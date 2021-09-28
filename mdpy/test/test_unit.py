@@ -37,12 +37,12 @@ class TestUnit:
         with pytest.raises(AttributeError):
             self.unit.relative_value = 1        
 
-    def test_isDimensionLess(self):
-        assert not self.unit.isDimensionLess()
-        assert BaseDimension().isDimensionLess()
+    def test_is_dimension_less(self):
+        assert not self.unit.is_dimension_less()
+        assert BaseDimension().is_dimension_less()
 
-    def test_setRelativeValueToOne(self):
-        self.unit.setRelativeValueToOne()
+    def test_set_relative_value_to_one(self):
+        self.unit.set_relative_value_to_one()
         assert self.unit.relative_value == 1
 
     def test_eq(self):
@@ -81,7 +81,7 @@ class TestUnit:
 
         assert angstrom_square / angstrom == angstrom
         assert angstrom / angstrom_square == angstrom_reciprocal
-        assert (angstrom / angstrom).isDimensionLess()
+        assert (angstrom / angstrom).is_dimension_less()
 
     def test_pow(self):
         constant = Unit(BaseDimension(), 1)
