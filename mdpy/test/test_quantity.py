@@ -23,11 +23,31 @@ class TestQuantity:
 
     def teardown(self):
         pass
-
     def test_attributes(self):
-        quantity = Quantity(1, angstrom)
-        quantity.value = 1
+        quantity = Quantity(1) * angstrom
+        assert quantity.value == 1
+        assert quantity.unit == angstrom
 
+        quantity = Quantity(np.array([1, 2, 3])) * angstrom
+        assert quantity[0].value == 1
+        assert quantity[0].unit == angstrom
+
+        quantity = Quantity([1, 2, 3, 4]) * angstrom
+        assert quantity[0].value == 1
+        assert quantity[0].unit == angstrom
+
+        assert isinstance(quantity.value, np.ndarray)
+
+        quantity = Quantity(quantity, meter)
+        assert quantity.unit == meter
+        assert quantity[0].value == 1e-10
+        assert quantity.value[0] == 1e-10
+
+    def test_exceptions(self):
+        with pytest.raises(ChangeDeviceBoundedDataError):
+            quantity = Quantity(np.array([1, 2, 3])) * angstrom
+            quantity.to_device()
+            quantity[1] = 0
     def test_to_device(self):
         quantity = Quantity(1, angstrom)
         assert isinstance(quantity.value, np.ndarray)
@@ -45,26 +65,6 @@ class TestQuantity:
         with pytest.raises(ChangeDeviceBoundedDataError):
             quantity[0] = 1
 
-    def test_attributes(self):
-        quantity = Quantity(1) * angstrom
-        assert quantity.value == 1
-        assert quantity.unit == angstrom
-
-        quantity = Quantity(np.array([1, 2, 3])) * angstrom
-        assert quantity[0].value == 1
-        assert quantity[0].unit == angstrom
-
-        quantity = Quantity([1, 2, 3, 4]) * angstrom
-        assert quantity[0].value == 1
-        assert quantity[0].unit == angstrom
-
-        assert isinstance(quantity.value, np.ndarray)
-
-    def test_exceptions(self):
-        with pytest.raises(ChangeDeviceBoundedDataError):
-            quantity = Quantity(np.array([1, 2, 3])) * angstrom
-            quantity.to_device()
-            quantity[1] = 0
 
     def test_convert_to(self):
         quantity = Quantity(1) * angstrom
