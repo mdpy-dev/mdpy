@@ -25,7 +25,8 @@ from .unit_definition import kilojoule_permol_over_angstrom, kilojoule_permol_ov
 from .unit_definition import watt, kilowatt
 
 # Default Unit
-from .unit_definition import default_length_unit, default_mass_unit, default_time_unit, default_temperature_unit, default_charge_unit, default_mol_unit, default_energy_unit
+from .unit_definition import default_length_unit, default_mass_unit, default_time_unit, default_temperature_unit, default_charge_unit, default_mol_unit 
+from .unit_definition import default_velocity_unit, default_energy_unit, default_force_unit
 
 from .quantity import Quantity
 # Constant
