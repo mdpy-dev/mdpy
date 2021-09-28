@@ -70,9 +70,9 @@ class Quantity:
         else:
             return False
 
-    def convertTo(self, target_unit: Unit):
+    def convert_to(self, target_unit: Unit):
         '''
-        convertTo converts ``self`` to the unit of ``target_unit``
+        convert_to converts ``self`` to the unit of ``target_unit``
 
         Parameters
         ----------
@@ -87,7 +87,7 @@ class Quantity:
         Raises
         ------
         ValueError
-            If ``self._unit.base_dimension != target_unit.unit.base_dimension``. E.g ``(10*meter).convertTo(second)``
+            If ``self._unit.base_dimension != target_unit.unit.base_dimension``. E.g ``(10*meter).convert_to(second)``
         '''        
         if self._unit.base_dimension != target_unit.base_dimension:
             raise UnitDimensionDismatchedError(
