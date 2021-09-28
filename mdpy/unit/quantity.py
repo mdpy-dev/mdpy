@@ -22,21 +22,26 @@ class Quantity:
         '''
         Parameters
         ----------
-        value : int, float, array
+        value : int, float, array, Quantity
             the value of quantity
         unit : Unit
             the unit of quantity
-        '''        
-        if isinstance(value, np.ndarray):
-            self._value = value.astype(np.float64)
-        else:        
-            self._value = np.array(value).astype(np.float64)
-
-        if unit.is_dimension_less():
-            self._value *= unit.relative_value
-            self._unit = deepcopy(no_unit)
+        '''     
+        if isinstance(value, Quantity): 
+            value = value.convert_to(unit)
+            self._value = value.value
+            self._unit = value.unit
         else:
-            self._unit = deepcopy(unit)
+            if isinstance(value, np.ndarray):
+                self._value = value.astype(np.float64)
+            else:        
+                self._value = np.array(value).astype(np.float64)
+
+            if unit.is_dimension_less():
+                self._value *= unit.relative_value
+                self._unit = deepcopy(no_unit)
+            else:
+                self._unit = deepcopy(unit)
 
         self._in_device = False
         
