@@ -28,11 +28,11 @@ class TestQuantity:
         quantity = Quantity(1, angstrom)
         quantity.value = 1
 
-    def test_toDevice(self):
+    def test_to_device(self):
         quantity = Quantity(1, angstrom)
         assert isinstance(quantity.value, np.ndarray)
 
-        quantity.toDevice()
+        quantity.to_device()
         assert isinstance(quantity.value, jnp.DeviceArray)
 
     def test_indice(self):
@@ -41,7 +41,7 @@ class TestQuantity:
         quantity[0] = Quantity(1, nanometer)
         quantity[0].value == 10
 
-        quantity.toDevice()
+        quantity.to_device()
         with pytest.raises(ChangeDeviceBoundedDataError):
             quantity[0] = 1
 
@@ -63,38 +63,38 @@ class TestQuantity:
     def test_exceptions(self):
         with pytest.raises(ChangeDeviceBoundedDataError):
             quantity = Quantity(np.array([1, 2, 3])) * angstrom
-            quantity.toDevice()
+            quantity.to_device()
             quantity[1] = 0
 
-    def test_convertTo(self):
+    def test_convert_to(self):
         quantity = Quantity(1) * angstrom
-        quantity_m = quantity.convertTo(meter)
+        quantity_m = quantity.convert_to(meter)
         assert quantity_m.unit == meter
         assert quantity_m.value == 1e-10
 
         with pytest.raises(UnitDimensionDismatchedError):
-            quantity.convertTo(second)
+            quantity.convert_to(second)
 
         quantity = Quantity(1) * meter / second
-        quantity_an_per_fs = quantity.convertTo(angstrom/femtosecond)
+        quantity_an_per_fs = quantity.convert_to(angstrom/femtosecond)
         assert quantity_an_per_fs.unit == (angstrom/femtosecond)
         assert quantity_an_per_fs.value == 1e-5
         with pytest.raises(UnitDimensionDismatchedError):
-            quantity.convertTo(second)
+            quantity.convert_to(second)
 
         del quantity
         del quantity_m
         del quantity_an_per_fs
 
-    def test_isDimensionLess(self):
+    def test_is_dimension_less(self):
         quantity = Quantity(1, angstrom)
-        assert not quantity.isDimensionLess()
+        assert not quantity.is_dimension_less()
         
         quantity = Quantity(1)
-        assert quantity.isDimensionLess()
+        assert quantity.is_dimension_less()
 
         quantity = Quantity([1, 2, 3, 4, 5])
-        assert quantity.isDimensionLess()
+        assert quantity.is_dimension_less()
 
         del quantity
 

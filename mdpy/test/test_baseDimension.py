@@ -101,7 +101,7 @@ class TestUnit:
         assert length == square.sqrt()
         assert volume.sqrt() == BaseDimension(length_dimension=1.5)
 
-    def test_generateDimensionName(self):
+    def test_generate_dimension_name(self):
         dimension = BaseDimension()
         assert dimension.name == ''
 
