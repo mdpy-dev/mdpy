@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- encoding: utf-8 -*-
 '''
-file : test_baseDimension.py
+file : test_base_dimension.py
 created time : 2021/09/28
 author : Zhenyu Wei
 version : 1.0
