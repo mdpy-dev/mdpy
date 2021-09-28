@@ -4,8 +4,8 @@ __email__ = "zhenyuwei99@gmail.com"
 __copyright__ = "Copyright 2021-2021, Southeast University and Zhenyu Wei"
 __license__ = "GPLv3"
 
-# Constant
-SPATIAL_DIM = 3
-
-# Import
-import mdpy.core
+from .particle import Particle
+from .topology import Topology
+from .system import System
+from .ensemble import Ensemble
+from .simulation import Simulation

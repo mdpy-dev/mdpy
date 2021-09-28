@@ -18,4 +18,4 @@ parser.add_argument('-n', type=int, default = 1)
 args = parser.parse_args()
 
 if __name__ == '__main__':
-    pytest.main(['-sv', '-r P', '-n %d' %args.n, test_dir])
+    pytest.main(['-r P', '-n %d' %args.n, test_dir])
