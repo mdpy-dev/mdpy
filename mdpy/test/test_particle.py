@@ -13,7 +13,7 @@ from functools import partial
 from sys import path_importer_cache
 import pytest
 import numpy as np
-from ..moduler import Particle
+from ..core import Particle
 from ..unit import default_length_unit, default_time_unit, default_mass_unit
 from ..error import *
 
