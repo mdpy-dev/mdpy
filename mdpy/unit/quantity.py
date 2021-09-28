@@ -32,7 +32,7 @@ class Quantity:
         else:        
             self._value = np.array(value).astype(np.float64)
 
-        if unit.isDimensionLess():
+        if unit.is_dimension_less():
             self._value *= unit.relative_value
             self._unit = deepcopy(no_unit)
         else:
@@ -51,13 +51,13 @@ class Quantity:
             '%s %s' %(self._value*self._unit.relative_value, self._unit.base_dimension)
         )
 
-    def toDevice(self):
+    def to_device(self):
         self._value = jax.device_put(self._value)
         self._in_device = True
 
-    def isDimensionLess(self):
+    def is_dimension_less(self):
         '''
-        isDimensionLess judges wether ``self`` is dimensionless
+        is_dimension_less judges wether ``self`` is dimensionless
 
         Returns
         -------
@@ -65,7 +65,7 @@ class Quantity:
             - True, the quantity is dimensionless
             - False, the quantity isn't dimensionless
         '''      
-        if self._unit.isDimensionLess():
+        if self._unit.is_dimension_less():
             return True
         else:
             return False
@@ -76,12 +76,12 @@ class Quantity:
 
         Parameters
         ----------
-        target_unit : mdax.Unit
-            the unit defined by MDax or users
+        target_unit : mdpy.Unit
+            the unit defined by mdpy or users
 
         Returns
         -------
-        mdax.Quantity
+        mdpy.Quantity
             Quantity with the same absolute value but new unit
 
         Raises
@@ -106,7 +106,7 @@ class Quantity:
     def __setitem__(self, key, value):
         if self._in_device:
             raise ChangeDeviceBoundedDataError(
-                'mdax.Quantity object does not support item assignment. JAX arrays are immutable;'
+                'mdpy.Quantity object does not support item assignment. JAX arrays are immutable;'
             )
         else:
             self._value[key] = (value / self._unit * self._unit).value
@@ -127,7 +127,7 @@ class Quantity:
                     %(self._unit.base_dimension, other.unit.base_dimension)
                 )
         # Value judgement, without relative value like 10*angstrom == 10
-        elif self.isDimensionLess():
+        elif self.is_dimension_less():
             return eq_judge(self._value, other)
         else:
             return NotImplemented
@@ -324,6 +324,6 @@ class Quantity:
     @value.setter
     def value(self, val):
         if self._in_device:
-            raise ChangeDeviceBoundedDataError('mdax.Quantity object does not support item assignment. JAX arrays are immutable;')
+            raise ChangeDeviceBoundedDataError('mdpy.Quantity object does not support item assignment. JAX arrays are immutable;')
         else:
             self._value = np.array(val).astype(np.float64)
