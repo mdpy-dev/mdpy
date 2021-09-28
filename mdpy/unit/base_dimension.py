@@ -61,9 +61,9 @@ class BaseDimension:
         self._dimension_name = [
             'm', 's', 'kg', 'k', 'c', 'mol'
         ]
-        self._generateDimensionName()
+        self._generate_dimension_name()
 
-    def _generateDimensionName(self):
+    def _generate_dimension_name(self):
         self._name = ''
         if self._dimension_list.count(0) == len(self._dimension_list):
             # All dimension is 0
@@ -200,9 +200,9 @@ class BaseDimension:
             self._mol_dimension / 2
         )
 
-    def isDimensionLess(self):
+    def is_dimension_less(self):
         '''
-        isDimensionLess judges wether ``self`` is a dimensionless
+        is_dimension_less judges wether ``self`` is a dimensionless
 
         Returns
         -------
