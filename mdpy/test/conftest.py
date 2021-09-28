@@ -11,7 +11,9 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 
 import pytest
 
-test_order = []
+test_order = [
+    'baseDimension', 'unit', 'unitDefinition', 'quantity'
+]
 
 def pytest_collection_modifyitems(items):
      current_index = 0
