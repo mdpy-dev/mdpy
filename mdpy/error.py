@@ -24,3 +24,11 @@ class ChangeDeviceBoundedDataError(Exception):
     - mdpy.unit.quantity
     '''
     pass
+
+class SpatialDimError(Exception):
+    '''
+    This error occurs when the dimension of quantity in cartesian reference is not 3
+    Used in:
+    - mdpy.moduler.particle
+    '''
+    pass
