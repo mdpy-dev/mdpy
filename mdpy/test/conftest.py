@@ -12,7 +12,8 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 import pytest
 
 test_order = [
-    'baseDimension', 'unit', 'unitDefinition', 'quantity'
+    'base_dimension', 'unit', 'unit_definition', 'quantity',
+    'particle'
 ]
 
 def pytest_collection_modifyitems(items):
