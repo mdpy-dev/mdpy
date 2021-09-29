@@ -28,10 +28,20 @@ class Particle:
         self._mass = Quantity(mass, default_mass_unit) if mass != None else mass
 
     def __repr__(self) -> str:
-        return '<Particle object: ID %d, Type %s at %x>' %(self._particle_id, self._particle_type, id(self))
+        return '<Particle %s-%d at %x>' %(self._particle_type, self._particle_id, id(self))
+        # return '<Particle object: ID %d, Type %s at %x>' %(self._particle_id, self._particle_type, id(self))
 
     __str__ = __repr__
-
+    
+    def __eq__(self, o) -> bool:
+        if id(self) == id(o):
+            return True
+        return False
+    
+    def change_particle_id(self, particle_id: int):
+        # Only used by Topology
+        self._particle_id = particle_id
+            
     @property
     def particle_id(self):
         return self._particle_id
