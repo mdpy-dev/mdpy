@@ -13,7 +13,7 @@ import pytest
 
 test_order = [
     'base_dimension', 'unit', 'unit_definition', 'quantity',
-    'particle'
+    'particle', 'topology'
 ]
 
 def pytest_collection_modifyitems(items):
