@@ -10,32 +10,41 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 '''
 
 class UnitDimensionDismatchedError(Exception):
-    '''
-    This error occurs when the base dimension of two quantities is dismatched for a specific operation.
+    '''This error occurs when the base dimension of two quantities is dismatched for a specific operation.
     Used in:
     - mdpy.unit.base_dimension
     '''
     pass
 
 class ChangeDeviceBoundedDataError(Exception):
-    '''
-    This error occurs when users try to change the immutable jax.DeviceArray
+    '''This error occurs when users try to change the immutable jax.DeviceArray
     Used in:
     - mdpy.unit.quantity
     '''
     pass
 
 class SpatialDimError(Exception):
-    '''
-    This error occurs when the dimension of quantity in cartesian reference is not 3
+    '''This error occurs when the dimension of quantity in cartesian reference is not 3
     Used in:
     - mdpy.core.particle
     '''
     pass
 
-class NonBoundedError(Exception):
+class GeomtryDimError(Exception):
+    '''This error occurs when the dimension of geometry, like bond, angle, is mismatched
+    Used in:
+    - mdpy.core.topology
     '''
-    This error occurs when parent object is not bounded. 
+    pass
+
+class ParticleConflictError(Exception):
+    '''This error occurs when Particle is twice bounded to a Toplogy instance or Particle appera twice in bond, angle, dihedral or improper
+    Used in:
+    - mdpy.core.topology
+    '''
+
+class NonBoundedError(Exception):
+    '''This error occurs when parent object is not bounded. 
     Used in:
     - mdpy.core.segment
     '''
