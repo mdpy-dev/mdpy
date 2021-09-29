@@ -24,10 +24,16 @@ class Ensemble:
         self._segments = []
         self._constraints = []
 
-    def add_segment(self, keywords):
+    def create_segment(self, keywords):
         pass
 
     def add_constraints(self):
+        pass
+    
+    def set_positions(self, positions):
+        pass
+    
+    def set_velocities(self, velocities):
         pass
 
     def update_force(self):
@@ -35,3 +41,27 @@ class Ensemble:
 
     def update_energy(self):
         pass
+    
+    @property
+    def positions(self):
+        return self._positions
+    
+    @property
+    def velocities(self):
+        return self._velocities
+    
+    @property
+    def forces(self):
+        return self._forces
+    
+    @property
+    def total_energy(self):
+        return self._total_energy
+    
+    @property
+    def potential_energy(self):
+        return self._potential_energy
+    
+    @property
+    def kinetic_energy(self):
+        return self._kinetic_energy
