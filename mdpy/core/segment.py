@@ -9,19 +9,32 @@ contact : zhenyuwei99@gmail.com
 copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 '''
 
+from ..error import *
+
 class Segment:
     def __init__(self, segment_id, particles) -> None:
         self._segment_id = segment_id
         self._particles = particles
         self._parent_ensemble = None
-        self._is_bound = False
+        
+    def __repr__(self):
+        return '<Segment object with %d particles at %x>' %(self.num_particles, id(self))
+    
+    __str__ = __repr__
 
-    def bind_ensemble(self, ensemble):
-        pass
+    def _test_bound_state(self):
+        if self._parent_ensemble == None:
+            raise NonBoundedError(
+                '%s has not been bounded to any Ensemble instance' %self
+            )
 
     @property
     def segment_id(self):
         pass
+    
+    @property
+    def num_particles(self):
+        return len(self._particles)
 
     @property
     def particles(self):
@@ -40,15 +53,7 @@ class Segment:
         pass
 
     @property
-    def total_energy(self):
-        pass
-
-    @property
-    def potential_energy(self):
-        pass
-
-    @property
-    def kinetic_energy(self):
+    def center_of_mass(self):
         pass
 
     @property
