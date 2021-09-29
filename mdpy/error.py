@@ -29,6 +29,14 @@ class SpatialDimError(Exception):
     '''
     This error occurs when the dimension of quantity in cartesian reference is not 3
     Used in:
-    - mdpy.moduler.particle
+    - mdpy.core.particle
+    '''
+    pass
+
+class NonBoundedError(Exception):
+    '''
+    This error occurs when parent object is not bounded. 
+    Used in:
+    - mdpy.core.segment
     '''
     pass
