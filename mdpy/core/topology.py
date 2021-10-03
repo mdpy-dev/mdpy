@@ -38,6 +38,7 @@ class Topology:
         if particle in self._particles:
             raise ParticleConflictError('Particle %s is added twice to Toplogy instance' %particle)
         # particle.change_particle_id(self._num_particles) # Deprecated because this work should be done by modeling software
+        particle.change_matrix_id(self._num_particles)
         self._particles.append(particle)
         self._num_particles += 1
         
