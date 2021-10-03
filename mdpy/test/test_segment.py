@@ -40,7 +40,7 @@ class TestSegment:
         assert segment.num_particles == 3
         assert segment.segment_mass == Quantity(3, default_mass_unit)
         assert segment.particles_id[0] == 3
-        assert segment.particles_mass[2] == Quantity(1, default_mass_unit)
+        assert segment.particles_mass[2] == 1
 
     def test_exceptions(self):
         segment = Segment(0, self.topology.select_particles('molecule_id=1'))
