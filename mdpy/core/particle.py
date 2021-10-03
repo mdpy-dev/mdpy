@@ -15,12 +15,13 @@ from ..error import *
 
 class Particle:
     def __init__(
-        self, particle_id: int, particle_type: str,
+        self, particle_id: int, particle_type: str, matrix_id=None,
         mass=None, molecule_id=None, molecule_type=None, chain_id=None
     ) -> None:
         # Compulsory attributes
         self._particle_id = particle_id
         self._particle_type = particle_type
+        self._matrix_id = matrix_id
         # Optional attributes
         self._molecule_id = molecule_id
         self._molecule_type = molecule_type
@@ -38,9 +39,9 @@ class Particle:
             return True
         return False
     
-    def change_particle_id(self, particle_id: int):
+    def change_matrix_id(self, matrix_id: int):
         # Only used by Topology
-        self._particle_id = particle_id
+        self._matrix_id = matrix_id
             
     @property
     def particle_id(self):
@@ -49,6 +50,10 @@ class Particle:
     @property
     def particle_type(self):
         return self._particle_type
+
+    @property
+    def matrix_id(self):
+        return self._matrix_id
 
     @property
     def molecule_id(self):
