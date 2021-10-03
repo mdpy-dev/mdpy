@@ -9,7 +9,6 @@ contact : zhenyuwei99@gmail.com
 copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 '''
 
-from _pytest.python_api import raises
 from . import Particle
 from ..error import *
 
@@ -39,6 +38,7 @@ class Topology:
         if particle in self._particles:
             raise ParticleConflictError('Particle %s is added twice to Toplogy instance' %particle)
         # particle.change_particle_id(self._num_particles) # Deprecated because this work should be done by modeling software
+        particle.change_matrix_id(self._num_particles)
         self._particles.append(particle)
         self._num_particles += 1
         

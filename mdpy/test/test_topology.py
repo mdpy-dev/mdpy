@@ -40,6 +40,8 @@ class TestTopology:
         assert self.topology.num_particles == 3
         assert self.topology.particles[0].particle_id == 0
         assert self.topology.particles[1].particle_id == 0
+        assert self.topology.particles[0].matrix_id == 0
+        assert self.topology.particles[1].matrix_id == 1
 
         with pytest.raises(ParticleConflictError):
             self.topology.add_particles(p1)
