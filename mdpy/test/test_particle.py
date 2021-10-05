@@ -14,7 +14,7 @@ from sys import path_importer_cache
 import pytest
 import numpy as np
 from ..core import Particle
-from ..unit import default_length_unit, default_time_unit, default_mass_unit
+from ..unit import *
 from ..error import *
 
 class TestParticle:
@@ -25,15 +25,20 @@ class TestParticle:
         pass
 
     def test_attributes(self):
-        particle = Particle(1, 'CA')
+        particle = Particle(particle_id=1, particle_type='C')
         assert particle.particle_id == 1
-        assert particle.particle_type == 'CA'
+        assert particle.particle_type == 'C'
         assert particle.mass == None
 
     def test_exceptions(self):
         pass 
     
     def test_mass(self):
-        particle = Particle(1, 'CA', mass=1)
+        particle = Particle(particle_id=1, particle_type='C', mass=1)
         assert particle.mass.value == 1
         assert particle.mass.unit == default_mass_unit
+
+    def test_charge(self):
+        particle = Particle(particle_id=1, particle_type='C', charge=1)
+        assert particle.charge.value == 1
+        assert particle.charge.unit == default_charge_unit
