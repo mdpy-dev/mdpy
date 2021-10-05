@@ -6,3 +6,4 @@ __license__ = "GPLv3"
 
 from .particle import Particle
 from .topology import Topology
+from .segment import Segment
