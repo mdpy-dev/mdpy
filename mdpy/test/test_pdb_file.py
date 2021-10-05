@@ -53,3 +53,5 @@ class TestPDBFile:
         pdb = PDBFile(self.file_path)
         particles = pdb.create_particles()
         particles[10].particle_id == 11
+        particles[9].particle_name == 'HB3'
+        particles[8].particle_type == 'H'
