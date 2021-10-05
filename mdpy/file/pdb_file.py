@@ -9,14 +9,11 @@ contact : zhenyuwei99@gmail.com
 copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 '''
 
-from contextlib import redirect_stdout
-from functools import partial
 import numpy as np
 import MDAnalysis as mda
 from MDAnalysis.coordinates.PDB import PDBReader
 from MDAnalysis.topology.PDBParser import PDBParser
 from MDAnalysis.topology.guessers import guess_atom_type
-from numpy.matrixlib.defmatrix import matrix
 
 from mdpy.core.particle import Particle
 
@@ -45,7 +42,9 @@ class PDBFile:
         for i in range(self._num_particles):
             particles.append(
                 Particle(
-                    self._particle_ids[i], self._particle_types[i], 
+                    particle_id=self._particle_ids[i], 
+                    particle_type=self._particle_types[i],
+                    particle_name=self._particle_names[i], 
                     matrix_id=self._matrix_ids[i],
                     molecule_id=self._molecule_ids[i], 
                     molecule_type=self._molecule_types[i], 
