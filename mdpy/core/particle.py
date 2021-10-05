@@ -10,26 +10,29 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 '''
 
 from ..unit import Quantity
-from ..unit import default_mass_unit
+from ..unit import *
 from ..error import *
 
 class Particle:
     def __init__(
-        self, particle_id: int, particle_type: str, matrix_id=None,
-        mass=None, molecule_id=None, molecule_type=None, chain_id=None
+        self, particle_id=None, particle_type=None, particle_name=None,
+        matrix_id=None, molecule_id=None, molecule_type=None, chain_id=None,
+        mass=None, charge=None
     ) -> None:
         # Compulsory attributes
         self._particle_id = particle_id
         self._particle_type = particle_type
+        self._particle_name = particle_name
         self._matrix_id = matrix_id
         # Optional attributes
         self._molecule_id = molecule_id
         self._molecule_type = molecule_type
         self._chain_id = chain_id
         self._mass = Quantity(mass, default_mass_unit) if mass != None else mass
+        self._charge = Quantity(charge, default_charge_unit) if charge != None else charge
 
     def __repr__(self) -> str:
-        return '<Particle %s-%d at %x>' %(self._particle_type, self._particle_id, id(self))
+        return '<Particle %s-%d at %x>' %(self._particle_name, self._particle_id, id(self))
         # return '<Particle object: ID %d, Type %s at %x>' %(self._particle_id, self._particle_type, id(self))
 
     __str__ = __repr__
@@ -52,6 +55,10 @@ class Particle:
         return self._particle_type
 
     @property
+    def particle_name(self):
+        return self._particle_name
+
+    @property
     def matrix_id(self):
         return self._matrix_id
 
@@ -70,5 +77,9 @@ class Particle:
     @property
     def mass(self):
         return self._mass
+    
+    @property
+    def charge(self):
+        return self._charge
 
     
