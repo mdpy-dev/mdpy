@@ -34,10 +34,7 @@ class Topology:
             'Toplogy with %d particles, %d bonds, %d angles, %d dihedrals, %d impropers'
             %(self._num_particles, self._num_bonds, self._num_angles, self._num_dihedrals, self._num_impropers)
         )
-        
-    def _add_particle(self, particle: Particle):
-        pass
-        
+
     def add_particles(self, particles):
         for particle in particles:
             # if particle in self._particles:
@@ -97,15 +94,6 @@ class Topology:
                 [self.del_dihedral(dihedral) for dihedral in self._dihedrals if particle.matrix_id in dihedral]
                 [self.del_improper(improper) for improper in self._impropers if particle.matrix_id in improper]
                 self._num_particles -= 1
-
-    def _check_particles(self, *particles, is_patch_mode=True):
-        for i, j in enumerate(particles):
-            if j in particles[i+1:]:
-                raise ParticleConflictError('Particle appears twice in a topology connection')
-        if is_patch_mode:
-            for p in particles:
-                if not p in self._particles:
-                    self.add_particles(p)
 
     def _check_matrix_ids(self, *matrix_ids):
         for index, matrix_id in enumerate(matrix_ids):
