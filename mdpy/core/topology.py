@@ -86,14 +86,24 @@ class Topology:
         return selected_particles
 
     def del_particles(self, particles):
+        particle_list, bond_list, angle_list, dihedral_list, improper_list = [], [], [], [], []
         for particle in particles:
             if particle in self._particles:
-                self._particles.remove(particle)
-                [self.del_bond(bond) for bond in self._bonds if particle.matrix_id in bond]
-                [self.del_angle(angle) for angle in self._angles if particle.matrix_id in angle]
-                [self.del_dihedral(dihedral) for dihedral in self._dihedrals if particle.matrix_id in dihedral]
-                [self.del_improper(improper) for improper in self._impropers if particle.matrix_id in improper]
-                self._num_particles -= 1
+                particle_list.append(particle)
+                bond_list.extend([bond for bond in self._bonds if particle.matrix_id in bond])
+                angle_list.extend([angle for angle in self._angles if particle.matrix_id in angle])
+                dihedral_list.extend([dihedral for dihedral in self._dihedrals if particle.matrix_id in dihedral])
+                improper_list.extend([improper for improper in self._impropers if particle.matrix_id in improper])
+        _ = [self._particles.remove(i) for i in particle_list]
+        self._num_particles -= len(particle_list)
+        _ = [self._bonds.remove(i) for i in bond_list]
+        self._num_bonds -= len(bond_list)
+        _ = [self._angles.remove(i) for i in angle_list]
+        self._num_angles -= len(angle_list)
+        _ = [self._dihedrals.remove(i) for i in dihedral_list]
+        self._num_dihedrals -= len(dihedral_list)
+        _ = [self._impropers.remove(i) for i in improper_list]
+        self._num_impropers -= len(improper_list)
 
     def _check_matrix_ids(self, *matrix_ids):
         for index, matrix_id in enumerate(matrix_ids):
