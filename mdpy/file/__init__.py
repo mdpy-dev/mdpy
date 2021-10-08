@@ -10,3 +10,4 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 '''
 
 from .pdb_file import PDBFile
+from .psf_file import PSFFile
