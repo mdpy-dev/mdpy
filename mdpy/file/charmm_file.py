@@ -28,11 +28,11 @@ class CharmmParamFile:
         }
         # Parse file
         for file_path in self._file_path_list:
-            if 'toppar' in file_path or file_path.endswith('str'):
+            if file_path.startswith('toppar') or file_path.endswith('str'):
                 self.parse_toppar_file(file_path)
-            elif 'par' in file_path or file_path.endswith('prm'):
+            elif file_path.startswith('par') or file_path.endswith('prm'):
                 self.parse_par_file(file_path)
-            elif 'top' in file_path or file_path.endswith('rtf'):
+            elif file_path.startswith('top') or file_path.endswith('rtf'):
                 self.parse_top_file(file_path)
             else:
                 raise FileFormatError(
