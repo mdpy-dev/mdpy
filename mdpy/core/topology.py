@@ -42,7 +42,7 @@ class Topology:
         self._particles.append(particle)
         self._num_particles += 1
         
-    def add_particles(self, *p_list):
+    def add_particles(self, p_list):
         for p in p_list:
             self._add_particle(p)
     
@@ -90,10 +90,10 @@ class Topology:
         for particle in particles:
             if particle in self._particles:
                 self._particles.remove(particle)
-                [self.del_bond(bond) for bond in self._bonds if particle in bond]
-                [self.del_angle(angle) for angle in self._angles if particle in angle]
-                [self.del_dihedral(dihedral) for dihedral in self._dihedrals if particle in dihedral]
-                [self.del_improper(improper) for improper in self._impropers if particle in improper]
+                [self.del_bond(bond) for bond in self._bonds if particle.matrix_id in bond]
+                [self.del_angle(angle) for angle in self._angles if particle.matrix_id in angle]
+                [self.del_dihedral(dihedral) for dihedral in self._dihedrals if particle.matrix_id in dihedral]
+                [self.del_improper(improper) for improper in self._impropers if particle.matrix_id in improper]
                 self._num_particles -= 1
 
     def _check_particles(self, *particles, is_patch_mode=True):
@@ -105,12 +105,23 @@ class Topology:
                 if not p in self._particles:
                     self.add_particles(p)
 
+    def _check_matrix_ids(self, *matrix_ids):
+        for index, matrix_id in enumerate(matrix_ids):
+            if matrix_id >= self._num_particles:
+                raise ParticleConflictError(
+                    'Matrix id %d beyonds the range of particles contain in toplogy, can not be added as part of topology connection' 
+                    %matrix_id
+                )
+            if matrix_id in matrix_ids[index+1:]:
+                raise ParticleConflictError('Particle appears twice in a topology connection')
+            
+
     def add_bond(self, bond):
         num_particles = len(bond)
         if num_particles != 2:
-            raise GeomtryDimError('Bond should be a list of 2 Particles, instead of %d' %num_particles)
+            raise GeomtryDimError('Bond should be a matrix id list of 2 Particles, instead of %d' %num_particles)
         p1, p2 = bond
-        self._check_particles(p1, p2)
+        self._check_matrix_ids(p1, p2)
         bond_replica = [p2, p1]
         if not bond in self._bonds and not bond_replica in self._bonds:
             self._bonds.append(bond)
@@ -119,9 +130,9 @@ class Topology:
     def del_bond(self, bond):
         num_particles = len(bond)
         if num_particles != 2:
-            raise GeomtryDimError('Bond should be a list of 2 Particles, instead of %d' %num_particles)
+            raise GeomtryDimError('Bond should be a matrix id list of 2 Particles, instead of %d' %num_particles)
         p1, p2 = bond
-        self._check_particles(p1, p2, is_patch_mode=False)
+        self._check_matrix_ids(p1, p2)
         bond_replica = [p2, p1]
         if bond in self._bonds:
             self._bonds.remove(bond)
@@ -133,9 +144,9 @@ class Topology:
     def add_angle(self, angle):
         num_particles = len(angle)
         if num_particles != 3:
-            raise GeomtryDimError('Angle should be a list of 3 Particles, instead of %d' %num_particles)
+            raise GeomtryDimError('Angle should be a matrix id list of 3 Particles, instead of %d' %num_particles)
         p1, p2, p3 = angle
-        self._check_particles(p1, p2, p3)
+        self._check_matrix_ids(p1, p2, p3)
         angle_replica = [p3, p2, p1]
         if not angle in self._angles and not angle_replica in self._angles:
             self._angles.append(angle)  
@@ -144,9 +155,9 @@ class Topology:
     def del_angle(self, angle):
         num_particles = len(angle)
         if num_particles != 3:
-            raise GeomtryDimError('Angle should be a list of 3 Particles, instead of %d' %num_particles)
+            raise GeomtryDimError('Angle should be a matrix id list of 3 Particles, instead of %d' %num_particles)
         p1, p2, p3 = angle
-        self._check_particles(p1, p2, p3, is_patch_mode=False)
+        self._check_matrix_ids(p1, p2, p3)
         angle_replica = [p3, p2, p1]
         if angle in self._angles:
             self._angles.remove(angle)
@@ -158,9 +169,9 @@ class Topology:
     def add_dihedral(self, dihedral):
         num_particles = len(dihedral)
         if num_particles != 4:
-            raise GeomtryDimError('Dihedral should be a list of 4 Particles, instead of %d' %num_particles)
+            raise GeomtryDimError('Dihedral should be a matrix id list of 4 Particles, instead of %d' %num_particles)
         p1, p2, p3, p4 = dihedral
-        self._check_particles(p1, p2, p3, p4)
+        self._check_matrix_ids(p1, p2, p3, p4)
         dihedral_replica = [p4, p3, p2, p1]
         if not dihedral in self._dihedrals and not dihedral_replica in self._dihedrals:
             self._dihedrals.append(dihedral)
@@ -169,9 +180,9 @@ class Topology:
     def del_dihedral(self, dihedral):
         num_particles = len(dihedral)
         if num_particles != 4:
-            raise GeomtryDimError('Dihedral should be a list of 4 Particles, instead of %d' %num_particles)
+            raise GeomtryDimError('Dihedral should be a matrix id list of 4 Particles, instead of %d' %num_particles)
         p1, p2, p3, p4 = dihedral
-        self._check_particles(p1, p2, p3, p4, is_patch_mode=False)
+        self._check_matrix_ids(p1, p2, p3, p4)
         dihedral_replica = [p4, p3, p2, p1]
         if dihedral in self._dihedrals:
             self._dihedrals.remove(dihedral)
@@ -183,9 +194,9 @@ class Topology:
     def add_improper(self, improper):
         num_particles = len(improper)
         if num_particles != 4:
-            raise GeomtryDimError('Improper should be a list of 4 Particles, instead of %d' %num_particles)
+            raise GeomtryDimError('Improper should be a matrix id list of 4 Particles, instead of %d' %num_particles)
         p1, p2, p3, p4 = improper
-        self._check_particles(p1, p2, p3, p4)
+        self._check_matrix_ids(p1, p2, p3, p4)
         if not improper in self._impropers:
             self._impropers.append(improper)
             self._num_impropers += 1
@@ -193,9 +204,9 @@ class Topology:
     def del_improper(self, improper):
         num_particles = len(improper)
         if num_particles != 4:
-            raise GeomtryDimError('Improper should be a list of 4 Particles, instead of %d' %num_particles)
+            raise GeomtryDimError('Improper should be a matrix id list of 4 Particles, instead of %d' %num_particles)
         p1, p2, p3, p4 = improper
-        self._check_particles(p1, p2, p3, p4, is_patch_mode=False)
+        self._check_matrix_ids(p1, p2, p3, p4)
         if improper in self._impropers:
             self._impropers.remove(improper)
             self._num_impropers -= 1
