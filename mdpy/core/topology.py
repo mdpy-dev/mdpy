@@ -9,6 +9,7 @@ contact : zhenyuwei99@gmail.com
 copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 '''
 
+import numpy as np
 from . import Particle
 from ..error import *
 
@@ -35,19 +36,20 @@ class Topology:
         )
         
     def _add_particle(self, particle: Particle):
-        if particle in self._particles:
-            raise ParticleConflictError('Particle %s is added twice to Toplogy instance' %particle)
-        # particle.change_particle_id(self._num_particles) # Deprecated because this work should be done by modeling software
-        particle.change_matrix_id(self._num_particles)
-        self._particles.append(particle)
-        self._num_particles += 1
+        pass
         
-    def add_particles(self, p_list):
-        for p in p_list:
-            self._add_particle(p)
-    
+    def add_particles(self, particles):
+        for particle in particles:
+            # if particle in self._particles:
+            #     raise ParticleConflictError('Particle %s is added twice to Toplogy instance' %particle)
+            # particle.change_particle_id(self._num_particles) # Deprecated because this work should be done by modeling software
+            particle.change_matrix_id(self._num_particles)
+            self._particles.append(particle)
+            self._num_particles += 1
+
     def select_particles(self, keywords):
-        ''' particle_id=1 and molecule_type=ASN or particle_type=CB
+        ''' Example:
+        particle_id=1 and molecule_type=ASN or particle_type=CB
         '''
         target_partiles = self._particles.copy()
         selected_particles = []
@@ -122,10 +124,10 @@ class Topology:
             raise GeomtryDimError('Bond should be a matrix id list of 2 Particles, instead of %d' %num_particles)
         p1, p2 = bond
         self._check_matrix_ids(p1, p2)
-        bond_replica = [p2, p1]
-        if not bond in self._bonds and not bond_replica in self._bonds:
-            self._bonds.append(bond)
-            self._num_bonds += 1
+        # bond_replica = [p2, p1]
+        # if not bond in self._bonds and not bond_replica in self._bonds:
+        self._bonds.append(bond)
+        self._num_bonds += 1
         
     def del_bond(self, bond):
         num_particles = len(bond)
@@ -147,10 +149,10 @@ class Topology:
             raise GeomtryDimError('Angle should be a matrix id list of 3 Particles, instead of %d' %num_particles)
         p1, p2, p3 = angle
         self._check_matrix_ids(p1, p2, p3)
-        angle_replica = [p3, p2, p1]
-        if not angle in self._angles and not angle_replica in self._angles:
-            self._angles.append(angle)  
-            self._num_angles += 1
+        # angle_replica = [p3, p2, p1]
+        # if not angle in self._angles and not angle_replica in self._angles:
+        self._angles.append(angle)  
+        self._num_angles += 1
         
     def del_angle(self, angle):
         num_particles = len(angle)
@@ -172,10 +174,10 @@ class Topology:
             raise GeomtryDimError('Dihedral should be a matrix id list of 4 Particles, instead of %d' %num_particles)
         p1, p2, p3, p4 = dihedral
         self._check_matrix_ids(p1, p2, p3, p4)
-        dihedral_replica = [p4, p3, p2, p1]
-        if not dihedral in self._dihedrals and not dihedral_replica in self._dihedrals:
-            self._dihedrals.append(dihedral)
-            self._num_dihedrals += 1
+        # dihedral_replica = [p4, p3, p2, p1]
+        # if not dihedral in self._dihedrals and not dihedral_replica in self._dihedrals:
+        self._dihedrals.append(dihedral)
+        self._num_dihedrals += 1
         
     def del_dihedral(self, dihedral):
         num_particles = len(dihedral)
@@ -197,9 +199,9 @@ class Topology:
             raise GeomtryDimError('Improper should be a matrix id list of 4 Particles, instead of %d' %num_particles)
         p1, p2, p3, p4 = improper
         self._check_matrix_ids(p1, p2, p3, p4)
-        if not improper in self._impropers:
-            self._impropers.append(improper)
-            self._num_impropers += 1
+        # if not improper in self._impropers:
+        self._impropers.append(improper)
+        self._num_impropers += 1
         
     def del_improper(self, improper):
         num_particles = len(improper)
@@ -210,6 +212,18 @@ class Topology:
         if improper in self._impropers:
             self._impropers.remove(improper)
             self._num_impropers -= 1
+
+    def check(self):
+        # Check particle
+        for i, j in enumerate(self._particles):
+            if j in self._particles[i+1:]:
+                raise ParticleConflictError('Particle %s is added twice to Toplogy instance' %j)
+
+    def save(self):
+        pass
+
+    def load(self):
+        pass
 
     @property
     def particles(self):
