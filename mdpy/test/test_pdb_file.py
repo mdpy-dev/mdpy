@@ -10,7 +10,6 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 '''
 
 
-from re import A
 import pytest, os
 from ..file import PDBFile
 
