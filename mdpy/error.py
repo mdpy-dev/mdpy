@@ -49,3 +49,10 @@ class NonBoundedError(Exception):
     - mdpy.core.segment
     '''
     pass
+
+class FileFormatError(Exception):
+    '''This error occurs when file suffix or prefix appears in an unexpected way
+    Used in:
+    - mdpy.file.charmm_file
+    '''
+    pass
