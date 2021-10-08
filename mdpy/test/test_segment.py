@@ -29,7 +29,7 @@ class TestSegment:
             Particle(8, 'N', molecule_id=2, molecule_type='ASP', mass=1),
         ]
         self.topology = Topology()
-        self.topology.add_particles(*self.ps)
+        self.topology.add_particles(self.ps)
 
     def teardown(self):
         pass
