@@ -99,13 +99,13 @@ class CharmmParamFile:
 
     def _parse_par_mass_block(self, infos):
         for info in infos:
-            self._param['mass'][info[2]] = Quantity(float(info[3]), dalton).convert_to(default_mass_unit)
+            self._param['mass'][info[2]] = Quantity(float(info[3]), dalton).convert_to(default_mass_unit).value
 
     def _parse_par_bond_block(self, infos):
         for info in infos:
             res = [
-                Quantity(float(info[2]), kilocalorie_permol / angstrom**2).convert_to(default_energy_unit / default_length_unit**2), 
-                Quantity(float(info[3]), angstrom).convert_to(default_length_unit)
+                Quantity(float(info[2]), kilocalorie_permol / angstrom**2).convert_to(default_energy_unit / default_length_unit**2).value, 
+                Quantity(float(info[3]), angstrom).convert_to(default_length_unit).value
             ]
             self._param['bond']['%s-%s' %(info[0], info[1])] = res
             self._param['bond']['%s-%s' %(info[1], info[0])] = res
@@ -113,8 +113,8 @@ class CharmmParamFile:
     def _parse_par_angle_block(self, infos):
         for info in infos:
             res = [
-                Quantity(float(info[3]), kilocalorie_permol).convert_to(default_energy_unit), 
-                Quantity(float(info[4]))
+                Quantity(float(info[3]), kilocalorie_permol).convert_to(default_energy_unit).value, 
+                Quantity(float(info[4])).value
             ]
             self._param['angle']['%s-%s-%s' %(info[0], info[1], info[2])] = res
             self._param['angle']['%s-%s-%s' %(info[2], info[1], info[0])] = res
@@ -122,9 +122,9 @@ class CharmmParamFile:
     def _parse_par_dihedral_block(self, infos):
         for info in infos:
             res = [
-                Quantity(float(info[4]), kilocalorie_permol).convert_to(default_energy_unit), 
-                Quantity(float(info[5])),
-                Quantity(float(info[6]))
+                Quantity(float(info[4]), kilocalorie_permol).convert_to(default_energy_unit).value, 
+                Quantity(float(info[5])).value,
+                Quantity(float(info[6])).value
             ]
             self._param['dihedral']['%s-%s-%s-%s' %(info[0], info[1], info[2], info[3])] = res
             self._param['dihedral']['%s-%s-%s-%s' %(info[3], info[2], info[1], info[0])] = res
@@ -132,16 +132,16 @@ class CharmmParamFile:
     def _parse_par_improper_block(self, infos):
         for info in infos:
             res = [
-                Quantity(float(info[4]), kilocalorie_permol).convert_to(default_energy_unit), 
-                Quantity(float(info[6]))
+                Quantity(float(info[4]), kilocalorie_permol).convert_to(default_energy_unit).value, 
+                Quantity(float(info[6])).value
             ]
             self._param['improper']['%s-%s-%s-%s' %(info[0], info[1], info[2], info[3])] = res
 
     def _parse_par_nonbonded_block(self, infos):
         for info in infos[1:]:
             self._param['nonbonded'][info[0]] = [
-                Quantity(float(info[2]), kilocalorie_permol).convert_to(default_energy_unit),
-                Quantity(float(info[3]), angstrom).convert_to(default_length_unit)
+                Quantity(float(info[2]), kilocalorie_permol).convert_to(default_energy_unit).value,
+                Quantity(float(info[3]), angstrom).convert_to(default_length_unit).value
             ]
 
     def parse_top_file(self, file_path):
@@ -172,9 +172,9 @@ class CharmmParamFile:
         for key, val in info_dict.items():
             for line in val:
                 if key != line[2]:
-                    self._param['charge']['%s-%s' %(key, line[2])] = Quantity(float(line[3]), e).convert_to(default_charge_unit)
+                    self._param['charge']['%s-%s' %(key, line[2])] = Quantity(float(line[3]), e).convert_to(default_charge_unit).value
                 else: # group name is the same as atom name: ion
-                    self._param['charge']['%s' %key] = Quantity(float(line[3]), e).convert_to(default_charge_unit)
+                    self._param['charge']['%s' %key] = Quantity(float(line[3]), e).convert_to(default_charge_unit).value
 
     def parse_toppar_file(self, file_path):
         with open(file_path, 'r') as f:
