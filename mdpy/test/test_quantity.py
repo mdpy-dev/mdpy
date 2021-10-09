@@ -11,7 +11,6 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 
 import pytest
 import numpy as np
-import jax.numpy as jnp
 from ..unit import *
 from ..unit import Quantity
 from ..error import UnitDimensionDismatchedError, ChangeDeviceBoundedDataError
@@ -50,9 +49,6 @@ class TestQuantity:
     def test_to_device(self):
         quantity = Quantity(1, angstrom)
         assert isinstance(quantity.value, np.ndarray)
-
-        quantity.to_device()
-        assert isinstance(quantity.value, jnp.DeviceArray)
 
     def test_indice(self):
         quantity = Quantity([1, 2, 3, 4], angstrom)
