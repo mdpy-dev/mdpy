@@ -9,10 +9,7 @@ contact : zhenyuwei99@gmail.com
 copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 '''
 
-from functools import partial
-from sys import path_importer_cache
 import pytest
-import numpy as np
 from ..core import Particle
 from ..unit import *
 from ..error import *
