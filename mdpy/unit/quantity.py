@@ -36,6 +36,8 @@ class Quantity:
                 self._value = value.astype(np.float64)
             else:        
                 self._value = np.array(value).astype(np.float64)
+                if self._value.shape == ():
+                    self._value = np.array([self._value.item()])
 
             if unit.is_dimension_less():
                 self._value *= unit.relative_value

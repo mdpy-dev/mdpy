@@ -73,6 +73,7 @@ picosecond = Unit(time, 1e-12)
 femtosecond = Unit(time, 1e-15)
 
 default_time_unit = femtosecond
+default_velocity_unit = default_length_unit / default_time_unit
 
 ######################
 ## Temperature Unit ##
@@ -118,6 +119,7 @@ ev = Unit(energy, 1.60217662e-19)
 hartree = Unit(energy, 4.3597447222071e-18)
 
 default_energy_unit = kilojoule_permol
+default_force_unit = default_energy_unit / default_length_unit
 
 ######################
 ## Force Unit       ##
