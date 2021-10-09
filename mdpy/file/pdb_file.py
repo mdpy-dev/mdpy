@@ -10,7 +10,6 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 '''
 
 import numpy as np
-import MDAnalysis as mda
 from MDAnalysis.coordinates.PDB import PDBReader
 from MDAnalysis.topology.PDBParser import PDBParser
 from MDAnalysis.topology.guessers import guess_atom_type
