@@ -20,13 +20,13 @@ class TestSegment:
         self.ps = [
             Particle(0, 'CA', molecule_id=0, molecule_type='ASN', mass=1),
             Particle(1, 'CB', molecule_id=0, molecule_type='ASN', mass=1),
-            Particle(2, 'N', molecule_id=0, molecule_type='ASN', mass=1),
-            Particle(3, 'H', molecule_id=1, molecule_type='HOH', mass=1),
-            Particle(4, 'O', molecule_id=1, molecule_type='HOH', mass=1),
-            Particle(5, 'H', molecule_id=1, molecule_type='HOH', mass=1),
-            Particle(6, 'CA', molecule_id=2, molecule_type='ASP', mass=1),
-            Particle(7, 'CB', molecule_id=2, molecule_type='ASP', mass=1),
-            Particle(8, 'N', molecule_id=2, molecule_type='ASP', mass=1),
+            Particle(2, 'N', molecule_id=0, molecule_type='ASN', mass=1, charge=1),
+            Particle(3, 'H', molecule_id=1, molecule_type='HOH', mass=1, charge=1),
+            Particle(4, 'O', molecule_id=1, molecule_type='HOH', mass=1, charge=1),
+            Particle(5, 'H', molecule_id=1, molecule_type='HOH', mass=1, charge=3),
+            Particle(6, 'CA', molecule_id=2, molecule_type='ASP', mass=1, charge=1),
+            Particle(7, 'CB', molecule_id=2, molecule_type='ASP', mass=1, charge=1),
+            Particle(8, 'N', molecule_id=2, molecule_type='ASP', mass=1, charge=1),
         ]
         self.topology = Topology()
         self.topology.add_particles(self.ps)
@@ -38,9 +38,11 @@ class TestSegment:
         segment = Segment(0, self.topology.select_particles('molecule_id=1'))
         assert segment.segment_id == 0
         assert segment.num_particles == 3
-        assert segment.segment_mass == Quantity(3, default_mass_unit)
-        assert segment.particles_id[0] == 3
-        assert segment.particles_mass[2] == 1
+        assert segment.segment_mass == 3
+        assert segment.segment_charge == 5
+        assert segment.particle_ids[0] == 3
+        assert segment.particle_masses[2] == 1
+        assert segment.particle_charges[-1] == 3
 
     def test_exceptions(self):
         segment = Segment(0, self.topology.select_particles('molecule_id=1'))
