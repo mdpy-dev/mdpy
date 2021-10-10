@@ -15,7 +15,7 @@ from ..constraint import CharmmBondConstraint
 from ..core import Particle, Topology
 from ..ensemble import Ensemble
 from ..file import CharmmParamFile
-from ..math import bond
+from ..math import get_bond
 from ..error import *
 from ..unit import *
 
@@ -101,11 +101,10 @@ class TestCharmmBondConstraint:
         assert forces[1, 0] == 0
         assert forces[2, 1] == 0 
 
-        bond_length = bond([0, 0, 0], [0, 0, 1])
+        bond_length = get_bond([0, 0, 0], [0, 0, 1])
         k, r0 = self.params['bond']['CA-CA']
         force_val = 2 * k * (bond_length - r0)
         force_vec = [0, 0, 1]
-        print(forces)
         assert forces[0, 0] == 0
         assert forces[0, 1] == 0
         assert forces[0, 2] == force_val
@@ -117,7 +116,7 @@ class TestCharmmBondConstraint:
         self.constraint.bind_ensemble(self.ensemble)
         self.constraint.set_params(self.params['bond'])
         energy = self.constraint.get_potential_energy()
-        bond_length = bond([0, 0, 0], [0, 0, 1])
+        bond_length = get_bond([0, 0, 0], [0, 0, 1])
         k, r0 = self.params['bond']['CA-CA']
         assert energy == k * (bond_length - r0)**2
         
