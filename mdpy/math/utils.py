@@ -18,3 +18,11 @@ def check_quantity(val, target_unit: Unit):
         return None
     else:
         return Quantity(val, target_unit)
+
+def check_quantity_value(val, target_unit: Unit):
+    if isinstance(val, Quantity):
+        return val.convert_to(target_unit).value
+    elif val == None:
+        return None
+    else:
+        return Quantity(val, target_unit).value
