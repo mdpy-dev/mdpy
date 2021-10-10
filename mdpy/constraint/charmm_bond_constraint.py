@@ -46,7 +46,7 @@ class CharmmBondConstraint(Constraint):
         forces = np.zeros([self._parent_ensemble.topology.num_particles, 3])
         for bond_info in self._bond_info:
             id1, id2, k, r0 = bond_info
-            bond_length = bond(
+            bond_length = get_bond(
                 self._parent_ensemble.positions[id1, :], 
                 self._parent_ensemble.positions[id2, :]
             )
@@ -61,7 +61,7 @@ class CharmmBondConstraint(Constraint):
         potential_energy = 0
         for bond_info in self._bond_info:
             id1, id2, k, r0 = bond_info
-            bond_length = bond(
+            bond_length = get_bond(
                 self._parent_ensemble.positions[id1, :], 
                 self._parent_ensemble.positions[id2, :]
             )
