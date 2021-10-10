@@ -20,7 +20,7 @@ class Constraint:
     def bind_ensemble(self, ensemble):
         raise NotImplementedError('The subclass of mdpy.constraint.Constarint class should overload bind_ensemble method')
 
-    def set_param(self, param):
+    def set_params(self, params):
         raise NotImplementedError('The subclass of mdpy.constraint.Constarint class should overload set_param method')
 
     def _test_bound_state(self):
