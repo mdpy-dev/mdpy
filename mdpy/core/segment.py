@@ -18,12 +18,16 @@ class Segment:
         self._segment_id = segment_id
         self._particles = particles
         self._num_particles = len(particles)
-        self._particles_id, self._particles_mass, self._segment_mass = [], [], Quantity(0, default_mass_unit)
+        self._particle_ids, self._particle_masses, self._particle_charges = [], [], []
+        self._segment_mass, self._segment_charge = 0, 0
         for p in self._particles:
-            self._particles_id.append(p.particle_id)
-            self._particles_mass.append(p.mass.value)
+            self._particle_ids.append(p.particle_id)
+            self._particle_masses.append(p.mass)
+            self._particle_charges.append(p.charge)
             self._segment_mass += p.mass
-        self._particles_mass = np.array(self._particles_mass).reshape([self._num_particles, 1])
+            self._segment_charge += p.charge
+        self._particle_masses = np.array(self._particle_masses).reshape([self._num_particles, 1])
+        self._particle_charges = np.array(self._particle_charges).reshape([self._num_particles, 1])
         self._parent_ensemble = None
         
     def __repr__(self):
@@ -52,20 +56,28 @@ class Segment:
         return self._segment_id
 
     @property
-    def particles_id(self):
-        return self._particles_id
+    def particle_ids(self):
+        return self._particle_ids
     
     @property
     def num_particles(self):
         return self._num_particles
 
     @property
+    def particle_masses(self):
+        return self._particle_masses
+
+    @property
     def segment_mass(self):
         return self._segment_mass
 
     @property
-    def particles_mass(self):
-        return self._particles_mass
+    def particle_charges(self):
+        return self._particle_charges
+
+    @property
+    def segment_charge(self):
+        return self._segment_charge
 
     @property
     def particles(self):
