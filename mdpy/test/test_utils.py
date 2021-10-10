@@ -10,7 +10,7 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 '''
 
 import pytest
-from ..math import check_quantity
+from ..math import check_quantity, check_quantity_value
 from ..unit import *
 from ..error import *
 
@@ -22,3 +22,11 @@ def test_check_quantity():
 
     with pytest.raises(UnitDimensionDismatchedError):
         check_quantity(Quantity(1, default_charge_unit), default_length_unit)
+
+def test_check_quantity_value():
+    assert check_quantity_value(1, default_length_unit) == 1
+    assert check_quantity_value(None, default_length_unit) == None
+    assert check_quantity_value(Quantity(1, meter), default_length_unit) == 1e10
+
+    with pytest.raises(UnitDimensionDismatchedError):
+        check_quantity_value(Quantity(1, default_length_unit), default_mass_unit)
