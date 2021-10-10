@@ -9,10 +9,7 @@ contact : zhenyuwei99@gmail.com
 copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 '''
 
-from functools import partial
-from sys import path_importer_cache
 import pytest
-import numpy as np
 from ..core import Particle
 from ..unit import *
 from ..error import *
@@ -35,10 +32,20 @@ class TestParticle:
     
     def test_mass(self):
         particle = Particle(particle_id=1, particle_type='C', mass=1)
-        assert particle.mass.value == 1
-        assert particle.mass.unit == default_mass_unit
+        assert particle.mass == 1
+
+        particle = Particle(mass=Quantity(1, kilogram))
+        assert particle.mass == Quantity(1, kilogram).convert_to(default_mass_unit).value
+        
+        with pytest.raises(UnitDimensionDismatchedError):
+            Particle(mass=Quantity(1, default_charge_unit))
 
     def test_charge(self):
         particle = Particle(particle_id=1, particle_type='C', charge=1)
-        assert particle.charge.value == 1
-        assert particle.charge.unit == default_charge_unit
+        assert particle.charge == 1
+        
+        particle = Particle(charge=Quantity(1, coulomb))
+        assert particle.charge == Quantity(1, coulomb).convert_to(default_charge_unit).value
+
+        with pytest.raises(UnitDimensionDismatchedError):
+            Particle(charge=Quantity(1, default_energy_unit))
