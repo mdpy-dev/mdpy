@@ -25,6 +25,8 @@ class Topology:
         self._num_dihedrals = 0
         self._impropers = []
         self._num_impropers = 0
+        self._masses = []
+        self._charges = []
         
     def __repr__(self) -> str:
         return '<Toplogy object: %d particles at %x>' %(self._num_particles, id(self))
@@ -43,6 +45,14 @@ class Topology:
             particle.change_matrix_id(self._num_particles)
             self._particles.append(particle)
             self._num_particles += 1
+        self._update_particles_properties()
+
+    def _update_particles_properties(self):
+        self._masses = np.zeros([self._num_particles, 1])
+        self._charges = np.zeros([self._num_particles, 1])
+        for index, particle in enumerate(self._particles):
+            self._masses[index, 0] = particle.mass
+            self._charges[index, 0] = particle.charge
 
     def select_particles(self, keywords):
         ''' Example:
@@ -211,17 +221,13 @@ class Topology:
             self._impropers.remove(improper)
             self._num_impropers -= 1
 
-    def check(self):
-        # Check particle
-        for i, j in enumerate(self._particles):
-            if j in self._particles[i+1:]:
-                raise ParticleConflictError('Particle %s is added twice to Toplogy instance' %j)
+    @property
+    def masses(self):
+        return self._masses
 
-    def save(self):
-        pass
-
-    def load(self):
-        pass
+    @property
+    def charges(self):
+        return self._charges
 
     @property
     def particles(self):
