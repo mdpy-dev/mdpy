@@ -31,6 +31,24 @@ class TestTopology:
         assert self.topology.num_dihedrals == 0
         assert self.topology.impropers == []
         assert self.topology.num_impropers == 0
+        assert self.topology.charges == []
+        assert self.topology.masses == []
+
+    def test_particle_properties(self):
+        assert self.topology.charges == []
+        assert self.topology.masses == []
+        p1 = Particle(mass=1, charge=2)
+        p2 = Particle(mass=2, charge=1)
+        p3 = Particle(mass=3, charge=0)
+        self.topology.add_particles([p1, p2, p3])
+        assert self.topology.charges[0] == 2
+        assert self.topology.charges[-1] == 0
+        assert self.topology.masses[1] == 2
+
+        assert self.topology.masses.shape[0] == 3
+        assert self.topology.masses.shape[1] == 1
+        assert self.topology.charges.shape[0] == 3
+        assert self.topology.charges.shape[1] == 1
 
     def test_add_particles(self):
         p1 = Particle(0, 'CA')
