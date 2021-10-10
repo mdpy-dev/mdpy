@@ -17,8 +17,9 @@ def get_unit_vec(vec):
     return vec / norm if norm != 0 else vec
 
 def get_norm_vec(position1, position2, position3):
-    v0 = np.array(position2 - position1)
-    v1 = np.array(position3 - position1)
+    position1, position2, position3 = np.array(position1), np.array(position2), np.array(position3)
+    v0 = position2 - position1
+    v1 = position3 - position1
     
     norm_vec = np.cross(v0, v1)
     
@@ -28,8 +29,9 @@ def get_bond(position1, position2):
     return np.sqrt(((np.array(position1) - np.array(position2))**2).sum())
 
 def get_angle(position1, position2, position3, is_angular=True):
-    v0 = np.array(position1 - position2)
-    v1 = np.array(position3 - position2)
+    position1, position2, position3 = np.array(position1), np.array(position2), np.array(position3)
+    v0 = position1 - position2
+    v1 = position3 - position2
 
     cos_phi = np.dot(v0, v1) / (np.linalg.norm(v0)*np.linalg.norm(v1))
 
@@ -39,9 +41,11 @@ def get_angle(position1, position2, position3, is_angular=True):
         return arccos(cos_phi) / np.pi * 180
 
 def get_dihedral(position1, position2, position3, position4, is_angular=True):
-    v0 = np.array(position1 - position2)
-    v1 = np.array(position3 - position2)
-    v2 = np.array(position4 - position3)
+    position1, position2 = np.array(position1), np.array(position2)
+    position3, position4 = np.array(position3), np.array(position4)
+    v0 = position1 - position2
+    v1 = position3 - position2
+    v2 = position4 - position3
     
     # Calculate the vertical vector of each plane
     # Note the order of cross product
