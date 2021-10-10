@@ -5,7 +5,9 @@ __copyright__ = "Copyright 2021-2021, Southeast University and Zhenyu Wei"
 __license__ = "GPLv3"
 
 from .geometry import bond
+from .utils import check_quantity, check_quantity_value
 
 __all__ = [
-    'bond'
+    'bond',
+    'check_quantity', 'check_quantity_value'
 ]
