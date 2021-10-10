@@ -60,7 +60,7 @@ class TestCharmmBondConstraint:
         f2 = os.path.join(data_dir, 'par_all36_prot.prm')
         f3 = os.path.join(data_dir, 'top_all36_na.rtf')
         charmm = CharmmParamFile(f1, f2, f3)
-        self.params = charmm.param
+        self.params = charmm.params
         self.constraint = CharmmBondConstraint(0, 0)
 
     def teardown(self):
