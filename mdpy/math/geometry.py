@@ -43,23 +43,17 @@ def get_angle(position1, position2, position3, is_angular=True):
 def get_dihedral(position1, position2, position3, position4, is_angular=True):
     position1, position2 = np.array(position1), np.array(position2)
     position3, position4 = np.array(position3), np.array(position4)
-    v0 = position1 - position2
-    v1 = position3 - position2
-    v2 = position4 - position3
-    
-    # Calculate the vertical vector of each plane
-    # Note the order of cross product
-    na = np.cross(v1, v0)
-    nb = np.cross(v1, v2)
+    r1 = get_unit_vec(position2 - position1)
+    r2 = get_unit_vec(position3 - position2)
+    r3 = get_unit_vec(position4 - position3)
 
-    # Note that we delete the absolute value  
-    cos_phi = np.dot(na, nb) / (np.linalg.norm(na)*np.linalg.norm(nb))
+    n1 = np.cross(r1, r2)
+    n2 = np.cross(r2, r3)
 
-    # Sign of angle
-    omega = np.dot(v0, np.cross(v1, v2))
-    sign = omega / np.abs(omega)
+    x = np.dot(np.linalg.norm(r2) * r1, n2)
+    y = np.dot(n1, n2)
 
     if is_angular:
-        return sign * arccos(cos_phi)
+        return np.arctan2(x, y)
     else:
-        return sign * arccos(cos_phi) / np.pi * 180
+        return np.arctan2(x, y) / np.pi * 180
