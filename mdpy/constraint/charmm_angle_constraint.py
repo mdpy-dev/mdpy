@@ -49,17 +49,35 @@ class CharmmAngleConstraint(Constraint):
         forces = np.zeros([self._parent_ensemble.topology.num_particles, 3])
         for angle_info in self._angle_info:
             id1, id2, id3, k, theta0 = angle_info
+            theta = get_angle(
+                self._parent_ensemble.positions[id1, :], 
+                self._parent_ensemble.positions[id2, :],
+                self._parent_ensemble.positions[id3, :], is_angular=False
+            )
+            theta_rad = np.deg2rad(theta)
+            force_val = 2 * k * (theta - theta0) / np.abs(np.sin(theta_rad)) # The - is declined by the minus of 1/sin\theta
+            vec0 = self._parent_ensemble.positions[id1, :] - self._parent_ensemble.positions[id2, :]
+            vec1 = self._parent_ensemble.positions[id3, :] - self._parent_ensemble.positions[id2, :]
+            norm_vec0, norm_vec1 = np.linalg.norm(vec0), np.linalg.norm(vec1)
+            vec0 = vec0 / norm_vec0
+            vec1 = vec1 / norm_vec1
+            force_vec0 = (vec1 - vec0 * np.cos(theta_rad)) / norm_vec0
+            force_vec2 = (vec0 - vec1 * np.cos(theta_rad)) / norm_vec1
+            forces[id1, :] += force_val * force_vec0
+            forces[id2, :] -= force_val * (force_vec0 + force_vec2) 
+            forces[id3, :] += force_val * force_vec2
+        return forces
 
     def get_potential_energy(self):
         potential_energy = 0
         for angle_info in self._angle_info:
             id1, id2, id3, k, theta0 = angle_info
-            angle = get_angle(
+            theta = get_angle(
                 self._parent_ensemble.positions[id1, :], 
                 self._parent_ensemble.positions[id2, :],
                 self._parent_ensemble.positions[id3, :], is_angular=False
             )
-            potential_energy += k * (angle - theta0)**2
+            potential_energy += k * (theta - theta0)**2
         return potential_energy
 
 
