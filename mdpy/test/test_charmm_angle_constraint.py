@@ -9,13 +9,14 @@ contact : zhenyuwei99@gmail.com
 copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 '''
 
+from numpy.testing._private.utils import assert_almost_equal
 import pytest, os
 import numpy as np
 from ..constraint import CharmmAngleConstraint
 from ..core import Particle, Topology
 from ..ensemble import Ensemble
 from ..file import CharmmParamFile
-from ..math import get_angle
+from ..math import get_angle, get_unit_vec
 from ..error import *
 from ..unit import *
 
@@ -97,12 +98,29 @@ class TestCharmmAngleConstraint:
         assert self.constraint._angle_info[0][4] == Quantity(120).value
 
     def test_get_forces(self):
-        pass
+        self.constraint.bind_ensemble(self.ensemble)
+        self.constraint.set_params(self.params['angle'])
+        forces = self.constraint.get_forces()
+        k, theta0 = self.params['angle']['CA-CA-CA']
+        theta = get_angle([0, 0, 0], [1, 0, 0], [0, 0, 1], is_angular=False)
+        theta_rad = np.pi / 4
+        force_val = 2 * k * (45 - theta0) / np.abs(np.sin(theta_rad))
+        vec0, vec1 = np.array([-1, 0, 0]), get_unit_vec(np.array([-1, 0, 1]))
+        force_vec0 = (vec1 - vec0 * np.cos(theta_rad)) / 1
+        force_vec2 = (vec0 - vec1 * np.cos(theta_rad)) / np.sqrt(2)
+        force0, force2 = force_val * force_vec0, force_val * force_vec2
+        assert forces[0, 0] == pytest.approx(force0[0], abs=1e-10)
+        assert forces[0, 1] == pytest.approx(force0[1])
+        assert forces[0, 2] == pytest.approx(force0[2])
+        assert forces[3, 0] == pytest.approx(force2[0])
+        assert forces[3, 1] == pytest.approx(force2[1])
+        assert forces[3, 2] == pytest.approx(force2[2])
+        assert forces.sum() == pytest.approx(0, abs=1e-10)
 
     def test_potential_energy(self):
         self.constraint.bind_ensemble(self.ensemble)
         self.constraint.set_params(self.params['angle'])
         energy = self.constraint.get_potential_energy()
         k, theta0 = self.params['angle']['CA-CA-CA']
-        angle = get_angle([0, 0, 0], [1, 0, 0], [0, 0, 1], is_angular=False)
-        assert energy == k * (angle - theta0)**2
+        theta = get_angle([0, 0, 0], [1, 0, 0], [0, 0, 1], is_angular=False)
+        assert energy == k * (theta - theta0)**2
