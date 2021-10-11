@@ -103,14 +103,14 @@ class TestCharmmBondConstraint:
 
         bond_length = get_bond([0, 0, 0], [0, 0, 1])
         k, r0 = self.params['bond']['CA-CA']
-        force_val = 2 * k * (bond_length - r0)
-        force_vec = [0, 0, 1]
+        force_val = - 2 * k * (bond_length - r0)
         assert forces[0, 0] == 0
         assert forces[0, 1] == 0
-        assert forces[0, 2] == force_val
+        assert forces[0, 2] == - force_val
         assert forces[3, 0] == 0
         assert forces[3, 1] == 0
-        assert forces[3, 2] == - force_val
+        assert forces[3, 2] == force_val
+        assert forces.sum() == 0
 
     def test_get_potential_energy(self):
         self.constraint.bind_ensemble(self.ensemble)
