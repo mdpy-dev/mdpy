@@ -8,7 +8,8 @@ from .constraint import Constraint
 
 # Charmm
 from .charmm_bond_constraint import CharmmBondConstraint
+from .charmm_angle_constraint import CharmmAngleConstraint
 
 __all__ = [
-    'CharmmBondConstraint'
+    'CharmmBondConstraint', 'CharmmAngleConstraint'
 ]
