@@ -11,7 +11,10 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 
 import numpy as np
 from . import Particle
+from .. import SPATIAL_DIM
 from ..error import *
+from ..math import check_quantity_value
+from ..unit import *
 
 class Topology:
     def __init__(self) -> None:
@@ -27,6 +30,8 @@ class Topology:
         self._num_impropers = 0
         self._masses = []
         self._charges = []
+        self._pbc_matrix = np.zeros([SPATIAL_DIM, SPATIAL_DIM])
+        self._pbc_inv = np.zeros([SPATIAL_DIM, SPATIAL_DIM])
         
     def __repr__(self) -> str:
         return '<Toplogy object: %d particles at %x>' %(self._num_particles, id(self))
@@ -37,8 +42,28 @@ class Topology:
             %(self._num_particles, self._num_bonds, self._num_angles, self._num_dihedrals, self._num_impropers)
         )
 
+    def set_pbc_matrix(self, pbc_matrix):
+        pbc_matrix = check_quantity_value(pbc_matrix, default_length_unit)
+        row, col = pbc_matrix.shape
+        if row != SPATIAL_DIM or col != SPATIAL_DIM:
+            raise SpatialDimError(
+                'The pbc matrix should have shape [%d, %d], while matrix [%d %d] is provided'
+                %(SPATIAL_DIM, SPATIAL_DIM, row, col)
+            )
+        self._pbc_matrix = pbc_matrix
+        self._check_pbc_matrix()
+        self._pbc_inv = np.linalg.inv(self._pbc_matrix)
+    
+    def _check_pbc_matrix(self):
+        if np.linalg.det(self._pbc_matrix) == 0:
+            raise PBCPoorDefinedError(
+                'PBC of %s is poor defined. Two or more column vectors are linear corellated'
+            )
+
     def add_particles(self, particles):
         for particle in particles:
+            if not isinstance(particle, Particle):
+                raise TypeError('mdpy.core.Particle type is excepted, while %s provided' %type(particle))
             # if particle in self._particles:
             #     raise ParticleConflictError('Particle %s is added twice to Toplogy instance' %particle)
             # particle.change_particle_id(self._num_particles) # Deprecated because this work should be done by modeling software
@@ -268,3 +293,11 @@ class Topology:
     @property
     def num_impropers(self):
         return self._num_impropers
+
+    @property
+    def pbc_matrix(self):
+        return self._pbc_matrix
+
+    @property
+    def pbc_inv(self):
+        return self._pbc_inv

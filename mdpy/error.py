@@ -33,6 +33,7 @@ class SpatialDimError(Exception):
     
     Used in:
     - mdpy.core.particle
+    - mdpy.core.topology
     - mdpy.ensemble
     '''
     pass
@@ -72,5 +73,14 @@ class FileFormatError(Exception):
     
     Used in:
     - mdpy.file.charmm_file
+    '''
+    pass
+
+class PBCPoorDefinedError(Exception):
+    '''This error occurs when:
+    - Two or more column vector in pbc_matrix is linear corellated
+    
+    Used in:
+    - mdpy.core.topology
     '''
     pass
