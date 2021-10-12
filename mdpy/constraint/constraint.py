@@ -10,6 +10,7 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 '''
 
 from ..error import *
+from ..ensemble import Ensemble
 
 class Constraint:
     def __init__(self, force_id: int, force_group: int) -> None:
@@ -17,7 +18,10 @@ class Constraint:
         self._force_group = force_group
         self._parent_ensemble = None
 
-    def bind_ensemble(self, ensemble):
+    def __repr__(self) -> str:
+        return '<mdpy.Constraint class at %x>' %id(self)
+
+    def bind_ensemble(self, ensemble: Ensemble):
         raise NotImplementedError('The subclass of mdpy.constraint.Constarint class should overload bind_ensemble method')
 
     def set_params(self, params):
