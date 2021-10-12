@@ -11,7 +11,10 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 
 import numpy as np
 from . import Particle
+from .. import SPATIAL_DIM
 from ..error import *
+from ..math import check_quantity_value
+from ..unit import *
 
 class Topology:
     def __init__(self) -> None:
@@ -25,6 +28,10 @@ class Topology:
         self._num_dihedrals = 0
         self._impropers = []
         self._num_impropers = 0
+        self._masses = []
+        self._charges = []
+        self._pbc_matrix = np.zeros([SPATIAL_DIM, SPATIAL_DIM])
+        self._pbc_inv = np.zeros([SPATIAL_DIM, SPATIAL_DIM])
         
     def __repr__(self) -> str:
         return '<Toplogy object: %d particles at %x>' %(self._num_particles, id(self))
@@ -35,14 +42,42 @@ class Topology:
             %(self._num_particles, self._num_bonds, self._num_angles, self._num_dihedrals, self._num_impropers)
         )
 
+    def set_pbc_matrix(self, pbc_matrix):
+        pbc_matrix = check_quantity_value(pbc_matrix, default_length_unit)
+        row, col = pbc_matrix.shape
+        if row != SPATIAL_DIM or col != SPATIAL_DIM:
+            raise SpatialDimError(
+                'The pbc matrix should have shape [%d, %d], while matrix [%d %d] is provided'
+                %(SPATIAL_DIM, SPATIAL_DIM, row, col)
+            )
+        self._pbc_matrix = pbc_matrix
+        self._check_pbc_matrix()
+        self._pbc_inv = np.linalg.inv(self._pbc_matrix)
+    
+    def _check_pbc_matrix(self):
+        if np.linalg.det(self._pbc_matrix) == 0:
+            raise PBCPoorDefinedError(
+                'PBC of %s is poor defined. Two or more column vectors are linear corellated'
+            )
+
     def add_particles(self, particles):
         for particle in particles:
+            if not isinstance(particle, Particle):
+                raise TypeError('mdpy.core.Particle type is excepted, while %s provided' %type(particle))
             # if particle in self._particles:
             #     raise ParticleConflictError('Particle %s is added twice to Toplogy instance' %particle)
             # particle.change_particle_id(self._num_particles) # Deprecated because this work should be done by modeling software
             particle.change_matrix_id(self._num_particles)
             self._particles.append(particle)
             self._num_particles += 1
+        self._update_particles_properties()
+
+    def _update_particles_properties(self):
+        self._masses = np.zeros([self._num_particles, 1])
+        self._charges = np.zeros([self._num_particles, 1])
+        for index, particle in enumerate(self._particles):
+            self._masses[index, 0] = particle.mass
+            self._charges[index, 0] = particle.charge
 
     def select_particles(self, keywords):
         ''' Example:
@@ -86,14 +121,24 @@ class Topology:
         return selected_particles
 
     def del_particles(self, particles):
+        particle_list, bond_list, angle_list, dihedral_list, improper_list = [], [], [], [], []
         for particle in particles:
             if particle in self._particles:
-                self._particles.remove(particle)
-                [self.del_bond(bond) for bond in self._bonds if particle.matrix_id in bond]
-                [self.del_angle(angle) for angle in self._angles if particle.matrix_id in angle]
-                [self.del_dihedral(dihedral) for dihedral in self._dihedrals if particle.matrix_id in dihedral]
-                [self.del_improper(improper) for improper in self._impropers if particle.matrix_id in improper]
-                self._num_particles -= 1
+                particle_list.append(particle)
+                bond_list.extend([bond for bond in self._bonds if particle.matrix_id in bond])
+                angle_list.extend([angle for angle in self._angles if particle.matrix_id in angle])
+                dihedral_list.extend([dihedral for dihedral in self._dihedrals if particle.matrix_id in dihedral])
+                improper_list.extend([improper for improper in self._impropers if particle.matrix_id in improper])
+        _ = [self._particles.remove(i) for i in particle_list]
+        self._num_particles -= len(particle_list)
+        _ = [self._bonds.remove(i) for i in bond_list]
+        self._num_bonds -= len(bond_list)
+        _ = [self._angles.remove(i) for i in angle_list]
+        self._num_angles -= len(angle_list)
+        _ = [self._dihedrals.remove(i) for i in dihedral_list]
+        self._num_dihedrals -= len(dihedral_list)
+        _ = [self._impropers.remove(i) for i in improper_list]
+        self._num_impropers -= len(improper_list)
 
     def _check_matrix_ids(self, *matrix_ids):
         for index, matrix_id in enumerate(matrix_ids):
@@ -201,17 +246,13 @@ class Topology:
             self._impropers.remove(improper)
             self._num_impropers -= 1
 
-    def check(self):
-        # Check particle
-        for i, j in enumerate(self._particles):
-            if j in self._particles[i+1:]:
-                raise ParticleConflictError('Particle %s is added twice to Toplogy instance' %j)
+    @property
+    def masses(self):
+        return self._masses
 
-    def save(self):
-        pass
-
-    def load(self):
-        pass
+    @property
+    def charges(self):
+        return self._charges
 
     @property
     def particles(self):
@@ -252,3 +293,11 @@ class Topology:
     @property
     def num_impropers(self):
         return self._num_impropers
+
+    @property
+    def pbc_matrix(self):
+        return self._pbc_matrix
+
+    @property
+    def pbc_inv(self):
+        return self._pbc_inv

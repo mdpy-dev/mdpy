@@ -11,7 +11,6 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 
 import pytest
 import numpy as np
-import jax.numpy as jnp
 from ..unit import *
 from ..unit import Quantity
 from ..error import UnitDimensionDismatchedError, ChangeDeviceBoundedDataError
@@ -22,6 +21,7 @@ class TestQuantity:
 
     def teardown(self):
         pass
+
     def test_attributes(self):
         quantity = Quantity(1) * angstrom
         assert quantity.value == 1
@@ -43,16 +43,11 @@ class TestQuantity:
         assert quantity.value[0] == 1e-10
 
     def test_exceptions(self):
-        with pytest.raises(ChangeDeviceBoundedDataError):
-            quantity = Quantity(np.array([1, 2, 3])) * angstrom
-            quantity.to_device()
-            quantity[1] = 0
+        pass
+
     def test_to_device(self):
         quantity = Quantity(1, angstrom)
         assert isinstance(quantity.value, np.ndarray)
-
-        quantity.to_device()
-        assert isinstance(quantity.value, jnp.DeviceArray)
 
     def test_indice(self):
         quantity = Quantity([1, 2, 3, 4], angstrom)
@@ -61,9 +56,6 @@ class TestQuantity:
         quantity[0].value == 10
 
         quantity.to_device()
-        with pytest.raises(ChangeDeviceBoundedDataError):
-            quantity[0] = 1
-
 
     def test_convert_to(self):
         quantity = Quantity(1) * angstrom

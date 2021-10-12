@@ -9,13 +9,11 @@ contact : zhenyuwei99@gmail.com
 copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 '''
 
-import jax
-import jax.numpy as jnp
 import numpy as np
 from copy import deepcopy
 from . import Unit
 from .unit_definition import *
-from ..error import UnitDimensionDismatchedError, ChangeDeviceBoundedDataError
+from ..error import *
 
 class Quantity:
     def __init__(self, value, unit: Unit=no_unit) -> None:
@@ -59,8 +57,9 @@ class Quantity:
         )
 
     def to_device(self):
-        self._value = jax.device_put(self._value)
-        self._in_device = True
+        # self._value = jax.device_put(self._value)
+        # self._in_device = True
+        pass
 
     def is_dimension_less(self):
         '''
@@ -111,18 +110,13 @@ class Quantity:
         )
 
     def __setitem__(self, key, value):
-        if self._in_device:
-            raise ChangeDeviceBoundedDataError(
-                'mdpy.Quantity object does not support item assignment. JAX arrays are immutable;'
-            )
+        if isinstance(value, Quantity):
+            self._value[key] = value.convert_to(self._unit).value
         else:
-            self._value[key] = (value / self._unit * self._unit).value
+            self._value[key] =  Quantity(value, self._unit).value
 
     def __eq__(self, other) -> bool:
-        if self._in_device:
-            eq_judge = jnp.isclose
-        else:
-            eq_judge = np.isclose
+        eq_judge = np.isclose
         if isinstance(other, Quantity):
             if self._unit == other.unit:
                 return eq_judge(self._value, other.value)
@@ -303,16 +297,10 @@ class Quantity:
         Unit
             square root of ``self``
         '''   
-        if self._in_device:
-            return Quantity(
-                jnp.sqrt(self._value),
-                self._unit.sqrt()
-            )
-        else:
-            return Quantity(
-                np.sqrt(self._value),
-                self._unit.sqrt()
-            )
+        return Quantity(
+            np.sqrt(self._value),
+            self._unit.sqrt()
+        )
 
     def __abs__(self):
         return Quantity(
