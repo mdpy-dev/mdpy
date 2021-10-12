@@ -9,7 +9,6 @@ contact : zhenyuwei99@gmail.com
 copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 '''
 
-from numpy.testing._private.utils import assert_almost_equal
 import pytest, os
 import numpy as np
 from ..constraint import CharmmAngleConstraint
