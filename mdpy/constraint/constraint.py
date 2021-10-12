@@ -35,3 +35,15 @@ class Constraint:
 
     def get_potential_energy(self):
         raise NotImplementedError('The subclass of mdpy.constraint.Constarint class should overload get_potential method')
+
+    @property
+    def force_id(self):
+        return self._force_id
+
+    @force_id.setter
+    def force_id(self, index: int):
+        self._force_id = index
+
+    @property
+    def force_group(self):
+        return self._force_group
