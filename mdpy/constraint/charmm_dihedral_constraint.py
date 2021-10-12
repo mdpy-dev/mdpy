@@ -11,12 +11,13 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 
 import numpy as np
 from . import Constraint
+from .. import SPATIAL_DIM
 from ..ensemble import Ensemble
 from ..math import *
 
 class CharmmDihedralConstraint(Constraint):
-    def __init__(self, force_id: int, force_group: int) -> None:
-        super().__init__(force_id, force_group)
+    def __init__(self, force_id: int=0, force_group: int=0) -> None:
+        super().__init__(force_id=force_id, force_group=force_group)
         self._dihedral_type, self._dihedral_matrix_id, self._dihedral_info = [], [], []
         self._num_dihedrals = 0
 
@@ -41,14 +42,15 @@ class CharmmDihedralConstraint(Constraint):
             self._num_dihedrals += 1
 
     def set_params(self, params):
-        self._test_bound_state()
+        self._check_bound_state()
         self._dihedral_info = []
-        for index, dihedral in enumerate (self._dihedral_type):
+        for index, dihedral in enumerate(self._dihedral_type):
             self._dihedral_info.append(self._dihedral_matrix_id[index] + params[dihedral])
 
     def get_forces(self):
+        self._check_bound_state()
         # V(dihedral) = Kchi(1 + cos(n(chi) - delta))
-        forces = np.zeros([self._parent_ensemble.topology.num_particles, 3])
+        forces = np.zeros([self._parent_ensemble.topology.num_particles, SPATIAL_DIM])
         for dihedral_info in self._dihedral_info:
             id1, id2, id3, id4, k, n, delta = dihedral_info
             theta = get_dihedral(
@@ -92,6 +94,7 @@ class CharmmDihedralConstraint(Constraint):
         return forces
 
     def get_potential_energy(self):
+        self._check_bound_state()
         potential_energy = 0
         for dihedral_info in self._dihedral_info:
             id1, id2, id3, id4, k, n, delta = dihedral_info

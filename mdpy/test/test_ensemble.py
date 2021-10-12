@@ -16,6 +16,7 @@ import numpy as np
 from ..core import Particle, Topology
 from ..error import *
 from ..ensemble import Ensemble
+from ..constraint import Constraint
 
 class TestEnsemble:
     def setup(self):
@@ -67,6 +68,16 @@ class TestEnsemble:
 
         with pytest.raises(SpatialDimError):
             self.ensemble.set_velocities(np.ones([4, 4]))
+
+    def test_add_constraints(self):
+        c1, c2 = Constraint(), Constraint()
+        self.ensemble.add_constraints(c1, c2)
+        assert self.ensemble.num_constraints == 2
+        assert c1.force_id == 0
+        assert c2.force_id == 1
+        
+        with pytest.raises(ConstraintConflictError):
+            self.ensemble.add_constraints(c1)
 
     def test_update_kinetic_energy(self):
         self.ensemble._update_kinetic_energy()
