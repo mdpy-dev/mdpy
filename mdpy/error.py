@@ -48,7 +48,7 @@ class GeomtryDimError(Exception):
     pass
 
 class ParticleConflictError(Exception):
-    '''This error occurs when 
+    '''This error occurs when:
     - Particle is twice bounded to a Toplogy instance 
     - Particle appears twice in bond, angle, dihedral or improper
     - The number of particles is mismatched with the dimension of positions, velocities, forces matrix
@@ -57,6 +57,16 @@ class ParticleConflictError(Exception):
     - mdpy.core.topology
     - mdpy.ensemble
     '''
+    pass
+
+class ConstraintConflictError(Exception):
+    '''This error occurs when:
+    - Constraint is twice bounded to a Ensemble instance
+    
+    Used in:
+    - mdpy.ensemble
+    '''
+    pass
 
 class NonBoundedError(Exception):
     '''This error occurs when:
