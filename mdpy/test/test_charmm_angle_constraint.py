@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 # -*- encoding: utf-8 -*-
 '''
-file : test_charmm_bond_constraint.py
-created time : 2021/10/09
+file : test_charmm_angle_constraint.py
+created time : 2021/10/10
 author : Zhenyu Wei
 version : 1.0
 contact : zhenyuwei99@gmail.com
@@ -11,18 +11,18 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 
 import pytest, os
 import numpy as np
-from ..constraint import CharmmBondConstraint
+from ..constraint import CharmmAngleConstraint
 from ..core import Particle, Topology
 from ..ensemble import Ensemble
 from ..file import CharmmParamFile
-from ..math import get_bond
+from ..math import get_angle, get_unit_vec
 from ..error import *
 from ..unit import *
 
 cur_dir = os.path.dirname(os.path.abspath(__file__))
 data_dir = os.path.join(cur_dir, 'data')
 
-class TestCharmmBondConstraint:
+class TestCharmmAngleConstraint:
     def setup(self):
         p1 = Particle(
             particle_id=0, particle_type='C', 
@@ -30,8 +30,8 @@ class TestCharmmBondConstraint:
             mass=12, charge=0
         )
         p2 = Particle(
-            particle_id=1, particle_type='N', 
-            particle_name='N', molecule_type='ASN',
+            particle_id=1, particle_type='C', 
+            particle_name='CA', molecule_type='ASN',
             mass=14, charge=0
         )
         p3 = Particle(
@@ -46,7 +46,7 @@ class TestCharmmBondConstraint:
         )
         t = Topology()
         t.add_particles([p1, p2, p3, p4])
-        t.add_bond([0, 3]) # CA   CA    305.000     1.3750
+        t.add_angle([0, 1, 3]) # CA   CA   CA    40.000    120.00
         positions = np.array([
             [0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]
         ])
@@ -61,7 +61,7 @@ class TestCharmmBondConstraint:
         f3 = os.path.join(data_dir, 'top_all36_na.rtf')
         charmm = CharmmParamFile(f1, f2, f3)
         self.params = charmm.params
-        self.constraint = CharmmBondConstraint(0, 0)
+        self.constraint = CharmmAngleConstraint(0, 0)
 
     def teardown(self):
         self.ensemble, self.params, self.constraint = None, None, None
@@ -77,46 +77,49 @@ class TestCharmmBondConstraint:
         self.constraint.bind_ensemble(self.ensemble)
         assert self.constraint._parent_ensemble.num_constraints == 1
 
-        assert self.constraint._bond_type[0] == 'CA-CA'
-        assert self.constraint._bond_matrix_id[0][0] == 0
-        assert self.constraint._bond_matrix_id[0][1] == 3
-        assert self.constraint.num_bonds == 1
-        
+        assert self.constraint._angle_type[0] == 'CA-CA-CA'
+        assert self.constraint._angle_matrix_id[0][0] == 0
+        assert self.constraint._angle_matrix_id[0][1] == 1
+        assert self.constraint._angle_matrix_id[0][2] == 3
+        assert self.constraint.num_angles == 1
+
         # No exception
         self.constraint._test_bound_state()
 
     def test_set_params(self):
-        # CA   CA    305.000     1.3750
+        # CA   CA   CA    40.000    120.00
         self.constraint.bind_ensemble(self.ensemble)
-        self.constraint.set_params(self.params['bond'])
-        assert self.constraint._bond_info[0][0] == 0
-        assert self.constraint._bond_info[0][1] == 3
-        assert self.constraint._bond_info[0][2] == Quantity(305, kilocalorie_permol).convert_to(default_energy_unit).value
-        assert self.constraint._bond_info[0][3] == Quantity(1.3750, angstrom).convert_to(default_length_unit).value
+        self.constraint.set_params(self.params['angle'])
+        assert self.constraint._angle_info[0][0] == 0
+        assert self.constraint._angle_info[0][1] == 1
+        assert self.constraint._angle_info[0][2] == 3
+        assert self.constraint._angle_info[0][3] == Quantity(40, kilocalorie_permol).convert_to(default_energy_unit).value
+        assert self.constraint._angle_info[0][4] == Quantity(120).value
 
     def test_get_forces(self):
         self.constraint.bind_ensemble(self.ensemble)
-        self.constraint.set_params(self.params['bond'])
+        self.constraint.set_params(self.params['angle'])
         forces = self.constraint.get_forces()
-        assert forces[1, 0] == 0
-        assert forces[2, 1] == 0 
+        k, theta0 = self.params['angle']['CA-CA-CA']
+        theta = get_angle([0, 0, 0], [1, 0, 0], [0, 0, 1], is_angular=False)
+        theta_rad = np.pi / 4
+        force_val = 2 * k * (45 - theta0) / np.abs(np.sin(theta_rad))
+        vec0, vec1 = np.array([-1, 0, 0]), get_unit_vec(np.array([-1, 0, 1]))
+        force_vec0 = (vec1 - vec0 * np.cos(theta_rad)) / 1
+        force_vec2 = (vec0 - vec1 * np.cos(theta_rad)) / np.sqrt(2)
+        force0, force2 = force_val * force_vec0, force_val * force_vec2
+        assert forces[0, 0] == pytest.approx(force0[0], abs=1e-10)
+        assert forces[0, 1] == pytest.approx(force0[1])
+        assert forces[0, 2] == pytest.approx(force0[2])
+        assert forces[3, 0] == pytest.approx(force2[0])
+        assert forces[3, 1] == pytest.approx(force2[1])
+        assert forces[3, 2] == pytest.approx(force2[2])
+        assert forces.sum() == pytest.approx(0, abs=1e-10)
 
-        bond_length = get_bond([0, 0, 0], [0, 0, 1])
-        k, r0 = self.params['bond']['CA-CA']
-        force_val = - 2 * k * (bond_length - r0)
-        assert forces[0, 0] == 0
-        assert forces[0, 1] == 0
-        assert forces[0, 2] == - force_val
-        assert forces[3, 0] == 0
-        assert forces[3, 1] == 0
-        assert forces[3, 2] == force_val
-        assert forces.sum() == 0
-
-    def test_get_potential_energy(self):
+    def test_potential_energy(self):
         self.constraint.bind_ensemble(self.ensemble)
-        self.constraint.set_params(self.params['bond'])
+        self.constraint.set_params(self.params['angle'])
         energy = self.constraint.get_potential_energy()
-        bond_length = get_bond([0, 0, 0], [0, 0, 1])
-        k, r0 = self.params['bond']['CA-CA']
-        assert energy == k * (bond_length - r0)**2
-        
+        k, theta0 = self.params['angle']['CA-CA-CA']
+        theta = get_angle([0, 0, 0], [1, 0, 0], [0, 0, 1], is_angular=False)
+        assert energy == k * (theta - theta0)**2
