@@ -43,6 +43,7 @@ class CharmmBondConstraint(Constraint):
             self._bond_info.append(self._bond_matrix_id[index] + params[bond])
 
     def get_forces(self):
+        self._test_bound_state()
         forces = np.zeros([self._parent_ensemble.topology.num_particles, 3])
         for bond_info in self._bond_info:
             id1, id2, k, r0 = bond_info
@@ -60,6 +61,7 @@ class CharmmBondConstraint(Constraint):
         return forces
 
     def get_potential_energy(self):
+        self._test_bound_state()
         potential_energy = 0
         for bond_info in self._bond_info:
             id1, id2, k, r0 = bond_info

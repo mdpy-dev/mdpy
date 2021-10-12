@@ -43,10 +43,11 @@ class CharmmDihedralConstraint(Constraint):
     def set_params(self, params):
         self._test_bound_state()
         self._dihedral_info = []
-        for index, dihedral in enumerate (self._dihedral_type):
+        for index, dihedral in enumerate(self._dihedral_type):
             self._dihedral_info.append(self._dihedral_matrix_id[index] + params[dihedral])
 
     def get_forces(self):
+        self._test_bound_state()
         # V(dihedral) = Kchi(1 + cos(n(chi) - delta))
         forces = np.zeros([self._parent_ensemble.topology.num_particles, 3])
         for dihedral_info in self._dihedral_info:
@@ -92,6 +93,7 @@ class CharmmDihedralConstraint(Constraint):
         return forces
 
     def get_potential_energy(self):
+        self._test_bound_state()
         potential_energy = 0
         for dihedral_info in self._dihedral_info:
             id1, id2, id3, id4, k, n, delta = dihedral_info
