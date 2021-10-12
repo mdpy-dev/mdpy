@@ -30,6 +30,10 @@ class Constraint:
                 '%s has not been bounded to any Ensemble instance' %self
             )
 
+    def update_neighbor(self):
+        # Overloading of update_neighbor method is not compulsory
+        raise NotImplementedError('The subclass of mdpy.constraint.Constarint class has not overloaded update_neighbor method') 
+
     def get_forces(self):
         raise NotImplementedError('The subclass of mdpy.constraint.Constarint class should overload get_forces method')
 
