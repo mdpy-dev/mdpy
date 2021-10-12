@@ -45,6 +45,7 @@ class CharmmAngleConstraint(Constraint):
             self._angle_info.append(self._angle_matrix_id[index] + params[angle])
     
     def get_forces(self):
+        self._test_bound_state()
         # V(angle) = Ktheta(Theta - Theta0)**2
         forces = np.zeros([self._parent_ensemble.topology.num_particles, 3])
         for angle_info in self._angle_info:
@@ -69,6 +70,7 @@ class CharmmAngleConstraint(Constraint):
         return forces
 
     def get_potential_energy(self):
+        self._test_bound_state()
         potential_energy = 0
         for angle_info in self._angle_info:
             id1, id2, id3, k, theta0 = angle_info
