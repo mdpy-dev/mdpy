@@ -346,7 +346,7 @@ class TestTopology:
     
     def test_pbc(self):
         with pytest.raises(PBCPoorDefinedError):
-            self.topology._check_pbc_matrix()
+            self.topology.check_pbc_matrix()
 
         with pytest.raises(PBCPoorDefinedError):
             self.topology.set_pbc_matrix(np.ones([3, 3]))
