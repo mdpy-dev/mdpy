@@ -15,7 +15,7 @@ from ..ensemble import Ensemble
 from ..math import *
 
 class CharmmDihedralConstraint(Constraint):
-    def __init__(self, force_id: int, force_group: int) -> None:
+    def __init__(self, force_id: int=0, force_group: int=0) -> None:
         super().__init__(force_id, force_group)
         self._dihedral_type, self._dihedral_matrix_id, self._dihedral_info = [], [], []
         self._num_dihedrals = 0
