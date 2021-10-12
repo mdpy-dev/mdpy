@@ -16,7 +16,7 @@ from ..math import *
 
 class CharmmBondConstraint(Constraint):
     def __init__(self, force_id: int=0, force_group: int=0) -> None:
-        super().__init__(force_id, force_group)
+        super().__init__(force_id=force_id, force_group=force_group)
         self._bond_type, self._bond_matrix_id, self._bond_info = [], [], []
         self._num_bonds = 0
 
