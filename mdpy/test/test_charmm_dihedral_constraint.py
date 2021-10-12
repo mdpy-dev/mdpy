@@ -22,7 +22,7 @@ from ..unit import *
 cur_dir = os.path.dirname(os.path.abspath(__file__))
 data_dir = os.path.join(cur_dir, 'data')
 
-class TestCharmmBondConstraint:
+class TestCharmmDihedralConstraint:
     def setup(self):
         p1 = Particle(
             particle_id=0, particle_type='C', 
