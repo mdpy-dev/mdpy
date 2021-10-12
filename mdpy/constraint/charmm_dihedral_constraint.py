@@ -58,6 +58,38 @@ class CharmmDihedralConstraint(Constraint):
                 self._parent_ensemble.positions[id4, :],
                 is_angular=False
             )
+            force_val = k * (1 - n * np.sin(n*theta - delta))
+
+            vab = self._parent_ensemble.positions[id2, :] -self._parent_ensemble.positions[id1, :]
+            lab = np.linalg.norm(vab)
+            vbc = self._parent_ensemble.positions[id3, :] -self._parent_ensemble.positions[id2, :]
+            lbc = np.linalg.norm(vbc)
+            voc, loc = vbc / 2, lbc / 2
+            vcd = self._parent_ensemble.positions[id4, :] -self._parent_ensemble.positions[id3, :]
+            lcd = np.linalg.norm(vcd)
+            theta_abc = get_angle(
+                self._parent_ensemble.positions[id1, :], 
+                self._parent_ensemble.positions[id2, :],
+                self._parent_ensemble.positions[id3, :]
+            )
+            theta_bcd = get_angle(
+                self._parent_ensemble.positions[id2, :], 
+                self._parent_ensemble.positions[id3, :],
+                self._parent_ensemble.positions[id4, :]
+            )
+
+            force_a = force_val / (lab * np.sin(theta_abc)) * get_unit_vec(np.cross(-vab, vbc))
+            force_d = force_val / (lcd * np.sin(theta_bcd)) * get_unit_vec(np.cross(vcd, -vbc))
+            force_c =  np.cross(
+                - (np.cross(voc, force_d) + np.cross(vcd, force_d) / 2 + np.cross(-vab, force_a) / 2),
+                voc
+            ) / loc**2
+            force_b = - (force_a + force_c + force_d)
+            forces[id1, :] += force_a
+            forces[id2, :] += force_b
+            forces[id3, :] += force_c
+            forces[id4, :] += force_d
+        return forces
 
     def get_potential_energy(self):
         potential_energy = 0
