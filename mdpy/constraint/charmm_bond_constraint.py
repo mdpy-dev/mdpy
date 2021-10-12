@@ -11,6 +11,7 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 
 import numpy as np
 from . import Constraint
+from .. import SPATIAL_DIM
 from ..ensemble import Ensemble
 from ..math import *
 
@@ -44,7 +45,7 @@ class CharmmBondConstraint(Constraint):
 
     def get_forces(self):
         self._check_bound_state()
-        forces = np.zeros([self._parent_ensemble.topology.num_particles, 3])
+        forces = np.zeros([self._parent_ensemble.topology.num_particles, SPATIAL_DIM])
         for bond_info in self._bond_info:
             id1, id2, k, r0 = bond_info
             r = get_bond(

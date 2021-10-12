@@ -11,6 +11,7 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 
 import numpy as np
 from . import Constraint
+from .. import SPATIAL_DIM
 from ..ensemble import Ensemble
 from ..math import *
 
@@ -49,7 +50,7 @@ class CharmmDihedralConstraint(Constraint):
     def get_forces(self):
         self._check_bound_state()
         # V(dihedral) = Kchi(1 + cos(n(chi) - delta))
-        forces = np.zeros([self._parent_ensemble.topology.num_particles, 3])
+        forces = np.zeros([self._parent_ensemble.topology.num_particles, SPATIAL_DIM])
         for dihedral_info in self._dihedral_info:
             id1, id2, id3, id4, k, n, delta = dihedral_info
             theta = get_dihedral(

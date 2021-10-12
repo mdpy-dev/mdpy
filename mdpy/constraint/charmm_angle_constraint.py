@@ -11,6 +11,7 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 
 import numpy as np
 from . import Constraint
+from .. import SPATIAL_DIM
 from ..ensemble import Ensemble
 from ..math import *
 
@@ -47,7 +48,7 @@ class CharmmAngleConstraint(Constraint):
     def get_forces(self):
         self._check_bound_state()
         # V(angle) = Ktheta(Theta - Theta0)**2
-        forces = np.zeros([self._parent_ensemble.topology.num_particles, 3])
+        forces = np.zeros([self._parent_ensemble.topology.num_particles, SPATIAL_DIM])
         for angle_info in self._angle_info:
             id1, id2, id3, k, theta0 = angle_info
             theta = get_angle(
