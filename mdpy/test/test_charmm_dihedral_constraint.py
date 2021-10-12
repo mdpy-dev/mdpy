@@ -9,7 +9,6 @@ contact : zhenyuwei99@gmail.com
 copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 '''
 
-from numpy.testing._private.utils import assert_almost_equal
 import pytest, os
 import numpy as np
 from ..constraint import CharmmDihedralConstraint
@@ -102,7 +101,30 @@ class TestCharmmBondConstraint:
         assert self.constraint._dihedral_info[0][6] == Quantity(180).value
 
     def test_get_forces(self):
-        pass
+        self.constraint.bind_ensemble(self.ensemble)
+        self.constraint.set_params(self.params['dihedral'])
+        forces = self.constraint.get_forces()
+        k, n, delta = self.params['dihedral']['CA-NY-CPT-CA']
+        theta = get_dihedral([0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1], is_angular=False)
+        assert forces.sum() == pytest.approx(0)
+
+        positions = np.array([
+            [0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]
+        ])
+        vec_bc = positions[2, :] - positions[1, :]
+        vec_oc = vec_bc / 2
+        vec_ob = - vec_bc / 2
+        vec_oa = vec_ob + positions[0, :] - positions[1, :] # Vec ba
+        vec_od = vec_oc + positions[3, :] - positions[2, :] # Vec cd
+        res = (
+            np.cross(vec_oa, forces[0, :]) +
+            np.cross(vec_ob, forces[1, :]) +
+            np.cross(vec_oc, forces[2, :]) + 
+            np.cross(vec_od, forces[3, :])
+        )
+        assert res[0] == pytest.approx(0)
+        assert res[1] == pytest.approx(0)
+        assert res[2] == pytest.approx(0)
 
     def test_get_potential_energy(self):
         self.constraint.bind_ensemble(self.ensemble)
