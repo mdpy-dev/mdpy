@@ -16,7 +16,7 @@ from ..math import *
 
 class CharmmAngleConstraint(Constraint):
     def __init__(self, force_id: int=0, force_group: int=0) -> None:
-        super().__init__(force_id, force_group)
+        super().__init__(force_id=force_id, force_group=force_group)
         self._angle_type, self._angle_matrix_id, self._angle_info = [], [], []
         self._num_angles = 0
 
