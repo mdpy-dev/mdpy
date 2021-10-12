@@ -72,7 +72,7 @@ class TestCharmmBondConstraint:
 
     def test_exceptions(self):
         with pytest.raises(NonBoundedError):
-            self.constraint._test_bound_state()
+            self.constraint._check_bound_state()
 
     def test_bind_ensemble(self):
         self.constraint.bind_ensemble(self.ensemble)
@@ -86,7 +86,7 @@ class TestCharmmBondConstraint:
         assert self.constraint.num_dihedrals == 1
 
         # No exception
-        self.constraint._test_bound_state()
+        self.constraint._check_bound_state()
 
     def test_set_params(self):
         # CA   NY   CPT  CA       3.0000  2   180.00

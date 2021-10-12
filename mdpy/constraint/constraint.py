@@ -24,7 +24,7 @@ class Constraint:
     def set_params(self, params):
         raise NotImplementedError('The subclass of mdpy.constraint.Constarint class should overload set_param method')
 
-    def _test_bound_state(self):
+    def _check_bound_state(self):
         if self._parent_ensemble == None:
             raise NonBoundedError(
                 '%s has not been bounded to any Ensemble instance' %self
