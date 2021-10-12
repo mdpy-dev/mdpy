@@ -22,7 +22,7 @@ def check_quantity(val, target_unit: Unit):
 def check_quantity_value(val, target_unit: Unit):
     if isinstance(val, Quantity):
         return val.convert_to(target_unit).value
-    elif val == None:
+    elif isinstance(val, type(None)):
         return None
     else:
         return Quantity(val, target_unit).value
