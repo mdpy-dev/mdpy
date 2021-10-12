@@ -81,5 +81,6 @@ class PBCPoorDefinedError(Exception):
     - Two or more column vector in pbc_matrix is linear corellated
     
     Used in:
-    - mdpy.core.Topology
+    - mdpy.core.topology
     '''
+    pass
