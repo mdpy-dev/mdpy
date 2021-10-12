@@ -51,10 +51,10 @@ class Topology:
                 %(SPATIAL_DIM, SPATIAL_DIM, row, col)
             )
         self._pbc_matrix = pbc_matrix
-        self._check_pbc_matrix()
+        self.check_pbc_matrix()
         self._pbc_inv = np.linalg.inv(self._pbc_matrix)
     
-    def _check_pbc_matrix(self):
+    def check_pbc_matrix(self):
         if np.linalg.det(self._pbc_matrix) == 0:
             raise PBCPoorDefinedError(
                 'PBC of %s is poor defined. Two or more column vectors are linear corellated'
