@@ -11,7 +11,6 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 
 import pytest
 import numpy as np
-import jax.numpy as jnp
 from ..unit import BaseDimension
 
 class TestUnit:
@@ -91,8 +90,6 @@ class TestUnit:
             length**[1, 2]
         with pytest.raises(ValueError):
             length**np.array([1, 2])
-        with pytest.raises(ValueError):
-            length**jnp.array([1, 2])
 
     def test_sqrt(self):
         length = BaseDimension(length_dimension=1)

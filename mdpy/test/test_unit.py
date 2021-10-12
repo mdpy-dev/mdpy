@@ -11,7 +11,6 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 
 import pytest
 import numpy as np
-import jax.numpy as jnp
 from ..unit import BaseDimension, Unit
 from ..error import UnitDimensionDismatchedError
 
@@ -100,8 +99,6 @@ class TestUnit:
             constant**[1, 2]
         with pytest.raises(ValueError):
             constant**np.array([1, 2])
-        with pytest.raises(ValueError):
-            constant**jnp.array([1, 2])
 
     def test_sqrt(self):
         angstrom_reciprocal = Unit(BaseDimension(length_dimension=-1), 1e10)

@@ -33,6 +33,17 @@ class TestPDBFile:
         assert pdb.molecule_types[22] == 'LEU'
         assert pdb.chain_ids[pdb.get_matrix_id(1617)] == 'W'
 
+        assert pdb.pbc_matrix[0, 0] == 100
+        assert pdb.pbc_matrix[1, 1] == 100
+        assert pdb.pbc_matrix[2, 2] == 100
+        assert pdb.pbc_matrix[0, 1] == 0
+        assert pdb.pbc_matrix[2, 1] == 0
+
+    def test_exceptions(self):
+        pass
+
+    def test_get_particle_info(self):
+        pdb = PDBFile(self.file_path)
         particle_info = pdb.get_particle_info(1)
         assert particle_info['particle_id'] == 1
         assert particle_info['particle_type'] == 'N'
@@ -44,9 +55,6 @@ class TestPDBFile:
         assert particle_info['position'][0] == pytest.approx(0.337)
         assert particle_info['position'][1] == pytest.approx(-11.334)
         assert particle_info['position'][2] == pytest.approx(11.207)
-
-    def test_exceptions(self):
-        pass
 
     def test_create_particles(self):
         pdb = PDBFile(self.file_path)

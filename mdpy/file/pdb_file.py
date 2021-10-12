@@ -10,7 +10,6 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 '''
 
 import numpy as np
-import MDAnalysis as mda
 from MDAnalysis.coordinates.PDB import PDBReader
 from MDAnalysis.topology.PDBParser import PDBParser
 from MDAnalysis.topology.guessers import guess_atom_type
@@ -20,8 +19,9 @@ from mdpy.core.particle import Particle
 class PDBFile:
     def __init__(self, file_path) -> None:
         # Initial reader and parser setting
-        self._reader = PDBReader(file_path)
-        self._parser = PDBParser(file_path).parse()
+        self._file_path = file_path
+        self._reader = PDBReader(self._file_path)
+        self._parser = PDBParser(self._file_path).parse()
         # Parse data
         self._num_particles = self._parser.n_atoms
         self._particle_ids = list(self._parser.ids.values)
@@ -36,6 +36,7 @@ class PDBFile:
             self._molecule_types.append(molecule_types[resid])
         self._chain_ids = list(self._parser.chainIDs.values)
         self._positions = self._reader.ts.positions
+        self._pbc_matrix = self._reader.ts.triclinic_dimensions
 
     def create_particles(self):
         particles = []
@@ -100,3 +101,7 @@ class PDBFile:
     @property
     def positions(self):
         return self._positions
+
+    @property
+    def pbc_matrix(self):
+        return self._pbc_matrix
