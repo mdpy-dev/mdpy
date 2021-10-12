@@ -71,7 +71,7 @@ class TestCharmmAngleConstraint:
 
     def test_exceptions(self):
         with pytest.raises(NonBoundedError):
-            self.constraint._test_bound_state()
+            self.constraint._check_bound_state()
 
     def test_bind_ensemble(self):
         self.constraint.bind_ensemble(self.ensemble)
@@ -84,7 +84,7 @@ class TestCharmmAngleConstraint:
         assert self.constraint.num_angles == 1
 
         # No exception
-        self.constraint._test_bound_state()
+        self.constraint._check_bound_state()
 
     def test_set_params(self):
         # CA   CA   CA    40.000    120.00
@@ -115,6 +115,12 @@ class TestCharmmAngleConstraint:
         assert forces[3, 1] == pytest.approx(force2[1])
         assert forces[3, 2] == pytest.approx(force2[2])
         assert forces.sum() == pytest.approx(0, abs=1e-10)
+
+        vec1 = np.array([-1, 0, 1])
+        torque = np.cross(vec0, forces[0, :]) + np.cross(vec1, forces[3, :])
+        assert torque[0] == pytest.approx(0, abs=1e-11)
+        assert torque[1] == pytest.approx(0, abs=1e-11)
+        assert torque[2] == pytest.approx(0, abs=1e-11)
 
     def test_potential_energy(self):
         self.constraint.bind_ensemble(self.ensemble)
