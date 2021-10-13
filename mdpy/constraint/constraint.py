@@ -18,6 +18,11 @@ class Constraint:
         self._force_group = force_group
         self._parent_ensemble = None
 
+    def __repr__(self) -> str:
+        return '<mdpy.Constraint class at %x>' %id(self)
+
+    __str__ = __repr__
+
     def bind_ensemble(self, ensemble: Ensemble):
         raise NotImplementedError('The subclass of mdpy.constraint.Constarint class should overload bind_ensemble method')
 

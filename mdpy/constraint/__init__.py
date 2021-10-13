@@ -10,7 +10,10 @@ from .constraint import Constraint
 from .charmm_bond_constraint import CharmmBondConstraint
 from .charmm_angle_constraint import CharmmAngleConstraint
 from .charmm_dihedral_constraint import CharmmDihedralConstraint
+from .charmm_improper_constraint import CharmmImproperConstraint
+from .charmm_nonbonded_constraint import CharmmNonbondedConstraint
 
 __all__ = [
-    'CharmmBondConstraint', 'CharmmAngleConstraint'
+    'CharmmBondConstraint', 'CharmmAngleConstraint', 'CharmmDihedralConstraint', 'CharmmImproperConstraint', 
+    'CharmmNonbondedConstraint'
 ]
