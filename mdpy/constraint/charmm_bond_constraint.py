@@ -11,12 +11,13 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 
 import numpy as np
 from . import Constraint
+from .. import SPATIAL_DIM
 from ..ensemble import Ensemble
 from ..math import *
 
 class CharmmBondConstraint(Constraint):
-    def __init__(self, force_id: int, force_group: int) -> None:
-        super().__init__(force_id, force_group)
+    def __init__(self, force_id: int=0, force_group: int=0) -> None:
+        super().__init__(force_id=force_id, force_group=force_group)
         self._bond_type, self._bond_matrix_id, self._bond_info = [], [], []
         self._num_bonds = 0
 
@@ -37,13 +38,14 @@ class CharmmBondConstraint(Constraint):
             self._num_bonds += 1
 
     def set_params(self, params):
-        self._test_bound_state()
+        self._check_bound_state()
         self._bond_info = []
         for index, bond in enumerate(self._bond_type):
             self._bond_info.append(self._bond_matrix_id[index] + params[bond])
 
     def get_forces(self):
-        forces = np.zeros([self._parent_ensemble.topology.num_particles, 3])
+        self._check_bound_state()
+        forces = np.zeros([self._parent_ensemble.topology.num_particles, SPATIAL_DIM])
         for bond_info in self._bond_info:
             id1, id2, k, r0 = bond_info
             r = get_bond(
@@ -60,6 +62,7 @@ class CharmmBondConstraint(Constraint):
         return forces
 
     def get_potential_energy(self):
+        self._check_bound_state()
         potential_energy = 0
         for bond_info in self._bond_info:
             id1, id2, k, r0 = bond_info

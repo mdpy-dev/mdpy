@@ -71,7 +71,7 @@ class TestCharmmBondConstraint:
 
     def test_exceptions(self):
         with pytest.raises(NonBoundedError):
-            self.constraint._test_bound_state()
+            self.constraint._check_bound_state()
 
     def test_bind_ensemble(self):
         self.constraint.bind_ensemble(self.ensemble)
@@ -83,7 +83,7 @@ class TestCharmmBondConstraint:
         assert self.constraint.num_bonds == 1
         
         # No exception
-        self.constraint._test_bound_state()
+        self.constraint._check_bound_state()
 
     def test_set_params(self):
         # CA   CA    305.000     1.3750
