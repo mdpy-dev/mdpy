@@ -13,7 +13,7 @@ import numpy as np
 from copy import deepcopy
 from . import Unit
 from .unit_definition import *
-from ..error import UnitDimensionDismatchedError, ChangeDeviceBoundedDataError
+from ..error import *
 
 class Quantity:
     def __init__(self, value, unit: Unit=no_unit) -> None:
@@ -110,12 +110,10 @@ class Quantity:
         )
 
     def __setitem__(self, key, value):
-        if self._in_device:
-            raise ChangeDeviceBoundedDataError(
-                'mdpy.Quantity object does not support item assignment. JAX arrays are immutable;'
-            )
+        if isinstance(value, Quantity):
+            self._value[key] = value.convert_to(self._unit).value
         else:
-            self._value[key] = (value / self._unit * self._unit).value
+            self._value[key] =  Quantity(value, self._unit).value
 
     def __eq__(self, other) -> bool:
         eq_judge = np.isclose

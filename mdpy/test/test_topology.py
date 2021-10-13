@@ -10,8 +10,10 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 '''
 
 import pytest
+import numpy as np
 from ..core import Particle, Topology
 from ..error import *
+from ..unit import *
 
 class TestTopology:
     def setup(self):
@@ -31,6 +33,24 @@ class TestTopology:
         assert self.topology.num_dihedrals == 0
         assert self.topology.impropers == []
         assert self.topology.num_impropers == 0
+        assert self.topology.charges == []
+        assert self.topology.masses == []
+
+    def test_particle_properties(self):
+        assert self.topology.charges == []
+        assert self.topology.masses == []
+        p1 = Particle(mass=1, charge=2)
+        p2 = Particle(mass=2, charge=1)
+        p3 = Particle(mass=3, charge=0)
+        self.topology.add_particles([p1, p2, p3])
+        assert self.topology.charges[0] == 2
+        assert self.topology.charges[-1] == 0
+        assert self.topology.masses[1] == 2
+
+        assert self.topology.masses.shape[0] == 3
+        assert self.topology.masses.shape[1] == 1
+        assert self.topology.charges.shape[0] == 3
+        assert self.topology.charges.shape[1] == 1
 
     def test_add_particles(self):
         p1 = Particle(0, 'CA')
@@ -323,3 +343,19 @@ class TestTopology:
 
         with pytest.raises(ParticleConflictError):
             self.topology.del_improper([1, 2, 9, 3])
+    
+    def test_pbc(self):
+        with pytest.raises(PBCPoorDefinedError):
+            self.topology.check_pbc_matrix()
+
+        with pytest.raises(PBCPoorDefinedError):
+            self.topology.set_pbc_matrix(np.ones([3, 3]))
+
+        with pytest.raises(SpatialDimError):
+            self.topology.set_pbc_matrix(np.ones([4, 3]))
+
+        self.topology.set_pbc_matrix(np.diag(np.ones(3)*10))
+        assert self.topology.pbc_inv[1, 1] == 0.1
+
+        self.topology.set_pbc_matrix(Quantity(np.diag(np.ones(3)), nanometer))
+        assert self.topology.pbc_inv[2, 2] == 0.1
