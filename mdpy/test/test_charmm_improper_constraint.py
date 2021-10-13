@@ -49,7 +49,7 @@ class TestCharmmDihedralConstraint:
         # CA   NY   CPT  CA       3.0000  2   180.00
         t.add_improper([0, 1, 2, 3])
         positions = np.array([
-            [0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]
+            [0, 0, 0], [1, 0, 0], [0, 1, 0], [0.5, 0.5, 1]
         ])
         velocities = np.array([
             [0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]
@@ -98,3 +98,47 @@ class TestCharmmDihedralConstraint:
         assert self.constraint._improper_info[0][3] == 3
         assert self.constraint._improper_info[0][4] == Quantity(3, kilocalorie_permol).convert_to(default_energy_unit).value
         assert self.constraint._improper_info[0][5] == Quantity(0).value
+
+    def test_get_forces(self):
+        self.constraint.bind_ensemble(self.ensemble)
+        self.constraint.set_params(self.params['improper'])
+        forces = self.constraint.get_forces()
+        k, psi0 = self.params['improper']['HE2-HE2-CE2-CE2']
+        psi = get_dihedral([0, 0, 0], [1, 0, 0], [0, 1, 0], [0.5, 0.5, 1], is_angular=False)
+        assert forces.sum() == pytest.approx(0)
+
+        positions = np.array([
+            [0, 0, 0], [1, 0, 0], [0, 1, 0], [0.5, 0.5, 1]
+        ])
+        vec_bc = positions[2, :] - positions[1, :]
+        vec_oc = vec_bc / 2
+        vec_ob = - vec_bc / 2
+        vec_oa = vec_ob + positions[0, :] - positions[1, :] # Vec ba
+        vec_od = vec_oc + positions[3, :] - positions[2, :] # Vec cd
+        res = (
+            np.cross(vec_oa, forces[0, :]) +
+            np.cross(vec_ob, forces[1, :]) +
+            np.cross(vec_oc, forces[2, :]) + 
+            np.cross(vec_od, forces[3, :])
+        )
+        assert res[0] == pytest.approx(0)
+        assert res[1] == pytest.approx(0)
+        assert res[2] == pytest.approx(0)
+
+        force_val = 2 * k * (90 - psi0)
+        vec_ab = positions[1, :] - positions[0, :]
+        theta_abc = get_angle(
+            positions[0, :], positions[1, :], positions[2, :]
+        )
+        force_a = force_val / (np.linalg.norm(vec_ab) * np.sin(theta_abc)) * get_unit_vec(np.cross(-vec_ab, vec_bc))
+        assert forces[0, 0] == force_a[0]
+        assert forces[0, 1] == force_a[1]
+        assert forces[0, 2] == force_a[2]
+
+    def test_get_potential_energy(self):
+        self.constraint.bind_ensemble(self.ensemble)
+        self.constraint.set_params(self.params['improper'])
+        energy = self.constraint.get_potential_energy()
+        k, psi0 = self.params['improper']['HE2-HE2-CE2-CE2']
+        psi = get_dihedral([0, 0, 0], [1, 0, 0], [0, 1, 0], [0.5, 0.5, 1], is_angular=False)
+        assert energy == k * (90 - psi0)**2
