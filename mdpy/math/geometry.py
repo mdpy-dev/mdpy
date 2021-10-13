@@ -57,15 +57,3 @@ def get_dihedral(position1, position2, position3, position4, is_angular=True):
         return np.arctan2(x, y)
     else:
         return np.arctan2(x, y) / np.pi * 180
-
-def get_cos_dihedral(position1, position2, position3, position4):
-    position1, position2 = np.array(position1), np.array(position2)
-    position3, position4 = np.array(position3), np.array(position4)
-
-    r1 = position2 - position1
-    r2 = position3 - position2
-    r3 = position4 - position3
-
-    n1 = np.cross(r1, r2)
-    n2 = np.cross(r2, r3)
-    return np.dot(n1, n2) / np.linalg.norm(n1) / np.linalg.norm(n2)

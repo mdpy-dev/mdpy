@@ -86,36 +86,3 @@ def test_get_dihedral():
     assert dihedral == pytest.approx(np.pi * 3/ 4)
     dihedral = get_dihedral(p1, p2, p3, p4, is_angular=False)
     assert dihedral == pytest.approx(135)
-
-def test_get_cos_dihedral():
-    p1 = np.array([0, 1, 1])
-    p2 = np.array([0, 0, 0])
-    p3 = np.array([1, 0, 0])
-    p4 = np.array([1, 1, 0])
-    
-    dihedral = get_cos_dihedral(p1, p2, p3, p4)
-    assert dihedral == pytest.approx(np.cos(- np.pi / 4))
-
-    p1 = np.array([0, 1, 1])
-    p2 = np.array([0, 0, 0])
-    p3 = np.array([1, 0, 0])
-    p4 = np.array([1, 0, -1])
-    
-    dihedral = get_cos_dihedral(p1, p2, p3, p4)
-    assert dihedral == pytest.approx(np.cos(- np.pi * 3/ 4))
-
-    p1 = np.array([0, 1, 1])
-    p2 = np.array([0, 0, 0])
-    p3 = np.array([1, 0, 0])
-    p4 = np.array([1, 0, 1])
-    
-    dihedral = get_cos_dihedral(p1, p2, p3, p4)
-    assert dihedral == pytest.approx(np.cos(np.pi / 4))
-
-    p1 = np.array([0, 1, 1])
-    p2 = np.array([0, 0, 0])
-    p3 = np.array([1, 0, 0])
-    p4 = np.array([1, -1, 0])
-    
-    dihedral = get_cos_dihedral(p1, p2, p3, p4)
-    assert dihedral == pytest.approx(np.cos(np.pi * 3/ 4))
