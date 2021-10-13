@@ -35,6 +35,27 @@ class TestCharmmParamFile:
         with pytest.raises(FileFormatError):
             charmm = CharmmParamFile('to.p')
 
+    def test_embed_x_element(self):
+        charmm = CharmmParamFile()
+        charmm._params['atom'] = 'C CA N H S'.split()
+        embed_res = charmm._embed_x_element('SS-CS')
+        assert len(embed_res) == 1
+
+        embed_res = charmm._embed_x_element('X-A')
+        assert len(embed_res) == 5
+        assert embed_res[0] == 'C-A'
+        assert embed_res[-1] == 'S-A'
+
+        embed_res = charmm._embed_x_element('X-A-X')
+        assert len(embed_res) == 25
+        assert embed_res[0] == 'C-A-C'
+        assert embed_res[5] == 'CA-A-C'
+        assert embed_res[-1] == 'S-A-S'
+
+        embed_res = charmm._embed_x_element('X-A-X-X')
+        assert len(embed_res) == 125
+        assert embed_res[2] == 'C-A-C-N'
+
     def test_parse_par_file(self):
         charmm = CharmmParamFile()
         charmm.parse_par_file(os.path.join(data_dir, 'par_all36_prot.prm'))
@@ -48,7 +69,7 @@ class TestCharmmParamFile:
         assert charmm.params['angle']['CPH1-CPH1-CT2'][1] == Quantity(130).value
         # Dihedral
         assert charmm.params['dihedral']['H-NH2-CT1-HB1'][0] == Quantity(0.11, kilocalorie_permol).convert_to(default_energy_unit).value
-        assert charmm.params['dihedral']['CT2-CT2-CT2-CT2'][1] == Quantity(6).value
+        assert charmm.params['dihedral']['CT2-CT2-CT2-CT2'][1] == Quantity(2).value
         assert charmm.params['dihedral']['C-CT1-NH1-H'][2] == Quantity(0).value
         # Improper
         assert charmm.params['improper']['HR1-NR1-NR2-CPH2'][0] == Quantity(0.5, kilocalorie_permol).convert_to(default_energy_unit).value
@@ -107,7 +128,7 @@ class TestCharmmParamFile:
         assert charmm.params['angle']['CPH1-CPH1-CT2'][1] == Quantity(130).value
         # Dihedral
         assert charmm.params['dihedral']['H-NH2-CT1-HB1'][0] == Quantity(0.11, kilocalorie_permol).convert_to(default_energy_unit).value
-        assert charmm.params['dihedral']['CT2-CT2-CT2-CT2'][1] == Quantity(6).value
+        assert charmm.params['dihedral']['CT2-CT2-CT2-CT2'][1] == Quantity(2).value
         assert charmm.params['dihedral']['C-CT1-NH1-H'][2] == Quantity(0).value
         # Improper
         assert charmm.params['improper']['HR1-NR1-NR2-CPH2'][0] == Quantity(0.5, kilocalorie_permol).convert_to(default_energy_unit).value
