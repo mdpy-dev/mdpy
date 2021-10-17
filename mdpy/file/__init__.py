@@ -1,13 +1,9 @@
-#!/usr/bin/env python
-# -*- encoding: utf-8 -*-
-'''
-file : __init__.py
-created time : 2021/09/28
-author : Zhenyu Wei
-version : 1.0
-contact : zhenyuwei99@gmail.com
-copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
-'''
+__author__ = "Zhenyu Wei"
+__maintainer__ = "Zhenyu Wei"
+__email__ = "zhenyuwei99@gmail.com"
+__copyright__ = "Copyright 2021-2021, Southeast University and Zhenyu Wei"
+__license__ = "GPLv3"
+
 
 # Position file
 from .pdb_file import PDBFile
@@ -17,3 +13,9 @@ from .psf_file import PSFFile
 
 # Forcefield file
 from .charmm_file import CharmmParamFile
+
+__all__ = [
+    'PDBFile',
+    'PSFFile',
+    'CharmmParamFile'
+]
