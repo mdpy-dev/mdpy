@@ -75,8 +75,6 @@ class TestCharmmNonbondedConstraint:
             self.constraint._check_bound_state()
 
     def test_bind_ensemble(self):
-        with pytest.raises(PBCPoorDefinedError):
-            self.constraint.bind_ensemble(self.ensemble)
         self.ensemble.topology.set_pbc_matrix(self.pbc)
         self.constraint.bind_ensemble(self.ensemble)
         assert self.constraint._parent_ensemble.num_constraints == 1
