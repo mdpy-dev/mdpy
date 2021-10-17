@@ -14,10 +14,10 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 import pytest
 import numpy as np
 from ..core import Particle, Topology
-from ..error import *
 from ..ensemble import Ensemble
 from ..constraint import Constraint
-
+from ..error import *
+from ..unit import *
 class TestEnsemble:
     def setup(self):
         p1 = Particle(
@@ -54,8 +54,8 @@ class TestEnsemble:
             [0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]
         ])
         self.ensemble = Ensemble(t)
-        self.ensemble.set_positions(positions)
-        self.ensemble.set_velocities(velocities)
+        self.ensemble.state.set_positions(positions)
+        self.ensemble.state.set_velocities(velocities)
 
     def teardown(self):
         self.ensemble = None
@@ -64,11 +64,7 @@ class TestEnsemble:
         pass
 
     def test_exceptions(self):
-        with pytest.raises(ParticleConflictError):
-            self.ensemble.set_positions(np.ones([5, 3]))
-
-        with pytest.raises(SpatialDimError):
-            self.ensemble.set_velocities(np.ones([4, 4]))
+        pass
 
     def test_add_constraints(self):
         c1, c2 = Constraint(1), Constraint(1)
@@ -82,7 +78,9 @@ class TestEnsemble:
 
     def test_update_kinetic_energy(self):
         self.ensemble._update_kinetic_energy()
-        assert self.ensemble.kinetic_energy == 13.5
+        assert self.ensemble.kinetic_energy == Quantity(
+            13.5, default_velocity_unit**2*default_mass_unit
+        ).convert_to(default_energy_unit).value
 
     def test_update_potential_energy(self):
         self.ensemble._update_potential_energy()
@@ -90,4 +88,6 @@ class TestEnsemble:
 
     def test_update_energy(self):
         self.ensemble.update_energy()
-        assert self.ensemble.total_energy == 13.5
+        assert self.ensemble.total_energy == Quantity(
+            13.5, default_velocity_unit**2*default_mass_unit
+        ).convert_to(default_energy_unit).value
