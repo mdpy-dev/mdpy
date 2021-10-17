@@ -22,7 +22,6 @@ class CharmmImproperConstraint(Constraint):
         self._num_impropers = 0
 
     def bind_ensemble(self, ensemble: Ensemble):
-        self._parent_ensemble = ensemble
         ensemble.add_constraints(self)
         self._improper_type, self._improper_matrix_id = [], []
         self._num_impropers = 0

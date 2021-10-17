@@ -22,7 +22,6 @@ class CharmmBondConstraint(Constraint):
         self._num_bonds = 0
 
     def bind_ensemble(self, ensemble: Ensemble):
-        self._parent_ensemble = ensemble
         ensemble.add_constraints(self)
         self._bond_type, self._bond_matrix_id = [], []
         self._num_bonds = 0

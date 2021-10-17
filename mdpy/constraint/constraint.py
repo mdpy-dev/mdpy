@@ -56,3 +56,11 @@ class Constraint:
     @property
     def force_group(self):
         return self._force_group
+
+    @property
+    def parent_ensemble(self):
+        return self._parent_ensemble
+
+    @parent_ensemble.setter
+    def parent_ensemble(self, ensemble: Ensemble):
+        self._parent_ensemble = ensemble

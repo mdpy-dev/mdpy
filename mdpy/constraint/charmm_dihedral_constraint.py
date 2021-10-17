@@ -22,7 +22,6 @@ class CharmmDihedralConstraint(Constraint):
         self._num_dihedrals = 0
 
     def bind_ensemble(self, ensemble: Ensemble):
-        self._parent_ensemble = ensemble
         ensemble.add_constraints(self)
         self._dihedral_type, self._dihedral_matrix_id = [], []
         self._num_dihedrals = 0
