@@ -13,7 +13,8 @@ from ..error import *
 from ..ensemble import Ensemble
 
 class Constraint:
-    def __init__(self, force_id: int=0, force_group: int=0) -> None:
+    def __init__(self, params, force_id: int=0, force_group: int=0) -> None:
+        self._params = params
         self._force_id = force_id
         self._force_group = force_group
         self._parent_ensemble = None
@@ -25,9 +26,6 @@ class Constraint:
 
     def bind_ensemble(self, ensemble: Ensemble):
         raise NotImplementedError('The subclass of mdpy.constraint.Constarint class should overload bind_ensemble method')
-
-    def set_params(self, params):
-        raise NotImplementedError('The subclass of mdpy.constraint.Constarint class should overload set_param method')
 
     def _check_bound_state(self):
         if self._parent_ensemble == None:
