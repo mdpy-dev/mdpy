@@ -6,7 +6,8 @@ __license__ = "GPLv3"
 
 from .constraint import Constraint
 
-# Ele
+# Electrostatic
+LONG_RANGE_SOLVER = ['PME', 'PPPM']
 from .electrostatic_constraint import ElectrostaticConstraint
 
 # Charmm
