@@ -11,9 +11,26 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 
 from ..core import Topology
 
-class ForceField:
+class Forcefield:
     def __init__(self, topology: Topology) -> None:
-        pass
+        self._topology = topology
+        self._params = None
+
+    def set_param_files(self):
+        raise NotImplementedError(
+            'The subclass of mdpy.forcefield.Forcefield class should overload set_param_files method'
+        )
+
+    def check_params(self):
+        raise NotImplementedError(
+            'The subclass of mdpy.forcefield.Forcefield class should overload check_params method'
+        )
 
     def create_ensemble(self):
+        raise NotImplementedError(
+            'The subclass of mdpy.forcefield.Forcefield class should overload create_ensemble method'
+        )
+
+    @property
+    def params(self):
         pass

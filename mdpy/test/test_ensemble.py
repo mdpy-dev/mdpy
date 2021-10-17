@@ -53,7 +53,8 @@ class TestEnsemble:
         velocities = np.array([
             [0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]
         ])
-        self.ensemble = Ensemble(positions, t)
+        self.ensemble = Ensemble(t)
+        self.ensemble.set_positions(positions)
         self.ensemble.set_velocities(velocities)
 
     def teardown(self):
@@ -70,7 +71,7 @@ class TestEnsemble:
             self.ensemble.set_velocities(np.ones([4, 4]))
 
     def test_add_constraints(self):
-        c1, c2 = Constraint(), Constraint()
+        c1, c2 = Constraint(1), Constraint(1)
         self.ensemble.add_constraints(c1, c2)
         assert self.ensemble.num_constraints == 2
         assert c1.force_id == 0
