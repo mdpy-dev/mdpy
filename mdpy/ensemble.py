@@ -62,8 +62,10 @@ class Ensemble:
                     %(constraint, self)
                 )
             constraint.force_id = self._num_constraints
+            constraint.parent_ensemble = self
             self._constraints.append(constraint)
             self._num_constraints += 1
+            constraint.set_params()
     
     def set_positions(self, positions: np.ndarray):
         self._check_matrix_shape(positions)
