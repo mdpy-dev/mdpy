@@ -54,7 +54,8 @@ class TestCharmmNonbondedConstraint:
         velocities = np.array([
             [0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 1, 0]
         ])
-        self.ensemble = Ensemble(self.p, t)
+        self.ensemble = Ensemble(t)
+        self.ensemble.set_positions(self.p)
         self.ensemble.set_velocities(velocities)
 
         f1 = os.path.join(data_dir, 'toppar_water_ions_namd.str')
