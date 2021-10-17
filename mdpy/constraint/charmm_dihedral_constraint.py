@@ -16,14 +16,14 @@ from ..ensemble import Ensemble
 from ..math import *
 
 class CharmmDihedralConstraint(Constraint):
-    def __init__(self, force_id: int=0, force_group: int=0) -> None:
-        super().__init__(force_id=force_id, force_group=force_group)
+    def __init__(self, params, force_id: int = 0, force_group: int = 0) -> None:
+        super().__init__(params, force_id=force_id, force_group=force_group)
         self._dihedral_type, self._dihedral_matrix_id, self._dihedral_info = [], [], []
         self._num_dihedrals = 0
 
     def bind_ensemble(self, ensemble: Ensemble):
         ensemble.add_constraints(self)
-        self._dihedral_type, self._dihedral_matrix_id = [], []
+        self._dihedral_type, self._dihedral_matrix_id, self._dihedral_info = [], [], []
         self._num_dihedrals = 0
         for dihedral in self._parent_ensemble.topology.dihedrals:
             self._dihedral_type.append('%s-%s-%s-%s' %(
@@ -40,11 +40,8 @@ class CharmmDihedralConstraint(Constraint):
             ])
             self._num_dihedrals += 1
 
-    def set_params(self, params):
-        self._check_bound_state()
-        self._dihedral_info = []
         for index, dihedral in enumerate(self._dihedral_type):
-            self._dihedral_info.append(self._dihedral_matrix_id[index] + params[dihedral])
+            self._dihedral_info.append(self._dihedral_matrix_id[index] + self._params[dihedral])
 
     def get_forces(self):
         self._check_bound_state()
