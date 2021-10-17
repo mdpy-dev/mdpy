@@ -16,15 +16,14 @@ from ..ensemble import Ensemble
 from ..math import *
 
 class CharmmBondConstraint(Constraint):
-    def __init__(self, force_id: int=0, force_group: int=0) -> None:
-        super().__init__(force_id=force_id, force_group=force_group)
+    def __init__(self, params, force_id: int = 0, force_group: int = 0) -> None:
+        super().__init__(params, force_id=force_id, force_group=force_group)
         self._bond_type, self._bond_matrix_id, self._bond_info = [], [], []
         self._num_bonds = 0
 
     def bind_ensemble(self, ensemble: Ensemble):
-        self._parent_ensemble = ensemble
         ensemble.add_constraints(self)
-        self._bond_type, self._bond_matrix_id = [], []
+        self._bond_type, self._bond_matrix_id, self._bond_info = [], [], []
         self._num_bonds = 0
         for bond in self._parent_ensemble.topology.bonds:
             self._bond_type.append('%s-%s' %(
@@ -37,11 +36,8 @@ class CharmmBondConstraint(Constraint):
             ])
             self._num_bonds += 1
 
-    def set_params(self, params):
-        self._check_bound_state()
-        self._bond_info = []
         for index, bond in enumerate(self._bond_type):
-            self._bond_info.append(self._bond_matrix_id[index] + params[bond])
+            self._bond_info.append(self._bond_matrix_id[index] + self._params[bond])
 
     def get_forces(self):
         self._check_bound_state()
