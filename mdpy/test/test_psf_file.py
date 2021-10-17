@@ -26,11 +26,13 @@ class TestPSFFile:
         psf = PSFFile(self.file_path)
         assert psf.num_particles == 95567
         assert psf.particle_ids[1] == 1
-        assert psf.particle_types[3] == 'HC'
-        assert psf.particle_names[15] == 'HA'
+        assert psf.particle_types[3] == 'HT3'
+        assert psf.particle_names[15] == 'HB1'
         assert psf.molecule_ids[9] == 26
         assert psf.molecule_types[21] == 'LEU'
         assert psf.chain_ids[1616] == 'WT1'
+        assert psf._charges[2] == pytest.approx(0.33)
+        assert psf._masses[5] == 1.008
 
     def test_create_topology(self):
         psf = PSFFile(self.file_path)
