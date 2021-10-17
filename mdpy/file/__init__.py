@@ -12,7 +12,7 @@ from .pdb_file import PDBFile
 from .psf_file import PSFFile
 
 # Forcefield file
-from .charmm_file import CharmmParamFile
+from .charmm_param_file import CharmmParamFile
 
 __all__ = [
     'PDBFile',
