@@ -53,7 +53,8 @@ class TestCharmmAngleConstraint:
         velocities = np.array([
             [0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]
         ])
-        self.ensemble = Ensemble(positions, t)
+        self.ensemble = Ensemble(t)
+        self.ensemble.set_positions(positions)
         self.ensemble.set_velocities(velocities)
 
         f1 = os.path.join(data_dir, 'toppar_water_ions_namd.str')
@@ -61,7 +62,7 @@ class TestCharmmAngleConstraint:
         f3 = os.path.join(data_dir, 'top_all36_na.rtf')
         charmm = CharmmParamFile(f1, f2, f3)
         self.params = charmm.params
-        self.constraint = CharmmAngleConstraint(0, 0)
+        self.constraint = CharmmAngleConstraint(self.params['angle'], 0, 0)
 
     def teardown(self):
         self.ensemble, self.params, self.constraint = None, None, None
@@ -71,7 +72,7 @@ class TestCharmmAngleConstraint:
 
     def test_exceptions(self):
         with pytest.raises(NonBoundedError):
-            self.constraint._test_bound_state()
+            self.constraint._check_bound_state()
 
     def test_bind_ensemble(self):
         self.constraint.bind_ensemble(self.ensemble)
@@ -83,22 +84,17 @@ class TestCharmmAngleConstraint:
         assert self.constraint._angle_matrix_id[0][2] == 3
         assert self.constraint.num_angles == 1
 
-        # No exception
-        self.constraint._test_bound_state()
-
-    def test_set_params(self):
-        # CA   CA   CA    40.000    120.00
-        self.constraint.bind_ensemble(self.ensemble)
-        self.constraint.set_params(self.params['angle'])
         assert self.constraint._angle_info[0][0] == 0
         assert self.constraint._angle_info[0][1] == 1
         assert self.constraint._angle_info[0][2] == 3
         assert self.constraint._angle_info[0][3] == Quantity(40, kilocalorie_permol).convert_to(default_energy_unit).value
         assert self.constraint._angle_info[0][4] == Quantity(120).value
 
+        # No exception
+        self.constraint._check_bound_state()
+
     def test_get_forces(self):
         self.constraint.bind_ensemble(self.ensemble)
-        self.constraint.set_params(self.params['angle'])
         forces = self.constraint.get_forces()
         k, theta0 = self.params['angle']['CA-CA-CA']
         theta = get_angle([0, 0, 0], [1, 0, 0], [0, 0, 1], is_angular=False)
@@ -116,9 +112,14 @@ class TestCharmmAngleConstraint:
         assert forces[3, 2] == pytest.approx(force2[2])
         assert forces.sum() == pytest.approx(0, abs=1e-10)
 
+        vec1 = np.array([-1, 0, 1])
+        torque = np.cross(vec0, forces[0, :]) + np.cross(vec1, forces[3, :])
+        assert torque[0] == pytest.approx(0, abs=1e-11)
+        assert torque[1] == pytest.approx(0, abs=1e-11)
+        assert torque[2] == pytest.approx(0, abs=1e-11)
+
     def test_potential_energy(self):
         self.constraint.bind_ensemble(self.ensemble)
-        self.constraint.set_params(self.params['angle'])
         energy = self.constraint.get_potential_energy()
         k, theta0 = self.params['angle']['CA-CA-CA']
         theta = get_angle([0, 0, 0], [1, 0, 0], [0, 0, 1], is_angular=False)

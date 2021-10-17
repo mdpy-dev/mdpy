@@ -32,8 +32,8 @@ class SpatialDimError(Exception):
     - The dimension of quantity in cartesian reference is not 3
     
     Used in:
-    - mdpy.core.particle
     - mdpy.core.topology
+    - mdpy.core.state
     - mdpy.ensemble
     '''
     pass
@@ -55,6 +55,7 @@ class ParticleConflictError(Exception):
     
     Used in:
     - mdpy.core.topology
+    - mdpy.core.state
     - mdpy.ensemble
     '''
     pass
@@ -91,6 +92,15 @@ class PBCPoorDefinedError(Exception):
     - Two or more column vector in pbc_matrix is linear corellated
     
     Used in:
-    - mdpy.core.topology
+    - mdpy.forcefield.charmm_forcefield
+    '''
+    pass
+
+class ParameterNotFoundError(Exception):
+    '''This error occurs when:
+    - Topology connections' parameter is not defined in selected parameter file
+    
+    Used in:
+    - mdpy.forcefield.charmm_forcefield
     '''
     pass
