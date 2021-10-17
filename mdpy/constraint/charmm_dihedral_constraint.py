@@ -50,30 +50,30 @@ class CharmmDihedralConstraint(Constraint):
         for dihedral_info in self._dihedral_info:
             id1, id2, id3, id4, k, n, delta = dihedral_info
             theta = get_dihedral(
-                self._parent_ensemble.positions[id1, :], 
-                self._parent_ensemble.positions[id2, :],
-                self._parent_ensemble.positions[id3, :], 
-                self._parent_ensemble.positions[id4, :],
+                self._parent_ensemble.state.positions[id1, :], 
+                self._parent_ensemble.state.positions[id2, :],
+                self._parent_ensemble.state.positions[id3, :], 
+                self._parent_ensemble.state.positions[id4, :],
                 is_angular=False
             )
             force_val = k * (1 - n * np.sin(n*theta - delta))
 
-            vab = self._parent_ensemble.positions[id2, :] -self._parent_ensemble.positions[id1, :]
+            vab = self._parent_ensemble.state.positions[id2, :] -self._parent_ensemble.state.positions[id1, :]
             lab = np.linalg.norm(vab)
-            vbc = self._parent_ensemble.positions[id3, :] -self._parent_ensemble.positions[id2, :]
+            vbc = self._parent_ensemble.state.positions[id3, :] -self._parent_ensemble.state.positions[id2, :]
             lbc = np.linalg.norm(vbc)
             voc, loc = vbc / 2, lbc / 2
-            vcd = self._parent_ensemble.positions[id4, :] -self._parent_ensemble.positions[id3, :]
+            vcd = self._parent_ensemble.state.positions[id4, :] -self._parent_ensemble.state.positions[id3, :]
             lcd = np.linalg.norm(vcd)
             theta_abc = get_angle(
-                self._parent_ensemble.positions[id1, :], 
-                self._parent_ensemble.positions[id2, :],
-                self._parent_ensemble.positions[id3, :]
+                self._parent_ensemble.state.positions[id1, :], 
+                self._parent_ensemble.state.positions[id2, :],
+                self._parent_ensemble.state.positions[id3, :]
             )
             theta_bcd = get_angle(
-                self._parent_ensemble.positions[id2, :], 
-                self._parent_ensemble.positions[id3, :],
-                self._parent_ensemble.positions[id4, :]
+                self._parent_ensemble.state.positions[id2, :], 
+                self._parent_ensemble.state.positions[id3, :],
+                self._parent_ensemble.state.positions[id4, :]
             )
 
             force_a = force_val / (lab * np.sin(theta_abc)) * get_unit_vec(np.cross(-vab, vbc))
@@ -95,10 +95,10 @@ class CharmmDihedralConstraint(Constraint):
         for dihedral_info in self._dihedral_info:
             id1, id2, id3, id4, k, n, delta = dihedral_info
             theta = get_dihedral(
-                self._parent_ensemble.positions[id1, :], 
-                self._parent_ensemble.positions[id2, :],
-                self._parent_ensemble.positions[id3, :], 
-                self._parent_ensemble.positions[id4, :],
+                self._parent_ensemble.state.positions[id1, :], 
+                self._parent_ensemble.state.positions[id2, :],
+                self._parent_ensemble.state.positions[id3, :], 
+                self._parent_ensemble.state.positions[id4, :],
                 is_angular=False
             )
             potential_energy += k * (1 + np.cos(n*theta - delta))

@@ -45,12 +45,12 @@ class CharmmBondConstraint(Constraint):
         for bond_info in self._bond_info:
             id1, id2, k, r0 = bond_info
             r = get_bond(
-                self._parent_ensemble.positions[id1, :], 
-                self._parent_ensemble.positions[id2, :]
+                self._parent_ensemble.state.positions[id1, :], 
+                self._parent_ensemble.state.positions[id2, :]
             )
             force_val = - 2 * k * (r - r0)
             force_vec = get_unit_vec(
-                self._parent_ensemble.positions[id2, :] - self._parent_ensemble.positions[id1, :]
+                self._parent_ensemble.state.positions[id2, :] - self._parent_ensemble.state.positions[id1, :]
             )
             force = force_val * force_vec
             forces[id1, :] -= force
@@ -63,8 +63,8 @@ class CharmmBondConstraint(Constraint):
         for bond_info in self._bond_info:
             id1, id2, k, r0 = bond_info
             r = get_bond(
-                self._parent_ensemble.positions[id1, :], 
-                self._parent_ensemble.positions[id2, :]
+                self._parent_ensemble.state.positions[id1, :], 
+                self._parent_ensemble.state.positions[id2, :]
             )
             potential_energy += k * (r - r0)**2
         return potential_energy

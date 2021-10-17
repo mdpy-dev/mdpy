@@ -54,8 +54,8 @@ class TestCharmmAngleConstraint:
             [0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]
         ])
         self.ensemble = Ensemble(t)
-        self.ensemble.set_positions(positions)
-        self.ensemble.set_velocities(velocities)
+        self.ensemble.state.set_positions(positions)
+        self.ensemble.state.set_velocities(velocities)
 
         f1 = os.path.join(data_dir, 'toppar_water_ions_namd.str')
         f2 = os.path.join(data_dir, 'par_all36_prot.prm')
