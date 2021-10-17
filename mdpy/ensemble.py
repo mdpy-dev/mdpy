@@ -15,12 +15,11 @@ from .core import Topology
 from .error import *
 
 class Ensemble:
-    def __init__(self, positions: np.ndarray, topology: Topology) -> None:
+    def __init__(self, topology: Topology) -> None:
         # Read input
         self._topology = topology
-
         self._matrix_shape = [self._topology.num_particles, SPATIAL_DIM]
-        self.set_positions(positions)
+        self._positions = np.zeros(self._matrix_shape)
         self._velocities = np.zeros(self._matrix_shape)
         self._forces = np.zeros(self._matrix_shape)
 
