@@ -54,7 +54,8 @@ class TestCharmmDihedralConstraint:
         velocities = np.array([
             [0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]
         ])
-        self.ensemble = Ensemble(positions, t)
+        self.ensemble = Ensemble(t)
+        self.ensemble.set_positions(positions)
         self.ensemble.set_velocities(velocities)
 
         f1 = os.path.join(data_dir, 'toppar_water_ions_namd.str')
@@ -62,7 +63,7 @@ class TestCharmmDihedralConstraint:
         f3 = os.path.join(data_dir, 'top_all36_na.rtf')
         charmm = CharmmParamFile(f1, f2, f3)
         self.params = charmm.params
-        self.constraint = CharmmImproperConstraint(0, 0)
+        self.constraint = CharmmImproperConstraint(self.params['improper'], 0, 0)
 
     def teardown(self):
         self.ensemble, self.params, self.constraint = None, None, None
@@ -85,13 +86,7 @@ class TestCharmmDihedralConstraint:
         assert self.constraint._improper_matrix_id[0][3] == 3
         assert self.constraint.num_impropers == 1
 
-        # No exception
-        self.constraint._check_bound_state()
-
-    def test_set_params(self):
         # HE2  HE2  CE2  CE2     3.0            0      0.00   
-        self.constraint.bind_ensemble(self.ensemble)
-        self.constraint.set_params(self.params['improper'])
         assert self.constraint._improper_info[0][0] == 0
         assert self.constraint._improper_info[0][1] == 1
         assert self.constraint._improper_info[0][2] == 2
@@ -99,9 +94,11 @@ class TestCharmmDihedralConstraint:
         assert self.constraint._improper_info[0][4] == Quantity(3, kilocalorie_permol).convert_to(default_energy_unit).value
         assert self.constraint._improper_info[0][5] == Quantity(0).value
 
+        # No exception
+        self.constraint._check_bound_state()
+
     def test_get_forces(self):
         self.constraint.bind_ensemble(self.ensemble)
-        self.constraint.set_params(self.params['improper'])
         forces = self.constraint.get_forces()
         k, psi0 = self.params['improper']['HE2-HE2-CE2-CE2']
         psi = get_dihedral([0, 0, 0], [1, 0, 0], [0, 1, 0], [0.5, 0.5, 1], is_angular=False)
@@ -137,7 +134,6 @@ class TestCharmmDihedralConstraint:
 
     def test_get_potential_energy(self):
         self.constraint.bind_ensemble(self.ensemble)
-        self.constraint.set_params(self.params['improper'])
         energy = self.constraint.get_potential_energy()
         k, psi0 = self.params['improper']['HE2-HE2-CE2-CE2']
         psi = get_dihedral([0, 0, 0], [1, 0, 0], [0, 1, 0], [0.5, 0.5, 1], is_angular=False)
