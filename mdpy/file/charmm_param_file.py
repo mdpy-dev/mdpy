@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- encoding: utf-8 -*-
 '''
-file : charmm_file.py
+file : charmm_param_file.py
 created time : 2021/10/08
 author : Zhenyu Wei
 version : 1.0
