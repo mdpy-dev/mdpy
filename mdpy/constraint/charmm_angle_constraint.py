@@ -22,7 +22,6 @@ class CharmmAngleConstraint(Constraint):
         self._num_angles = 0
 
     def bind_ensemble(self, ensemble: Ensemble):
-        self._parent_ensemble = ensemble
         ensemble.add_constraints(self)
         self._angle_type, self._angle_matrix_id = [], []
         self._num_angles = 0
