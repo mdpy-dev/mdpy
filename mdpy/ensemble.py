@@ -15,12 +15,11 @@ from .core import Topology
 from .error import *
 
 class Ensemble:
-    def __init__(self, positions: np.ndarray, topology: Topology) -> None:
+    def __init__(self, topology: Topology) -> None:
         # Read input
         self._topology = topology
-
         self._matrix_shape = [self._topology.num_particles, SPATIAL_DIM]
-        self.set_positions(positions)
+        self._positions = np.zeros(self._matrix_shape)
         self._velocities = np.zeros(self._matrix_shape)
         self._forces = np.zeros(self._matrix_shape)
 
@@ -31,6 +30,13 @@ class Ensemble:
         self._num_segments = 0
         self._constraints = []
         self._num_constraints = 0
+
+    def __repr__(self) -> str:
+        return '<mdpy.Ensemble object: %d constraints at %x>' %(
+            self._num_constraints, id(self)
+        )
+
+    __str__ = __repr__
 
     def _check_matrix_shape(self, matrix: np.ndarray):
         row, col = matrix.shape
@@ -49,6 +55,13 @@ class Ensemble:
 
     def add_constraints(self, *constraints):
         for constraint in constraints:
+            if constraint in self._constraints:
+                raise ConstraintConflictError(
+                    '%s has added twice to %s' 
+                    %(constraint, self)
+                )
+            constraint.force_id = self._num_constraints
+            constraint.parent_ensemble = self
             self._constraints.append(constraint)
             self._num_constraints += 1
     
@@ -60,7 +73,7 @@ class Ensemble:
         self._check_matrix_shape(velocities)
         self._velocities = velocities
 
-    def update_force(self):
+    def update_forces(self):
         self._forces = np.zeros(self._matrix_shape)
         for constraint in self._constraints:
             self._forces += constraint.get_forces()
