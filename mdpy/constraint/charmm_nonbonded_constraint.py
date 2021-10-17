@@ -29,7 +29,6 @@ class CharmmNonbondedConstraint(Constraint):
         self._num_nonbonded_pairs = 0
 
     def bind_ensemble(self, ensemble: Ensemble):
-        ensemble.topology.check_pbc_matrix()
         ensemble.add_constraints(self)
         self._nonbonded_pair_type, self._nonbonded_matrix_id = [], []
         self._nonbonded_pair_info = {}
