@@ -161,9 +161,11 @@ class CharmmParamFile:
                 Quantity(float(info[4]), kilocalorie_permol).convert_to(default_energy_unit).value, 
                 Quantity(float(info[6])).value
             ]
-            target_keys = self._embed_x_element(
-                '%s-%s-%s-%s' %(info[0], info[1], info[2], info[3])
-            )
+            target_keys = []
+            for target_key in itertools.permutations(info[:4]):
+                target_keys.extend(self._embed_x_element(
+                    '%s-%s-%s-%s' %(target_key)
+                ))
             for key in target_keys:
                 if not key in self._params['improper'].keys():
                     self._params['improper'][key] = res
