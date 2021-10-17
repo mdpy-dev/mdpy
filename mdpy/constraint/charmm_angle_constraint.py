@@ -48,14 +48,14 @@ class CharmmAngleConstraint(Constraint):
         for angle_info in self._angle_info:
             id1, id2, id3, k, theta0 = angle_info
             theta = get_angle(
-                self._parent_ensemble.positions[id1, :], 
-                self._parent_ensemble.positions[id2, :],
-                self._parent_ensemble.positions[id3, :], is_angular=False
+                self._parent_ensemble.state.positions[id1, :], 
+                self._parent_ensemble.state.positions[id2, :],
+                self._parent_ensemble.state.positions[id3, :], is_angular=False
             )
             theta_rad = np.deg2rad(theta)
             force_val = 2 * k * (theta - theta0) / np.abs(np.sin(theta_rad)) # The - is declined by the minus of 1/sin\theta
-            vec0 = self._parent_ensemble.positions[id1, :] - self._parent_ensemble.positions[id2, :]
-            vec1 = self._parent_ensemble.positions[id3, :] - self._parent_ensemble.positions[id2, :]
+            vec0 = self._parent_ensemble.state.positions[id1, :] - self._parent_ensemble.state.positions[id2, :]
+            vec1 = self._parent_ensemble.state.positions[id3, :] - self._parent_ensemble.state.positions[id2, :]
             norm_vec0, norm_vec1 = np.linalg.norm(vec0), np.linalg.norm(vec1)
             vec0 = vec0 / norm_vec0
             vec1 = vec1 / norm_vec1
@@ -72,9 +72,9 @@ class CharmmAngleConstraint(Constraint):
         for angle_info in self._angle_info:
             id1, id2, id3, k, theta0 = angle_info
             theta = get_angle(
-                self._parent_ensemble.positions[id1, :], 
-                self._parent_ensemble.positions[id2, :],
-                self._parent_ensemble.positions[id3, :], is_angular=False
+                self._parent_ensemble.state.positions[id1, :], 
+                self._parent_ensemble.state.positions[id2, :],
+                self._parent_ensemble.state.positions[id3, :], is_angular=False
             )
             potential_energy += k * (theta - theta0)**2
         return potential_energy
