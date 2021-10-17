@@ -62,7 +62,7 @@ class TestCharmmDihedralConstraint:
         f3 = os.path.join(data_dir, 'top_all36_na.rtf')
         charmm = CharmmParamFile(f1, f2, f3)
         self.params = charmm.params
-        self.constraint = CharmmDihedralConstraint(0, 0)
+        self.constraint = CharmmDihedralConstraint(self.params['dihedral'], 0, 0)
 
     def teardown(self):
         self.ensemble, self.params, self.constraint = None, None, None
@@ -85,13 +85,7 @@ class TestCharmmDihedralConstraint:
         assert self.constraint._dihedral_matrix_id[0][3] == 3
         assert self.constraint.num_dihedrals == 1
 
-        # No exception
-        self.constraint._check_bound_state()
-
-    def test_set_params(self):
         # CA   NY   CPT  CA       3.0000  2   180.00
-        self.constraint.bind_ensemble(self.ensemble)
-        self.constraint.set_params(self.params['dihedral'])
         assert self.constraint._dihedral_info[0][0] == 0
         assert self.constraint._dihedral_info[0][1] == 1
         assert self.constraint._dihedral_info[0][2] == 2
@@ -100,9 +94,11 @@ class TestCharmmDihedralConstraint:
         assert self.constraint._dihedral_info[0][5] == Quantity(2).value
         assert self.constraint._dihedral_info[0][6] == Quantity(180).value
 
+        # No exception
+        self.constraint._check_bound_state()        
+
     def test_get_forces(self):
         self.constraint.bind_ensemble(self.ensemble)
-        self.constraint.set_params(self.params['dihedral'])
         forces = self.constraint.get_forces()
         k, n, delta = self.params['dihedral']['CA-NY-CPT-CA']
         theta = get_dihedral([0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1], is_angular=False)
@@ -128,7 +124,6 @@ class TestCharmmDihedralConstraint:
 
     def test_get_potential_energy(self):
         self.constraint.bind_ensemble(self.ensemble)
-        self.constraint.set_params(self.params['dihedral'])
         energy = self.constraint.get_potential_energy()
         k, n, delta = self.params['dihedral']['CA-NY-CPT-CA']
         theta = get_dihedral([0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1], is_angular=False)

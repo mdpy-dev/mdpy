@@ -19,8 +19,8 @@ from ..unit import *
 RMIN_TO_SIGMA_FACTOR = 2**(-1/6)
 
 class CharmmNonbondedConstraint(Constraint):
-    def __init__(self, cutoff_radius=12, force_id: int = 0, force_group: int = 0) -> None:
-        super().__init__(force_id=force_id, force_group=force_group)
+    def __init__(self, params, cutoff_radius=12, force_id: int = 0, force_group: int = 0) -> None:
+        super().__init__(params, force_id=force_id, force_group=force_group)
         self._cutoff_radius = check_quantity_value(cutoff_radius, default_length_unit)
         self._nonbonded_pair_type, self._nonbonded_matrix_id = [], []
         self._nonbonded_pair_info = {}
@@ -29,9 +29,9 @@ class CharmmNonbondedConstraint(Constraint):
         self._num_nonbonded_pairs = 0
 
     def bind_ensemble(self, ensemble: Ensemble):
-        ensemble.topology.check_pbc_matrix()
         ensemble.add_constraints(self)
         self._nonbonded_pair_type, self._nonbonded_matrix_id = [], []
+        self._nonbonded_pair_info = {}
         self._num_nonbonded_pairs = 0
         for index, particle1 in enumerate(self._parent_ensemble.topology.particles):
             for particle2 in self._parent_ensemble.topology.particles[index+1:]:
@@ -45,13 +45,10 @@ class CharmmNonbondedConstraint(Constraint):
                 ])
                 self._num_nonbonded_pairs += 1
 
-    def set_params(self, params):
-        self._check_bound_state()
-        self._nonbonded_pair_info = {}
         for index, nonbonded_pair in enumerate(self._nonbonded_pair_type):
             id1, id2 = self._nonbonded_matrix_id[index]
-            epsilon1, half_rmin1 = params[nonbonded_pair[0]]
-            epsilon2, half_rmin2 = params[nonbonded_pair[1]]
+            epsilon1, half_rmin1 = self._params[nonbonded_pair[0]]
+            epsilon2, half_rmin2 = self._params[nonbonded_pair[1]]
             
             # Mix rule: 
             # - Eps,i,j = sqrt(eps,i * eps,j)

@@ -16,14 +16,14 @@ from ..ensemble import Ensemble
 from ..math import *
 
 class CharmmImproperConstraint(Constraint):
-    def __init__(self, force_id: int, force_group: int) -> None:
-        super().__init__(force_id, force_group)
+    def __init__(self, params, force_id: int = 0, force_group: int = 0) -> None:
+        super().__init__(params, force_id=force_id, force_group=force_group)
         self._improper_type, self._improper_matrix_id, self._improper_info = [], [], []
         self._num_impropers = 0
 
     def bind_ensemble(self, ensemble: Ensemble):
         ensemble.add_constraints(self)
-        self._improper_type, self._improper_matrix_id = [], []
+        self._improper_type, self._improper_matrix_id, self._improper_info = [], [], []
         self._num_impropers = 0
         for improper in self._parent_ensemble.topology.impropers:
             self._improper_type.append('%s-%s-%s-%s' %(
@@ -40,11 +40,8 @@ class CharmmImproperConstraint(Constraint):
             ])
             self._num_impropers += 1
 
-    def set_params(self, params):
-        self._check_bound_state()
-        self._improper_info = []
         for index, improper in enumerate(self._improper_type):
-            self._improper_info.append(self._improper_matrix_id[index] + params[improper])
+            self._improper_info.append(self._improper_matrix_id[index] + self._params[improper])
 
     def get_forces(self):
         self._check_bound_state()
