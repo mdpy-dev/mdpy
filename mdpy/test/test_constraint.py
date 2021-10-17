@@ -28,7 +28,7 @@ class TestConstraint:
             self.constraint.bind_ensemble(1)
         
         with pytest.raises(NotImplementedError):
-            self.constraint.set_params(1)
+            self.constraint.update_neighbor()
 
         with pytest.raises(NotImplementedError):
             self.constraint.get_forces()

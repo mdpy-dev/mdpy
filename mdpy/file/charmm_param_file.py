@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- encoding: utf-8 -*-
 '''
-file : charmm_file.py
+file : charmm_param_file.py
 created time : 2021/10/08
 author : Zhenyu Wei
 version : 1.0
@@ -9,6 +9,7 @@ contact : zhenyuwei99@gmail.com
 copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 '''
 
+import itertools
 from ..error import *
 from ..unit import *
 
@@ -22,7 +23,7 @@ class CharmmParamFile:
         self._file_path_list = file_path_list
         # Set attributes
         self._params = {
-            'mass': {}, 'charge': {},
+            'atom': [], 'mass': {}, 'charge': {},
             'bond': {}, 'angle':{}, 'nonbonded': {},
             'dihedral': {}, 'improper': {}
         }
@@ -97,8 +98,20 @@ class CharmmParamFile:
             info_dict[key] = [i.strip().split('!')[0].split() for i in val][1:]
         return info_dict
 
+    def _embed_x_element(self, pair):
+        if not 'X' in pair:
+            return [pair]
+        else:
+            res = []
+            pair = [[i] if i != 'X' else self._params['atom'] for i in pair.split('-')]
+            pairs = itertools.product(*pair)
+            for pair in pairs:
+                res.append('-'.join(pair))
+            return res
+
     def _parse_par_mass_block(self, infos):
         for info in infos:
+            self._params['atom'].append(info[2])
             self._params['mass'][info[2]] = Quantity(float(info[3]), dalton).convert_to(default_mass_unit).value
 
     def _parse_par_bond_block(self, infos):
@@ -107,8 +120,11 @@ class CharmmParamFile:
                 Quantity(float(info[2]), kilocalorie_permol / angstrom**2).convert_to(default_energy_unit / default_length_unit**2).value, 
                 Quantity(float(info[3]), angstrom).convert_to(default_length_unit).value
             ]
-            self._params['bond']['%s-%s' %(info[0], info[1])] = res
-            self._params['bond']['%s-%s' %(info[1], info[0])] = res
+            target_keys = self._embed_x_element('%s-%s' %(info[0], info[1]))
+            target_keys.extend(self._embed_x_element('%s-%s' %(info[1], info[0])))
+            for key in target_keys:
+                if not key in self._params['bond'].keys():
+                    self._params['bond'][key] = res
 
     def _parse_par_angle_block(self, infos):
         for info in infos:
@@ -116,8 +132,11 @@ class CharmmParamFile:
                 Quantity(float(info[3]), kilocalorie_permol).convert_to(default_energy_unit).value, 
                 Quantity(float(info[4])).value
             ]
-            self._params['angle']['%s-%s-%s' %(info[0], info[1], info[2])] = res
-            self._params['angle']['%s-%s-%s' %(info[2], info[1], info[0])] = res
+            target_keys = self._embed_x_element('%s-%s-%s' %(info[0], info[1], info[2]))
+            target_keys.extend(self._embed_x_element('%s-%s-%s' %(info[2], info[1], info[0])))
+            for key in target_keys:
+                if not key in self._params['angle'].keys():
+                    self._params['angle'][key] = res
 
     def _parse_par_dihedral_block(self, infos):
         for info in infos:
@@ -126,8 +145,15 @@ class CharmmParamFile:
                 Quantity(float(info[5])).value,
                 Quantity(float(info[6])).value
             ]
-            self._params['dihedral']['%s-%s-%s-%s' %(info[0], info[1], info[2], info[3])] = res
-            self._params['dihedral']['%s-%s-%s-%s' %(info[3], info[2], info[1], info[0])] = res
+            target_keys = self._embed_x_element(
+                '%s-%s-%s-%s' %(info[0], info[1], info[2], info[3])
+            )
+            target_keys.extend(self._embed_x_element(
+                '%s-%s-%s-%s' %(info[3], info[2], info[1], info[0])
+            ))
+            for key in target_keys:
+                if not key in self._params['dihedral'].keys():
+                    self._params['dihedral'][key] = res
 
     def _parse_par_improper_block(self, infos):
         for info in infos:
@@ -135,7 +161,14 @@ class CharmmParamFile:
                 Quantity(float(info[4]), kilocalorie_permol).convert_to(default_energy_unit).value, 
                 Quantity(float(info[6])).value
             ]
-            self._params['improper']['%s-%s-%s-%s' %(info[0], info[1], info[2], info[3])] = res
+            target_keys = []
+            for target_key in itertools.permutations(info[:4]):
+                target_keys.extend(self._embed_x_element(
+                    '%s-%s-%s-%s' %(target_key)
+                ))
+            for key in target_keys:
+                if not key in self._params['improper'].keys():
+                    self._params['improper'][key] = res
 
     def _parse_par_nonbonded_block(self, infos):
         for info in infos[1:]:
