@@ -62,7 +62,7 @@ class TestState:
         kinetic_energy = Quantity(0, default_energy_unit)
         for particle in range(self.num_particles):
             kinetic_energy += Quantity(0.5) * (
-                self.state._masses[particle] * 
+                Quantity(self.state._masses[particle], default_mass_unit) * 
                 (Quantity(self.state.velocities[particle, :], default_velocity_unit)**2).sum()
             )
         temperature = kinetic_energy * Quantity(2 / 3 / self.num_particles) / KB
