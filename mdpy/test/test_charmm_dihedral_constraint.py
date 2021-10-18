@@ -76,14 +76,8 @@ class TestCharmmDihedralConstraint:
             self.constraint._check_bound_state()
 
     def test_bind_ensemble(self):
-        self.constraint.bind_ensemble(self.ensemble)
+        self.ensemble.add_constraints(self.constraint)
         assert self.constraint._parent_ensemble.num_constraints == 1
-
-        assert self.constraint._dihedral_type[0] == 'CA-NY-CPT-CA'
-        assert self.constraint._dihedral_matrix_id[0][0] == 0
-        assert self.constraint._dihedral_matrix_id[0][1] == 1
-        assert self.constraint._dihedral_matrix_id[0][2] == 2
-        assert self.constraint._dihedral_matrix_id[0][3] == 3
         assert self.constraint.num_dihedrals == 1
 
         # CA   NY   CPT  CA       3.0000  2   180.00
@@ -99,7 +93,7 @@ class TestCharmmDihedralConstraint:
         self.constraint._check_bound_state()        
 
     def test_get_forces(self):
-        self.constraint.bind_ensemble(self.ensemble)
+        self.ensemble.add_constraints(self.constraint)
         forces = self.constraint.get_forces()
         k, n, delta = self.params['dihedral']['CA-NY-CPT-CA']
         theta = get_dihedral([0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1], is_angular=False)
@@ -124,7 +118,7 @@ class TestCharmmDihedralConstraint:
         assert res[2] == pytest.approx(0)
 
     def test_get_potential_energy(self):
-        self.constraint.bind_ensemble(self.ensemble)
+        self.ensemble.add_constraints(self.constraint)
         energy = self.constraint.get_potential_energy()
         k, n, delta = self.params['dihedral']['CA-NY-CPT-CA']
         theta = get_dihedral([0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1], is_angular=False)
