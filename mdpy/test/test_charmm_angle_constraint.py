@@ -54,8 +54,8 @@ class TestCharmmAngleConstraint:
             [0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]
         ])
         self.ensemble = Ensemble(t)
-        self.ensemble.set_positions(positions)
-        self.ensemble.set_velocities(velocities)
+        self.ensemble.state.set_positions(positions)
+        self.ensemble.state.set_velocities(velocities)
 
         f1 = os.path.join(data_dir, 'toppar_water_ions_namd.str')
         f2 = os.path.join(data_dir, 'par_all36_prot.prm')
@@ -75,13 +75,8 @@ class TestCharmmAngleConstraint:
             self.constraint._check_bound_state()
 
     def test_bind_ensemble(self):
-        self.constraint.bind_ensemble(self.ensemble)
+        self.ensemble.add_constraints(self.constraint)
         assert self.constraint._parent_ensemble.num_constraints == 1
-
-        assert self.constraint._angle_type[0] == 'CA-CA-CA'
-        assert self.constraint._angle_matrix_id[0][0] == 0
-        assert self.constraint._angle_matrix_id[0][1] == 1
-        assert self.constraint._angle_matrix_id[0][2] == 3
         assert self.constraint.num_angles == 1
 
         assert self.constraint._angle_info[0][0] == 0
@@ -94,7 +89,7 @@ class TestCharmmAngleConstraint:
         self.constraint._check_bound_state()
 
     def test_get_forces(self):
-        self.constraint.bind_ensemble(self.ensemble)
+        self.ensemble.add_constraints(self.constraint)
         forces = self.constraint.get_forces()
         k, theta0 = self.params['angle']['CA-CA-CA']
         theta = get_angle([0, 0, 0], [1, 0, 0], [0, 0, 1], is_angular=False)
@@ -119,7 +114,7 @@ class TestCharmmAngleConstraint:
         assert torque[2] == pytest.approx(0, abs=1e-11)
 
     def test_potential_energy(self):
-        self.constraint.bind_ensemble(self.ensemble)
+        self.ensemble.add_constraints(self.constraint)
         energy = self.constraint.get_potential_energy()
         k, theta0 = self.params['angle']['CA-CA-CA']
         theta = get_angle([0, 0, 0], [1, 0, 0], [0, 0, 1], is_angular=False)

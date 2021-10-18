@@ -47,8 +47,8 @@ class Segment:
 
     def update_segment_info(self):
         self._test_bound_state()
-        self._positions = self._parent_ensemble.positions[self._particles_id, :]
-        self._velocities = self._parent_ensemble.velocities[self._particles_id, :]
+        self._positions = self._parent_ensemble.state.positions[self._particles_id, :]
+        self._velocities = self._parent_ensemble.state.velocities[self._particles_id, :]
         self._forces = self._parent_ensemble.forces[self._particles_id, :]
 
     @property
