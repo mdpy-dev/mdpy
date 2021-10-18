@@ -48,9 +48,8 @@ class Ensemble:
                     '%s has added twice to %s' 
                     %(constraint, self)
                 )
-            constraint.force_id = self._num_constraints
-            constraint.parent_ensemble = self
             self._constraints.append(constraint)
+            constraint.bind_ensemble(self)
             self._num_constraints += 1
 
     def update_forces(self):
