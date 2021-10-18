@@ -77,7 +77,7 @@ class TestCharmmNonbondedConstraint:
 
     def test_bind_ensemble(self):
         self.ensemble.topology.set_pbc_matrix(self.pbc)
-        self.constraint.bind_ensemble(self.ensemble)
+        self.ensemble.add_constraints(self.constraint)
         assert self.constraint._parent_ensemble.num_constraints == 1
 
         assert self.constraint._nonbonded_pair_type[0][0] == 'CA' 
@@ -106,7 +106,7 @@ class TestCharmmNonbondedConstraint:
     
     def test_update_neighbor(self):
         self.ensemble.topology.set_pbc_matrix(self.pbc)
-        self.constraint.bind_ensemble(self.ensemble)
+        self.ensemble.add_constraints(self.constraint)
         self.constraint.update_neighbor()
         assert len(self.constraint._neighbor_list[0]) == 3
         
@@ -125,7 +125,7 @@ class TestCharmmNonbondedConstraint:
         # NY     0.000000  -0.200000     1.850000 
         # CPT    0.000000  -0.099000     1.860000
         self.ensemble.topology.set_pbc_matrix(self.pbc)
-        self.constraint.bind_ensemble(self.ensemble)
+        self.ensemble.add_constraints(self.constraint)
         self.constraint.update_neighbor()
         forces = self.constraint.get_forces()
         
@@ -155,7 +155,7 @@ class TestCharmmNonbondedConstraint:
         # NY     0.000000  -0.200000     1.850000 
         # CPT    0.000000  -0.099000     1.860000
         self.ensemble.topology.set_pbc_matrix(self.pbc)
-        self.constraint.bind_ensemble(self.ensemble)
+        self.ensemble.add_constraints(self.constraint)
         
         self.constraint.cutoff_radius = Quantity(0.81, nanometer)
         self.constraint.update_neighbor()
