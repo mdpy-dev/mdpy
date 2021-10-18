@@ -79,7 +79,7 @@ class TestEnsemble:
         topology = PSFFile(psf_file_path).create_topology()
         topology.set_pbc_matrix(np.diag(np.ones(3)*10))
         ensemble = Ensemble(topology)
-        constraint = CharmmAngleConstraint(params['angle'])
+        constraint = CharmmNonbondedConstraint(params['nonbonded'])
         ensemble.add_constraints(constraint)
         assert ensemble.num_constraints == 1
 
