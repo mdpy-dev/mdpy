@@ -54,8 +54,8 @@ class TestCharmmBondConstraint:
             [0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]
         ])
         self.ensemble = Ensemble(t)
-        self.ensemble.set_positions(positions)
-        self.ensemble.set_velocities(velocities)
+        self.ensemble.state.set_positions(positions)
+        self.ensemble.state.set_velocities(velocities)
 
         f1 = os.path.join(data_dir, 'toppar_water_ions_namd.str')
         f2 = os.path.join(data_dir, 'par_all36_prot.prm')
@@ -75,12 +75,8 @@ class TestCharmmBondConstraint:
             self.constraint._check_bound_state()
 
     def test_bind_ensemble(self):
-        self.constraint.bind_ensemble(self.ensemble)
+        self.ensemble.add_constraints(self.constraint)
         assert self.constraint._parent_ensemble.num_constraints == 1
-
-        assert self.constraint._bond_type[0] == 'CA-CA'
-        assert self.constraint._bond_matrix_id[0][0] == 0
-        assert self.constraint._bond_matrix_id[0][1] == 3
         assert self.constraint.num_bonds == 1
 
         # CA   CA    305.000     1.3750
@@ -93,7 +89,7 @@ class TestCharmmBondConstraint:
         self.constraint._check_bound_state()
 
     def test_get_forces(self):
-        self.constraint.bind_ensemble(self.ensemble)
+        self.ensemble.add_constraints(self.constraint)
         forces = self.constraint.get_forces()
         assert forces[1, 0] == 0
         assert forces[2, 1] == 0 
@@ -110,7 +106,7 @@ class TestCharmmBondConstraint:
         assert forces.sum() == 0
 
     def test_get_potential_energy(self):
-        self.constraint.bind_ensemble(self.ensemble)
+        self.ensemble.add_constraints(self.constraint)
         energy = self.constraint.get_potential_energy()
         bond_length = get_bond([0, 0, 0], [0, 0, 1])
         k, r0 = self.params['bond']['CA-CA']

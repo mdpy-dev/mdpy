@@ -18,26 +18,25 @@ from ..math import *
 class CharmmBondConstraint(Constraint):
     def __init__(self, params, force_id: int = 0, force_group: int = 0) -> None:
         super().__init__(params, force_id=force_id, force_group=force_group)
-        self._bond_type, self._bond_matrix_id, self._bond_info = [], [], []
+        self._bond_info = []
         self._num_bonds = 0
 
     def bind_ensemble(self, ensemble: Ensemble):
-        ensemble.add_constraints(self)
-        self._bond_type, self._bond_matrix_id, self._bond_info = [], [], []
+        self._parent_ensemble = ensemble
+        self._force_id = ensemble.constraints.index(self)
+        self._bond_info = []
         self._num_bonds = 0
         for bond in self._parent_ensemble.topology.bonds:
-            self._bond_type.append('%s-%s' %(
+            bond_type = '%s-%s' %(
                 self._parent_ensemble.topology.particles[bond[0]].particle_name,
                 self._parent_ensemble.topology.particles[bond[1]].particle_name
-            ))
-            self._bond_matrix_id.append([
+            )
+            matrix_id = [
                 self._parent_ensemble.topology.particles[bond[0]].matrix_id,
                 self._parent_ensemble.topology.particles[bond[1]].matrix_id
-            ])
+            ]
+            self._bond_info.append(matrix_id + self._params[bond_type])
             self._num_bonds += 1
-
-        for index, bond in enumerate(self._bond_type):
-            self._bond_info.append(self._bond_matrix_id[index] + self._params[bond])
 
     def get_forces(self):
         self._check_bound_state()
@@ -45,12 +44,12 @@ class CharmmBondConstraint(Constraint):
         for bond_info in self._bond_info:
             id1, id2, k, r0 = bond_info
             r = get_bond(
-                self._parent_ensemble.positions[id1, :], 
-                self._parent_ensemble.positions[id2, :]
+                self._parent_ensemble.state.positions[id1, :], 
+                self._parent_ensemble.state.positions[id2, :]
             )
             force_val = - 2 * k * (r - r0)
             force_vec = get_unit_vec(
-                self._parent_ensemble.positions[id2, :] - self._parent_ensemble.positions[id1, :]
+                self._parent_ensemble.state.positions[id2, :] - self._parent_ensemble.state.positions[id1, :]
             )
             force = force_val * force_vec
             forces[id1, :] -= force
@@ -63,8 +62,8 @@ class CharmmBondConstraint(Constraint):
         for bond_info in self._bond_info:
             id1, id2, k, r0 = bond_info
             r = get_bond(
-                self._parent_ensemble.positions[id1, :], 
-                self._parent_ensemble.positions[id2, :]
+                self._parent_ensemble.state.positions[id1, :], 
+                self._parent_ensemble.state.positions[id2, :]
             )
             potential_energy += k * (r - r0)**2
         return potential_energy

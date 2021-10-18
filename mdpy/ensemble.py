@@ -10,17 +10,17 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 '''
 
 import numpy as np
-from . import SPATIAL_DIM
-from .core import Topology
+
+from .core import Topology, State
 from .error import *
+from .unit import *
 
 class Ensemble:
     def __init__(self, topology: Topology) -> None:
         # Read input
         self._topology = topology
-        self._matrix_shape = [self._topology.num_particles, SPATIAL_DIM]
-        self._positions = np.zeros(self._matrix_shape)
-        self._velocities = np.zeros(self._matrix_shape)
+        self._state = State(self._topology.particles)
+        self._matrix_shape = self._state.matrix_shape
         self._forces = np.zeros(self._matrix_shape)
 
         self._total_energy = 0
@@ -38,18 +38,6 @@ class Ensemble:
 
     __str__ = __repr__
 
-    def _check_matrix_shape(self, matrix: np.ndarray):
-        row, col = matrix.shape
-        if self._topology.num_particles != row:
-            raise ParticleConflictError(
-                'The dimension of position matrix [%d, %d] do not match the number of particle %d contains in topology'
-                %(row, col, self._topology.num_particles)
-            )
-        if matrix.shape[1] != SPATIAL_DIM:
-            raise SpatialDimError(
-                'The column dimension of matrix should be 3, instead of %d' %col
-            )
-
     def create_segment(self, keywords):
         pass
 
@@ -60,18 +48,9 @@ class Ensemble:
                     '%s has added twice to %s' 
                     %(constraint, self)
                 )
-            constraint.force_id = self._num_constraints
-            constraint.parent_ensemble = self
             self._constraints.append(constraint)
+            constraint.bind_ensemble(self)
             self._num_constraints += 1
-    
-    def set_positions(self, positions: np.ndarray):
-        self._check_matrix_shape(positions)
-        self._positions = positions
-    
-    def set_velocities(self, velocities: np.ndarray):
-        self._check_matrix_shape(velocities)
-        self._velocities = velocities
 
     def update_forces(self):
         self._forces = np.zeros(self._matrix_shape)
@@ -92,20 +71,19 @@ class Ensemble:
         # Without reshape, the result of the first sum will be a 1d vector
         # , which will be a matrix after multiple with a 2d vector
         self._kinetic_energy = ((
-            (self._velocities**2).sum(1).reshape(self.topology.num_particles, 1) * self._topology.masses
+            (self._state.velocities**2).sum(1).reshape(self._topology.num_particles, 1) * self._topology.masses
         ).sum() / 2)
+        self._kinetic_energy = Quantity(
+            self._kinetic_energy, default_velocity_unit**2 * default_mass_unit
+        ).convert_to(default_energy_unit).value
     
     @property
     def topology(self):
         return self._topology
 
     @property
-    def positions(self):
-        return self._positions
-    
-    @property
-    def velocities(self):
-        return self._velocities
+    def state(self):
+        return self._state
     
     @property
     def forces(self):

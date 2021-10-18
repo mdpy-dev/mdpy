@@ -11,13 +11,17 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 
 # *** Note: current test file only contain test for information without constrait
 
-import pytest
+import pytest, os
 import numpy as np
 from ..core import Particle, Topology
-from ..error import *
 from ..ensemble import Ensemble
-from ..constraint import Constraint
+from ..file import CharmmParamFile, PSFFile
+from ..constraint import *
+from ..error import *
+from ..unit import *
 
+cur_dir = os.path.dirname(os.path.abspath(__file__))
+data_dir = os.path.join(cur_dir, 'data')
 class TestEnsemble:
     def setup(self):
         p1 = Particle(
@@ -54,8 +58,8 @@ class TestEnsemble:
             [0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]
         ])
         self.ensemble = Ensemble(t)
-        self.ensemble.set_positions(positions)
-        self.ensemble.set_velocities(velocities)
+        self.ensemble.state.set_positions(positions)
+        self.ensemble.state.set_velocities(velocities)
 
     def teardown(self):
         self.ensemble = None
@@ -64,25 +68,30 @@ class TestEnsemble:
         pass
 
     def test_exceptions(self):
-        with pytest.raises(ParticleConflictError):
-            self.ensemble.set_positions(np.ones([5, 3]))
-
-        with pytest.raises(SpatialDimError):
-            self.ensemble.set_velocities(np.ones([4, 4]))
+        pass
 
     def test_add_constraints(self):
-        c1, c2 = Constraint(1), Constraint(1)
-        self.ensemble.add_constraints(c1, c2)
-        assert self.ensemble.num_constraints == 2
-        assert c1.force_id == 0
-        assert c2.force_id == 1
+        f2 = os.path.join(data_dir, 'par_all36_prot.prm')
+        f3 = os.path.join(data_dir, 'toppar_water_ions_namd.str')
+        psf_file_path = os.path.join(data_dir, '1M9Z.psf')
+        charmm_file = CharmmParamFile(f2, f3)
+        params = charmm_file.params
+        topology = PSFFile(psf_file_path).create_topology()
+        topology.set_pbc_matrix(np.diag(np.ones(3)*10))
+        ensemble = Ensemble(topology)
+        constraint = CharmmAngleConstraint(params['angle'])
+        ensemble.add_constraints(constraint)
+        assert ensemble.num_constraints == 1
+
         
         with pytest.raises(ConstraintConflictError):
-            self.ensemble.add_constraints(c1)
+            ensemble.add_constraints(constraint)
 
     def test_update_kinetic_energy(self):
         self.ensemble._update_kinetic_energy()
-        assert self.ensemble.kinetic_energy == 13.5
+        assert self.ensemble.kinetic_energy == Quantity(
+            13.5, default_velocity_unit**2*default_mass_unit
+        ).convert_to(default_energy_unit).value
 
     def test_update_potential_energy(self):
         self.ensemble._update_potential_energy()
@@ -90,4 +99,6 @@ class TestEnsemble:
 
     def test_update_energy(self):
         self.ensemble.update_energy()
-        assert self.ensemble.total_energy == 13.5
+        assert self.ensemble.total_energy == Quantity(
+            13.5, default_velocity_unit**2*default_mass_unit
+        ).convert_to(default_energy_unit).value
