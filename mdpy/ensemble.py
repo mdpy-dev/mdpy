@@ -55,6 +55,10 @@ class Ensemble:
     def update_forces(self):
         self._forces = np.zeros(self._matrix_shape)
         for constraint in self._constraints:
+            try:
+                constraint.update_neighbor()
+            except:
+                pass
             self._forces += constraint.get_forces()
 
     def update_energy(self):
