@@ -24,6 +24,11 @@ class Constraint:
 
     __str__ = __repr__
 
+    def __eq__(self, o: object) -> bool:
+        if id(self) == id(o):
+            return True
+        return False
+
     def bind_ensemble(self, ensemble: Ensemble):
         raise NotImplementedError('The subclass of mdpy.constraint.Constarint class should overload bind_ensemble method')
 
@@ -47,10 +52,6 @@ class Constraint:
     def force_id(self):
         return self._force_id
 
-    @force_id.setter
-    def force_id(self, index: int):
-        self._force_id = index
-
     @property
     def force_group(self):
         return self._force_group
@@ -58,7 +59,3 @@ class Constraint:
     @property
     def parent_ensemble(self):
         return self._parent_ensemble
-
-    @parent_ensemble.setter
-    def parent_ensemble(self, ensemble: Ensemble):
-        self._parent_ensemble = ensemble
