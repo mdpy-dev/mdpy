@@ -22,7 +22,7 @@ from ..unit import *
 cur_dir = os.path.dirname(os.path.abspath(__file__))
 data_dir = os.path.join(cur_dir, 'data')
 
-class TestCharmmDihedralConstraint:
+class TestCharmmImproperConstraint:
     def setup(self):
         p1 = Particle(
             particle_id=0, particle_type='H', 
@@ -55,8 +55,8 @@ class TestCharmmDihedralConstraint:
             [0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]
         ])
         self.ensemble = Ensemble(t)
-        self.ensemble.set_positions(positions)
-        self.ensemble.set_velocities(velocities)
+        self.ensemble.state.set_positions(positions)
+        self.ensemble.state.set_velocities(velocities)
 
         f1 = os.path.join(data_dir, 'toppar_water_ions_namd.str')
         f2 = os.path.join(data_dir, 'par_all36_prot.prm')
@@ -76,14 +76,8 @@ class TestCharmmDihedralConstraint:
             self.constraint._check_bound_state()
 
     def test_bind_ensemble(self):
-        self.constraint.bind_ensemble(self.ensemble)
+        self.ensemble.add_constraints(self.constraint)
         assert self.constraint._parent_ensemble.num_constraints == 1
-
-        assert self.constraint._improper_type[0] == 'HE2-HE2-CE2-CE2'
-        assert self.constraint._improper_matrix_id[0][0] == 0
-        assert self.constraint._improper_matrix_id[0][1] == 1
-        assert self.constraint._improper_matrix_id[0][2] == 2
-        assert self.constraint._improper_matrix_id[0][3] == 3
         assert self.constraint.num_impropers == 1
 
         # HE2  HE2  CE2  CE2     3.0            0      0.00   
@@ -98,7 +92,7 @@ class TestCharmmDihedralConstraint:
         self.constraint._check_bound_state()
 
     def test_get_forces(self):
-        self.constraint.bind_ensemble(self.ensemble)
+        self.ensemble.add_constraints(self.constraint)
         forces = self.constraint.get_forces()
         k, psi0 = self.params['improper']['HE2-HE2-CE2-CE2']
         psi = get_dihedral([0, 0, 0], [1, 0, 0], [0, 1, 0], [0.5, 0.5, 1], is_angular=False)
@@ -133,7 +127,7 @@ class TestCharmmDihedralConstraint:
         assert forces[0, 2] == force_a[2]
 
     def test_get_potential_energy(self):
-        self.constraint.bind_ensemble(self.ensemble)
+        self.ensemble.add_constraints(self.constraint)
         energy = self.constraint.get_potential_energy()
         k, psi0 = self.params['improper']['HE2-HE2-CE2-CE2']
         psi = get_dihedral([0, 0, 0], [1, 0, 0], [0, 1, 0], [0.5, 0.5, 1], is_angular=False)

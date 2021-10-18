@@ -38,6 +38,7 @@ class TestCharmmForcefield:
         charmm_file = CharmmParamFile(f1, f2, f3)
         params = charmm_file.params
         topology = PSFFile(self.psf_file_path).create_topology()
+        topology.set_pbc_matrix(np.diag(np.ones(3)*10))
         forcefield = CharmmForcefield(topology)
         forcefield._params = params
         forcefield.check_params()

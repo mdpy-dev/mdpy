@@ -22,47 +22,39 @@ class CharmmNonbondedConstraint(Constraint):
     def __init__(self, params, cutoff_radius=12, force_id: int = 0, force_group: int = 0) -> None:
         super().__init__(params, force_id=force_id, force_group=force_group)
         self._cutoff_radius = check_quantity_value(cutoff_radius, default_length_unit)
-        self._nonbonded_pair_type, self._nonbonded_matrix_id = [], []
+        self._nonbonded_pair_type = []
         self._nonbonded_pair_info = {}
         self._neighbor_list = []
         self._neighbor_distance = []
         self._num_nonbonded_pairs = 0
 
     def bind_ensemble(self, ensemble: Ensemble):
-        ensemble.add_constraints(self)
-        self._nonbonded_pair_type, self._nonbonded_matrix_id = [], []
+        self._parent_ensemble = ensemble
+        self._force_id = ensemble.constraints.index(self)
         self._nonbonded_pair_info = {}
         self._num_nonbonded_pairs = 0
-        for index, particle1 in enumerate(self._parent_ensemble.topology.particles):
-            for particle2 in self._parent_ensemble.topology.particles[index+1:]:
-                self._nonbonded_pair_type.append([
-                    particle1.particle_name, 
-                    particle2.particle_name
-                ])
-                self._nonbonded_matrix_id.append([
-                    particle1.matrix_id, 
-                    particle2.matrix_id
-                ])
+        params = [self._params[i.particle_name] for i in self._parent_ensemble.topology.particles]
+        for index1, particle1 in enumerate(self._parent_ensemble.topology.particles):
+            id1, particle_name1 = particle1.matrix_id, particle1.particle_name
+            epsilon1, half_rmin1 = params[index1]
+            for index2, particle2 in enumerate(self._parent_ensemble.topology.particles[index1+1:]):
+                id2, particle_name2 = particle2.matrix_id, particle2.particle_name
+                self._nonbonded_pair_type.append([particle_name1, particle_name2])
+                epsilon2, half_rmin2 = params[index1 + index2 + 1]
+                # Mix rule: 
+                # - Eps,i,j = sqrt(eps,i * eps,j)
+                # - Rmin,i,j = Rmin/2,i + Rmin/2,j
+                # Turn r_min to sigma
+                self._nonbonded_pair_info['%s-%s' %(id1, id2)] = [
+                    np.sqrt(epsilon1 * epsilon2), (half_rmin1 + half_rmin2) * RMIN_TO_SIGMA_FACTOR
+                ]
                 self._num_nonbonded_pairs += 1
-
-        for index, nonbonded_pair in enumerate(self._nonbonded_pair_type):
-            id1, id2 = self._nonbonded_matrix_id[index]
-            epsilon1, half_rmin1 = self._params[nonbonded_pair[0]]
-            epsilon2, half_rmin2 = self._params[nonbonded_pair[1]]
-            
-            # Mix rule: 
-            # - Eps,i,j = sqrt(eps,i * eps,j)
-            # - Rmin,i,j = Rmin/2,i + Rmin/2,j
-            # Turn r_min to sigma
-            self._nonbonded_pair_info['%s-%s' %(id1, id2)] = [
-                np.sqrt(epsilon1 * epsilon2), (half_rmin1 + half_rmin2) * RMIN_TO_SIGMA_FACTOR
-            ]
 
     def update_neighbor(self):
         self._check_bound_state()
         self._neighbor_list, self._neighbor_distance = [], []
         scaled_position = np.dot(
-            self._parent_ensemble.positions,
+            self._parent_ensemble.state.positions,
             self._parent_ensemble.topology.pbc_inv
         )
         for particle in self._parent_ensemble.topology.particles:
@@ -87,7 +79,7 @@ class CharmmNonbondedConstraint(Constraint):
                 r = self._neighbor_distance[id1][i]
                 scaled_r = r / sigma
                 force_val = 24 * epsilon / r * (2 * scaled_r**12 - scaled_r**6)
-                force_vec = get_unit_vec(self._parent_ensemble.positions[id2] - self._parent_ensemble.positions[id1])
+                force_vec = get_unit_vec(self._parent_ensemble.state.positions[id2] - self._parent_ensemble.state.positions[id1])
                 force = force_vec * force_val
                 forces[id1, :] += force
                 forces[id2, :] -= force
