@@ -302,6 +302,12 @@ class Quantity:
             self._unit.sqrt()
         )
 
+    def sum(self, *keys):
+        return Quantity(
+            np.sum(self._value, *keys),
+            self.unit
+        )
+
     def __abs__(self):
         return Quantity(
             abs(self._value),

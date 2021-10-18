@@ -32,8 +32,8 @@ class SpatialDimError(Exception):
     - The dimension of quantity in cartesian reference is not 3
     
     Used in:
-    - mdpy.core.particle
     - mdpy.core.topology
+    - mdpy.core.state
     - mdpy.ensemble
     '''
     pass
@@ -55,6 +55,7 @@ class ParticleConflictError(Exception):
     
     Used in:
     - mdpy.core.topology
+    - mdpy.core.state
     - mdpy.ensemble
     '''
     pass
