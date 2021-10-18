@@ -79,27 +79,15 @@ class TestCharmmNonbondedConstraint:
         self.ensemble.topology.set_pbc_matrix(self.pbc)
         self.ensemble.add_constraints(self.constraint)
         assert self.constraint._parent_ensemble.num_constraints == 1
-
-        assert self.constraint._nonbonded_pair_type[0][0] == 'CA' 
-        assert self.constraint._nonbonded_pair_type[0][1] == 'NY' 
-        assert self.constraint._nonbonded_pair_type[1][0] == 'CA' 
-        assert self.constraint._nonbonded_pair_type[1][1] == 'CPT' 
-        assert self.constraint._nonbonded_pair_type[4][0] == 'NY' 
-        assert self.constraint._nonbonded_pair_type[1][1] == 'CPT' 
         assert self.constraint.num_nonbonded_pairs == 6
 
         # CA     0.000000  -0.070000     1.992400
         # NY     0.000000  -0.200000     1.850000 
         # CPT    0.000000  -0.099000     1.860000
         self.ensemble.topology.set_pbc_matrix(self.pbc)
-        assert self.constraint._nonbonded_pair_info['0-1'][0] == np.sqrt(
-            Quantity(0.07, kilocalorie_permol).convert_to(default_energy_unit).value *
-            Quantity(0.2, kilocalorie_permol).convert_to(default_energy_unit).value
-        )
+        assert self.constraint._param_list[0][0] == Quantity(-0.07, kilocalorie_permol).convert_to(default_energy_unit).value
         assert RMIN_TO_SIGMA_FACTOR == 2**(-1/6)
-        assert self.constraint._nonbonded_pair_info['1-2'][1] == (
-            (1.85 + 1.86) * RMIN_TO_SIGMA_FACTOR
-        )
+        assert self.constraint._param_list[1][1] == 1.85 * RMIN_TO_SIGMA_FACTOR
 
         # No exception
         self.constraint._check_bound_state()
