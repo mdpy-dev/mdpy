@@ -15,4 +15,5 @@ import mdpy.file as file
 import mdpy.constraint as constraint
 import mdpy.forcefield as forcefield
 from mdpy.ensemble import Ensemble
+import mdpy.integrator as integrator
 from mdpy.simulation import Simulation
