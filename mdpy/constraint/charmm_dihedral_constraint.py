@@ -18,30 +18,29 @@ from ..math import *
 class CharmmDihedralConstraint(Constraint):
     def __init__(self, params, force_id: int = 0, force_group: int = 0) -> None:
         super().__init__(params, force_id=force_id, force_group=force_group)
-        self._dihedral_type, self._dihedral_matrix_id, self._dihedral_info = [], [], []
+        self._dihedral_info = []
         self._num_dihedrals = 0
 
     def bind_ensemble(self, ensemble: Ensemble):
-        ensemble.add_constraints(self)
-        self._dihedral_type, self._dihedral_matrix_id, self._dihedral_info = [], [], []
+        self._parent_ensemble = ensemble
+        self._force_id = ensemble.constraints.index(self)
+        self._dihedral_info = []
         self._num_dihedrals = 0
         for dihedral in self._parent_ensemble.topology.dihedrals:
-            self._dihedral_type.append('%s-%s-%s-%s' %(
+            dihedral_type = '%s-%s-%s-%s' %(
                 self._parent_ensemble.topology.particles[dihedral[0]].particle_name,
                 self._parent_ensemble.topology.particles[dihedral[1]].particle_name,
                 self._parent_ensemble.topology.particles[dihedral[2]].particle_name,
                 self._parent_ensemble.topology.particles[dihedral[3]].particle_name
-            ))
-            self._dihedral_matrix_id.append([
+            )
+            matrix_id = [
                 self._parent_ensemble.topology.particles[dihedral[0]].matrix_id,
                 self._parent_ensemble.topology.particles[dihedral[1]].matrix_id,
                 self._parent_ensemble.topology.particles[dihedral[2]].matrix_id,
                 self._parent_ensemble.topology.particles[dihedral[3]].matrix_id
-            ])
+            ]
+            self._dihedral_info.append(matrix_id + self._params[dihedral_type])
             self._num_dihedrals += 1
-
-        for index, dihedral in enumerate(self._dihedral_type):
-            self._dihedral_info.append(self._dihedral_matrix_id[index] + self._params[dihedral])
 
     def get_forces(self):
         self._check_bound_state()
