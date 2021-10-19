@@ -20,7 +20,7 @@ test_order = [
     'charmm_dihedral_constraint', 'charmm_improper_constraint',
     'forcefield', 'charmm_forcefield'
     'ensemble',
-    'integrator'
+    'integrator', 'verlet_integrator'
 ]
 
 def pytest_collection_modifyitems(items):
