@@ -12,6 +12,7 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 import numpy as np
 from .ensemble import Ensemble
 from .integrator import Integrator
+from .error import *
 
 class Simulation:
     def __init__(self, ensemble: Ensemble, integrator: Integrator) -> None:
@@ -41,6 +42,10 @@ class Simulation:
         self._cur_step = 0
 
     def sample(self, num_steps: int):
+        if self._num_dumpers == 0 or self._minimum_dump_frequency == 0:
+            raise DumperPoorDefinedError(
+                'No dumper has been added to Simulation yet.'
+            )
         target_step = self._cur_step + num_steps
         while self._cur_step < target_step:
             self._integrator.sample(self._ensemble, self._minimum_dump_frequency)
