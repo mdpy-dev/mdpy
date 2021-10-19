@@ -226,3 +226,20 @@ class TestQuantity:
         quantity = quantity / (Quantity([1, 2, 3, 4]) * newton)
         assert quantity[0] == Quantity(1) / newton * angstrom
         assert quantity[-1] == Quantity(1) / newton * angstrom
+
+    def test_sum(self):
+        quantity = Quantity([1, 2, 3, 4]) * angstrom
+        assert quantity.sum().value == 10
+
+        quantity = Quantity(1) * angstrom
+        assert quantity.sum().value == 1
+
+        quantity = Quantity(np.array([0, 0, 1])) * angstrom
+        assert quantity.sum().value == 1
+
+        quantity = Quantity(np.ones([5, 3]))
+        res = quantity.sum(1)
+        assert res[0].value == 3
+
+        res = quantity.sum(0)
+        assert res[1].value == 5
