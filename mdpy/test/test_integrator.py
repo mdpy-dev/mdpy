@@ -30,4 +30,4 @@ class TestIntegrator:
     def test_exceptions(self):
         integrator = Integrator(1)
         with pytest.raises(NotImplementedError):
-            integrator.step(0, 1)
+            integrator.sample(0, 1)
