@@ -17,9 +17,9 @@ class Integrator:
     def __init__(self, time_step) -> None:
         self._time_step = check_quantity_value(time_step, default_time_unit) 
 
-    def step(self, ensemble: Ensemble, num_steps: int=1):
+    def sample(self, ensemble: Ensemble, num_steps: int=1):
         raise NotImplementedError(
-            'The subclass of mdpy.integrator.Integrator class should overload step method'
+            'The subclass of mdpy.integrator.Integrator class should overload sample method'
         )
 
     @property
