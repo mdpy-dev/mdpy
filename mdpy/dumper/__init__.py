@@ -5,3 +5,9 @@ __copyright__ = "Copyright 2021-2021, Southeast University and Zhenyu Wei"
 __license__ = "GPLv3"
 
 from .dumper import Dumper
+
+from .pdb_dumper import PDBDumper
+
+__all__ = [
+    'PDBDumper'
+]
