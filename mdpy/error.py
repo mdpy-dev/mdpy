@@ -92,7 +92,7 @@ class PBCPoorDefinedError(Exception):
     - Two or more column vector in pbc_matrix is linear corellated
     
     Used in:
-    - mdpy.forcefield.charmm_forcefield
+    - mdpy.core.topology
     '''
     pass
 
@@ -102,5 +102,16 @@ class ParameterNotFoundError(Exception):
     
     Used in:
     - mdpy.forcefield.charmm_forcefield
+    '''
+    pass
+
+class DumperPoorDefinedError(Exception):
+    '''This error occurs when:
+    - Dump frequency of dumper object is 0
+    - Simulation samples without adding dumper
+    
+    Used in:
+    - mdpy.dumper.dumper
+    - mdpy.simulation
     '''
     pass
