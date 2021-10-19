@@ -19,7 +19,10 @@ test_order = [
     'charmm_nonbonded_constraint', 'charmm_bond_constraint', 'charmm_angle_constraint',
     'charmm_dihedral_constraint', 'charmm_improper_constraint',
     'forcefield', 'charmm_forcefield'
-    'ensemble'
+    'ensemble',
+    'integrator', 'verlet_integrator',
+    'simulation',
+    'dumper', 'pdb_dumper'
 ]
 
 def pytest_collection_modifyitems(items):

@@ -18,28 +18,27 @@ from ..math import *
 class CharmmAngleConstraint(Constraint):
     def __init__(self, params, force_id: int = 0, force_group: int = 0) -> None:
         super().__init__(params, force_id=force_id, force_group=force_group)
-        self._angle_type, self._angle_matrix_id, self._angle_info = [], [], []
+        self._angle_info = []
         self._num_angles = 0
 
     def bind_ensemble(self, ensemble: Ensemble):
-        ensemble.add_constraints(self)
-        self._angle_type, self._angle_matrix_id, self._angle_info = [], [], []
+        self._parent_ensemble = ensemble
+        self._force_id = ensemble.constraints.index(self)
+        self._angle_info = []
         self._num_angles = 0
         for angle in self._parent_ensemble.topology.angles:
-            self._angle_type.append('%s-%s-%s' %(
+            angle_type = '%s-%s-%s' %(
                 self._parent_ensemble.topology.particles[angle[0]].particle_name,
                 self._parent_ensemble.topology.particles[angle[1]].particle_name,
                 self._parent_ensemble.topology.particles[angle[2]].particle_name
-            ))
-            self._angle_matrix_id.append([
+            )
+            matrix_id = [
                 self._parent_ensemble.topology.particles[angle[0]].matrix_id,
                 self._parent_ensemble.topology.particles[angle[1]].matrix_id,
                 self._parent_ensemble.topology.particles[angle[2]].matrix_id
-            ])
+            ]
+            self._angle_info.append(matrix_id + self._params[angle_type])
             self._num_angles += 1
-
-        for index, angle, in enumerate(self._angle_type):
-            self._angle_info.append(self._angle_matrix_id[index] + self._params[angle])
     
     def get_forces(self):
         self._check_bound_state()

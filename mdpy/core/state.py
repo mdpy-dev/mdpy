@@ -17,9 +17,7 @@ from ..math import *
 
 class State:
     def __init__(self, particles) -> None:
-        self._masses = [
-            Quantity(particle.mass, default_mass_unit) for particle in particles
-        ]
+        self._masses = [particle.mass for particle in particles]
         self._num_particles = len(particles)
         self._matrix_shape = [self._num_particles, SPATIAL_DIM]
         self._positions = np.zeros(self._matrix_shape)
@@ -55,10 +53,11 @@ class State:
 
     def set_velocities_to_temperature(self, temperature):
         temperature = check_quantity(temperature, default_temperature_unit)
+        masses = Quantity(self._masses)
         velocities = []
-        factor = Quantity(3) * KB * temperature
+        factor = Quantity(3) * KB * temperature / default_mass_unit
         for i in range(self._num_particles):
-            width = (factor/self._masses[i]).sqrt().convert_to(default_velocity_unit).value
+            width = (factor/masses[i]).sqrt().convert_to(default_velocity_unit).value
             velocities.append(np.random.rand(3) * 2 * width - width)
         self.set_velocities(np.vstack(velocities))
 
