@@ -54,15 +54,16 @@ class TestCharmmNonbondedConstraint:
         velocities = np.array([
             [0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 1, 0]
         ])
-        self.ensemble = Ensemble(self.p, t)
-        self.ensemble.set_velocities(velocities)
+        self.ensemble = Ensemble(t)
+        self.ensemble.state.set_positions(self.p)
+        self.ensemble.state.set_velocities(velocities)
 
         f1 = os.path.join(data_dir, 'toppar_water_ions_namd.str')
         f2 = os.path.join(data_dir, 'par_all36_prot.prm')
         f3 = os.path.join(data_dir, 'top_all36_na.rtf')
         charmm = CharmmParamFile(f1, f2, f3)
         self.params = charmm.params
-        self.constraint = CharmmNonbondedConstraint()
+        self.constraint = CharmmNonbondedConstraint(self.params['nonbonded'])
 
     def teardown(self):
         self.ensemble, self.params, self.constraint = None, None, None
@@ -75,43 +76,25 @@ class TestCharmmNonbondedConstraint:
             self.constraint._check_bound_state()
 
     def test_bind_ensemble(self):
-        with pytest.raises(PBCPoorDefinedError):
-            self.constraint.bind_ensemble(self.ensemble)
         self.ensemble.topology.set_pbc_matrix(self.pbc)
-        self.constraint.bind_ensemble(self.ensemble)
+        self.ensemble.add_constraints(self.constraint)
         assert self.constraint._parent_ensemble.num_constraints == 1
-
-        assert self.constraint._nonbonded_pair_type[0][0] == 'CA' 
-        assert self.constraint._nonbonded_pair_type[0][1] == 'NY' 
-        assert self.constraint._nonbonded_pair_type[1][0] == 'CA' 
-        assert self.constraint._nonbonded_pair_type[1][1] == 'CPT' 
-        assert self.constraint._nonbonded_pair_type[4][0] == 'NY' 
-        assert self.constraint._nonbonded_pair_type[1][1] == 'CPT' 
         assert self.constraint.num_nonbonded_pairs == 6
 
-        # No exception
-        self.constraint._check_bound_state()
-
-    def test_set_params(self):
         # CA     0.000000  -0.070000     1.992400
         # NY     0.000000  -0.200000     1.850000 
         # CPT    0.000000  -0.099000     1.860000
         self.ensemble.topology.set_pbc_matrix(self.pbc)
-        self.constraint.bind_ensemble(self.ensemble)
-        self.constraint.set_params(self.params['nonbonded'])
-        assert self.constraint._nonbonded_pair_info['0-1'][0] == np.sqrt(
-            Quantity(0.07, kilocalorie_permol).convert_to(default_energy_unit).value *
-            Quantity(0.2, kilocalorie_permol).convert_to(default_energy_unit).value
-        )
+        assert self.constraint._param_list[0][0] == Quantity(-0.07, kilocalorie_permol).convert_to(default_energy_unit).value
         assert RMIN_TO_SIGMA_FACTOR == 2**(-1/6)
-        assert self.constraint._nonbonded_pair_info['1-2'][1] == (
-            (1.85 + 1.86) * RMIN_TO_SIGMA_FACTOR
-        )
+        assert self.constraint._param_list[1][1] == 1.85 * RMIN_TO_SIGMA_FACTOR
+
+        # No exception
+        self.constraint._check_bound_state()
     
     def test_update_neighbor(self):
         self.ensemble.topology.set_pbc_matrix(self.pbc)
-        self.constraint.bind_ensemble(self.ensemble)
-        self.constraint.set_params(self.params['nonbonded'])
+        self.ensemble.add_constraints(self.constraint)
         self.constraint.update_neighbor()
         assert len(self.constraint._neighbor_list[0]) == 3
         
@@ -130,8 +113,7 @@ class TestCharmmNonbondedConstraint:
         # NY     0.000000  -0.200000     1.850000 
         # CPT    0.000000  -0.099000     1.860000
         self.ensemble.topology.set_pbc_matrix(self.pbc)
-        self.constraint.bind_ensemble(self.ensemble)
-        self.constraint.set_params(self.params['nonbonded'])
+        self.ensemble.add_constraints(self.constraint)
         self.constraint.update_neighbor()
         forces = self.constraint.get_forces()
         
@@ -161,8 +143,7 @@ class TestCharmmNonbondedConstraint:
         # NY     0.000000  -0.200000     1.850000 
         # CPT    0.000000  -0.099000     1.860000
         self.ensemble.topology.set_pbc_matrix(self.pbc)
-        self.constraint.bind_ensemble(self.ensemble)
-        self.constraint.set_params(self.params['nonbonded'])
+        self.ensemble.add_constraints(self.constraint)
         
         self.constraint.cutoff_radius = Quantity(0.81, nanometer)
         self.constraint.update_neighbor()

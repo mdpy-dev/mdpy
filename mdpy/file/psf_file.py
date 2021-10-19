@@ -12,6 +12,7 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 import numpy as np
 from MDAnalysis.topology.PSFParser import PSFParser
 from ..core import Particle, Topology
+from ..unit import *
 
 class PSFFile:
     def __init__(self, file_path: str) -> None:
@@ -19,8 +20,9 @@ class PSFFile:
         
         self._num_particles = self._parser.n_atoms
         self._particle_ids = list(self._parser.ids.values)
-        self._particle_types = list(self._parser.types.values)
-        self._particle_names = list(self._parser.names.values)
+        # The definition of type in PSFParser corresponding to name in Particle class
+        self._particle_types = list(self._parser.names.values)
+        self._particle_names = list(self._parser.types.values)
         self._matrix_ids = list(np.linspace(0, self._num_particles-1, self._num_particles, dtype=np.int))
         molecule_ids, molecule_types = self._parser.resids.values, self._parser.resnames.values
         chain_ids = self._parser.segids.values
@@ -33,15 +35,15 @@ class PSFFile:
             self._molecule_types.append(molecule_types[resid])
             self._chain_ids.append(chain_ids[segid])
 
-        self._masses = list(self._parser.masses.values)
-        self._charges = list(self._parser.charges.values)
-        self._bonds = self._parser.bonds.values
+        self._masses = list(Quantity(self._parser.masses.values, dalton).convert_to(default_mass_unit).value)
+        self._charges = list(Quantity(self._parser.charges.values, e).convert_to(default_charge_unit).value)
+        self._bonds = [list(i) for i in self._parser.bonds.values]
         self._num_bonds = len(self._bonds)
-        self._angles = self._parser.angles.values
+        self._angles = [list(i) for i in self._parser.angles.values]
         self._num_angles = len(self._angles)
-        self._dihedrals = self._parser.dihedrals.values
+        self._dihedrals = [list(i) for i in self._parser.dihedrals.values]
         self._num_dihedrals = len(self._dihedrals)
-        self._impropers = self._parser.impropers.values
+        self._impropers = [list(i) for i in self._parser.impropers.values]
         self._num_impropers = len(self._impropers)
 
     def create_topology(self):
@@ -56,7 +58,8 @@ class PSFFile:
                     matrix_id=self._matrix_ids[i],
                     molecule_id=self._molecule_ids[i], 
                     molecule_type=self._molecule_types[i], 
-                    chain_id=self._chain_ids[i]
+                    chain_id=self._chain_ids[i],
+                    mass=self._masses[i], charge=self._charges[i]
                 )
             )
         topology.add_particles(particles)
