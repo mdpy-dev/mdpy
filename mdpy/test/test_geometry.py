@@ -46,6 +46,18 @@ def test_get_angle():
     angle = get_angle(p1, p2, p3, is_angular=False)
     assert angle == pytest.approx(45)
 
+def test_get_included_angle():
+    p1 = np.array([1, 1])
+    p2 = np.array([0, 0])
+    p3 = np.array([0, 1])
+    v1 = p1 - p2
+    v2 = p3 - p2
+    angle = get_included_angle(v1, v2)
+    assert angle == pytest.approx(np.pi / 4)
+    
+    angle = get_included_angle(v1, v2, is_angular=False)
+    assert angle == pytest.approx(45)
+
 def test_get_dihedral():
     p1 = np.array([0, 1, 1])
     p2 = np.array([0, 0, 0])
