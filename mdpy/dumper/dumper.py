@@ -10,9 +10,14 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 '''
 
 from ..ensemble import Ensemble
+from ..error import *
 
 class Dumper:
     def __init__(self, file_path: str, dump_frequency: int) -> None:
+        if dump_frequency <= 0:
+            raise DumperPoorDefinedError(
+                'The dump_frequency of dumper should be a positive integer.'
+            )
         self._file_path = file_path
         self._file = open(file_path, 'w')
         self._file.close()
@@ -20,7 +25,7 @@ class Dumper:
 
     def dump(self, ensemble: Ensemble):
         raise NotImplementedError(
-            'The subclass of mdpy.dumper.Dumper class should overload update_ensemble method'
+            'The subclass of mdpy.dumper.Dumper class should overload update_ensemble method.'
         )
 
     def _dump_info(self, info):

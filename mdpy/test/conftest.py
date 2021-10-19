@@ -21,7 +21,8 @@ test_order = [
     'forcefield', 'charmm_forcefield'
     'ensemble',
     'integrator', 'verlet_integrator',
-    'simulation'
+    'simulation',
+    'dumper', 'pdb_dumper'
 ]
 
 def pytest_collection_modifyitems(items):
