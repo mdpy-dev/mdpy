@@ -9,22 +9,29 @@ contact : zhenyuwei99@gmail.com
 copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 '''
 
-import pytest
+import pytest, os
 from ..dumper import Dumper
+
+cur_dir = os.path.dirname(os.path.abspath(__file__))
+out_dir = os.path.join(cur_dir, 'out')
 
 class TestDumper:
     def setup(self):
-        pass
+        self.file = os.path.join(out_dir, 'test_dumper.txt')
 
     def teardown(self):
         pass
 
     def test_attributes(self):
-        dumper = Dumper('test.dump', 1)
-        assert dumper.file_path == 'test.dump'
+        dumper = Dumper(self.file, 1)
+        assert dumper.file_path == os.path.join(out_dir, 'test_dumper.txt')
         assert dumper.dump_frequency == 1
 
     def test_exceptions(self):
-        dumper = Dumper('test.dump', 1)
+        dumper = Dumper(self.file, 1)
         with pytest.raises(NotImplementedError):
             dumper.dump(1)
+
+    def test_dump_info(self):
+        dumper = Dumper(self.file, 1)
+        dumper._dump_info('test dump info')
