@@ -43,7 +43,7 @@ class TestVerletIntegrator:
         ensemble.state.set_positions(pdb.positions)
         ensemble.state.set_velocities_to_temperature(300)
         integrator = VerletIntegrator(1)
-        integrator.step(ensemble, 1)
+        integrator.sample(ensemble, 1)
 
         # ATOM      1  N   LYS A   1     -12.138   4.446  -6.361  1.00  0.00      A    N
         assert ensemble.state.positions[0, 1] == pytest.approx(4.446, abs=0.01)
