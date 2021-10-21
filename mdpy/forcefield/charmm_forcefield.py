@@ -98,13 +98,15 @@ class CharmmForcefield(Forcefield):
     def create_ensemble(self):
         self.check_params()
         ensemble = Ensemble(self._topology)
+        ele_constraint = ElectrostaticConstraint()
         nonbonded_constraint = CharmmNonbondedConstraint(self._params['nonbonded'], self._cutoff_radius)
         bond_constraint = CharmmBondConstraint(self._params['bond'])
         angle_constraint = CharmmAngleConstraint(self._params['angle'])
         dihedral_constraint = CharmmDihedralConstraint(self._params['dihedral'])
         improper_constraint = CharmmImproperConstraint(self._params['improper'])
         ensemble.add_constraints(
-            nonbonded_constraint, bond_constraint, angle_constraint,
+            ele_constraint, nonbonded_constraint, 
+            bond_constraint, angle_constraint,
             dihedral_constraint, improper_constraint
         )
         return ensemble

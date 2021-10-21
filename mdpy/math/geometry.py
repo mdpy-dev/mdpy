@@ -40,6 +40,13 @@ def get_angle(position1, position2, position3, is_angular=True):
     else:
         return arccos(cos_phi) / np.pi * 180
 
+def get_included_angle(vec1, vec2, is_angular=True):
+    cos_phi = np.dot(vec1, vec2) / (np.linalg.norm(vec1)*np.linalg.norm(vec2))
+    if is_angular:
+        return arccos(cos_phi)
+    else:
+        return arccos(cos_phi) / np.pi * 180
+
 def get_dihedral(position1, position2, position3, position4, is_angular=True):
     position1, position2 = np.array(position1), np.array(position2)
     position3, position4 = np.array(position3), np.array(position4)
