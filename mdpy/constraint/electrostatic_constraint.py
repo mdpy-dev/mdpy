@@ -45,7 +45,7 @@ class ElectrostaticConstraint(Constraint):
             ))**2).sum(1))
             for index, dist in enumerate(dist_list):
                 id2 = index + id1 + 1
-                force_val = - self._charges[id1] * self._charges[id2] * k / dist**2
+                force_val = - self._charges[id1] * self._charges[id2] / k / dist**2
                 force_vec = get_unit_vec(self._parent_ensemble.state.positions[id2] - self._parent_ensemble.state.positions[id1])
                 force = force_vec * force_val
                 forces[id1, :] += force
@@ -55,5 +55,20 @@ class ElectrostaticConstraint(Constraint):
     def get_potential_energy(self):
         self._check_bound_state()
         potential_energy = 0
-
+        k = 4 * np.pi * EPSILON0.value
+        scaled_position = np.dot(
+            self._parent_ensemble.state.positions,
+            self._parent_ensemble.topology.pbc_inv
+        )
+        for particle in self._parent_ensemble.topology.particles[:-1]:
+            id1 = particle.matrix_id
+            scaled_position_diff = scaled_position[id1, :] - scaled_position[id1+1:, :]
+            scaled_position_diff -= np.round(scaled_position_diff)
+            dist_list = np.sqrt(((np.dot(
+                scaled_position_diff, 
+                self._parent_ensemble.topology.pbc_matrix
+            ))**2).sum(1))
+            for index, dist in enumerate(dist_list):
+                id2 = index + id1 + 1
+                potential_energy += self._charges[id1] * self._charges[id2] / k / dist
         return potential_energy
