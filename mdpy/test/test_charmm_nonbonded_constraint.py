@@ -130,7 +130,7 @@ class TestCharmmNonbondedConstraint:
         )
         sigma = (1.9924 + 1.86) * RMIN_TO_SIGMA_FACTOR
         r = 9
-        scaled_r = r / sigma
+        scaled_r = sigma / r
         force_val = 24 * epsilon / r * (2 * scaled_r**12 - scaled_r**6)
         force_vec = get_unit_vec(self.p[2, :] - self.p[0, :])
         force = force_val * force_vec
