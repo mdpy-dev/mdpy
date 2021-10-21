@@ -56,4 +56,4 @@ class TestCharmmForcefield:
         forcefield = CharmmForcefield(topology)
         forcefield.set_param_files(f1, f2, f3)
         ensemble = forcefield.create_ensemble()
-        assert ensemble.num_constraints == 5
+        assert ensemble.num_constraints == 6
