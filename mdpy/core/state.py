@@ -72,9 +72,6 @@ class State:
     def set_positions(self, positions: np.ndarray):
         self._check_matrix_shape(positions)
         self._positions = positions
-
-    def wrap_positions(self):
-        pass
     
     def set_velocities(self, velocities: np.ndarray):
         self._check_matrix_shape(velocities)
