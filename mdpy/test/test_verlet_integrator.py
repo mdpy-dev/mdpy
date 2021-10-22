@@ -32,16 +32,16 @@ class TestVerletIntegrator:
     def test_exceptions(self):
         pass
 
-    def test_step(self):
+    def test_sample(self):
         pdb = PDBFile(os.path.join(data_dir, '2BQJ.pdb'))
         topology = PSFFile(os.path.join(data_dir, '2BQJ.psf')).create_topology()
-        topology.set_pbc_matrix(np.diag(np.ones(3) * 40))
 
         forcefield = CharmmForcefield(topology)
         forcefield.set_param_files(os.path.join(data_dir, 'par_all36_prot.prm'))
         ensemble = forcefield.create_ensemble()
         ensemble.state.set_positions(pdb.positions)
         ensemble.state.set_velocities_to_temperature(300)
+        ensemble.state.set_pbc_matrix(np.diag(np.ones(3) * 40))
         integrator = VerletIntegrator(1)
         integrator.sample(ensemble, 1)
 

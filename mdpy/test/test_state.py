@@ -71,3 +71,19 @@ class TestState:
         temperature = kinetic_energy * Quantity(2 / 3 / self.num_particles) / KB
         assert temperature < Quantity(315, default_temperature_unit)
         assert temperature > Quantity(285, default_temperature_unit)
+
+    def test_pbc(self):
+        with pytest.raises(PBCPoorDefinedError):
+            self.state.check_pbc_matrix()
+
+        with pytest.raises(PBCPoorDefinedError):
+            self.state.set_pbc_matrix(np.ones([3, 3]))
+
+        with pytest.raises(SpatialDimError):
+            self.state.set_pbc_matrix(np.ones([4, 3]))
+
+        self.state.set_pbc_matrix(np.diag(np.ones(3)*10))
+        assert self.state.pbc_inv[1, 1] == 0.1
+
+        self.state.set_pbc_matrix(Quantity(np.diag(np.ones(3)), nanometer))
+        assert self.state.pbc_inv[2, 2] == 0.1
