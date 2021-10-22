@@ -25,6 +25,9 @@ class State:
         self._positions = np.zeros(self._matrix_shape)
         self._velocities = np.zeros(self._matrix_shape)
 
+        self._pbc_matrix = np.zeros([SPATIAL_DIM, SPATIAL_DIM])
+        self._pbc_inv = np.zeros([SPATIAL_DIM, SPATIAL_DIM])
+
     def __repr__(self) -> str:
         return '<mdpy.State object with %d particles at %x>' %(
             self._num_particles, id(self)
@@ -44,6 +47,24 @@ class State:
                 'The column dimension of matrix should be %d, instead of %d' 
                 %(self._matrix_shape[1], col)
             ) 
+
+    def set_pbc_matrix(self, pbc_matrix):
+        pbc_matrix = check_quantity_value(pbc_matrix, default_length_unit)
+        row, col = pbc_matrix.shape
+        if row != SPATIAL_DIM or col != SPATIAL_DIM:
+            raise SpatialDimError(
+                'The pbc matrix should have shape [%d, %d], while matrix [%d %d] is provided'
+                %(SPATIAL_DIM, SPATIAL_DIM, row, col)
+            )
+        self._pbc_matrix = pbc_matrix
+        self.check_pbc_matrix()
+        self._pbc_inv = np.linalg.inv(self._pbc_matrix)
+    
+    def check_pbc_matrix(self):
+        if np.linalg.det(self._pbc_matrix) == 0:
+            raise PBCPoorDefinedError(
+                'PBC of %s is poor defined. Two or more column vectors are linear corellated'
+            )
 
     def set_positions(self, positions: np.ndarray):
         self._check_matrix_shape(positions)
@@ -77,3 +98,11 @@ class State:
     @property
     def matrix_shape(self):
         return self._matrix_shape
+
+    @property
+    def pbc_matrix(self):
+        return self._pbc_matrix
+
+    @property
+    def pbc_inv(self):
+        return self._pbc_inv
