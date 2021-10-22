@@ -17,7 +17,7 @@ class VerletIntegrator(Integrator):
         super().__init__(time_step)
         self._time_step_square = self._time_step**2
 
-    def sample(self, ensemble: Ensemble, num_steps: int = 1):
+    def sample(self, ensemble: Ensemble, num_steps: int=1):
         # Setting variables
         cur_step = 0
         masses = ensemble.topology.masses
@@ -41,10 +41,10 @@ class VerletIntegrator(Integrator):
                 2 * self._cur_positions - self._pre_positions + 
                 accelration * self._time_step_square
             ), self._cur_positions
+            ensemble.state.set_positions(self._cur_positions)
             # Update step
             cur_step += 1
         # Set ensemble attributes
-        ensemble.state.set_positions(self._cur_positions)
         ensemble.state.set_velocities(
             (self._cur_positions - self._pre_positions) / 2 / self._time_step
         )
