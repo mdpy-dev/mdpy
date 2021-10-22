@@ -55,8 +55,8 @@ class TestCharmmNonbondedConstraint:
             [0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 1, 0]
         ])
         self.ensemble = Ensemble(t)
-        self.ensemble.set_positions(self.p)
-        self.ensemble.set_velocities(velocities)
+        self.ensemble.state.set_positions(self.p)
+        self.ensemble.state.set_velocities(velocities)
 
         f1 = os.path.join(data_dir, 'toppar_water_ions_namd.str')
         f2 = os.path.join(data_dir, 'par_all36_prot.prm')
@@ -77,36 +77,24 @@ class TestCharmmNonbondedConstraint:
 
     def test_bind_ensemble(self):
         self.ensemble.topology.set_pbc_matrix(self.pbc)
-        self.constraint.bind_ensemble(self.ensemble)
+        self.ensemble.add_constraints(self.constraint)
         assert self.constraint._parent_ensemble.num_constraints == 1
-
-        assert self.constraint._nonbonded_pair_type[0][0] == 'CA' 
-        assert self.constraint._nonbonded_pair_type[0][1] == 'NY' 
-        assert self.constraint._nonbonded_pair_type[1][0] == 'CA' 
-        assert self.constraint._nonbonded_pair_type[1][1] == 'CPT' 
-        assert self.constraint._nonbonded_pair_type[4][0] == 'NY' 
-        assert self.constraint._nonbonded_pair_type[1][1] == 'CPT' 
         assert self.constraint.num_nonbonded_pairs == 6
 
         # CA     0.000000  -0.070000     1.992400
         # NY     0.000000  -0.200000     1.850000 
         # CPT    0.000000  -0.099000     1.860000
         self.ensemble.topology.set_pbc_matrix(self.pbc)
-        assert self.constraint._nonbonded_pair_info['0-1'][0] == np.sqrt(
-            Quantity(0.07, kilocalorie_permol).convert_to(default_energy_unit).value *
-            Quantity(0.2, kilocalorie_permol).convert_to(default_energy_unit).value
-        )
+        assert self.constraint._param_list[0][0] == Quantity(-0.07, kilocalorie_permol).convert_to(default_energy_unit).value
         assert RMIN_TO_SIGMA_FACTOR == 2**(-1/6)
-        assert self.constraint._nonbonded_pair_info['1-2'][1] == (
-            (1.85 + 1.86) * RMIN_TO_SIGMA_FACTOR
-        )
+        assert self.constraint._param_list[1][1] == 1.85 * RMIN_TO_SIGMA_FACTOR
 
         # No exception
         self.constraint._check_bound_state()
     
     def test_update_neighbor(self):
         self.ensemble.topology.set_pbc_matrix(self.pbc)
-        self.constraint.bind_ensemble(self.ensemble)
+        self.ensemble.add_constraints(self.constraint)
         self.constraint.update_neighbor()
         assert len(self.constraint._neighbor_list[0]) == 3
         
@@ -125,7 +113,7 @@ class TestCharmmNonbondedConstraint:
         # NY     0.000000  -0.200000     1.850000 
         # CPT    0.000000  -0.099000     1.860000
         self.ensemble.topology.set_pbc_matrix(self.pbc)
-        self.constraint.bind_ensemble(self.ensemble)
+        self.ensemble.add_constraints(self.constraint)
         self.constraint.update_neighbor()
         forces = self.constraint.get_forces()
         
@@ -142,7 +130,7 @@ class TestCharmmNonbondedConstraint:
         )
         sigma = (1.9924 + 1.86) * RMIN_TO_SIGMA_FACTOR
         r = 9
-        scaled_r = r / sigma
+        scaled_r = sigma / r
         force_val = 24 * epsilon / r * (2 * scaled_r**12 - scaled_r**6)
         force_vec = get_unit_vec(self.p[2, :] - self.p[0, :])
         force = force_val * force_vec
@@ -155,7 +143,7 @@ class TestCharmmNonbondedConstraint:
         # NY     0.000000  -0.200000     1.850000 
         # CPT    0.000000  -0.099000     1.860000
         self.ensemble.topology.set_pbc_matrix(self.pbc)
-        self.constraint.bind_ensemble(self.ensemble)
+        self.ensemble.add_constraints(self.constraint)
         
         self.constraint.cutoff_radius = Quantity(0.81, nanometer)
         self.constraint.update_neighbor()

@@ -13,8 +13,16 @@ import pytest
 
 test_order = [
     'base_dimension', 'unit', 'unit_definition', 'quantity',
-    'particle', 'topology', 'segment',
-    'pdb_file', 'psf_file'
+    'particle', 'topology', 'state', 'segment',
+    'pdb_file', 'psf_file', 'charmm_param_file',
+    'constraint', 
+    'charmm_nonbonded_constraint', 'charmm_bond_constraint', 'charmm_angle_constraint',
+    'charmm_dihedral_constraint', 'charmm_improper_constraint',
+    'forcefield', 'charmm_forcefield'
+    'ensemble',
+    'integrator', 'verlet_integrator',
+    'simulation',
+    'dumper', 'pdb_dumper'
 ]
 
 def pytest_collection_modifyitems(items):
