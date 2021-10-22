@@ -43,7 +43,7 @@ class CharmmForcefield(Forcefield):
         for particle in self._topology.particles:
             particle_name = particle.particle_name
             if not particle_name in particle_keys:
-                raise ParameterNotFoundError(
+                raise ParameterPoorDefinedError(
                     'The nonbonded parameter for particle %d (%s) can not be found'
                     %(particle_name)
                 )
@@ -53,7 +53,7 @@ class CharmmForcefield(Forcefield):
                 self._topology.particles[bond[1]].particle_name
             )
             if not bond_name in bond_keys:
-                raise ParameterNotFoundError(
+                raise ParameterPoorDefinedError(
                     'The parameter for bond %d-%d (%s) can not be found' 
                     %(*bond, bond_name)
                 ) 
@@ -64,7 +64,7 @@ class CharmmForcefield(Forcefield):
                 self._topology.particles[angle[2]].particle_name
             )
             if not angle_name in angle_keys:
-                raise ParameterNotFoundError(
+                raise ParameterPoorDefinedError(
                     'The parameter for angle %d-%d-%d (%s) can not be found' 
                     %(*angle, angle_name)
                 ) 
@@ -76,7 +76,7 @@ class CharmmForcefield(Forcefield):
                 self._topology.particles[dihedral[3]].particle_name
             )
             if not dihedral_name in dihedral_keys:
-                raise ParameterNotFoundError(
+                raise ParameterPoorDefinedError(
                     'The parameter for dihedral %d-%d-%d-%d (%s) can not be found' 
                     %(*dihedral, dihedral_name)
                 ) 
@@ -88,7 +88,7 @@ class CharmmForcefield(Forcefield):
                 self._topology.particles[improper[3]].particle_name
             )
             if not improper_name in improper_keys:
-                raise ParameterNotFoundError(
+                raise ParameterPoorDefinedError(
                     'The parameter for improper %d-%d-%d-%d (%s) can not be found' 
                     %(*improper, improper_name)
                 ) 
