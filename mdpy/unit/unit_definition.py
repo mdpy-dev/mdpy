@@ -118,7 +118,7 @@ kilocalorie_permol = Unit(energy, 4.184e3/6.0221e23)
 ev = Unit(energy, 1.60217662e-19)
 hartree = Unit(energy, 4.3597447222071e-18)
 
-default_energy_unit = kilojoule_permol
+default_energy_unit = default_mass_unit * default_length_unit**2 / default_time_unit**2 #kilojoule_permol
 default_force_unit = default_energy_unit / default_length_unit
 
 ######################
