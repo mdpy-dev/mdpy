@@ -26,7 +26,6 @@ class CharmmForcefield(Forcefield):
         is_SHAKE: bool=True
     ) -> None:
         super().__init__(topology)
-        self._topology.check_pbc_matrix()
         self._cutoff_radius = check_quantity_value(cutoff_radius, default_length_unit)
         self._long_range_solver = long_range_solver
         self._ewald_error = ewald_error
