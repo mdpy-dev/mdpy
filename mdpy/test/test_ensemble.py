@@ -22,6 +22,7 @@ from ..unit import *
 
 cur_dir = os.path.dirname(os.path.abspath(__file__))
 data_dir = os.path.join(cur_dir, 'data')
+
 class TestEnsemble:
     def setup(self):
         p1 = Particle(
@@ -77,8 +78,8 @@ class TestEnsemble:
         charmm_file = CharmmParamFile(f2, f3)
         params = charmm_file.params
         topology = PSFFile(psf_file_path).create_topology()
-        topology.set_pbc_matrix(np.diag(np.ones(3)*10))
         ensemble = Ensemble(topology)
+        ensemble.state.set_pbc_matrix(np.diag(np.ones(3)*10))
         constraint = CharmmNonbondedConstraint(params['nonbonded'])
         ensemble.add_constraints(constraint)
         assert ensemble.num_constraints == 1

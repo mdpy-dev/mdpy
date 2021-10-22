@@ -33,7 +33,7 @@ class ElectrostaticConstraint(Constraint):
         forces = np.zeros([self._parent_ensemble.topology.num_particles, SPATIAL_DIM])
         scaled_position = np.dot(
             self._parent_ensemble.state.positions,
-            self._parent_ensemble.topology.pbc_inv
+            self._parent_ensemble.state.pbc_inv
         )
         for particle in self._parent_ensemble.topology.particles[:-1]:
             id1 = particle.matrix_id
@@ -41,7 +41,7 @@ class ElectrostaticConstraint(Constraint):
             scaled_position_diff -= np.round(scaled_position_diff)
             dist_list = np.sqrt(((np.dot(
                 scaled_position_diff, 
-                self._parent_ensemble.topology.pbc_matrix
+                self._parent_ensemble.state.pbc_matrix
             ))**2).sum(1))
             for index, dist in enumerate(dist_list):
                 id2 = index + id1 + 1
@@ -58,7 +58,7 @@ class ElectrostaticConstraint(Constraint):
         k = 4 * np.pi * EPSILON0.value
         scaled_position = np.dot(
             self._parent_ensemble.state.positions,
-            self._parent_ensemble.topology.pbc_inv
+            self._parent_ensemble.state.pbc_inv
         )
         for particle in self._parent_ensemble.topology.particles[:-1]:
             id1 = particle.matrix_id
@@ -66,7 +66,7 @@ class ElectrostaticConstraint(Constraint):
             scaled_position_diff -= np.round(scaled_position_diff)
             dist_list = np.sqrt(((np.dot(
                 scaled_position_diff, 
-                self._parent_ensemble.topology.pbc_matrix
+                self._parent_ensemble.state.pbc_matrix
             ))**2).sum(1))
             for index, dist in enumerate(dist_list):
                 id2 = index + id1 + 1
