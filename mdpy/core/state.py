@@ -56,7 +56,10 @@ class State:
                 'The pbc matrix should have shape [%d, %d], while matrix [%d %d] is provided'
                 %(SPATIAL_DIM, SPATIAL_DIM, row, col)
             )
-        self._pbc_matrix = pbc_matrix
+        # The origin define of pbc_matrix is the stack of 3 column vector
+        # While in MDPy the position is in shape of n x 3
+        # So the scaled position will be Position * PBC instead of PBC * Position as usual
+        self._pbc_matrix = pbc_matrix.T
         self.check_pbc_matrix()
         self._pbc_inv = np.linalg.inv(self._pbc_matrix)
     
