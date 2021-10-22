@@ -56,14 +56,14 @@ class CharmmNonbondedConstraint(Constraint):
         self._neighbor_list, self._neighbor_distance = [], []
         scaled_position = np.dot(
             self._parent_ensemble.state.positions,
-            self._parent_ensemble.topology.pbc_inv
+            self._parent_ensemble.state.pbc_inv
         )
         for particle in self._parent_ensemble.topology.particles:
             scaled_position_diff = scaled_position[particle.matrix_id, :] - scaled_position[particle.matrix_id+1:, :]
             scaled_position_diff -= np.round(scaled_position_diff)
             dist = np.sqrt(((np.dot(
                 scaled_position_diff, 
-                self._parent_ensemble.topology.pbc_matrix
+                self._parent_ensemble.state.pbc_matrix
             ))**2).sum(1))
             index = np.argwhere(dist <= self._cutoff_radius).reshape(-1)
             self._neighbor_list.append(index + particle.matrix_id + 1)

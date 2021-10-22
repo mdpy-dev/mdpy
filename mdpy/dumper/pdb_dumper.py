@@ -116,7 +116,8 @@ class PDBDumper(Dumper):
             'PDB FILE CREATED WITH MDPY',
             datetime.date.today().strftime('%d-%b-%Y').upper()
         )
-        pbc_matrix = ensemble.topology.pbc_matrix
+        # Transport for the correction of origin transport in mdpy.core.State class
+        pbc_matrix = ensemble.state.pbc_matrix.T
         pbc_len = np.linalg.norm(pbc_matrix, axis=0)
         alpha = get_included_angle(pbc_matrix[0, :], pbc_matrix[1, :], is_angular=False)
         beta = get_included_angle(pbc_matrix[0, :], pbc_matrix[2, :], is_angular=False)
