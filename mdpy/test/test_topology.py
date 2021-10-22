@@ -344,18 +344,3 @@ class TestTopology:
         with pytest.raises(ParticleConflictError):
             self.topology.del_improper([1, 2, 9, 3])
     
-    def test_pbc(self):
-        with pytest.raises(PBCPoorDefinedError):
-            self.topology.check_pbc_matrix()
-
-        with pytest.raises(PBCPoorDefinedError):
-            self.topology.set_pbc_matrix(np.ones([3, 3]))
-
-        with pytest.raises(SpatialDimError):
-            self.topology.set_pbc_matrix(np.ones([4, 3]))
-
-        self.topology.set_pbc_matrix(np.diag(np.ones(3)*10))
-        assert self.topology.pbc_inv[1, 1] == 0.1
-
-        self.topology.set_pbc_matrix(Quantity(np.diag(np.ones(3)), nanometer))
-        assert self.topology.pbc_inv[2, 2] == 0.1

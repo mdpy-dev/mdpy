@@ -56,14 +56,14 @@ class CharmmNonbondedConstraint(Constraint):
         self._neighbor_list, self._neighbor_distance = [], []
         scaled_position = np.dot(
             self._parent_ensemble.state.positions,
-            self._parent_ensemble.topology.pbc_inv
+            self._parent_ensemble.state.pbc_inv
         )
         for particle in self._parent_ensemble.topology.particles:
-            scaled_position_diff = scaled_position[particle.matrix_id] - scaled_position[particle.matrix_id+1:]
+            scaled_position_diff = scaled_position[particle.matrix_id, :] - scaled_position[particle.matrix_id+1:, :]
             scaled_position_diff -= np.round(scaled_position_diff)
             dist = np.sqrt(((np.dot(
                 scaled_position_diff, 
-                self._parent_ensemble.topology.pbc_matrix
+                self._parent_ensemble.state.pbc_matrix
             ))**2).sum(1))
             index = np.argwhere(dist <= self._cutoff_radius).reshape(-1)
             self._neighbor_list.append(index + particle.matrix_id + 1)
@@ -78,8 +78,8 @@ class CharmmNonbondedConstraint(Constraint):
             for i, id2 in enumerate(self._neighbor_list[id1]):
                 epsilon, sigma = self._mix_params(id1, id2)
                 r = self._neighbor_distance[id1][i]
-                scaled_r = r / sigma
-                force_val = 24 * epsilon / r * (2 * scaled_r**12 - scaled_r**6)
+                scaled_r = sigma / r
+                force_val = (2 * scaled_r**12 - scaled_r**6) / r * epsilon * 24 # Sequence for small number divide small number
                 force_vec = get_unit_vec(self._parent_ensemble.state.positions[id2] - self._parent_ensemble.state.positions[id1])
                 force = force_vec * force_val
                 forces[id1, :] += force
