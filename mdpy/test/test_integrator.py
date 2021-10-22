@@ -27,6 +27,10 @@ class TestIntegrator:
         integrator = Integrator(Quantity(1, nanosecond))
         assert integrator.time_step == 1e6
 
+        assert integrator.is_cached == False
+        integrator._cur_positions = 1
+        assert integrator.is_cached == True
+
     def test_exceptions(self):
         integrator = Integrator(1)
         with pytest.raises(NotImplementedError):
