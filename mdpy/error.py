@@ -96,7 +96,7 @@ class PBCPoorDefinedError(Exception):
     '''
     pass
 
-class ParameterNotFoundError(Exception):
+class ParameterPoorDefinedError(Exception):
     '''This error occurs when:
     - Topology connections' parameter is not defined in selected parameter file
     
