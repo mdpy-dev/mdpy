@@ -92,7 +92,7 @@ class PBCPoorDefinedError(Exception):
     - Two or more column vector in pbc_matrix is linear corellated
     
     Used in:
-    - mdpy.core.topology
+    - mdpy.core.state
     '''
     pass
 
