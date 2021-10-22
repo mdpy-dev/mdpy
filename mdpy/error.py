@@ -115,3 +115,11 @@ class DumperPoorDefinedError(Exception):
     - mdpy.simulation
     '''
     pass
+
+class AtomLossError(Exception):
+    '''This error occurs when:
+    - The atom go beyond the range of two PBC images
+    
+    Used in:
+    - mdpy.core.state'''
+    pass
