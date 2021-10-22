@@ -36,7 +36,7 @@ class Simulation:
     def _dump(self):
         for dumper in self._dumpers:
             if self._cur_step % dumper.dump_frequency == 0:
-                dumper.dump()
+                dumper.dump(self)
 
     def reset_simulation_step(self):
         self._cur_step = 0
@@ -47,9 +47,11 @@ class Simulation:
                 'No dumper has been added to Simulation yet.'
             )
         target_step = self._cur_step + num_steps
+        self._dump()
         while self._cur_step < target_step:
             self._integrator.sample(self._ensemble, self._minimum_dump_frequency)
             self._dump()
+            self._cur_step += self._minimum_dump_frequency
 
     @property
     def ensemble(self):

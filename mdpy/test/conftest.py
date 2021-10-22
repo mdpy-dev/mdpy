@@ -16,6 +16,7 @@ test_order = [
     'particle', 'topology', 'state', 'segment',
     'pdb_file', 'psf_file', 'charmm_param_file',
     'constraint', 
+    'electrostatic_constraint'
     'charmm_nonbonded_constraint', 'charmm_bond_constraint', 'charmm_angle_constraint',
     'charmm_dihedral_constraint', 'charmm_improper_constraint',
     'forcefield', 'charmm_forcefield'
