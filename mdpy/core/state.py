@@ -10,15 +10,17 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 '''
 
 import numpy as np
+from .topology import Topology
 from .. import SPATIAL_DIM
 from ..unit import *
 from ..error import *
 from ..math import *
 
 class State:
-    def __init__(self, particles) -> None:
-        self._masses = [particle.mass for particle in particles]
-        self._num_particles = len(particles)
+    def __init__(self, topology: Topology) -> None:
+        self._particles = topology.particles
+        self._masses = [particle.mass for particle in self._particles]
+        self._num_particles = len(self._particles)
         self._matrix_shape = [self._num_particles, SPATIAL_DIM]
         self._positions = np.zeros(self._matrix_shape)
         self._velocities = np.zeros(self._matrix_shape)
@@ -46,6 +48,9 @@ class State:
     def set_positions(self, positions: np.ndarray):
         self._check_matrix_shape(positions)
         self._positions = positions
+
+    def wrap_positions(self):
+        pass
     
     def set_velocities(self, velocities: np.ndarray):
         self._check_matrix_shape(velocities)
