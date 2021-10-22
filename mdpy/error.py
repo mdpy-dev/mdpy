@@ -92,11 +92,11 @@ class PBCPoorDefinedError(Exception):
     - Two or more column vector in pbc_matrix is linear corellated
     
     Used in:
-    - mdpy.core.topology
+    - mdpy.core.state
     '''
     pass
 
-class ParameterNotFoundError(Exception):
+class ParameterPoorDefinedError(Exception):
     '''This error occurs when:
     - Topology connections' parameter is not defined in selected parameter file
     
@@ -114,4 +114,12 @@ class DumperPoorDefinedError(Exception):
     - mdpy.dumper.dumper
     - mdpy.simulation
     '''
+    pass
+
+class AtomLossError(Exception):
+    '''This error occurs when:
+    - The atom go beyond the range of two PBC images
+    
+    Used in:
+    - mdpy.core.state'''
     pass
