@@ -12,7 +12,7 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 import pytest
 import numpy as np
 from .. import SPATIAL_DIM
-from ..core import Particle, State
+from ..core import Particle, Topology, State
 from ..error import *
 from ..unit import *
 
@@ -30,11 +30,14 @@ class TestState:
         self.particles.append(Particle(particle_type='C', mass=12))
         _ = [self.particles.extend(self.particles) for i in range(7)]
         self.num_particles = len(self.particles)
-        self.state = State(self.particles)
+        self.topology = Topology()
+        self.topology.add_particles(self.particles)
+        self.state = State(self.topology)
 
     def teardown(self):
         self.particles = None
         self.state = None
+        self.topology = None
 
     def test_attributes(self):
         assert self.state.positions.shape[0] == self.num_particles
@@ -66,5 +69,5 @@ class TestState:
                 (Quantity(self.state.velocities[particle, :], default_velocity_unit)**2).sum()
             )
         temperature = kinetic_energy * Quantity(2 / 3 / self.num_particles) / KB
-        assert temperature < Quantity(310, default_temperature_unit)
-        assert temperature > Quantity(290, default_temperature_unit)
+        assert temperature < Quantity(315, default_temperature_unit)
+        assert temperature > Quantity(285, default_temperature_unit)
