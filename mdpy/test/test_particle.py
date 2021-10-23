@@ -52,16 +52,21 @@ class TestParticle:
 
     def test_bonded_particles(self):
         particle = Particle(particle_id=1, particle_type='C', matrix_id=0)
-        particle.add_bonded_particles(1)
+        particle.add_bonded_particle(1)
         assert particle.num_bonded_particles == 1
         assert particle.bonded_particle[0] == 1
 
-        particle.add_bonded_particles(2)
+        particle.add_bonded_particle(2)
         assert particle.num_bonded_particles == 2
         assert particle.bonded_particle[1] == 2
 
         with pytest.raises(ParticleConflictError):
-            particle.add_bonded_particles(1)
+            particle.add_bonded_particle(1)
 
         with pytest.raises(ParticleConflictError):
-            particle.add_bonded_particles(0)
+            particle.add_bonded_particle(0)
+
+        particle.del_bonded_particle(1)
+        assert particle.num_bonded_particles == 1
+        particle.del_bonded_particle(3)
+        assert particle.num_bonded_particles == 1
