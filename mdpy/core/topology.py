@@ -169,7 +169,7 @@ class Topology:
         self._check_matrix_ids(p1, p2, p3)
         # angle_replica = [p3, p2, p1]
         # if not angle in self._angles and not angle_replica in self._angles:
-        self._angles.append(angle)  
+        self._angles.append(angle)
         self._num_angles += 1
         
     def del_angle(self, angle):
@@ -186,7 +186,7 @@ class Topology:
             self._angles.remove(angle_replica)
             self._num_angles -= 1
         
-    def add_dihedral(self, dihedral):
+    def add_dihedral(self, dihedral, scaling_factor=1):
         num_particles = len(dihedral)
         if num_particles != 4:
             raise GeomtryDimError('Dihedral should be a matrix id list of 4 Particles, instead of %d' %num_particles)
@@ -195,6 +195,8 @@ class Topology:
         # dihedral_replica = [p4, p3, p2, p1]
         # if not dihedral in self._dihedrals and not dihedral_replica in self._dihedrals:
         self._dihedrals.append(dihedral)
+        self._particles[p1].add_scaling_particle(p4, scaling_factor)
+        self._particles[p4].add_scaling_particle(p1, scaling_factor)
         self._num_dihedrals += 1
         
     def del_dihedral(self, dihedral):
@@ -206,9 +208,13 @@ class Topology:
         dihedral_replica = [p4, p3, p2, p1]
         if dihedral in self._dihedrals:
             self._dihedrals.remove(dihedral)
+            self._particles[p1].del_scaling_particle(p4)
+            self._particles[p4].del_scaling_particle(p1)
             self._num_dihedrals -= 1
         elif dihedral_replica in self._dihedrals:
             self._dihedrals.remove(dihedral_replica)
+            self._particles[p1].del_scaling_particle(p4)
+            self._particles[p4].del_scaling_particle(p1)
             self._num_dihedrals -= 1
 
     def add_improper(self, improper):
