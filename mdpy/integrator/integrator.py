@@ -28,6 +28,10 @@ class Integrator:
             'The subclass of mdpy.integrator.Integrator class should overload sample method'
         )
 
+    def wrap_pbc(self, pbc_matrix, pbc_inv):
+        self._cur_positions = wrap_positions(self._cur_positions, pbc_matrix, pbc_inv)
+        self._pre_positions = wrap_positions(self._pre_positions, pbc_matrix, pbc_inv)
+
     @property
     def time_step(self):
         return self._time_step
