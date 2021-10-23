@@ -59,12 +59,12 @@ class CharmmImproperConstraint(Constraint):
             )
             force_val = 2 * k * (psi - psi0)
 
-            vab = self._parent_ensemble.state.positions[id2, :] -self._parent_ensemble.state.positions[id1, :]
+            vab = self._parent_ensemble.state.positions[id2, :] - self._parent_ensemble.state.positions[id1, :]
             lab = np.linalg.norm(vab)
-            vbc = self._parent_ensemble.state.positions[id3, :] -self._parent_ensemble.state.positions[id2, :]
+            vbc = self._parent_ensemble.state.positions[id3, :] - self._parent_ensemble.state.positions[id2, :]
             lbc = np.linalg.norm(vbc)
             voc, loc = vbc / 2, lbc / 2
-            vcd = self._parent_ensemble.state.positions[id4, :] -self._parent_ensemble.state.positions[id3, :]
+            vcd = self._parent_ensemble.state.positions[id4, :] - self._parent_ensemble.state.positions[id3, :]
             lcd = np.linalg.norm(vcd)
             theta_abc = get_pbc_angle(
                 self._parent_ensemble.state.positions[id1, :], 
