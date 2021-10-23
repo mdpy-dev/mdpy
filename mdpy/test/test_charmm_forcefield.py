@@ -38,7 +38,6 @@ class TestCharmmForcefield:
         charmm_file = CharmmParamFile(f1, f2, f3)
         params = charmm_file.params
         topology = PSFFile(self.psf_file_path).create_topology()
-        topology.set_pbc_matrix(np.diag(np.ones(3)*10))
         forcefield = CharmmForcefield(topology)
         forcefield._params = params
         forcefield.check_params()
@@ -48,12 +47,7 @@ class TestCharmmForcefield:
         f2 = os.path.join(data_dir, 'par_all36_prot.prm')
         f3 = os.path.join(data_dir, 'top_all36_prot.rtf')
         topology = PSFFile(self.psf_file_path).create_topology()
-        with pytest.raises(PBCPoorDefinedError):
-            CharmmForcefield(topology)
-        
-        topology.set_pbc_matrix(np.diag(np.ones(3)*10))
-
         forcefield = CharmmForcefield(topology)
         forcefield.set_param_files(f1, f2, f3)
         ensemble = forcefield.create_ensemble()
-        assert ensemble.num_constraints == 5
+        assert ensemble.num_constraints == 6

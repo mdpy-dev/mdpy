@@ -19,7 +19,7 @@ class Ensemble:
     def __init__(self, topology: Topology) -> None:
         # Read input
         self._topology = topology
-        self._state = State(self._topology.particles)
+        self._state = State(self._topology)
         self._matrix_shape = self._state.matrix_shape
         self._forces = np.zeros(self._matrix_shape)
 

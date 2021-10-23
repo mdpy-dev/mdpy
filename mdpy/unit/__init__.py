@@ -32,6 +32,9 @@ from .quantity import Quantity
 # Constant
 KB = Quantity(1.38064852e-23, Unit(energy/temperature, 1))
 NA = Quantity(6.0221e23, Unit(1/mol_dimension, 1))
+EPSILON0 = Quantity(8.85418e-12, second**2*coulomb**2/meter**3/kilogram).convert_to(
+    default_time_unit**2*default_charge_unit**2/default_length_unit**3/default_mass_unit
+)
 
 __all__ = [
     'Quantity',
@@ -49,5 +52,5 @@ __all__ = [
     'kilojoule_permol_over_angstrom', 'kilojoule_permol_over_nanometer', 
     'kilocalorie_permol_over_angstrom', 'kilocalorie_permol_over_nanometer',
     'watt', 'kilowatt',
-    'NA', 'KB'
+    'NA', 'KB', 'EPSILON0'
 ]
