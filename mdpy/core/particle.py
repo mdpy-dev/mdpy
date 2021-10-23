@@ -50,19 +50,23 @@ class Particle:
         # Only used by Topology
         self._matrix_id = matrix_id
 
-    def add_bonded_particles(self, *particles):
-        for particle in particles:
-            if particle in self._bonded_particles:
-                raise ParticleConflictError(
-                    'Particle %d has been added twice to the bonded_particles of Particle %d'
-                    %(particle, self._matrix_id)
-                )
-            elif particle == self._matrix_id:
-                raise ParticleConflictError(
-                    'Particle itself can not be added to the bonded_particle list.'
-                )
-            self._bonded_particles.append(particle)
-            self._num_bonded_particles += 1
+    def add_bonded_particle(self, particle_matrix_id):
+        if particle_matrix_id in self._bonded_particles:
+            raise ParticleConflictError(
+                'Particle %d has been added twice to the bonded_particles of Particle %d'
+                %(particle_matrix_id, self._matrix_id)
+            )
+        elif particle_matrix_id == self._matrix_id:
+            raise ParticleConflictError(
+                'Particle itself can not be added to the bonded_particle list.'
+            )
+        self._bonded_particles.append(particle_matrix_id)
+        self._num_bonded_particles += 1
+    
+    def del_bonded_particle(self, particle_matrix_id):
+        if particle_matrix_id in self._bonded_particles:
+            self._bonded_particles.remove(particle_matrix_id)
+            self._num_bonded_particles -= 1
             
     @property
     def particle_id(self):
