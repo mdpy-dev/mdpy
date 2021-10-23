@@ -12,10 +12,10 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 import pytest, os
 import numpy as np
 from ..constraint import CharmmNonbondedConstraint
-from ..constraint.charmm_nonbonded_constraint import RMIN_TO_SIGMA_FACTOR
 from ..core import Particle, Topology
 from ..ensemble import Ensemble
 from ..file import CharmmParamFile
+from ..file.charmm_param_file import RMIN_TO_SIGMA_FACTOR
 from ..math import get_unit_vec
 from ..error import *
 from ..unit import *
@@ -85,9 +85,8 @@ class TestCharmmNonbondedConstraint:
         # NY     0.000000  -0.200000     1.850000 
         # CPT    0.000000  -0.099000     1.860000
         self.ensemble.state.set_pbc_matrix(self.pbc)
-        assert self.constraint._param_list[0][0] == Quantity(-0.07, kilocalorie_permol).convert_to(default_energy_unit).value
-        assert RMIN_TO_SIGMA_FACTOR == 2**(-1/6)
-        assert self.constraint._param_list[1][1] == 1.85 * RMIN_TO_SIGMA_FACTOR
+        assert self.constraint._param_list[0][0] == Quantity(0.07, kilocalorie_permol).convert_to(default_energy_unit).value
+        assert self.constraint._param_list[1][1] == 1.85 * RMIN_TO_SIGMA_FACTOR * 2
 
         # No exception
         self.constraint._check_bound_state()
@@ -131,7 +130,7 @@ class TestCharmmNonbondedConstraint:
         sigma = (1.9924 + 1.86) * RMIN_TO_SIGMA_FACTOR
         r = 9
         scaled_r = sigma / r
-        force_val = 24 * epsilon / r * (2 * scaled_r**12 - scaled_r**6)
+        force_val = - 24 * epsilon / r * (2 * scaled_r**12 - scaled_r**6)
         force_vec = get_unit_vec(self.p[2, :] - self.p[0, :])
         force = force_val * force_vec
         assert forces[0, 0] == pytest.approx(force[0])
