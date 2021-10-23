@@ -139,6 +139,8 @@ class Topology:
         # bond_replica = [p2, p1]
         # if not bond in self._bonds and not bond_replica in self._bonds:
         self._bonds.append(bond)
+        self._particles[p1].add_bonded_particle(p2)
+        self._particles[p2].add_bonded_particle(p1)
         self._num_bonds += 1
         
     def del_bond(self, bond):
@@ -150,9 +152,13 @@ class Topology:
         bond_replica = [p2, p1]
         if bond in self._bonds:
             self._bonds.remove(bond)
+            self._particles[p1].del_bonded_particle(p2)
+            self._particles[p2].del_bonded_particle(p1)
             self._num_bonds -= 1
         elif bond_replica in self._bonds:
             self._bonds.remove(bond_replica)
+            self._particles[p1].del_bonded_particle(p2)
+            self._particles[p2].del_bonded_particle(p1)
             self._num_bonds -= 1
 
     def add_angle(self, angle):
