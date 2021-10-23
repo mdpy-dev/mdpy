@@ -105,7 +105,7 @@ class Particle:
         return self._charge
 
     @property
-    def bonded_particle(self):
+    def bonded_particles(self):
         return self._bonded_particles
 
     @property

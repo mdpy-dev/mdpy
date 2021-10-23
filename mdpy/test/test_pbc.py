@@ -54,3 +54,15 @@ def test_unwrap_vec():
     assert unwrapped_vec[1, 0] == -5
     assert unwrapped_vec[1, 1] == pytest.approx(4)
     assert unwrapped_vec[1, 2] == pytest.approx(-1)
+
+    p1 = np.array([0, 0, 0])
+    p2 = np.array([0, 1, 0])
+    vec1 = p1 - p2
+    vec2 = unwrap_vec(p1 + 10 - p2, pbc_matrix, pbc_inv)
+    vec3 = unwrap_vec(p1 - 10 - p2, pbc_matrix, pbc_inv)
+    assert vec1[0] == pytest.approx(vec2[0])
+    assert vec1[0] == pytest.approx(vec3[0])
+    assert vec1[1] == pytest.approx(vec2[1])
+    assert vec1[1] == pytest.approx(vec3[1])
+    assert vec1[2] == pytest.approx(vec2[2])
+    assert vec1[2] == pytest.approx(vec3[2])

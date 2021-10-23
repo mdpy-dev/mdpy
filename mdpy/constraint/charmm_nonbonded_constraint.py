@@ -32,8 +32,8 @@ class CharmmNonbondedConstraint(Constraint):
         self._force_id = ensemble.constraints.index(self)
         self._param_list = []
         for particle in self._parent_ensemble.topology.particles:
-            epsilon, half_rmin = self._params[particle.particle_name]
-            self._param_list.append([epsilon, half_rmin * RMIN_TO_SIGMA_FACTOR])
+            epsilon, sigma = self._params[particle.particle_name]
+            self._param_list.append([epsilon, sigma])
         self._num_nonbonded_pairs = int((
             self._parent_ensemble.topology.num_particles**2 -
             self._parent_ensemble.topology.num_particles
@@ -44,11 +44,11 @@ class CharmmNonbondedConstraint(Constraint):
         # - Eps,i,j = sqrt(eps,i * eps,j)
         # - Rmin,i,j = Rmin/2,i + Rmin/2,j
         # Turn r_min to sigma
-        epsilon1, half_sigma1 = self._param_list[id1]
-        epsilon2, half_sigma2 = self._param_list[id2]
+        epsilon1, sigma1 = self._param_list[id1]
+        epsilon2, sigma2 = self._param_list[id2]
         return (
             np.sqrt(epsilon1 * epsilon2),
-            half_sigma1 + half_sigma2
+            (sigma1 + sigma2) / 2
         )
 
     def update_neighbor(self):
@@ -76,14 +76,18 @@ class CharmmNonbondedConstraint(Constraint):
         for particle in self._parent_ensemble.topology.particles:
             id1 = particle.matrix_id
             for i, id2 in enumerate(self._neighbor_list[id1]):
-                epsilon, sigma = self._mix_params(id1, id2)
-                r = self._neighbor_distance[id1][i]
-                scaled_r = sigma / r
-                force_val = (2 * scaled_r**12 - scaled_r**6) / r * epsilon * 24 # Sequence for small number divide small number
-                force_vec = get_unit_vec(self._parent_ensemble.state.positions[id2] - self._parent_ensemble.state.positions[id1])
-                force = force_vec * force_val
-                forces[id1, :] += force
-                forces[id2, :] -= force
+                if not id2 in self._parent_ensemble.topology.particles[id1].bonded_particles:
+                    epsilon, sigma = self._mix_params(id1, id2)
+                    r = self._neighbor_distance[id1][i]
+                    scaled_r = sigma / r
+                    force_val = - (2 * scaled_r**12 - scaled_r**6) / r * epsilon * 24 # Sequence for small number divide small number
+                    force_vec = unwrap_vec(get_unit_vec(
+                        self._parent_ensemble.state.positions[id2] - 
+                        self._parent_ensemble.state.positions[id1]
+                    ), self._parent_ensemble.state.pbc_matrix, self._parent_ensemble.state.pbc_inv)
+                    force = force_vec * force_val
+                    forces[id1, :] += force
+                    forces[id2, :] -= force
         return forces
 
 
@@ -94,10 +98,11 @@ class CharmmNonbondedConstraint(Constraint):
         for particle in self._parent_ensemble.topology.particles:
             id1 = particle.matrix_id
             for i, id2 in enumerate(self._neighbor_list[id1]):
-                epsilon, sigma = self._mix_params(id1, id2)
-                r = self._neighbor_distance[id1][i]
-                scaled_r = r / sigma
-                potential_energy += 4 * epsilon * (scaled_r**12 - scaled_r**6) 
+                if not id2 in self._parent_ensemble.topology.particles[id1].bonded_particles:
+                    epsilon, sigma = self._mix_params(id1, id2)
+                    r = self._neighbor_distance[id1][i]
+                    scaled_r = sigma / r        
+                    potential_energy += 4 * epsilon * (scaled_r**12 - scaled_r**6) 
         return potential_energy
 
     @property
