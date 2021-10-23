@@ -94,6 +94,7 @@ class TestCharmmDihedralConstraint:
 
     def test_get_forces(self):
         self.ensemble.add_constraints(self.constraint)
+        self.ensemble.state.set_pbc_matrix(np.diag(np.ones(3)*10))
         forces = self.constraint.get_forces()
         k, n, delta = self.params['dihedral']['CA-NY-CPT-CA']
         theta = get_dihedral([0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1], is_angular=False)
@@ -119,7 +120,8 @@ class TestCharmmDihedralConstraint:
 
     def test_get_potential_energy(self):
         self.ensemble.add_constraints(self.constraint)
+        self.ensemble.state.set_pbc_matrix(np.diag(np.ones(3)*10))
         energy = self.constraint.get_potential_energy()
         k, n, delta = self.params['dihedral']['CA-NY-CPT-CA']
-        theta = get_dihedral([0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1], is_angular=False)
-        assert energy == k * (1 + np.cos(n*theta - delta))
+        theta = get_dihedral([0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1])
+        assert energy == k * (1 + np.cos(n*theta - np.deg2rad(delta)))

@@ -48,14 +48,14 @@ class CharmmDihedralConstraint(Constraint):
         forces = np.zeros([self._parent_ensemble.topology.num_particles, SPATIAL_DIM])
         for dihedral_info in self._dihedral_info:
             id1, id2, id3, id4, k, n, delta = dihedral_info
+            delta = np.deg2rad(delta)
             theta = get_pbc_dihedral(
                 self._parent_ensemble.state.positions[id1, :], 
                 self._parent_ensemble.state.positions[id2, :],
                 self._parent_ensemble.state.positions[id3, :], 
                 self._parent_ensemble.state.positions[id4, :],
                 self._parent_ensemble.state.pbc_matrix,
-                self._parent_ensemble.state.pbc_inv,
-                is_angular=False
+                self._parent_ensemble.state.pbc_inv
             )
             force_val = k * (1 - n * np.sin(n*theta - delta))
 
@@ -99,14 +99,14 @@ class CharmmDihedralConstraint(Constraint):
         potential_energy = 0
         for dihedral_info in self._dihedral_info:
             id1, id2, id3, id4, k, n, delta = dihedral_info
+            delta = np.deg2rad(delta)
             theta = get_pbc_dihedral(
                 self._parent_ensemble.state.positions[id1, :], 
                 self._parent_ensemble.state.positions[id2, :],
                 self._parent_ensemble.state.positions[id3, :], 
                 self._parent_ensemble.state.positions[id4, :],
                 self._parent_ensemble.state.pbc_matrix,
-                self._parent_ensemble.state.pbc_inv,
-                is_angular=False
+                self._parent_ensemble.state.pbc_inv
             )
             potential_energy += k * (1 + np.cos(n*theta - delta))
         return potential_energy
