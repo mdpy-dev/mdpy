@@ -46,10 +46,12 @@ class CharmmAngleConstraint(Constraint):
         forces = np.zeros([self._parent_ensemble.topology.num_particles, SPATIAL_DIM])
         for angle_info in self._angle_info:
             id1, id2, id3, k, theta0 = angle_info
-            theta = get_angle(
+            theta = get_pbc_angle(
                 self._parent_ensemble.state.positions[id1, :], 
                 self._parent_ensemble.state.positions[id2, :],
-                self._parent_ensemble.state.positions[id3, :], is_angular=False
+                self._parent_ensemble.state.positions[id3, :],
+                self._parent_ensemble.state.pbc_matrix,
+                self._parent_ensemble.state.pbc_inv, is_angular=False
             )
             theta_rad = np.deg2rad(theta)
             force_val = 2 * k * (theta - theta0) / np.abs(np.sin(theta_rad)) # The - is declined by the minus of 1/sin\theta
@@ -70,10 +72,12 @@ class CharmmAngleConstraint(Constraint):
         potential_energy = 0
         for angle_info in self._angle_info:
             id1, id2, id3, k, theta0 = angle_info
-            theta = get_angle(
+            theta = get_pbc_angle(
                 self._parent_ensemble.state.positions[id1, :], 
                 self._parent_ensemble.state.positions[id2, :],
-                self._parent_ensemble.state.positions[id3, :], is_angular=False
+                self._parent_ensemble.state.positions[id3, :],
+                self._parent_ensemble.state.pbc_matrix,
+                self._parent_ensemble.state.pbc_inv, is_angular=False
             )
             potential_energy += k * (theta - theta0)**2
         return potential_energy

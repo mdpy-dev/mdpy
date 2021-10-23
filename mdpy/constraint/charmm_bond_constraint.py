@@ -43,9 +43,11 @@ class CharmmBondConstraint(Constraint):
         forces = np.zeros([self._parent_ensemble.topology.num_particles, SPATIAL_DIM])
         for bond_info in self._bond_info:
             id1, id2, k, r0 = bond_info
-            r = get_bond(
+            r = get_pbc_bond(
                 self._parent_ensemble.state.positions[id1, :], 
-                self._parent_ensemble.state.positions[id2, :]
+                self._parent_ensemble.state.positions[id2, :],
+                self._parent_ensemble.state.pbc_matrix,
+                self._parent_ensemble.state.pbc_inv
             )
             force_val = - 2 * k * (r - r0)
             force_vec = get_unit_vec(
@@ -61,9 +63,11 @@ class CharmmBondConstraint(Constraint):
         potential_energy = 0
         for bond_info in self._bond_info:
             id1, id2, k, r0 = bond_info
-            r = get_bond(
+            r = get_pbc_bond(
                 self._parent_ensemble.state.positions[id1, :], 
-                self._parent_ensemble.state.positions[id2, :]
+                self._parent_ensemble.state.positions[id2, :],
+                self._parent_ensemble.state.pbc_matrix,
+                self._parent_ensemble.state.pbc_inv
             )
             potential_energy += k * (r - r0)**2
         return potential_energy
