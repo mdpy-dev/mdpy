@@ -48,31 +48,37 @@ class CharmmImproperConstraint(Constraint):
         forces = np.zeros([self._parent_ensemble.topology.num_particles, SPATIAL_DIM])
         for improper_info in self._improper_info:
             id1, id2, id3, id4, k, psi0 = improper_info
-            psi = get_dihedral(
+            psi = get_pbc_dihedral(
                 self._parent_ensemble.state.positions[id1, :], 
                 self._parent_ensemble.state.positions[id2, :],
                 self._parent_ensemble.state.positions[id3, :], 
                 self._parent_ensemble.state.positions[id4, :],
+                self._parent_ensemble.state.pbc_matrix,
+                self._parent_ensemble.state.pbc_inv,
                 is_angular=False
             )
             force_val = 2 * k * (psi - psi0)
 
-            vab = self._parent_ensemble.state.positions[id2, :] -self._parent_ensemble.state.positions[id1, :]
+            vab = self._parent_ensemble.state.positions[id2, :] - self._parent_ensemble.state.positions[id1, :]
             lab = np.linalg.norm(vab)
-            vbc = self._parent_ensemble.state.positions[id3, :] -self._parent_ensemble.state.positions[id2, :]
+            vbc = self._parent_ensemble.state.positions[id3, :] - self._parent_ensemble.state.positions[id2, :]
             lbc = np.linalg.norm(vbc)
             voc, loc = vbc / 2, lbc / 2
-            vcd = self._parent_ensemble.state.positions[id4, :] -self._parent_ensemble.state.positions[id3, :]
+            vcd = self._parent_ensemble.state.positions[id4, :] - self._parent_ensemble.state.positions[id3, :]
             lcd = np.linalg.norm(vcd)
-            theta_abc = get_angle(
+            theta_abc = get_pbc_angle(
                 self._parent_ensemble.state.positions[id1, :], 
                 self._parent_ensemble.state.positions[id2, :],
-                self._parent_ensemble.state.positions[id3, :]
+                self._parent_ensemble.state.positions[id3, :],
+                self._parent_ensemble.state.pbc_matrix,
+                self._parent_ensemble.state.pbc_inv
             )
-            theta_bcd = get_angle(
+            theta_bcd = get_pbc_angle(
                 self._parent_ensemble.state.positions[id2, :], 
                 self._parent_ensemble.state.positions[id3, :],
-                self._parent_ensemble.state.positions[id4, :]
+                self._parent_ensemble.state.positions[id4, :],
+                self._parent_ensemble.state.pbc_matrix,
+                self._parent_ensemble.state.pbc_inv
             )
 
             force_a = force_val / (lab * np.sin(theta_abc)) * get_unit_vec(np.cross(-vab, vbc))
@@ -93,11 +99,13 @@ class CharmmImproperConstraint(Constraint):
         potential_energy = 0
         for improper_info in self._improper_info:
             id1, id2, id3, id4, k, psi0 = improper_info
-            psi = get_dihedral(
+            psi = get_pbc_dihedral(
                 self._parent_ensemble.state.positions[id1, :], 
                 self._parent_ensemble.state.positions[id2, :],
                 self._parent_ensemble.state.positions[id3, :], 
                 self._parent_ensemble.state.positions[id4, :],
+                self._parent_ensemble.state.pbc_matrix,
+                self._parent_ensemble.state.pbc_inv,
                 is_angular=False
             )
             potential_energy += k * (psi - psi0)**2

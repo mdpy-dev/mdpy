@@ -93,6 +93,7 @@ class TestCharmmImproperConstraint:
 
     def test_get_forces(self):
         self.ensemble.add_constraints(self.constraint)
+        self.ensemble.state.set_pbc_matrix(np.diag(np.ones(3)*10))
         forces = self.constraint.get_forces()
         k, psi0 = self.params['improper']['HE2-HE2-CE2-CE2']
         psi = get_dihedral([0, 0, 0], [1, 0, 0], [0, 1, 0], [0.5, 0.5, 1], is_angular=False)
@@ -128,6 +129,7 @@ class TestCharmmImproperConstraint:
 
     def test_get_potential_energy(self):
         self.ensemble.add_constraints(self.constraint)
+        self.ensemble.state.set_pbc_matrix(np.diag(np.ones(3)*10))
         energy = self.constraint.get_potential_energy()
         k, psi0 = self.params['improper']['HE2-HE2-CE2-CE2']
         psi = get_dihedral([0, 0, 0], [1, 0, 0], [0, 1, 0], [0.5, 0.5, 1], is_angular=False)

@@ -35,7 +35,7 @@ class ElectrostaticConstraint(Constraint):
             self._parent_ensemble.state.positions,
             self._parent_ensemble.state.pbc_inv
         )
-        for particle in self._parent_ensemble.topology.particles[:-1]:
+        for particle in self._parent_ensemble.topology.particles:
             id1 = particle.matrix_id
             scaled_position_diff = scaled_position[id1, :] - scaled_position[id1+1:, :]
             scaled_position_diff -= np.round(scaled_position_diff)
@@ -45,11 +45,15 @@ class ElectrostaticConstraint(Constraint):
             ))**2).sum(1))
             for index, dist in enumerate(dist_list):
                 id2 = index + id1 + 1
-                force_val = - self._charges[id1] * self._charges[id2] / k / dist**2
-                force_vec = get_unit_vec(self._parent_ensemble.state.positions[id2] - self._parent_ensemble.state.positions[id1])
-                force = force_vec * force_val
-                forces[id1, :] += force
-                forces[id2, :] -= force
+                if not id2 in self._parent_ensemble.topology.particles[id1].bonded_particles:
+                    force_val = - self._charges[id1] * self._charges[id2] / k / dist**2
+                    force_vec = unwrap_vec(get_unit_vec(
+                        self._parent_ensemble.state.positions[id2] - 
+                        self._parent_ensemble.state.positions[id1]
+                    ), self._parent_ensemble.state.pbc_matrix, self._parent_ensemble.state.pbc_inv)
+                    force = force_vec * force_val
+                    forces[id1, :] += force
+                    forces[id2, :] -= force
         return forces
 
     def get_potential_energy(self):
@@ -70,5 +74,6 @@ class ElectrostaticConstraint(Constraint):
             ))**2).sum(1))
             for index, dist in enumerate(dist_list):
                 id2 = index + id1 + 1
-                potential_energy += self._charges[id1] * self._charges[id2] / k / dist
+                if not id2 in self._parent_ensemble.topology.particles[id1].bonded_particles:
+                    potential_energy += self._charges[id1] * self._charges[id2] / k / dist
         return potential_energy
