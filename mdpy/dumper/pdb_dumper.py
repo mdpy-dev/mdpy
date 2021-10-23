@@ -68,7 +68,7 @@ ENDMDL = 'ENDMDL\n'
 # 77 - 78        LString(2)    element      Element symbol, right-justified.
 # 79 - 80        LString(2)    charge       Charge  on the atom.
 # Serial atomname resname chainid resid x y z 0 0 element
-ATOM = 'ATOM  ' + '%5d' + ' '*2 + '%-3s%4s%2s%4d' + ' '*4 + '%8.3f%8.3f%8.3f%6.2f%6.2f' + ' '*10 + '%2s\n'
+ATOM = 'ATOM  ' + '%5d' + ' '*2 + '%-4s%3s%2s%4d' + ' '*4 + '%8.3f%8.3f%8.3f%6.2f%6.2f' + ' '*10 + '%-2s\n'
 # COLUMNS       DATA  TYPE     FIELD         DEFINITION
 # -----------------------------------------------------------------------
 #  1 - 6        Record name    "HETATM"
@@ -87,7 +87,7 @@ ATOM = 'ATOM  ' + '%5d' + ' '*2 + '%-3s%4s%2s%4d' + ' '*4 + '%8.3f%8.3f%8.3f%6.2
 # 77 - 78       LString(2)     element       Element symbol; right-justified.
 # 79 - 80       LString(2)     charge        Charge on the atom.
 # Serial atomname resname chainid resid x y z 0 0 element
-HETATM = 'HETATM' + '%5d' + ' '*2 + '%-3s%4s%2s%4d' + ' '*4 + '%8.3f%8.3f%8.3f%6.2f%6.2f' + ' '*10 + '%2s\n'
+HETATM = 'HETATM' + '%5d' + ' '*2 + '%-4s%3s%2s%4d' + ' '*4 + '%8.3f%8.3f%8.3f%6.2f%6.2f' + ' '*10 + '%-2s\n'
 # COLUMNS        DATA  TYPE    FIELD           DEFINITION
 # -------------------------------------------------------------------------
 #  1 -  6        Record name   "TER   "
@@ -148,14 +148,14 @@ class PDBDumper(Dumper):
                     serial, particle.particle_name, particle.molecule_type,
                     particle.chain_id, particle.molecule_id,
                     positions[0], positions[1], positions[2], 
-                    0, 0, particle.particle_type
+                    0, 0, particle.particle_type[:2]
                 )
             else:
                 model += HETATM %(
                     serial, particle.particle_name, particle.molecule_type,
                     particle.chain_id, particle.molecule_id,
                     positions[0], positions[1], positions[2], 
-                    0, 0, particle.particle_type
+                    0, 0, particle.particle_type[:2]
                 )
             serial += 1
         pre_particle = ensemble.topology.particles[-1]
