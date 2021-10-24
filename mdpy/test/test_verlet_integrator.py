@@ -33,8 +33,8 @@ class TestVerletIntegrator:
         pass
 
     def test_sample(self):
-        pdb = PDBFile(os.path.join(data_dir, '2BQJ.pdb'))
-        topology = PSFFile(os.path.join(data_dir, '2BQJ.psf')).create_topology()
+        pdb = PDBFile(os.path.join(data_dir, '6PO6.pdb'))
+        topology = PSFFile(os.path.join(data_dir, '6PO6.psf')).create_topology()
 
         forcefield = CharmmForcefield(topology)
         forcefield.set_param_files(os.path.join(data_dir, 'par_all36_prot.prm'))
@@ -45,6 +45,6 @@ class TestVerletIntegrator:
         integrator = VerletIntegrator(1)
         integrator.sample(ensemble, 1)
 
-        # ATOM      1  N   LYS A   1     -12.138   4.446  -6.361  1.00  0.00      A    N
-        assert ensemble.state.positions[0, 1] == pytest.approx(4.446, abs=0.01)
-        assert ensemble.state.positions[0, 0] == pytest.approx(-12.138, abs=0.01)
+        # ATOM      1  N   VAL A   1       2.347  -0.970   3.962  1.00  0.00      A    N
+        assert ensemble.state.positions[0, 1] == pytest.approx(-0.970, abs=0.01)
+        assert ensemble.state.positions[0, 0] == pytest.approx(2.347, abs=0.01)
