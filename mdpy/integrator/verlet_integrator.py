@@ -23,7 +23,7 @@ class VerletIntegrator(Integrator):
         cur_step = 0
         masses = ensemble.topology.masses
         # Update force
-        ensemble.update_forces()
+        ensemble.update()
         accelration = ensemble.forces / masses
         # Initialization
         if self.is_cached == False:
@@ -35,7 +35,7 @@ class VerletIntegrator(Integrator):
             )
         while cur_step < num_steps:
             if cur_step != 0:
-                ensemble.update_forces()
+                ensemble.update()
                 accelration = ensemble.forces / masses
             # Update positions and velocities
             self._cur_positions, self._pre_positions = (
