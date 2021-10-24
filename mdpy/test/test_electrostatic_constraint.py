@@ -70,11 +70,13 @@ class TestElectrostaticConstraint:
         assert self.constraint._parent_ensemble.num_constraints == 1
         assert self.constraint._charges[0] == 1
         assert self.constraint._charges[2] == 0
-        
-    def test_get_force(self):
+
+    def test_update(self):
         self.ensemble.state.set_pbc_matrix(self.pbc)
         self.ensemble.add_constraints(self.constraint)
-        forces = self.constraint.get_forces()
+        self.constraint.update()
+        
+        forces = self.constraint.forces
         assert forces[2, 0] == 0
         assert forces[3, 1] == 0
         k = Quantity(4 * np.pi) * EPSILON0
@@ -88,10 +90,7 @@ class TestElectrostaticConstraint:
         assert forces[1, 1] == pytest.approx(-force1[1])
         assert forces[1, 2] == pytest.approx(-force1[2])
 
-    def test_get_potential_energy(self):
-        self.ensemble.state.set_pbc_matrix(self.pbc)
-        self.ensemble.add_constraints(self.constraint)
-        potential_energy = self.constraint.get_potential_energy()
+        potential_energy = self.constraint.potential_energy
         k = Quantity(4 * np.pi) * EPSILON0
         energy = Quantity(1, e) * Quantity(2, e) / k / Quantity(10, angstrom)
         assert potential_energy == pytest.approx(

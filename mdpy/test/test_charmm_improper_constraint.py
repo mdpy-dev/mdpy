@@ -91,10 +91,12 @@ class TestCharmmImproperConstraint:
         # No exception
         self.constraint._check_bound_state()
 
-    def test_get_forces(self):
+    def test_update(self):
         self.ensemble.add_constraints(self.constraint)
         self.ensemble.state.set_pbc_matrix(np.diag(np.ones(3)*10))
-        forces = self.constraint.get_forces()
+        self.constraint.update()
+
+        forces = self.constraint.forces
         k, psi0 = self.params['improper']['HE2-HE2-CE2-CE2']
         psi = get_dihedral([0, 0, 0], [1, 0, 0], [0, 1, 0], [0.5, 0.5, 1], is_angular=False)
         assert forces.sum() == pytest.approx(0)
@@ -127,10 +129,7 @@ class TestCharmmImproperConstraint:
         assert forces[0, 1] == force_a[1]
         assert forces[0, 2] == force_a[2]
 
-    def test_get_potential_energy(self):
-        self.ensemble.add_constraints(self.constraint)
-        self.ensemble.state.set_pbc_matrix(np.diag(np.ones(3)*10))
-        energy = self.constraint.get_potential_energy()
+        energy = self.constraint.potential_energy
         k, psi0 = self.params['improper']['HE2-HE2-CE2-CE2']
         psi = get_dihedral([0, 0, 0], [1, 0, 0], [0, 1, 0], [0.5, 0.5, 1], is_angular=False)
         assert energy == k * (90 - psi0)**2
