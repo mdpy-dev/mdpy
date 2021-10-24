@@ -10,11 +10,12 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 '''
 
 import numpy as np
+
+from mdpy.math.pbc import wrap_positions
 from .ensemble import Ensemble
 from .integrator import Integrator
 from .error import *
 from .unit import *
-from .math import *
 
 class Simulation:
     def __init__(self, ensemble: Ensemble, integrator: Integrator) -> None:
@@ -57,7 +58,7 @@ class Simulation:
 
     def minimize_energy(self, alpha, energy_tolerance=1e-6, max_iterations=1000):
         energy_convert_unit = default_energy_unit / kilojoule_permol
-        self.ensemble.update_energy()
+        self.ensemble.update()
         print('Start energy minimization:')
         print(
             'Initial potential energy: %.5f kj/mol' 
@@ -67,14 +68,12 @@ class Simulation:
         cur_iteration = 0
         cur_energy, pre_energy = self._ensemble.potential_energy, self._ensemble.potential_energy
         while cur_iteration < max_iterations:
-            self._ensemble.update_forces()
             self.ensemble.state.set_positions(wrap_positions(
-                self._ensemble.state.positions + alpha * self._ensemble.forces
+                self._ensemble.state.positions + alpha * self._ensemble.forces,
+                *self._ensemble.state.pbc_info
             ))
-            self.ensemble.state.w
-            self._ensemble.update_energy()
+            self._ensemble.update()
             cur_energy = self._ensemble.potential_energy
-            print(cur_energy)
             energy_error = np.abs((cur_energy - pre_energy) / pre_energy)
             if energy_error < energy_tolerance:
                 print('Penultimate potential energy: %.5f kj/mol' %(Quantity(pre_energy, energy_convert_unit).value))
