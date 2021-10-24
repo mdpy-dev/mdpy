@@ -95,11 +95,11 @@ class TestEnsemble:
         ).convert_to(default_energy_unit).value
 
     def test_update_potential_energy(self):
-        self.ensemble._update_potential_energy()
+        self.ensemble.update()
         assert self.ensemble.potential_energy == 0
 
     def test_update_energy(self):
-        self.ensemble.update_energy()
+        self.ensemble.update()
         assert self.ensemble.total_energy == Quantity(
             13.5, default_velocity_unit**2*default_mass_unit
         ).convert_to(default_energy_unit).value
