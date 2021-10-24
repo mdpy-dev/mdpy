@@ -20,7 +20,7 @@ class Constraint:
         self._parent_ensemble = None
 
     def __repr__(self) -> str:
-        return '<mdpy.Constraint class at %x>' %id(self)
+        return '<mdpy.constraint.Constraint class>'
 
     __str__ = __repr__
 

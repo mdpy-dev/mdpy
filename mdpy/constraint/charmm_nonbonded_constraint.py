@@ -27,6 +27,11 @@ class CharmmNonbondedConstraint(Constraint):
         self._neighbor_distance = []
         self._num_nonbonded_pairs = 0
 
+    def __repr__(self) -> str:
+        return '<mdpy.constraint.CharmmNonbondedConstraint object>'
+
+    __str__ = __repr__
+
     def bind_ensemble(self, ensemble: Ensemble):
         self._parent_ensemble = ensemble
         self._force_id = ensemble.constraints.index(self)
@@ -75,8 +80,9 @@ class CharmmNonbondedConstraint(Constraint):
         forces = np.zeros([self._parent_ensemble.topology.num_particles, SPATIAL_DIM])
         for particle in self._parent_ensemble.topology.particles:
             id1 = particle.matrix_id
+            particle1 = self._parent_ensemble.topology.particles[id1]
             for i, id2 in enumerate(self._neighbor_list[id1]):
-                if not id2 in self._parent_ensemble.topology.particles[id1].bonded_particles:
+                if not id2 in particle1.bonded_particles:
                     epsilon, sigma = self._mix_params(id1, id2)
                     r = self._neighbor_distance[id1][i]
                     scaled_r = sigma / r
@@ -85,7 +91,11 @@ class CharmmNonbondedConstraint(Constraint):
                         self._parent_ensemble.state.positions[id2] - 
                         self._parent_ensemble.state.positions[id1]
                     ), self._parent_ensemble.state.pbc_matrix, self._parent_ensemble.state.pbc_inv)
-                    force = force_vec * force_val
+                    if id2 in particle1.scaling_particles:
+                        scaling_factor = particle1.scaling_factors[particle.scaling_particles.index(id2)]
+                    else:
+                        scaling_factor = 1
+                    force = scaling_factor * force_vec * force_val
                     forces[id1, :] += force
                     forces[id2, :] -= force
         return forces
@@ -97,12 +107,17 @@ class CharmmNonbondedConstraint(Constraint):
         potential_energy = 0
         for particle in self._parent_ensemble.topology.particles:
             id1 = particle.matrix_id
+            particle1 = self._parent_ensemble.topology.particles[id1]
             for i, id2 in enumerate(self._neighbor_list[id1]):
-                if not id2 in self._parent_ensemble.topology.particles[id1].bonded_particles:
+                if not id2 in particle1.bonded_particles:
                     epsilon, sigma = self._mix_params(id1, id2)
                     r = self._neighbor_distance[id1][i]
-                    scaled_r = sigma / r        
-                    potential_energy += 4 * epsilon * (scaled_r**12 - scaled_r**6) 
+                    scaled_r = sigma / r  
+                    if id2 in particle1.scaling_particles:
+                        scaling_factor = particle1.scaling_factors[particle.scaling_particles.index(id2)]
+                    else:
+                        scaling_factor = 1     
+                    potential_energy += scaling_factor * 4 * epsilon * (scaled_r**12 - scaled_r**6) 
         return potential_energy
 
     @property

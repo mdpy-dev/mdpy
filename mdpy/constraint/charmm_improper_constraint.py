@@ -21,6 +21,11 @@ class CharmmImproperConstraint(Constraint):
         self._improper_info = []
         self._num_impropers = 0
 
+    def __repr__(self) -> str:
+        return '<mdpy.constraint.CharmmImproperConstraint object>'
+
+    __str__ = __repr__
+
     def bind_ensemble(self, ensemble: Ensemble):
         self._parent_ensemble = ensemble
         self._force_id = ensemble.constraints.index(self)
