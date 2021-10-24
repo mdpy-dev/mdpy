@@ -56,7 +56,7 @@ class CharmmNonbondedConstraint(Constraint):
             (sigma1 + sigma2) / 2
         )
 
-    def update_neighbor(self):
+    def _update_neighbor(self):
         self._check_bound_state()
         self._neighbor_list, self._neighbor_distance = [], []
         scaled_position = np.dot(
@@ -74,10 +74,12 @@ class CharmmNonbondedConstraint(Constraint):
             self._neighbor_list.append(index + particle.matrix_id + 1)
             self._neighbor_distance.append(dist[index])
 
-    def get_forces(self):
+    def update(self):
         self._check_bound_state()
+        self._update_neighbor()
+        self._forces = np.zeros([self._parent_ensemble.topology.num_particles, SPATIAL_DIM])
+        self._potential_energy = 0
         # V(Lennard-Jones) = Eps,i,j[(Rmin,i,j/ri,j)**12 - 2(Rmin,i,j/ri,j)**6]
-        forces = np.zeros([self._parent_ensemble.topology.num_particles, SPATIAL_DIM])
         for particle in self._parent_ensemble.topology.particles:
             id1 = particle.matrix_id
             particle1 = self._parent_ensemble.topology.particles[id1]
@@ -90,35 +92,15 @@ class CharmmNonbondedConstraint(Constraint):
                     force_vec = unwrap_vec(get_unit_vec(
                         self._parent_ensemble.state.positions[id2] - 
                         self._parent_ensemble.state.positions[id1]
-                    ), self._parent_ensemble.state.pbc_matrix, self._parent_ensemble.state.pbc_inv)
+                    ), *self._parent_ensemble.state.pbc_info)
                     if id2 in particle1.scaling_particles:
                         scaling_factor = particle1.scaling_factors[particle.scaling_particles.index(id2)]
                     else:
                         scaling_factor = 1
                     force = scaling_factor * force_vec * force_val
-                    forces[id1, :] += force
-                    forces[id2, :] -= force
-        return forces
-
-
-    def get_potential_energy(self):
-        self._check_bound_state()
-        # V(Lennard-Jones) = Eps,i,j[(Rmin,i,j/ri,j)**12 - 2(Rmin,i,j/ri,j)**6]
-        potential_energy = 0
-        for particle in self._parent_ensemble.topology.particles:
-            id1 = particle.matrix_id
-            particle1 = self._parent_ensemble.topology.particles[id1]
-            for i, id2 in enumerate(self._neighbor_list[id1]):
-                if not id2 in particle1.bonded_particles:
-                    epsilon, sigma = self._mix_params(id1, id2)
-                    r = self._neighbor_distance[id1][i]
-                    scaled_r = sigma / r  
-                    if id2 in particle1.scaling_particles:
-                        scaling_factor = particle1.scaling_factors[particle.scaling_particles.index(id2)]
-                    else:
-                        scaling_factor = 1     
-                    potential_energy += scaling_factor * 4 * epsilon * (scaled_r**12 - scaled_r**6) 
-        return potential_energy
+                    self._forces[id1, :] += force
+                    self._forces[id2, :] -= force
+                    self._potential_energy += scaling_factor * 4 * epsilon * (scaled_r**12 - scaled_r**6) 
 
     @property
     def num_nonbonded_pairs(self):

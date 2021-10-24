@@ -47,10 +47,11 @@ class CharmmImproperConstraint(Constraint):
             self._improper_info.append(matrix_id + self._params[improper_type])
             self._num_impropers += 1
 
-    def get_forces(self):
+    def update(self):
         self._check_bound_state()
         # V(improper) = Kpsi(psi - psi0)**2
-        forces = np.zeros([self._parent_ensemble.topology.num_particles, SPATIAL_DIM])
+        self._forces = np.zeros([self._parent_ensemble.topology.num_particles, SPATIAL_DIM])
+        self._potential_energy = 0
         for improper_info in self._improper_info:
             id1, id2, id3, id4, k, psi0 = improper_info
             psi = get_pbc_dihedral(
@@ -58,34 +59,41 @@ class CharmmImproperConstraint(Constraint):
                 self._parent_ensemble.state.positions[id2, :],
                 self._parent_ensemble.state.positions[id3, :], 
                 self._parent_ensemble.state.positions[id4, :],
-                self._parent_ensemble.state.pbc_matrix,
-                self._parent_ensemble.state.pbc_inv,
-                is_angular=False
+                *self._parent_ensemble.state.pbc_info, is_angular=False
             )
+            # Forces
             force_val = 2 * k * (psi - psi0)
-
-            vab = self._parent_ensemble.state.positions[id2, :] - self._parent_ensemble.state.positions[id1, :]
+            vab = unwrap_vec(
+                self._parent_ensemble.state.positions[id2, :] - 
+                self._parent_ensemble.state.positions[id1, :],
+                *self._parent_ensemble.state.pbc_info
+            )
             lab = np.linalg.norm(vab)
-            vbc = self._parent_ensemble.state.positions[id3, :] - self._parent_ensemble.state.positions[id2, :]
+            vbc = unwrap_vec(
+                self._parent_ensemble.state.positions[id3, :] - 
+                self._parent_ensemble.state.positions[id2, :],
+                *self._parent_ensemble.state.pbc_info
+            )
             lbc = np.linalg.norm(vbc)
             voc, loc = vbc / 2, lbc / 2
-            vcd = self._parent_ensemble.state.positions[id4, :] - self._parent_ensemble.state.positions[id3, :]
+            vcd = unwrap_vec(
+                self._parent_ensemble.state.positions[id4, :] - 
+                self._parent_ensemble.state.positions[id3, :],
+                *self._parent_ensemble.state.pbc_info
+            )
             lcd = np.linalg.norm(vcd)
             theta_abc = get_pbc_angle(
                 self._parent_ensemble.state.positions[id1, :], 
                 self._parent_ensemble.state.positions[id2, :],
                 self._parent_ensemble.state.positions[id3, :],
-                self._parent_ensemble.state.pbc_matrix,
-                self._parent_ensemble.state.pbc_inv
+                *self._parent_ensemble.state.pbc_info
             )
             theta_bcd = get_pbc_angle(
                 self._parent_ensemble.state.positions[id2, :], 
                 self._parent_ensemble.state.positions[id3, :],
                 self._parent_ensemble.state.positions[id4, :],
-                self._parent_ensemble.state.pbc_matrix,
-                self._parent_ensemble.state.pbc_inv
+                *self._parent_ensemble.state.pbc_info
             )
-
             force_a = force_val / (lab * np.sin(theta_abc)) * get_unit_vec(np.cross(-vab, vbc))
             force_d = force_val / (lcd * np.sin(theta_bcd)) * get_unit_vec(np.cross(vcd, -vbc))
             force_c =  np.cross(
@@ -93,28 +101,12 @@ class CharmmImproperConstraint(Constraint):
                 voc
             ) / loc**2
             force_b = - (force_a + force_c + force_d)
-            forces[id1, :] += force_a
-            forces[id2, :] += force_b
-            forces[id3, :] += force_c
-            forces[id4, :] += force_d
-        return forces
-
-    def get_potential_energy(self):
-         # V(improper) = Kpsi(psi - psi0)**2
-        potential_energy = 0
-        for improper_info in self._improper_info:
-            id1, id2, id3, id4, k, psi0 = improper_info
-            psi = get_pbc_dihedral(
-                self._parent_ensemble.state.positions[id1, :], 
-                self._parent_ensemble.state.positions[id2, :],
-                self._parent_ensemble.state.positions[id3, :], 
-                self._parent_ensemble.state.positions[id4, :],
-                self._parent_ensemble.state.pbc_matrix,
-                self._parent_ensemble.state.pbc_inv,
-                is_angular=False
-            )
-            potential_energy += k * (psi - psi0)**2
-        return potential_energy
+            self._forces[id1, :] += force_a
+            self._forces[id2, :] += force_b
+            self._forces[id3, :] += force_c
+            self._forces[id4, :] += force_d
+            # Potential energy
+            self._potential_energy += k * (psi - psi0)**2
 
     @property
     def num_impropers(self):
