@@ -10,6 +10,7 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 '''
 
 import numpy as np
+from numpy.testing._private.nosetester import run_module_suite
 from .topology import Topology
 from .. import SPATIAL_DIM
 from ..unit import *
@@ -106,3 +107,7 @@ class State:
     @property
     def pbc_inv(self):
         return self._pbc_inv
+
+    @property
+    def pbc_info(self):
+        return self._pbc_matrix, self._pbc_inv
