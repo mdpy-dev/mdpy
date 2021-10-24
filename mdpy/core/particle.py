@@ -34,6 +34,9 @@ class Particle:
         # Topology infomation
         self._bonded_particles = []
         self._num_bonded_particles = 0
+        self._scaling_particles = []
+        self._scaling_factors = []
+        self._num_scaling_particles = 0
 
     def __repr__(self) -> str:
         return '<Particle %s-%d at %x>' %(self._particle_name, self._particle_id, id(self))
@@ -56,7 +59,7 @@ class Particle:
                 'Particle %d has been added twice to the bonded_particles of Particle %d'
                 %(particle_matrix_id, self._matrix_id)
             )
-        elif particle_matrix_id == self._matrix_id:
+        if particle_matrix_id == self._matrix_id:
             raise ParticleConflictError(
                 'Particle itself can not be added to the bonded_particle list.'
             )
@@ -67,6 +70,25 @@ class Particle:
         if particle_matrix_id in self._bonded_particles:
             self._bonded_particles.remove(particle_matrix_id)
             self._num_bonded_particles -= 1
+
+    def add_scaling_particle(self, particle_matrix_id: int, factor):
+        # Benzene give two dihedral with same 1 4 particles
+        if particle_matrix_id == self._matrix_id:
+            raise ParticleConflictError(
+                'Particle itself can not be added to the scaling_particle list.'
+            )   
+        elif not particle_matrix_id in self._scaling_particles:
+            self._scaling_particles.append(particle_matrix_id)
+            self._scaling_factors.append(factor)
+            self._num_scaling_particles += 1
+
+    def del_scaling_particle(self, particle_matrix_id):
+        if particle_matrix_id in self._scaling_particles:
+            self._scaling_factors.remove(
+                self._scaling_factors[self._scaling_particles.index(particle_matrix_id)]
+            )
+            self._scaling_particles.remove(particle_matrix_id)
+            self._num_scaling_particles -= 1
             
     @property
     def particle_id(self):
@@ -111,3 +133,15 @@ class Particle:
     @property
     def num_bonded_particles(self):
         return self._num_bonded_particles
+
+    @property
+    def scaling_particles(self):
+        return self._scaling_particles
+
+    @property
+    def scaling_factors(self):
+        return self._scaling_factors
+
+    @property
+    def num_scaling_particles(self):
+        return self._num_scaling_particles
