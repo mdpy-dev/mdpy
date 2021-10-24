@@ -152,6 +152,6 @@ class TestCharmmNonbondedConstraint:
             Quantity(0.2, kilocalorie_permol).convert_to(default_energy_unit).value
         )
         sigma = (1.9924 + 1.85) * RMIN_TO_SIGMA_FACTOR
-        scaled_r = 1 / sigma
+        scaled_r = sigma / 1
         energy_ref = 4 * epsilon * (scaled_r**12 - scaled_r**6) 
         assert energy == pytest.approx(energy_ref)
