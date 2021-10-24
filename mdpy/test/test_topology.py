@@ -143,16 +143,12 @@ class TestTopology:
         p3 = Particle(2, 'N', molecule_id=0, molecule_type='ASN')
         self.topology.add_particles([p1, p2, p3])
         self.topology.add_bond([0, 1])
+        assert p1.num_bonded_particles == 1
         assert self.topology.num_bonds == 1
 
-        self.topology.add_bond([0, 1])
-        assert self.topology.num_bonds == 2
-
-        self.topology.add_bond([1, 0])
-        assert self.topology.num_bonds == 3
-
         self.topology.add_bond([1, 2])
-        assert self.topology.num_bonds == 4
+        assert p2.num_bonded_particles == 2
+        assert self.topology.num_bonds == 2
 
         with pytest.raises(GeomtryDimError):
             self.topology.add_bond([0, 1, 2])
@@ -169,8 +165,10 @@ class TestTopology:
         p3 = Particle(2, 'N', molecule_id=0, molecule_type='ASN')
         self.topology.add_particles([p1, p2, p3])
         self.topology.add_bond([0, 1])
+        assert p1.num_bonded_particles == 1
         assert self.topology.num_bonds == 1
         self.topology.del_bond([0, 1])
+        assert p2.num_bonded_particles == 0
         assert self.topology.num_bonds == 0
 
         self.topology.add_bond([0, 1])
@@ -251,9 +249,12 @@ class TestTopology:
         p4 = Particle(3, 'H', molecule_id=0, molecule_type='ASN')
         self.topology.add_particles([p1, p2, p3, p4])
         self.topology.add_dihedral([0, 1, 2, 3])
+        assert self.topology.particles[0].scaling_particles[0] == 3
+        assert self.topology.particles[3].scaling_factors[0] == 1
         assert self.topology.num_dihedrals == 1
 
         self.topology.add_dihedral([3, 2, 1, 0])
+        assert self.topology.particles[0].num_scaling_particles == 1
         assert self.topology.num_dihedrals == 2
 
         self.topology.add_dihedral([0, 2, 1, 3])
@@ -278,6 +279,7 @@ class TestTopology:
         assert self.topology.num_dihedrals == 1
         self.topology.del_dihedral([0, 1, 2, 3])
         assert self.topology.num_dihedrals == 0
+        assert self.topology.particles[0].num_scaling_particles == 0
 
         self.topology.add_dihedral([0, 1, 2, 3])
         assert self.topology.num_dihedrals == 1

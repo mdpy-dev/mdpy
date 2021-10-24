@@ -49,13 +49,13 @@ class CharmmBondConstraint(Constraint):
                 self._parent_ensemble.state.pbc_matrix,
                 self._parent_ensemble.state.pbc_inv
             )
-            force_val = - 2 * k * (r - r0)
+            force_val = 2 * k * (r - r0)
             force_vec = get_unit_vec(
                 self._parent_ensemble.state.positions[id2, :] - self._parent_ensemble.state.positions[id1, :]
             )
             force = force_val * force_vec
-            forces[id1, :] -= force
-            forces[id2, :] += force
+            forces[id1, :] += force
+            forces[id2, :] -= force
         return forces
 
     def get_potential_energy(self):
