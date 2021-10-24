@@ -21,6 +21,11 @@ class CharmmBondConstraint(Constraint):
         self._bond_info = []
         self._num_bonds = 0
 
+    def __repr__(self) -> str:
+        return '<mdpy.constraint.CharmmBondConstraint object>'
+
+    __str__ = __repr__
+
     def bind_ensemble(self, ensemble: Ensemble):
         self._parent_ensemble = ensemble
         self._force_id = ensemble.constraints.index(self)

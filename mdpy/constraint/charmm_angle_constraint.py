@@ -21,6 +21,11 @@ class CharmmAngleConstraint(Constraint):
         self._angle_info = []
         self._num_angles = 0
 
+    def __repr__(self) -> str:
+        return '<mdpy.constraint.CharmmAngleConstraint object>'
+
+    __str__ = __repr__
+
     def bind_ensemble(self, ensemble: Ensemble):
         self._parent_ensemble = ensemble
         self._force_id = ensemble.constraints.index(self)
@@ -79,6 +84,15 @@ class CharmmAngleConstraint(Constraint):
                 self._parent_ensemble.state.pbc_matrix,
                 self._parent_ensemble.state.pbc_inv, is_angular=False
             )
+            if k * (theta - theta0)**2 > 5:
+                print(
+                    k, theta, theta0,
+                    '%s-%s-%s' %(
+                        self._parent_ensemble.topology.particles[id1].particle_name,
+                        self._parent_ensemble.topology.particles[id2].particle_name,
+                        self._parent_ensemble.topology.particles[id3].particle_name
+                    ) ,
+                    k * (theta - theta0)**2)
             potential_energy += k * (theta - theta0)**2
         return potential_energy
 
