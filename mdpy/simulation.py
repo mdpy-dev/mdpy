@@ -14,6 +14,7 @@ from .ensemble import Ensemble
 from .integrator import Integrator
 from .error import *
 from .unit import *
+from .math import *
 
 class Simulation:
     def __init__(self, ensemble: Ensemble, integrator: Integrator) -> None:
@@ -67,11 +68,13 @@ class Simulation:
         cur_energy, pre_energy = self._ensemble.potential_energy, self._ensemble.potential_energy
         while cur_iteration < max_iterations:
             self._ensemble.update_forces()
-            self.ensemble.state.set_positions(
+            self.ensemble.state.set_positions(wrap_positions(
                 self._ensemble.state.positions + alpha * self._ensemble.forces
-            )
+            ))
+            self.ensemble.state.w
             self._ensemble.update_energy()
             cur_energy = self._ensemble.potential_energy
+            print(cur_energy)
             energy_error = np.abs((cur_energy - pre_energy) / pre_energy)
             if energy_error < energy_tolerance:
                 print('Penultimate potential energy: %.5f kj/mol' %(Quantity(pre_energy, energy_convert_unit).value))
