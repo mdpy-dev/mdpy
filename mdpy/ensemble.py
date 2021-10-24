@@ -69,6 +69,10 @@ class Ensemble:
     def _update_potential_energy(self):
         self._potential_energy = 0
         for constraint in self._constraints:
+            try:
+                constraint.update_neighbor()
+            except:
+                pass
             self._potential_energy += constraint.get_potential_energy() 
     
     def _update_kinetic_energy(self):

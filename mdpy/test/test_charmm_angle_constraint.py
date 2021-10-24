@@ -90,6 +90,7 @@ class TestCharmmAngleConstraint:
 
     def test_get_forces(self):
         self.ensemble.add_constraints(self.constraint)
+        self.ensemble.state.set_pbc_matrix(np.diag(np.ones(3)*10))
         forces = self.constraint.get_forces()
         k, theta0 = self.params['angle']['CA-CA-CA']
         theta = get_angle([0, 0, 0], [1, 0, 0], [0, 0, 1], is_angular=False)
@@ -115,6 +116,7 @@ class TestCharmmAngleConstraint:
 
     def test_potential_energy(self):
         self.ensemble.add_constraints(self.constraint)
+        self.ensemble.state.set_pbc_matrix(np.diag(np.ones(3)*10))
         energy = self.constraint.get_potential_energy()
         k, theta0 = self.params['angle']['CA-CA-CA']
         theta = get_angle([0, 0, 0], [1, 0, 0], [0, 0, 1], is_angular=False)
