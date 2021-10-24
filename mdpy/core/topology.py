@@ -11,7 +11,6 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 
 import numpy as np
 from . import Particle
-from .. import SPATIAL_DIM
 from ..error import *
 from ..math import check_quantity_value
 from ..unit import *
@@ -30,8 +29,6 @@ class Topology:
         self._num_impropers = 0
         self._masses = []
         self._charges = []
-        self._pbc_matrix = np.zeros([SPATIAL_DIM, SPATIAL_DIM])
-        self._pbc_inv = np.zeros([SPATIAL_DIM, SPATIAL_DIM])
         
     def __repr__(self) -> str:
         return '<Toplogy object: %d particles at %x>' %(self._num_particles, id(self))
@@ -41,24 +38,6 @@ class Topology:
             'Toplogy with %d particles, %d bonds, %d angles, %d dihedrals, %d impropers'
             %(self._num_particles, self._num_bonds, self._num_angles, self._num_dihedrals, self._num_impropers)
         )
-
-    def set_pbc_matrix(self, pbc_matrix):
-        pbc_matrix = check_quantity_value(pbc_matrix, default_length_unit)
-        row, col = pbc_matrix.shape
-        if row != SPATIAL_DIM or col != SPATIAL_DIM:
-            raise SpatialDimError(
-                'The pbc matrix should have shape [%d, %d], while matrix [%d %d] is provided'
-                %(SPATIAL_DIM, SPATIAL_DIM, row, col)
-            )
-        self._pbc_matrix = pbc_matrix
-        self.check_pbc_matrix()
-        self._pbc_inv = np.linalg.inv(self._pbc_matrix)
-    
-    def check_pbc_matrix(self):
-        if np.linalg.det(self._pbc_matrix) == 0:
-            raise PBCPoorDefinedError(
-                'PBC of %s is poor defined. Two or more column vectors are linear corellated'
-            )
 
     def add_particles(self, particles):
         for particle in particles:
@@ -160,6 +139,8 @@ class Topology:
         # bond_replica = [p2, p1]
         # if not bond in self._bonds and not bond_replica in self._bonds:
         self._bonds.append(bond)
+        self._particles[p1].add_bonded_particle(p2)
+        self._particles[p2].add_bonded_particle(p1)
         self._num_bonds += 1
         
     def del_bond(self, bond):
@@ -171,9 +152,13 @@ class Topology:
         bond_replica = [p2, p1]
         if bond in self._bonds:
             self._bonds.remove(bond)
+            self._particles[p1].del_bonded_particle(p2)
+            self._particles[p2].del_bonded_particle(p1)
             self._num_bonds -= 1
         elif bond_replica in self._bonds:
             self._bonds.remove(bond_replica)
+            self._particles[p1].del_bonded_particle(p2)
+            self._particles[p2].del_bonded_particle(p1)
             self._num_bonds -= 1
 
     def add_angle(self, angle):
@@ -184,7 +169,7 @@ class Topology:
         self._check_matrix_ids(p1, p2, p3)
         # angle_replica = [p3, p2, p1]
         # if not angle in self._angles and not angle_replica in self._angles:
-        self._angles.append(angle)  
+        self._angles.append(angle)
         self._num_angles += 1
         
     def del_angle(self, angle):
@@ -201,7 +186,7 @@ class Topology:
             self._angles.remove(angle_replica)
             self._num_angles -= 1
         
-    def add_dihedral(self, dihedral):
+    def add_dihedral(self, dihedral, scaling_factor=1):
         num_particles = len(dihedral)
         if num_particles != 4:
             raise GeomtryDimError('Dihedral should be a matrix id list of 4 Particles, instead of %d' %num_particles)
@@ -210,6 +195,8 @@ class Topology:
         # dihedral_replica = [p4, p3, p2, p1]
         # if not dihedral in self._dihedrals and not dihedral_replica in self._dihedrals:
         self._dihedrals.append(dihedral)
+        self._particles[p1].add_scaling_particle(p4, scaling_factor)
+        self._particles[p4].add_scaling_particle(p1, scaling_factor)
         self._num_dihedrals += 1
         
     def del_dihedral(self, dihedral):
@@ -221,9 +208,13 @@ class Topology:
         dihedral_replica = [p4, p3, p2, p1]
         if dihedral in self._dihedrals:
             self._dihedrals.remove(dihedral)
+            self._particles[p1].del_scaling_particle(p4)
+            self._particles[p4].del_scaling_particle(p1)
             self._num_dihedrals -= 1
         elif dihedral_replica in self._dihedrals:
             self._dihedrals.remove(dihedral_replica)
+            self._particles[p1].del_scaling_particle(p4)
+            self._particles[p4].del_scaling_particle(p1)
             self._num_dihedrals -= 1
 
     def add_improper(self, improper):
@@ -293,11 +284,3 @@ class Topology:
     @property
     def num_impropers(self):
         return self._num_impropers
-
-    @property
-    def pbc_matrix(self):
-        return self._pbc_matrix
-
-    @property
-    def pbc_inv(self):
-        return self._pbc_inv

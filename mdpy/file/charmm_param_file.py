@@ -13,6 +13,7 @@ import itertools
 from ..error import *
 from ..unit import *
 
+RMIN_TO_SIGMA_FACTOR = 2**(-1/6)
 USED_BLOCK_LABELS = ['ATOMS', 'BONDS', 'ANGLES', 'DIHEDRALS', 'IMPROPER', 'NONBONDED']
 UNUSED_BLOCK_LABELS = ['CMAP', 'NBFIX', 'HBOND', 'END']
 BLOCK_LABELS = USED_BLOCK_LABELS + UNUSED_BLOCK_LABELS
@@ -173,8 +174,8 @@ class CharmmParamFile:
     def _parse_par_nonbonded_block(self, infos):
         for info in infos[1:]:
             self._params['nonbonded'][info[0]] = [
-                Quantity(float(info[2]), kilocalorie_permol).convert_to(default_energy_unit).value,
-                Quantity(float(info[3]), angstrom).convert_to(default_length_unit).value
+                - Quantity(float(info[2]), kilocalorie_permol).convert_to(default_energy_unit).value,
+                Quantity(float(info[3]), angstrom).convert_to(default_length_unit).value * 2 * RMIN_TO_SIGMA_FACTOR
             ]
 
     def parse_top_file(self, file_path):
