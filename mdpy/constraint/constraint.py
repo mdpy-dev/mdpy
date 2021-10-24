@@ -18,6 +18,8 @@ class Constraint:
         self._force_id = force_id
         self._force_group = force_group
         self._parent_ensemble = None
+        self._forces = None
+        self._potential_energy = None
 
     def __repr__(self) -> str:
         return '<mdpy.constraint.Constraint class>'
@@ -38,15 +40,8 @@ class Constraint:
                 '%s has not been bounded to any Ensemble instance' %self
             )
 
-    def update_neighbor(self):
-        # Overloading of update_neighbor method is not compulsory
-        raise NotImplementedError('The subclass of mdpy.constraint.Constarint class has not overloaded update_neighbor method') 
-
-    def get_forces(self):
-        raise NotImplementedError('The subclass of mdpy.constraint.Constarint class should overload get_forces method')
-
-    def get_potential_energy(self):
-        raise NotImplementedError('The subclass of mdpy.constraint.Constarint class should overload get_potential method')
+    def update(self):
+        raise NotImplementedError('The subclass of mdpy.constraint.Constarint class should overload update method')
 
     @property
     def force_id(self):
@@ -59,3 +54,11 @@ class Constraint:
     @property
     def parent_ensemble(self):
         return self._parent_ensemble
+
+    @property
+    def forces(self):
+        return self._forces
+
+    @property
+    def potential_energy(self):
+        return self._potential_energy
