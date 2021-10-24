@@ -94,33 +94,32 @@ class TestCharmmNonbondedConstraint:
     def test_update_neighbor(self):
         self.ensemble.state.set_pbc_matrix(self.pbc)
         self.ensemble.add_constraints(self.constraint)
-        self.constraint.update_neighbor()
+        self.constraint._update_neighbor()
         assert len(self.constraint._neighbor_list[0]) == 3
         
         self.constraint.cutoff_radius = 9.5
-        self.constraint.update_neighbor()
+        self.constraint._update_neighbor()
         assert len(self.constraint._neighbor_list[0]) == 1
         assert self.constraint._neighbor_distance[0][0] == pytest.approx(9)
 
         self.constraint.cutoff_radius = Quantity(0.91, nanometer)
-        self.constraint.update_neighbor()
+        self.constraint._update_neighbor()
         assert len(self.constraint._neighbor_list[0]) == 1
         assert self.constraint._neighbor_distance[0][0] == pytest.approx(9)
 
-    def test_get_forces(self):
+    def test_update(self):
+        self.ensemble.state.set_pbc_matrix(self.pbc)
+        self.ensemble.add_constraints(self.constraint)
+        self.constraint.update()
         # CA     0.000000  -0.070000     1.992400
         # NY     0.000000  -0.200000     1.850000 
         # CPT    0.000000  -0.099000     1.860000
-        self.ensemble.state.set_pbc_matrix(self.pbc)
-        self.ensemble.add_constraints(self.constraint)
-        self.constraint.update_neighbor()
-        forces = self.constraint.get_forces()
-        
+        forces = self.constraint.forces
         assert forces.sum() == pytest.approx(0, abs=1e-9)
 
         self.constraint.cutoff_radius = Quantity(0.91, nanometer)
-        self.constraint.update_neighbor()
-        forces = self.constraint.get_forces()
+        self.constraint.update()
+        forces = self.constraint.forces
         assert forces.sum() == pytest.approx(0, abs=10e-9)
         
         epsilon = np.sqrt(
@@ -137,16 +136,7 @@ class TestCharmmNonbondedConstraint:
         assert forces[0, 1] == pytest.approx(force[1])
         assert forces[0, 2] == pytest.approx(force[2])
 
-    def test_get_potential_energy(self):
-        # CA     0.000000  -0.070000     1.992400
-        # NY     0.000000  -0.200000     1.850000 
-        # CPT    0.000000  -0.099000     1.860000
-        self.ensemble.state.set_pbc_matrix(self.pbc)
-        self.ensemble.add_constraints(self.constraint)
-        
-        self.constraint.cutoff_radius = Quantity(0.81, nanometer)
-        self.constraint.update_neighbor()
-        energy = self.constraint.get_potential_energy()
+        energy = self.constraint.potential_energy
         epsilon = np.sqrt(
             Quantity(0.07, kilocalorie_permol).convert_to(default_energy_unit).value *
             Quantity(0.2, kilocalorie_permol).convert_to(default_energy_unit).value
