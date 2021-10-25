@@ -21,6 +21,11 @@ class CharmmDihedralConstraint(Constraint):
         self._dihedral_info = []
         self._num_dihedrals = 0
 
+    def __repr__(self) -> str:
+        return '<mdpy.constraint.CharmmDihedralConstraint object>'
+
+    __str__ = __repr__
+
     def bind_ensemble(self, ensemble: Ensemble):
         self._parent_ensemble = ensemble
         self._force_id = ensemble.constraints.index(self)
@@ -42,45 +47,54 @@ class CharmmDihedralConstraint(Constraint):
             self._dihedral_info.append(matrix_id + self._params[dihedral_type])
             self._num_dihedrals += 1
 
-    def get_forces(self):
+    def update(self):
         self._check_bound_state()
         # V(dihedral) = Kchi(1 + cos(n(chi) - delta))
-        forces = np.zeros([self._parent_ensemble.topology.num_particles, SPATIAL_DIM])
+        self._forces = np.zeros([self._parent_ensemble.topology.num_particles, SPATIAL_DIM])
+        self._potential_energy = 0
         for dihedral_info in self._dihedral_info:
             id1, id2, id3, id4, k, n, delta = dihedral_info
+            delta = np.deg2rad(delta)
             theta = get_pbc_dihedral(
                 self._parent_ensemble.state.positions[id1, :], 
                 self._parent_ensemble.state.positions[id2, :],
                 self._parent_ensemble.state.positions[id3, :], 
                 self._parent_ensemble.state.positions[id4, :],
-                self._parent_ensemble.state.pbc_matrix,
-                self._parent_ensemble.state.pbc_inv,
-                is_angular=False
+                *self._parent_ensemble.state.pbc_info
             )
+            # Forces
             force_val = k * (1 - n * np.sin(n*theta - delta))
-
-            vab = self._parent_ensemble.state.positions[id2, :] -self._parent_ensemble.state.positions[id1, :]
+            vab = unwrap_vec(
+                self._parent_ensemble.state.positions[id2, :] - 
+                self._parent_ensemble.state.positions[id1, :],
+                *self._parent_ensemble.state.pbc_info
+            )
             lab = np.linalg.norm(vab)
-            vbc = self._parent_ensemble.state.positions[id3, :] -self._parent_ensemble.state.positions[id2, :]
+            vbc = unwrap_vec(
+                self._parent_ensemble.state.positions[id3, :] - 
+                self._parent_ensemble.state.positions[id2, :],
+                *self._parent_ensemble.state.pbc_info
+            )
             lbc = np.linalg.norm(vbc)
             voc, loc = vbc / 2, lbc / 2
-            vcd = self._parent_ensemble.state.positions[id4, :] -self._parent_ensemble.state.positions[id3, :]
+            vcd = unwrap_vec(
+                self._parent_ensemble.state.positions[id4, :] - 
+                self._parent_ensemble.state.positions[id3, :],
+                *self._parent_ensemble.state.pbc_info
+            )
             lcd = np.linalg.norm(vcd)
             theta_abc = get_pbc_angle(
                 self._parent_ensemble.state.positions[id1, :], 
                 self._parent_ensemble.state.positions[id2, :],
                 self._parent_ensemble.state.positions[id3, :],
-                self._parent_ensemble.state.pbc_matrix,
-                self._parent_ensemble.state.pbc_inv
+                *self._parent_ensemble.state.pbc_info
             )
             theta_bcd = get_pbc_angle(
                 self._parent_ensemble.state.positions[id2, :], 
                 self._parent_ensemble.state.positions[id3, :],
                 self._parent_ensemble.state.positions[id4, :],
-                self._parent_ensemble.state.pbc_matrix,
-                self._parent_ensemble.state.pbc_inv
+                *self._parent_ensemble.state.pbc_info
             )
-
             force_a = force_val / (lab * np.sin(theta_abc)) * get_unit_vec(np.cross(-vab, vbc))
             force_d = force_val / (lcd * np.sin(theta_bcd)) * get_unit_vec(np.cross(vcd, -vbc))
             force_c =  np.cross(
@@ -88,28 +102,12 @@ class CharmmDihedralConstraint(Constraint):
                 voc
             ) / loc**2
             force_b = - (force_a + force_c + force_d)
-            forces[id1, :] += force_a
-            forces[id2, :] += force_b
-            forces[id3, :] += force_c
-            forces[id4, :] += force_d
-        return forces
-
-    def get_potential_energy(self):
-        self._check_bound_state()
-        potential_energy = 0
-        for dihedral_info in self._dihedral_info:
-            id1, id2, id3, id4, k, n, delta = dihedral_info
-            theta = get_pbc_dihedral(
-                self._parent_ensemble.state.positions[id1, :], 
-                self._parent_ensemble.state.positions[id2, :],
-                self._parent_ensemble.state.positions[id3, :], 
-                self._parent_ensemble.state.positions[id4, :],
-                self._parent_ensemble.state.pbc_matrix,
-                self._parent_ensemble.state.pbc_inv,
-                is_angular=False
-            )
-            potential_energy += k * (1 + np.cos(n*theta - delta))
-        return potential_energy
+            self._forces[id1, :] += force_a
+            self._forces[id2, :] += force_b
+            self._forces[id3, :] += force_c
+            self._forces[id4, :] += force_d
+            # Potential energy
+            self._potential_energy += k * (1 + np.cos(n*theta - delta))
 
     @property
     def num_dihedrals(self):

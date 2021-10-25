@@ -88,9 +88,11 @@ class TestCharmmBondConstraint:
         # No exception
         self.constraint._check_bound_state()
 
-    def test_get_forces(self):
+    def test_update(self):
         self.ensemble.add_constraints(self.constraint)
-        forces = self.constraint.get_forces()
+        self.ensemble.state.set_pbc_matrix(np.diag(np.ones(3)*10))
+        self.constraint.update()
+        forces = self.constraint.forces
         assert forces[1, 0] == 0
         assert forces[2, 1] == 0 
 
@@ -105,10 +107,7 @@ class TestCharmmBondConstraint:
         assert forces[3, 2] == force_val
         assert forces.sum() == 0
 
-    def test_get_potential_energy(self):
-        self.ensemble.add_constraints(self.constraint)
-        energy = self.constraint.get_potential_energy()
+        energy = self.constraint.potential_energy
         bond_length = get_bond([0, 0, 0], [0, 0, 1])
         k, r0 = self.params['bond']['CA-CA']
         assert energy == k * (bond_length - r0)**2
-        
