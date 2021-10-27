@@ -59,10 +59,12 @@ class Particle:
                 'Particle %d has been added twice to the bonded_particles of Particle %d'
                 %(particle_matrix_id, self._matrix_id)
             )
-        elif particle_matrix_id == self._matrix_id:
+        if particle_matrix_id == self._matrix_id:
             raise ParticleConflictError(
                 'Particle itself can not be added to the bonded_particle list.'
             )
+        self._bonded_particles.append(particle_matrix_id)
+        self._num_bonded_particles += 1
     
     def del_bonded_particle(self, particle_matrix_id):
         if particle_matrix_id in self._bonded_particles:
@@ -71,14 +73,14 @@ class Particle:
 
     def add_scaling_particle(self, particle_matrix_id: int, factor):
         # Benzene give two dihedral with same 1 4 particles
-        if not particle_matrix_id in self._scaling_particles:
-            self._scaling_particles.append(particle_matrix_id)
-            self._scaling_factors.append(factor)
-            self._num_scaling_particles += 1
-        elif particle_matrix_id == self._matrix_id:
+        if particle_matrix_id == self._matrix_id:
             raise ParticleConflictError(
                 'Particle itself can not be added to the scaling_particle list.'
             )   
+        elif not particle_matrix_id in self._scaling_particles:
+            self._scaling_particles.append(particle_matrix_id)
+            self._scaling_factors.append(factor)
+            self._num_scaling_particles += 1
 
     def del_scaling_particle(self, particle_matrix_id):
         if particle_matrix_id in self._scaling_particles:

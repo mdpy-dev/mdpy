@@ -84,9 +84,6 @@ class TestParticle:
         assert particle.scaling_factors[1] == 0
 
         with pytest.raises(ParticleConflictError):
-            particle.add_scaling_particle(1, 0)
-
-        with pytest.raises(ParticleConflictError):
             particle.add_scaling_particle(0, 0)
 
         particle.del_scaling_particle(1)
