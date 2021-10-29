@@ -9,7 +9,7 @@ contact : zhenyuwei99@gmail.com
 copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 '''
 
-from ..ensemble import Ensemble
+from ..simulation import Simulation
 from ..error import *
 
 class Dumper:
@@ -22,8 +22,9 @@ class Dumper:
         self._file = open(file_path, 'w')
         self._file.close()
         self._dump_frequency = dump_frequency
+        self._num_dumpped_frames = 0
 
-    def dump(self, ensemble: Ensemble):
+    def dump(self, simulation: Simulation):
         raise NotImplementedError(
             'The subclass of mdpy.dumper.Dumper class should overload update_ensemble method.'
         )
