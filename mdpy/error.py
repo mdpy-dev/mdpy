@@ -112,9 +112,11 @@ class DumperPoorDefinedError(Exception):
     '''This error occurs when:
     - Dump frequency of dumper object is 0
     - Simulation samples without adding dumper
+    - LogDumper requires rest_time without providing total_step
     
     Used in:
     - mdpy.dumper.dumper
+    - mdpy.dumper.log_dumper
     - mdpy.simulation
     '''
     pass
