@@ -199,7 +199,7 @@ class LogDumper(Dumper):
         self._cur_dump_time = self._now()
         cpu_time = self._cpu_time.total_seconds()
         if cpu_time == 0:
-            return '-----'
+            return '--:--:--'
         else:
             cpu_time = Quantity(cpu_time, second).convert_to(day).value
             sim_time = self._dump_frequency * simulation.integrator.time_step
