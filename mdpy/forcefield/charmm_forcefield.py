@@ -93,7 +93,6 @@ class CharmmForcefield(Forcefield):
                     %(*improper, improper_name)
                 ) 
             
-
     def create_ensemble(self):
         self.check_params()
         ensemble = Ensemble(self._topology)
