@@ -135,7 +135,6 @@ END = 'END'
 class PDBDumper(Dumper):
     def __init__(self, file_path: str, dump_frequency: int) -> None:
         super().__init__(file_path, dump_frequency)
-        self._num_dumpped_frames = 0
 
     def dump(self, simulation: Simulation):
         if self._num_dumpped_frames == 0:

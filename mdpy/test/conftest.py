@@ -13,7 +13,7 @@ import pytest
 
 test_order = [
     'base_dimension', 'unit', 'unit_definition', 'quantity',
-    'particle', 'topology', 'state', 'segment',
+    'particle', 'topology', 'state', 'cell_list', 'segment',
     'pdb_file', 'psf_file', 'charmm_param_file',
     'constraint', 
     'electrostatic_constraint'
@@ -23,7 +23,7 @@ test_order = [
     'ensemble',
     'integrator', 'verlet_integrator',
     'simulation',
-    'dumper', 'pdb_dumper'
+    'dumper', 'pdb_dumper', 'log_dumper'
 ]
 
 def pytest_collection_modifyitems(items):
