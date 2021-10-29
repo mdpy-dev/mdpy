@@ -7,7 +7,9 @@ __license__ = "GPLv3"
 from .dumper import Dumper
 
 from .pdb_dumper import PDBDumper
+from .log_dumper import LogDumper
 
 __all__ = [
-    'PDBDumper'
+    'PDBDumper',
+    'LogDumper'
 ]
