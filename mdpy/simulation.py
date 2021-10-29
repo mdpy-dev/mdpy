@@ -53,8 +53,8 @@ class Simulation:
         self._dump()
         while self._cur_step < target_step:
             self._integrator.sample(self._ensemble, self._minimum_dump_frequency)
-            self._dump()
             self._cur_step += self._minimum_dump_frequency
+            self._dump()
 
     def minimize_energy(self, alpha, energy_tolerance=1e-6, max_iterations=1000):
         energy_convert_unit = default_energy_unit / kilojoule_permol
