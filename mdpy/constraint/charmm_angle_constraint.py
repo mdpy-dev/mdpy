@@ -52,33 +52,28 @@ class CharmmAngleConstraint(Constraint):
         self._potential_energy = 0
         for angle_info in self._angle_info:
             id1, id2, id3, k, theta0 = angle_info
-            theta = get_pbc_angle(
-                self._parent_ensemble.state.positions[id1, :], 
+            r21 = unwrap_vec(
+                self._parent_ensemble.state.positions[id1, :] -
                 self._parent_ensemble.state.positions[id2, :],
-                self._parent_ensemble.state.positions[id3, :],
-                *self._parent_ensemble.state.pbc_info, is_angular=False
+                *self._parent_ensemble.state.pbc_info
             )
+            l21 = np.linalg.norm(r21)
+            r23 = unwrap_vec(
+                self._parent_ensemble.state.positions[id3, :] -
+                self._parent_ensemble.state.positions[id2, :],
+                *self._parent_ensemble.state.pbc_info
+            )
+            l23 = np.linalg.norm(r23)
+            cos_theta = np.dot(r21, r23) / (l21 * l23)
+            theta = np.arccos(cos_theta) / np.pi * 180
             # Force
-            theta_rad = np.deg2rad(theta)
-            force_val = 2 * k * (theta - theta0) / np.abs(np.sin(theta_rad)) # The - is declined by the minus of 1/sin\theta
-            vec0 = unwrap_vec(
-                self._parent_ensemble.state.positions[id1, :] - 
-                self._parent_ensemble.state.positions[id2, :],
-                *self._parent_ensemble.state.pbc_info
-            )
-            vec1 = unwrap_vec(
-                self._parent_ensemble.state.positions[id3, :] - 
-                self._parent_ensemble.state.positions[id2, :],
-                *self._parent_ensemble.state.pbc_info
-            )
-            norm_vec0, norm_vec1 = np.linalg.norm(vec0), np.linalg.norm(vec1)
-            vec0 = vec0 / norm_vec0
-            vec1 = vec1 / norm_vec1
-            force_vec0 = (vec1 - vec0 * np.cos(theta_rad)) / norm_vec0
-            force_vec2 = (vec0 - vec1 * np.cos(theta_rad)) / norm_vec1
-            self._forces[id1, :] += force_val * force_vec0
-            self._forces[id2, :] -= force_val * (force_vec0 + force_vec2) 
-            self._forces[id3, :] += force_val * force_vec2
+            force_val = - 2 * k * (theta - theta0) 
+            vec_norm = np.cross(r21, r23)
+            force_vec1 = get_unit_vec(np.cross(r21, vec_norm)) / l21
+            force_vec3 = get_unit_vec(np.cross(-r23, vec_norm)) / l23
+            self._forces[id1, :] += force_val * force_vec1
+            self._forces[id2, :] -= force_val * (force_vec1 + force_vec3) 
+            self._forces[id3, :] += force_val * force_vec3
             # Potential energy
             self._potential_energy += k * (theta - theta0)**2
 
