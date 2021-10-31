@@ -68,8 +68,8 @@ class TestCharmmParamFile:
         # Angle
         assert charmm.params['angle']['NH2-CT1-HB1'][0] == Quantity(38, kilocalorie_permol).convert_to(default_energy_unit).value
         assert charmm.params['angle']['CPH1-CPH1-CT2'][1] == np.deg2rad(130)
-        assert charmm.params['urey-bradley']['NH2-CT1-HB1'][0] == Quantity(50, kilocalorie_permol).convert_to(default_energy_unit).value
-        assert charmm.params['urey-bradley']['CAI-CA-HP'][1] == Quantity(2.15250, angstrom).convert_to(default_length_unit).value
+        assert charmm.params['angle']['NH2-CT1-HB1'][2] == Quantity(50, kilocalorie_permol).convert_to(default_energy_unit).value
+        assert charmm.params['angle']['CAI-CA-HP'][3] == Quantity(2.15250, angstrom).convert_to(default_length_unit).value
         # Dihedral
         assert charmm.params['dihedral']['H-NH2-CT1-HB1'][0] == Quantity(0.11, kilocalorie_permol).convert_to(default_energy_unit).value
         assert charmm.params['dihedral']['CT2-CT2-CT2-CT2'][1] == Quantity(2).value
@@ -131,8 +131,8 @@ class TestCharmmParamFile:
         assert charmm.params['angle']['HT-OT-HT'][1] == np.deg2rad(Quantity(104.52).value)
         assert charmm.params['angle']['NH2-CT1-HB1'][0] == Quantity(38, kilocalorie_permol).convert_to(default_energy_unit).value
         assert charmm.params['angle']['CPH1-CPH1-CT2'][1] == np.deg2rad(Quantity(130).value)
-        assert charmm.params['urey-bradley']['NH2-CT1-HB1'][0] == Quantity(50, kilocalorie_permol).convert_to(default_energy_unit).value
-        assert charmm.params['urey-bradley']['CAI-CA-HP'][1] == Quantity(2.15250, angstrom).convert_to(default_length_unit).value
+        assert charmm.params['angle']['NH2-CT1-HB1'][2] == Quantity(50, kilocalorie_permol).convert_to(default_energy_unit).value
+        assert charmm.params['angle']['CAI-CA-HP'][3] == Quantity(2.15250, angstrom).convert_to(default_length_unit).value
         # Dihedral
         assert charmm.params['dihedral']['H-NH2-CT1-HB1'][0] == Quantity(0.11, kilocalorie_permol).convert_to(default_energy_unit).value
         assert charmm.params['dihedral']['CT2-CT2-CT2-CT2'][1] == Quantity(2).value
