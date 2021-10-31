@@ -83,7 +83,10 @@ class Unit:
                     %(self._base_dimension, other.base_dimension)
                 )
         else:
-            return NotImplemented
+            raise NotImplementedError(
+                '+ between %s and mdpy.unit.Unit is not implemented' 
+                %(type(other))
+            )
     
     __iadd__ = __add__
 
@@ -99,7 +102,10 @@ class Unit:
                     %(other.base_dimension, self._base_dimension)
                 )
         else:
-            return NotImplemented
+            raise NotImplementedError(
+                '+ between mdpy.unit.Unit and %s is not implemented' 
+                %(type(other))
+            )
 
     def __sub__(self, other):
         if isinstance(other, Unit):
@@ -113,7 +119,10 @@ class Unit:
                     %(self._base_dimension, other.base_dimension)
                 )
         else:
-            return NotImplemented
+            raise NotImplementedError(
+                '- between %s and mdpy.unit.Unit is not implemented' 
+                %(type(other))
+            )
 
     __isub__ = __sub__
 
@@ -129,7 +138,10 @@ class Unit:
                     %(other.base_dimension, self._base_dimension)
                 )
         else:
-            return NotImplemented
+            raise NotImplementedError(
+                '- between mdpy.unit.Unit and %s is not implemented' 
+                %(type(other))
+            )
 
     def __mul__(self, other):
         if isinstance(other, Unit):
@@ -138,7 +150,10 @@ class Unit:
                 self._relative_value * other.relative_value
             )
         else:
-            return NotImplemented
+            raise NotImplementedError(
+                '* between %s and mdpy.unit.Unit is not implemented' 
+                %(type(other))
+            )
 
     __imul__ = __mul__
     __rmul__ = __mul__
@@ -150,7 +165,10 @@ class Unit:
                 self._relative_value / other.relative_value
             )
         else:
-            return NotImplemented
+            raise NotImplementedError(
+                '/ between %s and mdpy.unit.Unit is not implemented' 
+                %(type(other))
+            )
 
     __itruediv__ = __truediv__
 
@@ -160,8 +178,16 @@ class Unit:
                 other.base_dimension / self._base_dimension,
                 other.relative_value / self._relative_value
             )
+        elif isinstance(other, int) and other == 1:
+            return Unit(
+                self._base_dimension**-1,
+                1 / self._relative_value
+            )
         else:
-            NotImplemented
+            raise NotImplementedError(
+                '/ between mdpy.unit.Unit and %s is not implemented' 
+                %(type(other))
+            )
 
     def __pow__(self, value):
         try:
