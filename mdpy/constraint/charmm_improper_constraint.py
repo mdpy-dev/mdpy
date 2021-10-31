@@ -59,7 +59,7 @@ class CharmmImproperConstraint(Constraint):
                 self._parent_ensemble.state.positions[id2, :],
                 self._parent_ensemble.state.positions[id3, :], 
                 self._parent_ensemble.state.positions[id4, :],
-                *self._parent_ensemble.state.pbc_info, is_angular=False
+                *self._parent_ensemble.state.pbc_info
             )
             # Forces
             force_val = 2 * k * (psi - psi0)
