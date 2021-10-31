@@ -10,6 +10,7 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 '''
 
 import itertools
+import numpy as np
 from ..error import *
 from ..unit import *
 
@@ -25,8 +26,8 @@ class CharmmParamFile:
         # Set attributes
         self._params = {
             'atom': [], 'mass': {}, 'charge': {},
-            'bond': {}, 'angle':{}, 'nonbonded': {},
-            'dihedral': {}, 'improper': {}
+            'bond': {}, 'angle':{}, 'urey-bradley': {},
+            'nonbonded': {}, 'dihedral': {}, 'improper': {}
         }
         # Parse file
         for file_path in self._file_path_list:
@@ -131,20 +132,28 @@ class CharmmParamFile:
         for info in infos:
             res = [
                 Quantity(float(info[3]), kilocalorie_permol).convert_to(default_energy_unit).value, 
-                Quantity(float(info[4])).value
+                np.deg2rad(Quantity(float(info[4])).value)
             ]
             target_keys = self._embed_x_element('%s-%s-%s' %(info[0], info[1], info[2]))
             target_keys.extend(self._embed_x_element('%s-%s-%s' %(info[2], info[1], info[0])))
             for key in target_keys:
                 if not key in self._params['angle'].keys():
                     self._params['angle'][key] = res
+            if len(info) == 7:
+                res = [
+                     Quantity(float(info[5]), kilocalorie_permol).convert_to(default_energy_unit).value, 
+                    Quantity(float(info[6]), angstrom).convert_to(default_length_unit).value
+                ]
+                for key in target_keys:
+                    if not key in self._params['urey-bradley'].keys():
+                        self._params['urey-bradley'][key] = res
 
     def _parse_par_dihedral_block(self, infos):
         for info in infos:
             res = [
                 Quantity(float(info[4]), kilocalorie_permol).convert_to(default_energy_unit).value, 
                 Quantity(float(info[5])).value,
-                Quantity(float(info[6])).value
+                np.deg2rad(Quantity(float(info[6])).value)
             ]
             target_keys = self._embed_x_element(
                 '%s-%s-%s-%s' %(info[0], info[1], info[2], info[3])
@@ -160,7 +169,7 @@ class CharmmParamFile:
         for info in infos:
             res = [
                 Quantity(float(info[4]), kilocalorie_permol).convert_to(default_energy_unit).value, 
-                Quantity(float(info[6])).value
+                np.deg2rad(Quantity(float(info[6])).value)
             ]
             target_keys = []
             for target_key in itertools.permutations(info[:4]):
@@ -173,10 +182,18 @@ class CharmmParamFile:
 
     def _parse_par_nonbonded_block(self, infos):
         for info in infos[1:]:
-            self._params['nonbonded'][info[0]] = [
-                - Quantity(float(info[2]), kilocalorie_permol).convert_to(default_energy_unit).value,
-                Quantity(float(info[3]), angstrom).convert_to(default_length_unit).value * 2 * RMIN_TO_SIGMA_FACTOR
-            ]
+            if len(info) == 4:
+                self._params['nonbonded'][info[0]] = [
+                    - Quantity(float(info[2]), kilocalorie_permol).convert_to(default_energy_unit).value,
+                    Quantity(float(info[3]), angstrom).convert_to(default_length_unit).value * 2 * RMIN_TO_SIGMA_FACTOR
+                ]
+            else:
+                self._params['nonbonded'][info[0]] = [
+                    - Quantity(float(info[2]), kilocalorie_permol).convert_to(default_energy_unit).value,
+                    Quantity(float(info[3]), angstrom).convert_to(default_length_unit).value * 2 * RMIN_TO_SIGMA_FACTOR,
+                    - Quantity(float(info[5]), kilocalorie_permol).convert_to(default_energy_unit).value,
+                    Quantity(float(info[6]), angstrom).convert_to(default_length_unit).value * 2 * RMIN_TO_SIGMA_FACTOR
+                ]     
 
     def parse_top_file(self, file_path):
         with open(file_path, 'r') as f:
