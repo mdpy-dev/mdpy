@@ -83,7 +83,7 @@ class TestCharmmAngleConstraint:
         assert self.constraint._angle_info[0][1] == 1
         assert self.constraint._angle_info[0][2] == 3
         assert self.constraint._angle_info[0][3] == Quantity(40, kilocalorie_permol).convert_to(default_energy_unit).value
-        assert self.constraint._angle_info[0][4] == Quantity(120).value
+        assert self.constraint._angle_info[0][4] == np.deg2rad(Quantity(120).value)
 
         # No exception
         self.constraint._check_bound_state()
@@ -95,12 +95,11 @@ class TestCharmmAngleConstraint:
 
         forces = self.constraint.forces
         k, theta0 = self.params['angle']['CA-CA-CA']
-        theta = get_angle([0, 0, 0], [1, 0, 0], [0, 0, 1], is_angular=False)
-        theta_rad = np.pi / 4
-        force_val = 2 * k * (45 - theta0) / np.abs(np.sin(theta_rad))
+        theta = get_angle([0, 0, 0], [1, 0, 0], [0, 0, 1])
+        force_val = 2 * k * (np.deg2rad(45) - theta0) / np.abs(np.sin(theta))
         vec0, vec1 = np.array([-1, 0, 0]), get_unit_vec(np.array([-1, 0, 1]))
-        force_vec0 = (vec1 - vec0 * np.cos(theta_rad)) / 1
-        force_vec2 = (vec0 - vec1 * np.cos(theta_rad)) / np.sqrt(2)
+        force_vec0 = (vec1 - vec0 * np.cos(theta)) / 1
+        force_vec2 = (vec0 - vec1 * np.cos(theta)) / np.sqrt(2)
         force0, force2 = force_val * force_vec0, force_val * force_vec2
         assert forces[0, 0] == pytest.approx(force0[0], abs=1e-10)
         assert forces[0, 1] == pytest.approx(force0[1])
@@ -118,6 +117,6 @@ class TestCharmmAngleConstraint:
 
         energy = self.constraint.potential_energy
         k, theta0 = self.params['angle']['CA-CA-CA']
-        theta = get_angle([0, 0, 0], [1, 0, 0], [0, 0, 1], is_angular=False)
+        theta = get_angle([0, 0, 0], [1, 0, 0], [0, 0, 1])
         assert energy == k * (theta - theta0)**2
         
