@@ -54,7 +54,6 @@ class CharmmDihedralConstraint(Constraint):
         self._potential_energy = 0
         for dihedral_info in self._dihedral_info:
             id1, id2, id3, id4, k, n, delta = dihedral_info
-            delta = np.deg2rad(delta)
             theta = get_pbc_dihedral(
                 self._parent_ensemble.state.positions[id1, :], 
                 self._parent_ensemble.state.positions[id2, :],
