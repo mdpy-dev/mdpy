@@ -198,11 +198,8 @@ class TestTopology:
         self.topology.add_angle([0, 1, 2])
         assert self.topology.num_angles == 1
 
-        self.topology.add_angle([2, 1, 0])
-        assert self.topology.num_angles == 2
-
         self.topology.add_angle([2, 0, 1])
-        assert self.topology.num_angles == 3
+        assert self.topology.num_angles == 2
 
         with pytest.raises(GeomtryDimError):
             self.topology.add_angle([1, 1, 2, 3])
