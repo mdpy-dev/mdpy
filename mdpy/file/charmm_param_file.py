@@ -26,7 +26,7 @@ class CharmmParamFile:
         # Set attributes
         self._params = {
             'atom': [], 'mass': {}, 'charge': {},
-            'bond': {}, 'angle':{}, 'urey-bradley': {},
+            'bond': {}, 'angle':{},
             'nonbonded': {}, 'dihedral': {}, 'improper': {}
         }
         # Parse file
@@ -130,23 +130,28 @@ class CharmmParamFile:
 
     def _parse_par_angle_block(self, infos):
         for info in infos:
-            res = [
-                Quantity(float(info[3]), kilocalorie_permol).convert_to(default_energy_unit).value, 
-                np.deg2rad(Quantity(float(info[4])).value)
-            ]
-            target_keys = self._embed_x_element('%s-%s-%s' %(info[0], info[1], info[2]))
-            target_keys.extend(self._embed_x_element('%s-%s-%s' %(info[2], info[1], info[0])))
-            for key in target_keys:
-                if not key in self._params['angle'].keys():
-                    self._params['angle'][key] = res
-            if len(info) == 7:
+            if len(info) == 5:
                 res = [
-                     Quantity(float(info[5]), kilocalorie_permol).convert_to(default_energy_unit).value, 
+                    Quantity(float(info[3]), kilocalorie_permol).convert_to(default_energy_unit).value, 
+                    np.deg2rad(Quantity(float(info[4])).value)
+                ]
+                target_keys = self._embed_x_element('%s-%s-%s' %(info[0], info[1], info[2]))
+                target_keys.extend(self._embed_x_element('%s-%s-%s' %(info[2], info[1], info[0])))
+                for key in target_keys:
+                    if not key in self._params['angle'].keys():
+                        self._params['angle'][key] = res
+            elif len(info) == 7:
+                res = [
+                    Quantity(float(info[3]), kilocalorie_permol).convert_to(default_energy_unit).value, 
+                    np.deg2rad(Quantity(float(info[4])).value),
+                    Quantity(float(info[5]), kilocalorie_permol).convert_to(default_energy_unit).value, 
                     Quantity(float(info[6]), angstrom).convert_to(default_length_unit).value
                 ]
+                target_keys = self._embed_x_element('%s-%s-%s' %(info[0], info[1], info[2]))
+                target_keys.extend(self._embed_x_element('%s-%s-%s' %(info[2], info[1], info[0])))
                 for key in target_keys:
-                    if not key in self._params['urey-bradley'].keys():
-                        self._params['urey-bradley'][key] = res
+                    if not key in self._params['angle'].keys():
+                        self._params['angle'][key] = res
 
     def _parse_par_dihedral_block(self, infos):
         for info in infos:
