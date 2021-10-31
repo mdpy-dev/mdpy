@@ -49,17 +49,14 @@ class CharmmBondConstraint(Constraint):
         self._potential_energy = 0
         for bond_info in self._bond_info:
             id1, id2, k, r0 = bond_info
-            r = get_pbc_bond(
-                self._parent_ensemble.state.positions[id1, :], 
-                self._parent_ensemble.state.positions[id2, :],
-                *self._parent_ensemble.state.pbc_info
-            )
-            # Forces
-            force_val = 2 * k * (r - r0)
-            force_vec = unwrap_vec(get_unit_vec(
+            force_vec = unwrap_vec(
                 self._parent_ensemble.state.positions[id2, :] - 
                 self._parent_ensemble.state.positions[id1, :]
-            ), *self._parent_ensemble.state.pbc_info)
+            , *self._parent_ensemble.state.pbc_info)
+            r = np.linalg.norm(force_vec)
+            force_vec /= r
+            # Forces
+            force_val = 2 * k * (r - r0)
             force = force_val * force_vec
             self._forces[id1, :] += force
             self._forces[id2, :] -= force
