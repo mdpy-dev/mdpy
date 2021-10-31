@@ -21,7 +21,7 @@ test_order = [
     'charmm_dihedral_constraint', 'charmm_improper_constraint',
     'forcefield', 'charmm_forcefield'
     'ensemble',
-    'integrator', 'verlet_integrator',
+    'integrator', 'verlet_integrator', 'langevin_integrator'
     'simulation',
     'dumper', 'pdb_dumper', 'log_dumper'
 ]
