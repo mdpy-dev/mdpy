@@ -65,7 +65,7 @@ class CharmmAngleConstraint(Constraint):
             )
             l23 = np.linalg.norm(r23)
             cos_theta = np.dot(r21, r23) / (l21 * l23)
-            theta = np.arccos(cos_theta) / np.pi * 180
+            theta = np.arccos(cos_theta)
             # Force
             force_val = - 2 * k * (theta - theta0) 
             vec_norm = np.cross(r21, r23)
