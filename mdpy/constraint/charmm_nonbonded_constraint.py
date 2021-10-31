@@ -37,20 +37,29 @@ class CharmmNonbondedConstraint(Constraint):
         self._force_id = ensemble.constraints.index(self)
         self._param_list = []
         for particle in self._parent_ensemble.topology.particles:
-            epsilon, sigma = self._params[particle.particle_name]
-            self._param_list.append([epsilon, sigma])
+            param = self._params[particle.particle_name]
+            if len(param) == 2:
+                epsilon, sigma = param
+                self._param_list.append([epsilon, sigma, epsilon, sigma])
+            elif len(param) == 4:
+                epsilon, sigma, epsilon14, sigma14 = param
+                self._param_list.append([epsilon, sigma, epsilon14, sigma14])
         self._num_nonbonded_pairs = int((
             self._parent_ensemble.topology.num_particles**2 -
             self._parent_ensemble.topology.num_particles
         ) / 2)
 
-    def _mix_params(self, id1, id2):
+    def _mix_params(self, id1, id2, is_14=False):
         # Mix rule: 
         # - Eps,i,j = sqrt(eps,i * eps,j)
         # - Rmin,i,j = Rmin/2,i + Rmin/2,j
         # Turn r_min to sigma
-        epsilon1, sigma1 = self._param_list[id1]
-        epsilon2, sigma2 = self._param_list[id2]
+        if is_14:
+            epsilon1, sigma1 = self._param_list[id1][2:]
+            epsilon2, sigma2 = self._param_list[id2][2:]
+        else:
+            epsilon1, sigma1 = self._param_list[id1][:2]
+            epsilon2, sigma2 = self._param_list[id2][:2]
         return (
             np.sqrt(epsilon1 * epsilon2),
             (sigma1 + sigma2) / 2
@@ -85,7 +94,12 @@ class CharmmNonbondedConstraint(Constraint):
             particle1 = self._parent_ensemble.topology.particles[id1]
             for i, id2 in enumerate(self._neighbor_list[id1]):
                 if not id2 in particle1.bonded_particles:
-                    epsilon, sigma = self._mix_params(id1, id2)
+                    if id2 in particle1.scaling_particles:
+                        scaling_factor = particle1.scaling_factors[particle.scaling_particles.index(id2)]
+                        epsilon, sigma = self._mix_params(id1, id2, is_14=True)
+                    else:
+                        scaling_factor = 1
+                        epsilon, sigma = self._mix_params(id1, id2, is_14=False)
                     r = self._neighbor_distance[id1][i]
                     scaled_r = sigma / r
                     force_val = - (2 * scaled_r**12 - scaled_r**6) / r * epsilon * 24 # Sequence for small number divide small number
@@ -93,10 +107,6 @@ class CharmmNonbondedConstraint(Constraint):
                         self._parent_ensemble.state.positions[id2] - 
                         self._parent_ensemble.state.positions[id1]
                     ), *self._parent_ensemble.state.pbc_info)
-                    if id2 in particle1.scaling_particles:
-                        scaling_factor = particle1.scaling_factors[particle.scaling_particles.index(id2)]
-                    else:
-                        scaling_factor = 1
                     force = scaling_factor * force_vec * force_val
                     self._forces[id1, :] += force
                     self._forces[id2, :] -= force
