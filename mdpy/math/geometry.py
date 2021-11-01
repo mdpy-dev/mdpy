@@ -27,11 +27,11 @@ def get_norm_vec(p1, p2, p3):
     return get_unit_vec(norm_vec)
 
 def get_bond(p1, p2):
-    return np.sqrt(((np.array(p1) - np.array(p2))**2).sum())
+    return np.linalg.norm(np.array(p1) - np.array(p2))
 
 def get_pbc_bond(p1, p2, pbc_matrix, pbc_inv):
     bond_vec = unwrap_vec(np.array(p1) - np.array(p2), pbc_matrix, pbc_inv)
-    return np.sqrt((bond_vec**2).sum())
+    return np.linalg.norm(bond_vec)
 
 def get_angle(p1, p2, p3, is_angular=True):
     p1, p2, p3 = np.array(p1), np.array(p2), np.array(p3)
