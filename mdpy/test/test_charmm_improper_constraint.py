@@ -91,11 +91,14 @@ class TestCharmmImproperConstraint:
         # No exception
         self.constraint._check_bound_state()
 
-    def test_get_forces(self):
+    def test_update(self):
         self.ensemble.add_constraints(self.constraint)
-        forces = self.constraint.get_forces()
+        self.ensemble.state.set_pbc_matrix(np.diag(np.ones(3)*10))
+        self.constraint.update()
+
+        forces = self.constraint.forces
         k, psi0 = self.params['improper']['HE2-HE2-CE2-CE2']
-        psi = get_dihedral([0, 0, 0], [1, 0, 0], [0, 1, 0], [0.5, 0.5, 1], is_angular=False)
+        psi = get_dihedral([0, 0, 0], [1, 0, 0], [0, 1, 0], [0.5, 0.5, 1])
         assert forces.sum() == pytest.approx(0)
 
         positions = np.array([
@@ -116,7 +119,7 @@ class TestCharmmImproperConstraint:
         assert res[1] == pytest.approx(0)
         assert res[2] == pytest.approx(0)
 
-        force_val = 2 * k * (90 - psi0)
+        force_val = 2 * k * (np.deg2rad(90) - psi0)
         vec_ab = positions[1, :] - positions[0, :]
         theta_abc = get_angle(
             positions[0, :], positions[1, :], positions[2, :]
@@ -126,9 +129,7 @@ class TestCharmmImproperConstraint:
         assert forces[0, 1] == force_a[1]
         assert forces[0, 2] == force_a[2]
 
-    def test_get_potential_energy(self):
-        self.ensemble.add_constraints(self.constraint)
-        energy = self.constraint.get_potential_energy()
+        energy = self.constraint.potential_energy
         k, psi0 = self.params['improper']['HE2-HE2-CE2-CE2']
-        psi = get_dihedral([0, 0, 0], [1, 0, 0], [0, 1, 0], [0.5, 0.5, 1], is_angular=False)
-        assert energy == k * (90 - psi0)**2
+        psi = get_dihedral([0, 0, 0], [1, 0, 0], [0, 1, 0], [0.5, 0.5, 1])
+        assert energy == k * (np.deg2rad(90) - psi0)**2

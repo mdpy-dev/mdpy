@@ -26,7 +26,6 @@ class CharmmForcefield(Forcefield):
         is_SHAKE: bool=True
     ) -> None:
         super().__init__(topology)
-        self._topology.check_pbc_matrix()
         self._cutoff_radius = check_quantity_value(cutoff_radius, default_length_unit)
         self._long_range_solver = long_range_solver
         self._ewald_error = ewald_error
@@ -44,7 +43,7 @@ class CharmmForcefield(Forcefield):
         for particle in self._topology.particles:
             particle_name = particle.particle_name
             if not particle_name in particle_keys:
-                raise ParameterNotFoundError(
+                raise ParameterPoorDefinedError(
                     'The nonbonded parameter for particle %d (%s) can not be found'
                     %(particle_name)
                 )
@@ -54,7 +53,7 @@ class CharmmForcefield(Forcefield):
                 self._topology.particles[bond[1]].particle_name
             )
             if not bond_name in bond_keys:
-                raise ParameterNotFoundError(
+                raise ParameterPoorDefinedError(
                     'The parameter for bond %d-%d (%s) can not be found' 
                     %(*bond, bond_name)
                 ) 
@@ -65,7 +64,7 @@ class CharmmForcefield(Forcefield):
                 self._topology.particles[angle[2]].particle_name
             )
             if not angle_name in angle_keys:
-                raise ParameterNotFoundError(
+                raise ParameterPoorDefinedError(
                     'The parameter for angle %d-%d-%d (%s) can not be found' 
                     %(*angle, angle_name)
                 ) 
@@ -77,7 +76,7 @@ class CharmmForcefield(Forcefield):
                 self._topology.particles[dihedral[3]].particle_name
             )
             if not dihedral_name in dihedral_keys:
-                raise ParameterNotFoundError(
+                raise ParameterPoorDefinedError(
                     'The parameter for dihedral %d-%d-%d-%d (%s) can not be found' 
                     %(*dihedral, dihedral_name)
                 ) 
@@ -89,22 +88,23 @@ class CharmmForcefield(Forcefield):
                 self._topology.particles[improper[3]].particle_name
             )
             if not improper_name in improper_keys:
-                raise ParameterNotFoundError(
+                raise ParameterPoorDefinedError(
                     'The parameter for improper %d-%d-%d-%d (%s) can not be found' 
                     %(*improper, improper_name)
                 ) 
             
-
     def create_ensemble(self):
         self.check_params()
         ensemble = Ensemble(self._topology)
+        ele_constraint = ElectrostaticConstraint()
         nonbonded_constraint = CharmmNonbondedConstraint(self._params['nonbonded'], self._cutoff_radius)
         bond_constraint = CharmmBondConstraint(self._params['bond'])
         angle_constraint = CharmmAngleConstraint(self._params['angle'])
         dihedral_constraint = CharmmDihedralConstraint(self._params['dihedral'])
         improper_constraint = CharmmImproperConstraint(self._params['improper'])
         ensemble.add_constraints(
-            nonbonded_constraint, bond_constraint, angle_constraint,
+            ele_constraint, nonbonded_constraint, 
+            bond_constraint, angle_constraint,
             dihedral_constraint, improper_constraint
         )
         return ensemble

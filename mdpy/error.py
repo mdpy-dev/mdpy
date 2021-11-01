@@ -49,11 +49,14 @@ class GeomtryDimError(Exception):
 
 class ParticleConflictError(Exception):
     '''This error occurs when:
+    - Particle is twice bounded to a Particle instance
+    - Particle is bounded to itself
     - Particle is twice bounded to a Toplogy instance 
     - Particle appears twice in bond, angle, dihedral or improper
     - The number of particles is mismatched with the dimension of positions, velocities, forces matrix
     
     Used in:
+    - mdpy.core.particle
     - mdpy.core.topology
     - mdpy.core.state
     - mdpy.ensemble
@@ -92,11 +95,11 @@ class PBCPoorDefinedError(Exception):
     - Two or more column vector in pbc_matrix is linear corellated
     
     Used in:
-    - mdpy.core.topology
+    - mdpy.core.state
     '''
     pass
 
-class ParameterNotFoundError(Exception):
+class ParameterPoorDefinedError(Exception):
     '''This error occurs when:
     - Topology connections' parameter is not defined in selected parameter file
     
@@ -109,9 +112,19 @@ class DumperPoorDefinedError(Exception):
     '''This error occurs when:
     - Dump frequency of dumper object is 0
     - Simulation samples without adding dumper
+    - LogDumper requires rest_time without providing total_step
     
     Used in:
     - mdpy.dumper.dumper
+    - mdpy.dumper.log_dumper
     - mdpy.simulation
     '''
+    pass
+
+class AtomLossError(Exception):
+    '''This error occurs when:
+    - The atom go beyond the range of two PBC images
+    
+    Used in:
+    - mdpy.core.state'''
     pass

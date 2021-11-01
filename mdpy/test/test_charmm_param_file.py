@@ -10,10 +10,11 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 '''
 
 import pytest, os
-
+import numpy as np
 from ..unit import *
 from ..error import *
 from ..file import CharmmParamFile
+from ..file.charmm_param_file import RMIN_TO_SIGMA_FACTOR
 
 cur_dir = os.path.dirname(os.path.abspath(__file__))
 data_dir = os.path.join(cur_dir, 'data')
@@ -66,7 +67,9 @@ class TestCharmmParamFile:
         assert charmm.params['bond']['CC-CP1'][1] == Quantity(1.49, angstrom).convert_to(default_length_unit).value # Test for opposite order
         # Angle
         assert charmm.params['angle']['NH2-CT1-HB1'][0] == Quantity(38, kilocalorie_permol).convert_to(default_energy_unit).value
-        assert charmm.params['angle']['CPH1-CPH1-CT2'][1] == Quantity(130).value
+        assert charmm.params['angle']['CPH1-CPH1-CT2'][1] == np.deg2rad(130)
+        assert charmm.params['angle']['NH2-CT1-HB1'][2] == Quantity(50, kilocalorie_permol).convert_to(default_energy_unit).value
+        assert charmm.params['angle']['CAI-CA-HP'][3] == Quantity(2.15250, angstrom).convert_to(default_length_unit).value
         # Dihedral
         assert charmm.params['dihedral']['H-NH2-CT1-HB1'][0] == Quantity(0.11, kilocalorie_permol).convert_to(default_energy_unit).value
         assert charmm.params['dihedral']['CT2-CT2-CT2-CT2'][1] == Quantity(2).value
@@ -75,8 +78,10 @@ class TestCharmmParamFile:
         assert charmm.params['improper']['HR1-NR1-NR2-CPH2'][0] == Quantity(0.5, kilocalorie_permol).convert_to(default_energy_unit).value
         assert charmm.params['improper']['O-NH2-CT1-CC'][1] == Quantity(0).value
         # Nonbonded
-        assert charmm.params['nonbonded']['CA'][0] == Quantity(-0.07, kilocalorie_permol).convert_to(default_energy_unit).value
-        assert charmm.params['nonbonded']['SM'][1] == Quantity(1.975, angstrom).convert_to(default_length_unit).value
+        assert charmm.params['nonbonded']['CA'][0] == Quantity(0.07, kilocalorie_permol).convert_to(default_energy_unit).value
+        assert charmm.params['nonbonded']['SM'][1] == Quantity(1.975, angstrom).convert_to(default_length_unit).value * RMIN_TO_SIGMA_FACTOR * 2
+        assert charmm.params['nonbonded']['CP1'][2] == Quantity(0.01, kilocalorie_permol).convert_to(default_energy_unit).value
+        assert charmm.params['nonbonded']['CP2'][3] == Quantity(1.9, angstrom).convert_to(default_length_unit).value * RMIN_TO_SIGMA_FACTOR * 2
 
     def test_parse_top_file(self):
         charmm = CharmmParamFile()
@@ -98,10 +103,10 @@ class TestCharmmParamFile:
         assert charmm.params['bond']['OX-HX'][1] == Quantity(0.97, angstrom).convert_to(default_length_unit).value
         # Angle
         assert charmm.params['angle']['HT-OT-HT'][0] == Quantity(55, kilocalorie_permol).convert_to(default_energy_unit).value
-        assert charmm.params['angle']['HT-OT-HT'][1] == Quantity(104.52).value
+        assert charmm.params['angle']['HT-OT-HT'][1] == np.deg2rad(Quantity(104.52).value)
         # Nonbonded
-        assert charmm.params['nonbonded']['OX'][0] == Quantity(-0.12, kilocalorie_permol).convert_to(default_energy_unit).value
-        assert charmm.params['nonbonded']['BAR'][1] == Quantity(1.890, angstrom).convert_to(default_length_unit).value
+        assert charmm.params['nonbonded']['OX'][0] == Quantity(0.12, kilocalorie_permol).convert_to(default_energy_unit).value
+        assert charmm.params['nonbonded']['BAR'][1] == Quantity(1.890, angstrom).convert_to(default_length_unit).value * 2 * RMIN_TO_SIGMA_FACTOR
 
     def test_parse_multi_files(self):
         f1 = os.path.join(data_dir, 'toppar_water_ions_namd.str')
@@ -123,9 +128,11 @@ class TestCharmmParamFile:
         assert charmm.params['bond']['CC-CP1'][1] == Quantity(1.49, angstrom).convert_to(default_length_unit).value
         # Angle
         assert charmm.params['angle']['HT-OT-HT'][0] == Quantity(55, kilocalorie_permol).convert_to(default_energy_unit).value
-        assert charmm.params['angle']['HT-OT-HT'][1] == Quantity(104.52).value
+        assert charmm.params['angle']['HT-OT-HT'][1] == np.deg2rad(Quantity(104.52).value)
         assert charmm.params['angle']['NH2-CT1-HB1'][0] == Quantity(38, kilocalorie_permol).convert_to(default_energy_unit).value
-        assert charmm.params['angle']['CPH1-CPH1-CT2'][1] == Quantity(130).value
+        assert charmm.params['angle']['CPH1-CPH1-CT2'][1] == np.deg2rad(Quantity(130).value)
+        assert charmm.params['angle']['NH2-CT1-HB1'][2] == Quantity(50, kilocalorie_permol).convert_to(default_energy_unit).value
+        assert charmm.params['angle']['CAI-CA-HP'][3] == Quantity(2.15250, angstrom).convert_to(default_length_unit).value
         # Dihedral
         assert charmm.params['dihedral']['H-NH2-CT1-HB1'][0] == Quantity(0.11, kilocalorie_permol).convert_to(default_energy_unit).value
         assert charmm.params['dihedral']['CT2-CT2-CT2-CT2'][1] == Quantity(2).value
@@ -134,8 +141,10 @@ class TestCharmmParamFile:
         assert charmm.params['improper']['HR1-NR1-NR2-CPH2'][0] == Quantity(0.5, kilocalorie_permol).convert_to(default_energy_unit).value
         assert charmm.params['improper']['O-NH2-CT1-CC'][1] == Quantity(0).value
         # Nonbonded
-        assert charmm.params['nonbonded']['OX'][0] == Quantity(-0.12, kilocalorie_permol).convert_to(default_energy_unit).value
-        assert charmm.params['nonbonded']['BAR'][1] == Quantity(1.890, angstrom).convert_to(default_length_unit).value
-        assert charmm.params['nonbonded']['CA'][0] == Quantity(-0.07, kilocalorie_permol).convert_to(default_energy_unit).value
-        assert charmm.params['nonbonded']['SM'][1] == Quantity(1.975, angstrom).convert_to(default_length_unit).value
+        assert charmm.params['nonbonded']['OX'][0] == Quantity(0.12, kilocalorie_permol).convert_to(default_energy_unit).value
+        assert charmm.params['nonbonded']['BAR'][1] == Quantity(1.890, angstrom).convert_to(default_length_unit).value * 2 * RMIN_TO_SIGMA_FACTOR
+        assert charmm.params['nonbonded']['CA'][0] == Quantity(0.07, kilocalorie_permol).convert_to(default_energy_unit).value
+        assert charmm.params['nonbonded']['SM'][1] == Quantity(1.975, angstrom).convert_to(default_length_unit).value * 2 * RMIN_TO_SIGMA_FACTOR
+        assert charmm.params['nonbonded']['CP1'][2] == Quantity(0.01, kilocalorie_permol).convert_to(default_energy_unit).value
+        assert charmm.params['nonbonded']['CP2'][3] == Quantity(1.9, angstrom).convert_to(default_length_unit).value * RMIN_TO_SIGMA_FACTOR * 2
         

@@ -9,8 +9,10 @@ contact : zhenyuwei99@gmail.com
 copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 '''
 
+import pytest
+import numpy as np
+from ..unit import energy, force
 from ..unit import *
-from ..unit import Quantity
 
 def test_constants():
     # Avogadro Constant
@@ -52,6 +54,22 @@ def test_temperature():
 
 def test_charge():
     assert Quantity(1) * coulomb / e == 1/1.602176634e-19
+    q1, q2 = Quantity(1, e), Quantity(1, e)
+    length = Quantity(1, angstrom)
+    energy_val = q1 * q2 / Quantity(4*np.pi) / EPSILON0 / length
+    assert energy_val.unit.base_dimension == energy
+    force_val = q1 * q2 / Quantity(4*np.pi) / EPSILON0 / length**2
+    assert force_val.unit.base_dimension == force
+
+    factor = 4 * np.pi * EPSILON0.value
+    q1 = q1.convert_to(default_charge_unit).value
+    q2 = q2.convert_to(default_charge_unit).value
+    length = length.convert_to(default_length_unit).value
+    force_val_no_unit = q1 * q2 / factor / length**2
+    assert force_val.convert_to(default_force_unit).value == pytest.approx(force_val_no_unit)
+
+    force_val_newton = force_val.convert_to(newton)
+    assert force_val_newton.value == pytest.approx(2.3e-8, abs=1e-10)
 
 def test_mol():
     assert Quantity(1) * kilomol / mol == 1e3

@@ -60,18 +60,42 @@ class TestUnit:
         with pytest.raises(UnitDimensionDismatchedError):
             gram + angstrom
 
+        with pytest.raises(NotImplementedError):
+            1 + angstrom
+        
+        with pytest.raises(NotImplementedError):
+            angstrom + 1
+
+        with pytest.raises(NotImplementedError):
+            angstrom += 1
+            
     def test_sub(self):
         angstrom = Unit(BaseDimension(length_dimension=1), 1e-10)
         gram = Unit(BaseDimension(mass_dimension=1), 1e-3)
         assert angstrom - angstrom == angstrom
 
-        with pytest.raises(UnitDimensionDismatchedError):
-            gram - angstrom
+        with pytest.raises(NotImplementedError):
+            1 - angstrom
+        
+        with pytest.raises(NotImplementedError):
+            angstrom - 1
+
+        with pytest.raises(NotImplementedError):
+            angstrom -= 1
 
     def test_mul(self):
         angstrom = Unit(BaseDimension(length_dimension=1), 1e-10)
         angstrom_square = Unit(BaseDimension(length_dimension=2), 1e-20)
         assert angstrom * angstrom == angstrom_square
+
+        with pytest.raises(NotImplementedError):
+            1 * angstrom
+        
+        with pytest.raises(NotImplementedError):
+            angstrom * 1
+
+        with pytest.raises(NotImplementedError):
+            angstrom *= 1
 
     def test_div(self):
         angstrom_reciprocal = Unit(BaseDimension(length_dimension=-1), 1e10)
@@ -81,6 +105,16 @@ class TestUnit:
         assert angstrom_square / angstrom == angstrom
         assert angstrom / angstrom_square == angstrom_reciprocal
         assert (angstrom / angstrom).is_dimension_less()
+        assert 1 / angstrom == angstrom**-1
+
+        with pytest.raises(NotImplementedError):
+            2 / angstrom
+
+        with pytest.raises(NotImplementedError):
+            1. / angstrom
+
+        with pytest.raises(NotImplementedError):
+            angstrom / 1
 
     def test_pow(self):
         constant = Unit(BaseDimension(), 1)

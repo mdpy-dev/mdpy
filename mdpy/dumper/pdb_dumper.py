@@ -68,10 +68,22 @@ ENDMDL = 'ENDMDL\n'
 # 77 - 78        LString(2)    element      Element symbol, right-justified.
 # 79 - 80        LString(2)    charge       Charge  on the atom.
 # Serial atomname resname chainid resid x y z 0 0 element
-ATOM = 'ATOM  ' + '%5d' + ' '*2 + '%-3s%4s%2s%4d' + ' '*4 + '%8.3f%8.3f%8.3f%6.2f%6.2f' + ' '*10 + '%2s\n'
+# ATOM = 'ATOM  ' + '%5d' + ' '*2 + '%-4s%-4s%1s%4d' + ' '*3 + '%8.3f%8.3f%8.3f%6.2f%6.2f' + ' '*10 + '%-2s\n'
+def ATOM(serial, particle_name, molecule_name, chain_id, molecule_id, x, y, z, element):
+    res = 'ATOM  '
+    len_serial = len('%5d' %serial)
+    res += '%5s' %serial + ' ' * (7 - len_serial)
+    res += '%-4s%-4s%1s' %(particle_name[:4], molecule_name[:4], chain_id[:1])
+    len_molecule_id = len('%4d' %molecule_id)
+    res += '%4d' %molecule_id + ' ' * (8 - len_molecule_id)
+    res += '%8.3f%8.3f%8.3f%6.2f%6.2f' %(x, y, z, 0, 0)
+    res += ' ' * 10
+    res += '%-2s\n' %element[:2]
+    return res
+
 # COLUMNS       DATA  TYPE     FIELD         DEFINITION
 # -----------------------------------------------------------------------
-#  1 - 6        Record name    "HETATM"
+#  1 - 6        Record name    "HETATM")
 #  7 - 11       Integer        serial        Atom serial number.
 # 14 - 16       Atom           name          Atom name.
 # 17            Character      altLoc        Alternate location indicator.
@@ -87,7 +99,18 @@ ATOM = 'ATOM  ' + '%5d' + ' '*2 + '%-3s%4s%2s%4d' + ' '*4 + '%8.3f%8.3f%8.3f%6.2
 # 77 - 78       LString(2)     element       Element symbol; right-justified.
 # 79 - 80       LString(2)     charge        Charge on the atom.
 # Serial atomname resname chainid resid x y z 0 0 element
-HETATM = 'HETATM' + '%5d' + ' '*2 + '%-3s%4s%2s%4d' + ' '*4 + '%8.3f%8.3f%8.3f%6.2f%6.2f' + ' '*10 + '%2s\n'
+# HETATM = 'HETATM' + '%5d' + ' '*2 + '%-4s%-4s%1s%5d' + ' '*3 + '%8.3f%8.3f%8.3f%6.2f%6.2f' + ' '*10 + '%-2s\n'
+def HETATM(serial, particle_name, molecule_name, chain_id, molecule_id, x, y, z, element):
+    res = 'HETATM'
+    len_serial = len('%5d' %serial)
+    res += '%5s' %serial + ' ' * (7 - len_serial)
+    res += '%-4s%-4s%1s' %(particle_name[:4], molecule_name[:4], chain_id[:1])
+    len_molecule_id = len('%4d' %molecule_id)
+    res += '%4d' %molecule_id + ' ' * (8 - len_molecule_id)
+    res += '%8.3f%8.3f%8.3f%6.2f%6.2f' %(x, y, z, 0, 0)
+    res += ' ' * 10
+    res += '%-2s\n' %element[:2]
+    return res
 # COLUMNS        DATA  TYPE    FIELD           DEFINITION
 # -------------------------------------------------------------------------
 #  1 -  6        Record name   "TER   "
@@ -97,13 +120,21 @@ HETATM = 'HETATM' + '%5d' + ' '*2 + '%-3s%4s%2s%4d' + ' '*4 + '%8.3f%8.3f%8.3f%6
 # 23 - 26        Integer       resSeq          Residue sequence number.
 # 27             AChar         iCode           Insertion code.
 # Serial resname chainid resid
-TER = 'TER   ' + '%5d' + ' '*6 + '%3s%2s%4d\n'
+# TER = 'TER   ' + '%5d' + ' '*6 + '%-4s%1s%5d\n'
+def TER(serial, molecule_name, chain_id, molecule_id):
+    res = 'TER   ' 
+    len_serial = len('%5d' %serial)
+    res += '%5s' %serial + ' ' * (11 - len_serial)
+    res += '%-4s%1s' %(molecule_name[:4], chain_id[:1])
+    len_molecule_id = len('%4d' %molecule_id)
+    res += '%4d' %molecule_id + ' ' * (8 - len_molecule_id) + '\n'
+    return res 
+
 END = 'END'
 
 class PDBDumper(Dumper):
     def __init__(self, file_path: str, dump_frequency: int) -> None:
         super().__init__(file_path, dump_frequency)
-        self._num_dumpped_frames = 0
 
     def dump(self, simulation: Simulation):
         if self._num_dumpped_frames == 0:
@@ -116,7 +147,8 @@ class PDBDumper(Dumper):
             'PDB FILE CREATED WITH MDPY',
             datetime.date.today().strftime('%d-%b-%Y').upper()
         )
-        pbc_matrix = ensemble.topology.pbc_matrix
+        # Transport for the correction of origin transport in mdpy.core.State class
+        pbc_matrix = ensemble.state.pbc_matrix.T
         pbc_len = np.linalg.norm(pbc_matrix, axis=0)
         alpha = get_included_angle(pbc_matrix[0, :], pbc_matrix[1, :], is_angular=False)
         beta = get_included_angle(pbc_matrix[0, :], pbc_matrix[2, :], is_angular=False)
@@ -129,13 +161,13 @@ class PDBDumper(Dumper):
 
     def _dump_pdb_model(self, ensemble: Ensemble, frame_index: int):
         model = MODEL % frame_index
-        cur_chain_id, serial = ensemble.topology.particles[0].chain_id, 1
+        cur_chain_id, serial = ensemble.topology.particles[0].chain_id[:1], 1
         for index, particle in enumerate(ensemble.topology.particles):
-            if cur_chain_id != particle.chain_id:
-                cur_chain_id = particle.chain_id
+            if cur_chain_id != particle.chain_id[:1]:
+                cur_chain_id = particle.chain_id[:1]
                 # Serial resname chainid resid
                 pre_particle = ensemble.topology.particles[index-1]
-                model += TER %(
+                model += TER(
                     serial, pre_particle.molecule_type, 
                     pre_particle.chain_id, pre_particle.molecule_id
                 )
@@ -143,22 +175,20 @@ class PDBDumper(Dumper):
             positions = ensemble.state.positions[particle.matrix_id, :]
             # Serial atomname resname chainid resid x y z 0 0 element
             if particle.molecule_type in STD_RES_NAMES:
-                model += ATOM %(
+                model += ATOM(
                     serial, particle.particle_name, particle.molecule_type,
                     particle.chain_id, particle.molecule_id,
-                    positions[0], positions[1], positions[2], 
-                    0, 0, particle.particle_type
+                    positions[0], positions[1], positions[2], particle.particle_type
                 )
             else:
-                model += HETATM %(
+                model += HETATM(
                     serial, particle.particle_name, particle.molecule_type,
                     particle.chain_id, particle.molecule_id,
-                    positions[0], positions[1], positions[2], 
-                    0, 0, particle.particle_type
+                    positions[0], positions[1], positions[2], particle.particle_type
                 )
             serial += 1
         pre_particle = ensemble.topology.particles[-1]
-        model += TER %(
+        model += TER(
             serial, pre_particle.molecule_type, 
             pre_particle.chain_id, pre_particle.molecule_id
         )
