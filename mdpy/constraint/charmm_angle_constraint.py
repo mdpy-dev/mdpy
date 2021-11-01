@@ -51,7 +51,7 @@ class CharmmAngleConstraint(Constraint):
         self._forces = np.zeros([self._parent_ensemble.topology.num_particles, SPATIAL_DIM])
         self._potential_energy = 0
         for angle_info in self._angle_info:
-            id1, id2, id3, k, theta0 = angle_info
+            id1, id2, id3, k, theta0 = angle_info[:5]
             r21 = unwrap_vec(
                 self._parent_ensemble.state.positions[id1, :] -
                 self._parent_ensemble.state.positions[id2, :],
@@ -65,7 +65,7 @@ class CharmmAngleConstraint(Constraint):
             )
             l23 = np.linalg.norm(r23)
             cos_theta = np.dot(r21, r23) / (l21 * l23)
-            theta = np.arccos(cos_theta) / np.pi * 180
+            theta = np.arccos(cos_theta)
             # Force
             force_val = - 2 * k * (theta - theta0) 
             vec_norm = np.cross(r21, r23)
@@ -76,7 +76,20 @@ class CharmmAngleConstraint(Constraint):
             self._forces[id3, :] += force_val * force_vec3
             # Potential energy
             self._potential_energy += k * (theta - theta0)**2
-
+            # Urey-Bradley
+            if len(angle_info) == 3 + 4:
+                ku, u0 = angle_info[5:]
+                r13 = unwrap_vec(
+                    self._parent_ensemble.state.positions[id3, :] -
+                    self._parent_ensemble.state.positions[id1, :],
+                    *self._parent_ensemble.state.pbc_info
+                )
+                l13 = np.linalg.norm(r13)
+                force_val = 2 * ku * (l13 - u0)
+                force_vec = r13 / l13 
+                self._forces[id1, :] += force_val * force_vec
+                self._forces[id3, :] -= force_val * force_vec
+                self._potential_energy += ku * (l13 - u0)**2
     @property
     def num_angles(self):
         return self._num_angles
