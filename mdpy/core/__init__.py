@@ -6,9 +6,10 @@ __license__ = "GPLv3"
 
 from .particle import Particle
 from .topology import Topology
+from .cell_list import CellList
 from .state import State
 from .segment import Segment
 
 __all__ = [
-    'Particle', 'Topology', 'State', 'Segment'
+    'Particle', 'Topology', 'CellList', 'State', 'Segment'
 ]

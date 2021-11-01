@@ -67,8 +67,8 @@ class TestSimulation:
         num_particles = len(self.particles)
         self.topology = Topology()
         self.topology.add_particles(self.particles)
-        self.topology.set_pbc_matrix(np.diag(np.ones(3)*10))
         self.ensemble = Ensemble(self.topology)
+        self.ensemble.state.set_pbc_matrix(np.diag(np.ones(3)*10))
         positions = np.array(list(range(num_particles)))
         positions = np.vstack([positions, positions, positions]).T
         self.ensemble.state.set_positions(positions)

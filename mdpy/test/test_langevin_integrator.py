@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 # -*- encoding: utf-8 -*-
 '''
-file : test_verlet_integrator.py
-created time : 2021/10/18
+file : test_langevin_integrator.py
+created time : 2021/10/31
 author : Zhenyu Wei
 version : 1.0
 contact : zhenyuwei99@gmail.com
@@ -13,7 +13,8 @@ import pytest, os
 import numpy as np 
 from ..file import PDBFile, PSFFile 
 from ..forcefield import CharmmForcefield
-from ..integrator import VerletIntegrator
+from ..integrator import LangevinIntegrator
+from ..unit import *
 
 cur_dir = os.path.dirname(os.path.abspath(__file__))
 data_dir = os.path.join(cur_dir, 'data')
@@ -42,7 +43,7 @@ class TestVerletIntegrator:
         ensemble.state.set_positions(pdb.positions)
         ensemble.state.set_velocities_to_temperature(300)
         ensemble.state.set_pbc_matrix(np.diag(np.ones(3) * 40))
-        integrator = VerletIntegrator(1)
+        integrator = LangevinIntegrator(1, 300, Quantity(1, 1/picosecond))
         integrator.sample(ensemble, 1)
 
         # ATOM      1  N   VAL A   1       2.347  -0.970   3.962  1.00  0.00      A    N

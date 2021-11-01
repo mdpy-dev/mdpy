@@ -19,7 +19,7 @@ class Ensemble:
     def __init__(self, topology: Topology) -> None:
         # Read input
         self._topology = topology
-        self._state = State(self._topology.particles)
+        self._state = State(self._topology)
         self._matrix_shape = self._state.matrix_shape
         self._forces = np.zeros(self._matrix_shape)
 
@@ -52,24 +52,15 @@ class Ensemble:
             constraint.bind_ensemble(self)
             self._num_constraints += 1
 
-    def update_forces(self):
+    def update(self):
         self._forces = np.zeros(self._matrix_shape)
+        self._total_energy, self._kinetic_energy, self._potential_energy = 0, 0, 0
         for constraint in self._constraints:
-            try:
-                constraint.update_neighbor()
-            except:
-                pass
-            self._forces += constraint.get_forces()
-
-    def update_energy(self):
-        self._update_potential_energy()
+            constraint.update()
+            self._forces += constraint.forces
+            self._potential_energy += constraint.potential_energy
         self._update_kinetic_energy()
         self._total_energy = self._potential_energy + self._kinetic_energy
-
-    def _update_potential_energy(self):
-        self._potential_energy = 0
-        for constraint in self._constraints:
-            self._potential_energy += constraint.get_potential_energy() 
     
     def _update_kinetic_energy(self):
         # Without reshape, the result of the first sum will be a 1d vector
