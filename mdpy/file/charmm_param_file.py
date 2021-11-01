@@ -154,7 +154,25 @@ class CharmmParamFile:
                         self._params['angle'][key] = res
 
     def _parse_par_dihedral_block(self, infos):
+        x_include_pairs = []
         for info in infos:
+            if 'X' in '-'.join(info[:4]):
+                x_include_pairs.append(info)
+                continue
+            else:
+                res = [
+                    Quantity(float(info[4]), kilocalorie_permol).convert_to(default_energy_unit).value, 
+                    Quantity(float(info[5])).value,
+                    np.deg2rad(Quantity(float(info[6])).value)
+                ]
+                target_keys = [
+                    '%s-%s-%s-%s' %(info[0], info[1], info[2], info[3]),
+                    '%s-%s-%s-%s' %(info[3], info[2], info[1], info[0])
+                ]
+                for key in target_keys:
+                    # if not key in self._params['dihedral'].keys():
+                    self._params['dihedral'][key] = res
+        for info in x_include_pairs:
             res = [
                 Quantity(float(info[4]), kilocalorie_permol).convert_to(default_energy_unit).value, 
                 Quantity(float(info[5])).value,
