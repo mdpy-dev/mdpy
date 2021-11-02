@@ -119,7 +119,7 @@ class TestCharmmImproperConstraint:
         assert res[1] == pytest.approx(0)
         assert res[2] == pytest.approx(0)
 
-        force_val = 2 * k * (np.deg2rad(90) - psi0)
+        force_val = - 2 * k * (np.deg2rad(90) - psi0)
         vec_ab = positions[1, :] - positions[0, :]
         theta_abc = get_angle(
             positions[0, :], positions[1, :], positions[2, :]
