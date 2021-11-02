@@ -49,9 +49,10 @@ class ElectrostaticConstraint(Constraint):
                 scaled_position_diff, 
                 self._parent_ensemble.state.pbc_matrix
             ))**2).sum(1))
+            bonded_particles = self._parent_ensemble.topology.particles[id1].bonded_particles
             for index, dist in enumerate(dist_list):
                 id2 = index + id1 + 1
-                if not id2 in self._parent_ensemble.topology.particles[id1].bonded_particles:
+                if not id2 in bonded_particles:
                     # Forces
                     force_val = - self._charges[id1] * self._charges[id2] / k / dist**2
                     force_vec = unwrap_vec(get_unit_vec(
