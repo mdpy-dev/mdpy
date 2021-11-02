@@ -62,7 +62,7 @@ class CharmmImproperConstraint(Constraint):
                 *self._parent_ensemble.state.pbc_info
             )
             # Forces
-            force_val = 2 * k * (psi - psi0)
+            force_val = - 2 * k * (psi - psi0)
             vab = unwrap_vec(
                 self._parent_ensemble.state.positions[id2, :] - 
                 self._parent_ensemble.state.positions[id1, :],
