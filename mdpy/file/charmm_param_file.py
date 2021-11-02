@@ -158,7 +158,6 @@ class CharmmParamFile:
         for info in infos:
             if 'X' in '-'.join(info[:4]):
                 x_include_pairs.append(info)
-                continue
             else:
                 res = [
                     Quantity(float(info[4]), kilocalorie_permol).convert_to(default_energy_unit).value, 
@@ -171,7 +170,10 @@ class CharmmParamFile:
                 ]
                 for key in target_keys:
                     # if not key in self._params['dihedral'].keys():
-                    self._params['dihedral'][key] = res
+                    if not key in self._params['dihedral'].keys():
+                        self._params['dihedral'][key] = [res]
+                    else:
+                        self._params['dihedral'][key].append(res)
         for info in x_include_pairs:
             res = [
                 Quantity(float(info[4]), kilocalorie_permol).convert_to(default_energy_unit).value, 
@@ -186,7 +188,7 @@ class CharmmParamFile:
             ))
             for key in target_keys:
                 if not key in self._params['dihedral'].keys():
-                    self._params['dihedral'][key] = res
+                    self._params['dihedral'][key] = [res]
 
     def _parse_par_improper_block(self, infos):
         for info in infos:
