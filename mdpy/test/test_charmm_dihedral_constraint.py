@@ -85,9 +85,9 @@ class TestCharmmDihedralConstraint:
         assert self.constraint._dihedral_info[0][1] == 1
         assert self.constraint._dihedral_info[0][2] == 2
         assert self.constraint._dihedral_info[0][3] == 3
-        assert self.constraint._dihedral_info[0][4] == Quantity(3, kilocalorie_permol).convert_to(default_energy_unit).value
-        assert self.constraint._dihedral_info[0][5] == Quantity(2).value
-        assert self.constraint._dihedral_info[0][6] == np.deg2rad(Quantity(180).value)
+        assert self.constraint._dihedral_info[0][4][0] == Quantity(3, kilocalorie_permol).convert_to(default_energy_unit).value
+        assert self.constraint._dihedral_info[0][4][1] == Quantity(2).value
+        assert self.constraint._dihedral_info[0][4][2] == np.deg2rad(Quantity(180).value)
 
         # No exception
         self.constraint._check_bound_state() 
@@ -98,7 +98,7 @@ class TestCharmmDihedralConstraint:
         self.constraint.update()
         
         forces = self.constraint.forces
-        k, n, delta = self.params['dihedral']['CA-NY-CPT-CA']
+        k, n, delta = self.params['dihedral']['CA-NY-CPT-CA'][0]
         theta = get_dihedral([0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1], is_angular=False)
         assert forces.sum() == pytest.approx(0)
 
@@ -121,6 +121,6 @@ class TestCharmmDihedralConstraint:
         assert res[2] == pytest.approx(0)
 
         energy = self.constraint.potential_energy
-        k, n, delta = self.params['dihedral']['CA-NY-CPT-CA']
+        k, n, delta = self.params['dihedral']['CA-NY-CPT-CA'][0]
         theta = get_dihedral([0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1])
         assert energy == k * (1 + np.cos(n*theta - delta))
