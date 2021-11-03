@@ -19,7 +19,7 @@ import numpy as np
 import mdpy as md
 from mdpy.unit import *
 
-prot_name = '6PO6'
+prot_name = '1L2Y'
 psf = md.file.PSFFile(os.path.join(data_dir, prot_name + '.psf'))
 pdb = md.file.PDBFile(os.path.join(data_dir, prot_name + '.pdb'))
 
@@ -43,7 +43,7 @@ integrator = md.integrator.VerletIntegrator(Quantity(0.05, femtosecond))
 
 simulation = md.Simulation(ensemble, integrator)
 dump_interval = 20
-sim_step = 5000
+sim_step = 10000
 pdb_dumper = md.dumper.PDBDumper(os.path.join(out_dir, prot_name + '.pdb'), dump_interval)
 log_dumper = md.dumper.LogDumper(os.path.join(out_dir, prot_name + '.log'), dump_interval,
     step=True, sim_time=True, sim_speed=True, cpu_time=True, rest_time=True, total_step=sim_step, 
