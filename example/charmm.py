@@ -19,7 +19,7 @@ import numpy as np
 import mdpy as md
 from mdpy.unit import *
 
-prot_name = '1L2Y'
+prot_name = '6PO6'
 psf = md.file.PSFFile(os.path.join(data_dir, prot_name + '.psf'))
 pdb = md.file.PDBFile(os.path.join(data_dir, prot_name + '.pdb'))
 
