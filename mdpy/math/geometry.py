@@ -10,9 +10,11 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 '''
 
 import numpy as np
+import numba as nb
 from numpy import arccos
 from .pbc import *
 
+@nb.jit()
 def get_unit_vec(vec):
     norm = np.linalg.norm(vec)
     return vec / norm if norm != 0 else vec
@@ -21,9 +23,7 @@ def get_norm_vec(p1, p2, p3):
     p1, p2, p3 = np.array(p1), np.array(p2), np.array(p3)
     v0 = p2 - p1
     v1 = p3 - p1
-    
     norm_vec = np.cross(v0, v1)
-    
     return get_unit_vec(norm_vec)
 
 def get_bond(p1, p2):
