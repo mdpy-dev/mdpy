@@ -10,13 +10,13 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 '''
 
 import numpy as np
-
 from . import Constraint
 from .. import SPATIAL_DIM
 from ..ensemble import Ensemble
 from ..math import *
 from ..unit import *
 
+epsilon0 = EPSILON0.value
 class ElectrostaticConstraint(Constraint):
     def __init__(self, params=None, force_id: int = 0, force_group: int = 0) -> None:
         super().__init__(params, force_id=force_id, force_group=force_group)
@@ -34,7 +34,7 @@ class ElectrostaticConstraint(Constraint):
 
     def update(self):
         self._check_bound_state()
-        k = 4 * np.pi * EPSILON0.value
+        k = 4 * np.pi * epsilon0
         self._forces = np.zeros([self._parent_ensemble.topology.num_particles, SPATIAL_DIM])
         self._potential_energy = 0
         scaled_position = np.dot(
