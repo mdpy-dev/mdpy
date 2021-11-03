@@ -10,7 +10,7 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 '''
 
 import numpy as np
-from numba import njit
+import numba as nb
 from . import Constraint
 from .. import SPATIAL_DIM
 from ..ensemble import Ensemble
@@ -19,6 +19,7 @@ from ..unit import *
 
 RMIN_TO_SIGMA_FACTOR = 2**(-1/6)
 
+@nb.jit()
 def kernel(params, positions, pbc_info):
     forces = np.zeros_like(positions)
     potential_energy = 0
