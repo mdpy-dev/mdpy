@@ -10,6 +10,7 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 '''
 
 import numpy as np
+from numba import njit
 from . import Constraint
 from .. import SPATIAL_DIM
 from ..ensemble import Ensemble
@@ -17,6 +18,22 @@ from ..math import *
 from ..unit import *
 
 RMIN_TO_SIGMA_FACTOR = 2**(-1/6)
+
+def kernel(params, positions, pbc_info):
+    forces = np.zeros_like(positions)
+    potential_energy = 0
+    for param in params:
+        id1, id2, scaling_factor, epsilon, sigma, r = param
+        scaled_r = sigma / r
+        force_val = - (2 * scaled_r**12 - scaled_r**6) / r * epsilon * 24 # Sequence for small number divide small number
+        force_vec = unwrap_vec(get_unit_vec(
+            positions[id2] - positions[id1]
+        ), *pbc_info)
+        force = scaling_factor * force_vec * force_val
+        forces[id1, :] += force
+        forces[id2, :] -= force
+        potential_energy += scaling_factor * 4 * epsilon * (scaled_r**12 - scaled_r**6) 
+    return forces, potential_energy
 
 class CharmmNonbondedConstraint(Constraint):
     def __init__(self, params, cutoff_radius=12, force_id: int = 0, force_group: int = 0) -> None:
@@ -86,9 +103,7 @@ class CharmmNonbondedConstraint(Constraint):
     def update(self):
         self._check_bound_state()
         self._update_neighbor()
-        self._forces = np.zeros([self._parent_ensemble.topology.num_particles, SPATIAL_DIM])
-        self._potential_energy = 0
-        # V(Lennard-Jones) = Eps,i,j[(Rmin,i,j/ri,j)**12 - 2(Rmin,i,j/ri,j)**6]
+        params = []
         for particle in self._parent_ensemble.topology.particles:
             id1 = particle.matrix_id
             particle1 = self._parent_ensemble.topology.particles[id1]
@@ -101,16 +116,11 @@ class CharmmNonbondedConstraint(Constraint):
                         scaling_factor = 1
                         epsilon, sigma = self._mix_params(id1, id2, is_14=False)
                     r = self._neighbor_distance[id1][i]
-                    scaled_r = sigma / r
-                    force_val = - (2 * scaled_r**12 - scaled_r**6) / r * epsilon * 24 # Sequence for small number divide small number
-                    force_vec = unwrap_vec(get_unit_vec(
-                        self._parent_ensemble.state.positions[id2] - 
-                        self._parent_ensemble.state.positions[id1]
-                    ), *self._parent_ensemble.state.pbc_info)
-                    force = scaling_factor * force_vec * force_val
-                    self._forces[id1, :] += force
-                    self._forces[id2, :] -= force
-                    self._potential_energy += scaling_factor * 4 * epsilon * (scaled_r**12 - scaled_r**6) 
+                    params.append([id1, id2, scaling_factor, epsilon, sigma, r])
+        self._forces, self._potential_energy = kernel(
+            params, self._parent_ensemble.state.positions, 
+            self._parent_ensemble.state.pbc_info
+        )
 
     @property
     def num_nonbonded_pairs(self):
