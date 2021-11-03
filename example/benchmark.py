@@ -39,8 +39,9 @@ ensemble.state.set_velocities_to_temperature(Quantity(273, kelvin))
 
 constraint = [i for i in ensemble._constraints if isinstance(i, md.constraint.CharmmNonbondedConstraint)][0]
 
+constraint._update_neighbor()
 constraint.update()
-
+print(Quantity(constraint.potential_energy, default_energy_unit).convert_to(kilocalorie_permol).value)
 # simulation.ensemble.update_energy()
 # simulation.minimize_energy(0.01, max_iterations=250)
 # for constraint in simulation.ensemble.constraints:
