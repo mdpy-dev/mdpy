@@ -11,8 +11,8 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 
 import numpy as np
 from . import Particle
+from .. import NUMPY_FLOAT
 from ..error import *
-from ..math import check_quantity_value
 from ..unit import *
 
 class Topology:
@@ -52,8 +52,8 @@ class Topology:
         self._update_particles_properties()
 
     def _update_particles_properties(self):
-        self._masses = np.zeros([self._num_particles, 1])
-        self._charges = np.zeros([self._num_particles, 1])
+        self._masses = np.zeros([self._num_particles, 1], dtype=NUMPY_FLOAT)
+        self._charges = np.zeros([self._num_particles, 1], dtype=NUMPY_FLOAT)
         for index, particle in enumerate(self._particles):
             self._masses[index, 0] = particle.mass
             self._charges[index, 0] = particle.charge
