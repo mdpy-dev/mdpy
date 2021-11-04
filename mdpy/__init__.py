@@ -9,8 +9,10 @@ SPATIAL_DIM = 3
 
 # Precision setting
 PRECISION = 'SINGLE' # SINGLE or DOUBLE
+
 import numpy as np
 import numba as nb
+
 if PRECISION == 'SINGLE':
     NUMPY_FLOAT = np.float32
     NUMBA_FLOAT= nb.float32
