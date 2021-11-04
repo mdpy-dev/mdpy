@@ -9,6 +9,7 @@ contact : zhenyuwei99@gmail.com
 copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 '''
 
+from cupy.cuda.nvtx import RangePush, RangePop
 import numpy as np
 import numba as nb
 from . import Constraint
@@ -106,6 +107,7 @@ class CharmmNonbondedConstraint(Constraint):
 
     def update(self):
         self._check_bound_state()
+        RangePush('Nonbonded IO')
         self._update_neighbor()
         params = []
         for particle in self._parent_ensemble.topology.particles:
@@ -124,6 +126,7 @@ class CharmmNonbondedConstraint(Constraint):
         params = np.vstack(params)
         int_params = params[:, 0:3].astype(NUMPY_INT)
         float_params = params[:, 3:].astype(NUMPY_FLOAT)
+        RangePop()
         self._forces, self._potential_energy = cpu_kernel(
             int_params, float_params, 
             self._parent_ensemble.state.positions, 
