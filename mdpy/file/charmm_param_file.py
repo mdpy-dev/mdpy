@@ -11,10 +11,11 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 
 import itertools
 import numpy as np
+from .. import NUMPY_FLOAT
 from ..error import *
 from ..unit import *
 
-RMIN_TO_SIGMA_FACTOR = 2**(-1/6)
+RMIN_TO_SIGMA_FACTOR = NUMPY_FLOAT(2**(-1/6))
 USED_BLOCK_LABELS = ['ATOMS', 'BONDS', 'ANGLES', 'DIHEDRALS', 'IMPROPER', 'NONBONDED']
 UNUSED_BLOCK_LABELS = ['CMAP', 'NBFIX', 'HBOND', 'END']
 BLOCK_LABELS = USED_BLOCK_LABELS + UNUSED_BLOCK_LABELS
