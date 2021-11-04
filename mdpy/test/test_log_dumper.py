@@ -38,7 +38,7 @@ class TestLogDumper:
             LogDumper(self.log_file, 100, rest_time=True)
 
     def test_dump(self):
-        prot_name = '1M9Z'
+        prot_name = '6PO6'
         psf = PSFFile(os.path.join(data_dir, prot_name + '.psf'))
         pdb = PDBFile(os.path.join(data_dir, prot_name + '.pdb'))
 
@@ -51,7 +51,7 @@ class TestLogDumper:
         )
 
         ensemble = forcefield.create_ensemble()
-        ensemble.state.set_pbc_matrix(pdb.pbc_matrix)
+        ensemble.state.set_pbc_matrix(np.eye(3) * 10)
         ensemble.state.set_positions(pdb.positions)
         ensemble.state.set_velocities_to_temperature(Quantity(300, kelvin))
 

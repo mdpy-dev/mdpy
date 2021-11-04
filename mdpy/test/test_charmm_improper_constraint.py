@@ -11,6 +11,7 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 
 import pytest, os
 import numpy as np
+from .. import NUMPY_FLOAT
 from ..constraint import CharmmImproperConstraint
 from ..core import Particle, Topology
 from ..ensemble import Ensemble
@@ -81,12 +82,12 @@ class TestCharmmImproperConstraint:
         assert self.constraint.num_impropers == 1
 
         # HE2  HE2  CE2  CE2     3.0            0      0.00   
-        assert self.constraint._improper_info[0][0] == 0
-        assert self.constraint._improper_info[0][1] == 1
-        assert self.constraint._improper_info[0][2] == 2
-        assert self.constraint._improper_info[0][3] == 3
-        assert self.constraint._improper_info[0][4] == Quantity(3, kilocalorie_permol).convert_to(default_energy_unit).value
-        assert self.constraint._improper_info[0][5] == Quantity(0).value
+        assert self.constraint._int_params[0][0] == 0
+        assert self.constraint._int_params[0][1] == 1
+        assert self.constraint._int_params[0][2] == 2
+        assert self.constraint._int_params[0][3] == 3
+        assert self.constraint._float_params[0][0] == Quantity(3, kilocalorie_permol).convert_to(default_energy_unit).value
+        assert self.constraint._float_params[0][1] == Quantity(0).value
 
         # No exception
         self.constraint._check_bound_state()
@@ -99,7 +100,7 @@ class TestCharmmImproperConstraint:
         forces = self.constraint.forces
         k, psi0 = self.params['improper']['HE2-HE2-CE2-CE2']
         psi = get_dihedral([0, 0, 0], [1, 0, 0], [0, 1, 0], [0.5, 0.5, 1])
-        assert forces.sum() == pytest.approx(0)
+        assert forces.sum() == pytest.approx(0, abs=1e-8)
 
         positions = np.array([
             [0, 0, 0], [1, 0, 0], [0, 1, 0], [0.5, 0.5, 1]
@@ -115,9 +116,9 @@ class TestCharmmImproperConstraint:
             np.cross(vec_oc, forces[2, :]) + 
             np.cross(vec_od, forces[3, :])
         )
-        assert res[0] == pytest.approx(0)
-        assert res[1] == pytest.approx(0)
-        assert res[2] == pytest.approx(0)
+        assert res[0] == pytest.approx(0, abs=1e-8)
+        assert res[1] == pytest.approx(0, abs=1e-8)
+        assert res[2] == pytest.approx(0, abs=1e-8)
 
         force_val = - 2 * k * (np.deg2rad(90) - psi0)
         vec_ab = positions[1, :] - positions[0, :]
@@ -125,11 +126,11 @@ class TestCharmmImproperConstraint:
             positions[0, :], positions[1, :], positions[2, :]
         )
         force_a = force_val / (np.linalg.norm(vec_ab) * np.sin(theta_abc)) * get_unit_vec(np.cross(-vec_ab, vec_bc))
-        assert forces[0, 0] == force_a[0]
-        assert forces[0, 1] == force_a[1]
-        assert forces[0, 2] == force_a[2]
+        assert forces[0, 0] == NUMPY_FLOAT(force_a[0])
+        assert forces[0, 1] == NUMPY_FLOAT(force_a[1])
+        assert forces[0, 2] == NUMPY_FLOAT(force_a[2])
 
         energy = self.constraint.potential_energy
         k, psi0 = self.params['improper']['HE2-HE2-CE2-CE2']
         psi = get_dihedral([0, 0, 0], [1, 0, 0], [0, 1, 0], [0.5, 0.5, 1])
-        assert energy == k * (np.deg2rad(90) - psi0)**2
+        assert energy == pytest.approx(NUMPY_FLOAT(k * (np.deg2rad(90) - psi0)**2))
