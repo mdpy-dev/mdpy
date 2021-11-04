@@ -88,7 +88,7 @@ class TestCharmmNonbondedConstraint:
         # CPT    0.000000  -0.099000     1.860000
         self.ensemble.state.set_pbc_matrix(self.pbc)
         assert self.constraint._param_list[0][0] == Quantity(0.07, kilocalorie_permol).convert_to(default_energy_unit).value
-        assert self.constraint._param_list[1][1] == 1.85 * RMIN_TO_SIGMA_FACTOR * 2
+        assert self.constraint._param_list[1][1] == pytest.approx(NUMPY_FLOAT(1.85 * RMIN_TO_SIGMA_FACTOR * 2))
 
         # No exception
         self.constraint._check_bound_state()
@@ -146,4 +146,4 @@ class TestCharmmNonbondedConstraint:
         sigma = (1.9924 + 1.85) * RMIN_TO_SIGMA_FACTOR
         scaled_r = sigma / 1
         energy_ref = 4 * epsilon * (scaled_r**12 - scaled_r**6) 
-        assert energy == pytest.approx(energy_ref)
+        assert energy == pytest.approx(NUMPY_FLOAT(energy_ref), abs=1e-3)
