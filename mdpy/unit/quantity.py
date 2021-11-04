@@ -14,6 +14,7 @@ from copy import deepcopy
 from . import Unit
 from .unit_definition import *
 from ..error import *
+from .. import NUMPY_FLOAT
 
 class Quantity:
     def __init__(self, value, unit: Unit=no_unit) -> None:
@@ -31,19 +32,17 @@ class Quantity:
             self._unit = value.unit
         else:
             if isinstance(value, np.ndarray):
-                self._value = value.astype(np.float64)
+                self._value = value.astype(NUMPY_FLOAT)
             else:        
-                self._value = np.array(value).astype(np.float64)
+                self._value = np.array(value).astype(NUMPY_FLOAT)
                 if self._value.shape == ():
-                    self._value = np.array([self._value.item()])
+                    self._value = np.array([self._value.item()]).astype(NUMPY_FLOAT)
 
             if unit.is_dimension_less():
                 self._value *= unit.relative_value
                 self._unit = deepcopy(no_unit)
             else:
                 self._unit = deepcopy(unit)
-
-        self._in_device = False
         
     def __repr__(self) -> str:
         return (
@@ -55,11 +54,6 @@ class Quantity:
         return (
             '%s %s' %(self._value*self._unit.relative_value, self._unit.base_dimension)
         )
-
-    def to_device(self):
-        # self._value = jax.device_put(self._value)
-        # self._in_device = True
-        pass
 
     def is_dimension_less(self):
         '''
@@ -316,6 +310,9 @@ class Quantity:
 
     @property
     def value(self):
+        self._value = self._value.astype(NUMPY_FLOAT)
+        if self._value.size == 1:
+            return self._value.flatten()[0]
         return self._value
 
     @property
@@ -324,7 +321,4 @@ class Quantity:
 
     @value.setter
     def value(self, val):
-        if self._in_device:
-            raise ChangeDeviceBoundedDataError('mdpy.Quantity object does not support item assignment. JAX arrays are immutable;')
-        else:
-            self._value = np.array(val).astype(np.float64)
+        self._value = np.array(val).astype(NUMPY_FLOAT)
