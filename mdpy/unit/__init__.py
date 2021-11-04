@@ -5,8 +5,8 @@ __copyright__ = "Copyright 2021-2021, Southeast University and Zhenyu Wei"
 __license__ = "GPLv3"
 
 
-UNIT_PRECISION = 1e-8
-QUANTITY_PRECISION = 1e-8
+UNIT_PRECISION = 1e-6
+QUANTITY_PRECISION = 1e-6
 
 from .base_dimension import BaseDimension
 from .unit import Unit
