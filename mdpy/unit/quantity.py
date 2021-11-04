@@ -115,7 +115,8 @@ class Quantity:
                 return np.isclose(self.value, other.value)
             elif self._unit.base_dimension == other.unit.base_dimension:
                 diff = self.value - (other.unit.relative_value / self._unit.relative_value * other.value)
-                return np.abs(diff) < QUANTITY_PRECISION
+                diff = np.abs(diff / self.value)
+                return diff < QUANTITY_PRECISION
             else:
                 raise UnitDimensionDismatchedError(
                     'Quantity in %s can not be compared with quantity in %s'
