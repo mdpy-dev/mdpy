@@ -13,12 +13,12 @@ import pytest
 import numpy as np
 from ..math import *
 from ..error import *
-from .. import NUMPY_FLOAT, NUMPY_INT
+from .. import NUMPY_FLOAT
 
 pbc_matrix = np.diag(np.ones(3)*10).astype(NUMPY_FLOAT)
 pbc_inv = np.linalg.inv(pbc_matrix).astype(NUMPY_FLOAT)
 
-def test_wrap_pbc():
+def test_wrap_positions():
     positions = np.array([
         [0, 0, 0],
         [4, 5, 1],
@@ -32,8 +32,8 @@ def test_wrap_pbc():
     wrapped_positions = wrap_positions(positions, pbc_matrix, pbc_inv)
     assert wrapped_positions[0, 0] == 0
     assert wrapped_positions[3, 0] == -4
-    assert wrapped_positions[1, 1] == 5
-    assert wrapped_positions[2, 2] == -5
+    assert wrapped_positions[1, 1] == -5
+    assert wrapped_positions[2, 2] == 5
     assert wrapped_positions[-1, 1] == -2
     assert wrapped_positions[-2, 0] == 1
     assert wrapped_positions[-2, 2] == 3
