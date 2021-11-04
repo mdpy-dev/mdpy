@@ -13,7 +13,8 @@ import pytest
 import numpy as np
 from ..unit import *
 from ..unit import Quantity
-from ..error import UnitDimensionDismatchedError, ChangeDeviceBoundedDataError
+from ..error import UnitDimensionDismatchedError
+from .. import NUMPY_FLOAT
 
 class TestQuantity:
     def setup(self):
@@ -39,15 +40,11 @@ class TestQuantity:
 
         quantity = Quantity(quantity, meter)
         assert quantity.unit == meter
-        assert quantity[0].value == 1e-10
-        assert quantity.value[0] == 1e-10
+        assert quantity[0].value == NUMPY_FLOAT(1e-10)
+        assert quantity.value[0] == NUMPY_FLOAT(1e-10)
 
     def test_exceptions(self):
         pass
-
-    def test_to_device(self):
-        quantity = Quantity(1, angstrom)
-        assert isinstance(quantity.value, np.ndarray)
 
     def test_indice(self):
         quantity = Quantity([1, 2, 3, 4], angstrom)
@@ -55,13 +52,11 @@ class TestQuantity:
         quantity[0] = Quantity(1, nanometer)
         quantity[0].value == 10
 
-        quantity.to_device()
-
     def test_convert_to(self):
         quantity = Quantity(1) * angstrom
         quantity_m = quantity.convert_to(meter)
         assert quantity_m.unit == meter
-        assert quantity_m.value == 1e-10
+        assert quantity_m.value == NUMPY_FLOAT(1e-10)
 
         with pytest.raises(UnitDimensionDismatchedError):
             quantity.convert_to(second)
@@ -69,7 +64,7 @@ class TestQuantity:
         quantity = Quantity(1) * meter / second
         quantity_an_per_fs = quantity.convert_to(angstrom/femtosecond)
         assert quantity_an_per_fs.unit == (angstrom/femtosecond)
-        assert quantity_an_per_fs.value == 1e-5
+        assert quantity_an_per_fs.value == NUMPY_FLOAT(1e-5)
         with pytest.raises(UnitDimensionDismatchedError):
             quantity.convert_to(second)
 
