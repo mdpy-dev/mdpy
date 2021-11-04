@@ -11,7 +11,7 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 
 import numpy as np
 from .topology import Topology
-from .. import SPATIAL_DIM
+from .. import SPATIAL_DIM, NUMPY_FLOAT
 from ..unit import *
 from ..error import *
 from ..math import *
@@ -22,11 +22,11 @@ class State:
         self._masses = [particle.mass for particle in self._particles]
         self._num_particles = len(self._particles)
         self._matrix_shape = [self._num_particles, SPATIAL_DIM]
-        self._positions = np.zeros(self._matrix_shape)
-        self._velocities = np.zeros(self._matrix_shape)
+        self._positions = np.zeros(self._matrix_shape, dtype=NUMPY_FLOAT)
+        self._velocities = np.zeros(self._matrix_shape, dtype=NUMPY_FLOAT)
 
-        self._pbc_matrix = np.zeros([SPATIAL_DIM, SPATIAL_DIM])
-        self._pbc_inv = np.zeros([SPATIAL_DIM, SPATIAL_DIM])
+        self._pbc_matrix = np.zeros([SPATIAL_DIM, SPATIAL_DIM], dtype=NUMPY_FLOAT)
+        self._pbc_inv = np.zeros([SPATIAL_DIM, SPATIAL_DIM], dtype=NUMPY_FLOAT)
 
     def __repr__(self) -> str:
         return '<mdpy.State object with %d particles at %x>' %(
@@ -59,9 +59,9 @@ class State:
         # The origin define of pbc_matrix is the stack of 3 column vector
         # While in MDPy the position is in shape of n x 3
         # So the scaled position will be Position * PBC instead of PBC * Position as usual
-        self._pbc_matrix = pbc_matrix.T
+        self._pbc_matrix = (pbc_matrix.T).astype(NUMPY_FLOAT)
         self.check_pbc_matrix()
-        self._pbc_inv = np.linalg.inv(self._pbc_matrix)
+        self._pbc_inv = np.linalg.inv(self._pbc_matrix).astype(NUMPY_FLOAT)
     
     def check_pbc_matrix(self):
         if np.linalg.det(self._pbc_matrix) == 0:
@@ -71,11 +71,11 @@ class State:
 
     def set_positions(self, positions: np.ndarray):
         self._check_matrix_shape(positions)
-        self._positions = positions
+        self._positions = positions.astype(NUMPY_FLOAT)
     
     def set_velocities(self, velocities: np.ndarray):
         self._check_matrix_shape(velocities)
-        self._velocities = velocities
+        self._velocities = velocities.astype(NUMPY_FLOAT)
 
     def set_velocities_to_temperature(self, temperature):
         temperature = check_quantity(temperature, default_temperature_unit)
