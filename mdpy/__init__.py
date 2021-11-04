@@ -23,6 +23,7 @@ elif PRECISION == 'DOUBLE':
     NUMBA_FLOAT= nb.float64
     NUMPY_INT = np.int64
     NUMBA_INT = nb.int64
+UNIT_FLOAT = np.float128
 
 # Import
 import mdpy.unit as unit
