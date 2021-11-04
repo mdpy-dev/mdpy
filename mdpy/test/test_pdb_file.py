@@ -55,10 +55,3 @@ class TestPDBFile:
         assert particle_info['position'][0] == pytest.approx(0.337)
         assert particle_info['position'][1] == pytest.approx(-11.334)
         assert particle_info['position'][2] == pytest.approx(11.207)
-
-    def test_create_particles(self):
-        pdb = PDBFile(self.file_path)
-        particles = pdb.create_particles()
-        particles[10].particle_id == 11
-        particles[9].particle_name == 'HB3'
-        particles[8].particle_type == 'H'
