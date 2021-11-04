@@ -11,6 +11,7 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 
 import pytest, os
 import numpy as np
+from .. import NUMPY_FLOAT
 from ..constraint import CharmmDihedralConstraint
 from ..core import Particle, Topology
 from ..ensemble import Ensemble
@@ -81,13 +82,13 @@ class TestCharmmDihedralConstraint:
         assert self.constraint.num_dihedrals == 1
 
         # CA   NY   CPT  CA       3.0000  2   180.00
-        assert self.constraint._dihedral_info[0][0] == 0
-        assert self.constraint._dihedral_info[0][1] == 1
-        assert self.constraint._dihedral_info[0][2] == 2
-        assert self.constraint._dihedral_info[0][3] == 3
-        assert self.constraint._dihedral_info[0][4][0] == Quantity(3, kilocalorie_permol).convert_to(default_energy_unit).value
-        assert self.constraint._dihedral_info[0][4][1] == Quantity(2).value
-        assert self.constraint._dihedral_info[0][4][2] == np.deg2rad(Quantity(180).value)
+        assert self.constraint._int_params[0][0] == 0
+        assert self.constraint._int_params[0][1] == 1
+        assert self.constraint._int_params[0][2] == 2
+        assert self.constraint._int_params[0][3] == 3
+        assert self.constraint._float_params[0][0] == Quantity(3, kilocalorie_permol).convert_to(default_energy_unit).value
+        assert self.constraint._float_params[0][1] == Quantity(2).value
+        assert self.constraint._float_params[0][2] == np.deg2rad(Quantity(180).value)
 
         # No exception
         self.constraint._check_bound_state() 
@@ -100,7 +101,7 @@ class TestCharmmDihedralConstraint:
         forces = self.constraint.forces
         k, n, delta = self.params['dihedral']['CA-NY-CPT-CA'][0]
         theta = get_dihedral([0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1], is_angular=False)
-        assert forces.sum() == pytest.approx(0)
+        assert forces.sum() == pytest.approx(0, abs=1e-8)
 
         positions = np.array([
             [0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]
@@ -116,11 +117,11 @@ class TestCharmmDihedralConstraint:
             np.cross(vec_oc, forces[2, :]) + 
             np.cross(vec_od, forces[3, :])
         )
-        assert res[0] == pytest.approx(0)
-        assert res[1] == pytest.approx(0)
-        assert res[2] == pytest.approx(0)
+        assert res[0] == pytest.approx(0, abs=1e-8)
+        assert res[1] == pytest.approx(0, abs=1e-8)
+        assert res[2] == pytest.approx(0, abs=1e-8)
 
         energy = self.constraint.potential_energy
         k, n, delta = self.params['dihedral']['CA-NY-CPT-CA'][0]
         theta = get_dihedral([0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1])
-        assert energy == k * (1 + np.cos(n*theta - delta))
+        assert energy == pytest.approx(NUMPY_FLOAT(k * (1 + np.cos(n*theta - delta))))
