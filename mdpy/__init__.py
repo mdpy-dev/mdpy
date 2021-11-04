@@ -8,12 +8,19 @@ __license__ = "GPLv3"
 SPATIAL_DIM = 3
 
 # Precision setting
+PRECISION = 'SINGLE' # SINGLE or DOUBLE
 import numpy as np
 import numba as nb
-NUMPY_FLOAT = np.float32
-NUMBA_FLOAT= nb.float32
-NUMPY_INT = np.int32
-NUMBA_INT = nb.int32
+if PRECISION == 'SINGLE':
+    NUMPY_FLOAT = np.float32
+    NUMBA_FLOAT= nb.float32
+    NUMPY_INT = np.int32
+    NUMBA_INT = nb.int32
+elif PRECISION == 'DOUBLE':
+    NUMPY_FLOAT = np.float64
+    NUMBA_FLOAT= nb.float64
+    NUMPY_INT = np.int64
+    NUMBA_INT = nb.int64
 
 # Import
 import mdpy.unit as unit
