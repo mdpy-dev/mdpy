@@ -9,10 +9,11 @@ contact : zhenyuwei99@gmail.com
 copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 '''
 
+import numpy as np
 from copy import deepcopy
-from math import sqrt, isclose
-from . import BaseDimension
+from . import BaseDimension, UNIT_PRECISION
 from ..error import UnitDimensionDismatchedError
+from .. import UNIT_FLOAT
 
 class Unit:
     def __init__(self, base_dimension:BaseDimension, relative_value) -> None:
@@ -25,7 +26,7 @@ class Unit:
             the relative value of ``self`` to the basic unit of ``base_dimension``
         '''        
         self._base_dimension = base_dimension
-        self._relative_value = float(relative_value) # The relative value to the normal unit like angstrom in Length 
+        self._relative_value = UNIT_FLOAT(relative_value) # The relative value to the normal unit like angstrom in Length 
 
     def is_dimension_less(self):
         '''
@@ -60,9 +61,10 @@ class Unit:
         )
 
     def __eq__(self, other) -> bool:
+        err = np.abs((self._relative_value - other.relative_value)/self._relative_value)
         if (
             self._base_dimension == other.base_dimension and
-            isclose(self._relative_value, other.relative_value)
+            err < UNIT_PRECISION
         ):
             return True
         else:
@@ -211,7 +213,7 @@ class Unit:
         '''        
         return Unit(
             self._base_dimension.sqrt(),
-            sqrt(self._relative_value)
+            np.sqrt(self._relative_value)
         )
             
     @property

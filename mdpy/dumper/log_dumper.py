@@ -202,6 +202,6 @@ class LogDumper(Dumper):
             return '--:--:--'
         else:
             cpu_time = Quantity(cpu_time, second).convert_to(day).value
-            sim_time = self._dump_frequency * simulation.integrator.time_step
+            sim_time = simulation.cur_step * simulation.integrator.time_step
             sim_time = Quantity(sim_time, default_time_unit).convert_to(nanosecond).value
             return '%.4f' %(sim_time / cpu_time)

@@ -43,15 +43,12 @@ def get_angle(p1, p2, p3, is_angular=True):
     else:
         return arccos(cos_phi) / np.pi * 180
 
-def get_pbc_angle(p1, p2, p3, pbc_matrix, pbc_inv, is_angular=True):
-    p1, p2, p3 = np.array(p1), np.array(p2), np.array(p3)
+@nb.njit()
+def get_pbc_angle(p1, p2, p3, pbc_matrix, pbc_inv):
     v0 = unwrap_vec(p1 - p2, pbc_matrix, pbc_inv)
     v1 = unwrap_vec(p3 - p2, pbc_matrix, pbc_inv)
     cos_phi = np.dot(v0, v1) / (np.linalg.norm(v0)*np.linalg.norm(v1))
-    if is_angular:
-        return arccos(cos_phi)
-    else:
-        return arccos(cos_phi) / np.pi * 180
+    return arccos(cos_phi)
 
 def get_included_angle(vec1, vec2, is_angular=True):
     cos_phi = np.dot(vec1, vec2) / (np.linalg.norm(vec1)*np.linalg.norm(vec2))
@@ -78,9 +75,8 @@ def get_dihedral(p1, p2, p3, p4, is_angular=True):
     else:
         return np.arctan2(x, y) / np.pi * 180
 
-def get_pbc_dihedral(p1, p2, p3, p4, pbc_matrix, pbc_inv, is_angular=True):
-    p1, p2 = np.array(p1), np.array(p2)
-    p3, p4 = np.array(p3), np.array(p4)
+@nb.njit()
+def get_pbc_dihedral(p1, p2, p3, p4, pbc_matrix, pbc_inv):
     r1 = unwrap_vec(p2 - p1, pbc_matrix, pbc_inv)
     r2 = unwrap_vec(p3 - p2, pbc_matrix, pbc_inv)
     r3 = unwrap_vec(p4 - p3, pbc_matrix, pbc_inv)
@@ -91,7 +87,4 @@ def get_pbc_dihedral(p1, p2, p3, p4, pbc_matrix, pbc_inv, is_angular=True):
     x = np.dot(np.linalg.norm(r2) * r1, n2)
     y = np.dot(n1, n2)
 
-    if is_angular:
-        return np.arctan2(x, y)
-    else:
-        return np.arctan2(x, y) / np.pi * 180
+    return np.arctan2(x, y)

@@ -38,22 +38,6 @@ class PDBFile:
         self._positions = self._reader.ts.positions
         self._pbc_matrix = self._reader.ts.triclinic_dimensions
 
-    def create_particles(self):
-        particles = []
-        for i in range(self._num_particles):
-            particles.append(
-                Particle(
-                    particle_id=self._particle_ids[i], 
-                    particle_type=self._particle_types[i],
-                    particle_name=self._particle_names[i], 
-                    matrix_id=self._matrix_ids[i],
-                    molecule_id=self._molecule_ids[i], 
-                    molecule_type=self._molecule_types[i], 
-                    chain_id=self._chain_ids[i]
-                )
-            )
-        return particles
-
     def get_matrix_id(self, particle_id):
         return self._particle_ids.index(particle_id)
 

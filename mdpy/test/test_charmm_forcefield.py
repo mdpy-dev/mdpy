@@ -20,7 +20,7 @@ data_dir = os.path.join(cur_dir, 'data')
 
 class TestCharmmForcefield:
     def setup(self):
-        self.psf_file_path = os.path.join(data_dir, '1M9Z.psf')
+        self.psf_file_path = os.path.join(data_dir, '6PO6.psf')
 
     def teardown(self):
         pass
