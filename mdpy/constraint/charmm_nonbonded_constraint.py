@@ -12,24 +12,27 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 import numpy as np
 import numba as nb
 from . import Constraint
-from .. import SPATIAL_DIM
+from .. import NUMPY_INT, NUMPY_FLOAT, NUMBA_INT, NUMBA_FLOAT
 from ..ensemble import Ensemble
 from ..math import *
 from ..unit import *
 
 RMIN_TO_SIGMA_FACTOR = 2**(-1/6)
 
-@nb.jit()
-def kernel(params, positions, pbc_info):
+@nb.njit((NUMBA_INT[:, :], NUMBA_FLOAT[:, :], NUMBA_FLOAT[:, :], NUMBA_FLOAT[:, :], NUMBA_FLOAT[:, :]))
+def cpu_kernel(int_params, float_params, positions, pbc_matrix, pbc_inv):
     forces = np.zeros_like(positions)
     potential_energy = 0
-    for param in params:
-        id1, id2, scaling_factor, epsilon, sigma, r = param
+    num_params = int_params.shape[0]
+    for i in range(num_params):
+        id1, id2, scaling_factor = int_params[i, :]
+        epsilon, sigma, r = float_params[i, :]
         scaled_r = sigma / r
         force_val = - (2 * scaled_r**12 - scaled_r**6) / r * epsilon * 24 # Sequence for small number divide small number
-        force_vec = unwrap_vec(get_unit_vec(
-            positions[id2] - positions[id1]
-        ), *pbc_info)
+        force_vec = (unwrap_vec(
+            positions[id2] - positions[id1],
+            pbc_matrix, pbc_inv
+        )) / r
         force = scaling_factor * force_vec * force_val
         forces[id1, :] += force
         forces[id2, :] -= force
@@ -118,9 +121,13 @@ class CharmmNonbondedConstraint(Constraint):
                         epsilon, sigma = self._mix_params(id1, id2, is_14=False)
                     r = self._neighbor_distance[id1][i]
                     params.append([id1, id2, scaling_factor, epsilon, sigma, r])
-        self._forces, self._potential_energy = kernel(
-            params, self._parent_ensemble.state.positions, 
-            self._parent_ensemble.state.pbc_info
+        params = np.vstack(params)
+        int_params = params[:, 0:3].astype(NUMPY_INT)
+        float_params = params[:, 3:].astype(NUMPY_FLOAT)
+        self._forces, self._potential_energy = cpu_kernel(
+            int_params, float_params, 
+            self._parent_ensemble.state.positions, 
+            *self._parent_ensemble.state.pbc_info
         )
 
     @property
