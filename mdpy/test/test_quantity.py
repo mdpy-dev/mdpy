@@ -11,10 +11,11 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 
 import pytest
 import numpy as np
+import math
 from ..unit import *
 from ..unit import Quantity
 from ..error import UnitDimensionDismatchedError
-from .. import NUMPY_FLOAT
+from .. import NUMPY_FLOAT, UNIT_FLOAT
 
 class TestQuantity:
     def setup(self):
@@ -85,14 +86,14 @@ class TestQuantity:
         del quantity
 
     def test_eq(self):
-        assert Quantity(1) * nanometer == Quantity(10) * angstrom
+        assert Quantity(1, nanometer) == Quantity(10, angstrom)
         assert (Quantity([1, 2, 3, 4]) * angstrom == Quantity([.1, .2, .3, .4], nanometer)).all()
 
         with pytest.raises(UnitDimensionDismatchedError):
             Quantity(1) * nanometer == Quantity(1) * nanosecond
 
     def test_ne(self):
-        assert Quantity(1) * nanometer != Quantity(10) * nanometer
+        assert Quantity(1) * nanometer != Quantity(1) * angstrom
         assert Quantity(10) * nanometer != Quantity(10) * angstrom
 
         assert not Quantity(1) * nanometer != Quantity(1) * nanometer
