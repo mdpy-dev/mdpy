@@ -14,7 +14,7 @@ cur_dir = os.path.dirname(os.path.abspath(__file__))
 toppar_dir = os.path.join(cur_dir, '../../data/charmm')
 str_dir = os.path.join(cur_dir, 'str')
 out_dir = os.path.join(cur_dir, 'out')
-sys.path.append(os.path.join(cur_dir, '..'))
+sys.path.append(os.path.join(cur_dir, '../..'))
 import numpy as np
 import mdpy as md
 from mdpy.unit import *
