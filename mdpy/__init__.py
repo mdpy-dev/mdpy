@@ -7,6 +7,14 @@ __license__ = "GPLv3"
 # Constant
 SPATIAL_DIM = 3
 
+# Precision setting
+import numpy as np
+import numba as nb
+NUMPY_FLOAT = np.float32
+NUMBA_FLOAT= nb.float32
+NUMPY_INT = np.int32
+NUMBA_INT = nb.int32
+
 # Import
 import mdpy.unit as unit
 import mdpy.math as math
