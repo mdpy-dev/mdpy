@@ -11,6 +11,7 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 
 import pytest, os
 import numpy as np
+from .. import NUMPY_FLOAT
 from ..constraint import CharmmBondConstraint
 from ..core import Particle, Topology
 from ..ensemble import Ensemble
@@ -80,10 +81,10 @@ class TestCharmmBondConstraint:
         assert self.constraint.num_bonds == 1
 
         # CA   CA    305.000     1.3750
-        assert self.constraint._bond_info[0][0] == 0
-        assert self.constraint._bond_info[0][1] == 3
-        assert self.constraint._bond_info[0][2] == Quantity(305, kilocalorie_permol).convert_to(default_energy_unit).value
-        assert self.constraint._bond_info[0][3] == Quantity(1.3750, angstrom).convert_to(default_length_unit).value
+        assert self.constraint._int_params[0][0] == 0
+        assert self.constraint._int_params[0][1] == 3
+        assert self.constraint._float_params[0][0] == Quantity(305, kilocalorie_permol).convert_to(default_energy_unit).value
+        assert self.constraint._float_params[0][1] == Quantity(1.3750, angstrom).convert_to(default_length_unit).value
         
         # No exception
         self.constraint._check_bound_state()
@@ -110,4 +111,4 @@ class TestCharmmBondConstraint:
         energy = self.constraint.potential_energy
         bond_length = get_bond([0, 0, 0], [0, 0, 1])
         k, r0 = self.params['bond']['CA-CA']
-        assert energy == k * (bond_length - r0)**2
+        assert energy == NUMPY_FLOAT(k * (bond_length - r0)**2)

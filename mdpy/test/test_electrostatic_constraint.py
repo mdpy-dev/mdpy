@@ -68,8 +68,8 @@ class TestElectrostaticConstraint:
         self.ensemble.state.set_pbc_matrix(self.pbc)
         self.ensemble.add_constraints(self.constraint)
         assert self.constraint._parent_ensemble.num_constraints == 1
-        assert self.constraint._charges[0] == 1
-        assert self.constraint._charges[2] == 0
+        assert self.constraint._float_params[0, 0] == 1
+        assert self.constraint._float_params[1, 1] == 0
 
     def test_update(self):
         self.ensemble.state.set_pbc_matrix(self.pbc)

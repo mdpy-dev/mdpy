@@ -10,15 +10,60 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 '''
 
 import numpy as np
+import numba as nb
 from . import Constraint
-from .. import SPATIAL_DIM
+from .. import NUMPY_INT, NUMPY_FLOAT, NUMBA_INT, NUMBA_FLOAT
 from ..ensemble import Ensemble
 from ..math import *
+
+@nb.njit((NUMBA_INT[:, :], NUMBA_FLOAT[:, :], NUMBA_FLOAT[:, :], NUMBA_FLOAT[:, :], NUMBA_FLOAT[:, :]))
+def cpu_kernel(int_params, float_params, positions, pbc_matrix, pbc_inv):
+    forces = np.zeros_like(positions, dtype=NUMPY_FLOAT)
+    potential_energy = NUMPY_FLOAT(0)
+    num_angles = int_params.shape[0]
+    for angle in range(num_angles):
+        id1, id2, id3 = int_params[angle]
+        k, theta0, ku, u0 = float_params[angle, :]
+        r21 = unwrap_vec(
+            positions[id1, :] - positions[id2, :],
+            pbc_matrix, pbc_inv
+        )
+        l21 = np.linalg.norm(r21)
+        r23 = unwrap_vec(
+            positions[id3, :] - positions[id2, :],
+            pbc_matrix, pbc_inv
+        )
+        l23 = np.linalg.norm(r23)
+        cos_theta = np.dot(r21, r23) / (l21 * l23)
+        theta = np.arccos(cos_theta)
+        # Force
+        force_val = - 2 * k * (theta - theta0) 
+        vec_norm = np.cross(r21, r23)
+        force_vec1 = get_unit_vec(np.cross(r21, vec_norm)) / l21
+        force_vec3 = get_unit_vec(np.cross(-r23, vec_norm)) / l23
+        forces[id1, :] += force_val * force_vec1
+        forces[id2, :] -= force_val * (force_vec1 + force_vec3) 
+        forces[id3, :] += force_val * force_vec3
+        # Potential energy
+        potential_energy += k * (theta - theta0)**2
+        # Urey-Bradley
+        r13 = unwrap_vec(
+            positions[id3, :] - positions[id1, :],
+            pbc_matrix, pbc_inv
+        )
+        l13 = np.linalg.norm(r13)
+        force_val = 2 * ku * (l13 - u0)
+        force_vec = r13 / l13 
+        forces[id1, :] += force_val * force_vec
+        forces[id3, :] -= force_val * force_vec
+        potential_energy += ku * (l13 - u0)**2
+    return forces, potential_energy
 
 class CharmmAngleConstraint(Constraint):
     def __init__(self, params, force_id: int = 0, force_group: int = 0) -> None:
         super().__init__(params, force_id=force_id, force_group=force_group)
-        self._angle_info = []
+        self._int_params = []
+        self._float_params = []
         self._num_angles = 0
 
     def __repr__(self) -> str:
@@ -29,7 +74,8 @@ class CharmmAngleConstraint(Constraint):
     def bind_ensemble(self, ensemble: Ensemble):
         self._parent_ensemble = ensemble
         self._force_id = ensemble.constraints.index(self)
-        self._angle_info = []
+        self._int_params = []
+        self._float_params = []
         self._num_angles = 0
         for angle in self._parent_ensemble.topology.angles:
             angle_type = '%s-%s-%s' %(
@@ -37,59 +83,25 @@ class CharmmAngleConstraint(Constraint):
                 self._parent_ensemble.topology.particles[angle[1]].particle_name,
                 self._parent_ensemble.topology.particles[angle[2]].particle_name
             )
-            matrix_id = [
+            self._int_params.append([
                 self._parent_ensemble.topology.particles[angle[0]].matrix_id,
                 self._parent_ensemble.topology.particles[angle[1]].matrix_id,
                 self._parent_ensemble.topology.particles[angle[2]].matrix_id
-            ]
-            self._angle_info.append(matrix_id + self._params[angle_type])
+            ])
+            self._float_params.append(self._params[angle_type])
             self._num_angles += 1
+        self._int_params = np.vstack(self._int_params).astype(NUMPY_INT)
+        self._float_params = np.vstack(self._float_params).astype(NUMPY_FLOAT)
 
     def update(self):
         self._check_bound_state()
         # V(angle) = Ktheta(Theta - Theta0)**2
-        self._forces = np.zeros([self._parent_ensemble.topology.num_particles, SPATIAL_DIM])
-        self._potential_energy = 0
-        for angle_info in self._angle_info:
-            id1, id2, id3, k, theta0 = angle_info[:5]
-            r21 = unwrap_vec(
-                self._parent_ensemble.state.positions[id1, :] -
-                self._parent_ensemble.state.positions[id2, :],
-                *self._parent_ensemble.state.pbc_info
-            )
-            l21 = np.linalg.norm(r21)
-            r23 = unwrap_vec(
-                self._parent_ensemble.state.positions[id3, :] -
-                self._parent_ensemble.state.positions[id2, :],
-                *self._parent_ensemble.state.pbc_info
-            )
-            l23 = np.linalg.norm(r23)
-            cos_theta = np.dot(r21, r23) / (l21 * l23)
-            theta = np.arccos(cos_theta)
-            # Force
-            force_val = - 2 * k * (theta - theta0) 
-            vec_norm = np.cross(r21, r23)
-            force_vec1 = get_unit_vec(np.cross(r21, vec_norm)) / l21
-            force_vec3 = get_unit_vec(np.cross(-r23, vec_norm)) / l23
-            self._forces[id1, :] += force_val * force_vec1
-            self._forces[id2, :] -= force_val * (force_vec1 + force_vec3) 
-            self._forces[id3, :] += force_val * force_vec3
-            # Potential energy
-            self._potential_energy += k * (theta - theta0)**2
-            # Urey-Bradley
-            if len(angle_info) == 3 + 4:
-                ku, u0 = angle_info[5:]
-                r13 = unwrap_vec(
-                    self._parent_ensemble.state.positions[id3, :] -
-                    self._parent_ensemble.state.positions[id1, :],
-                    *self._parent_ensemble.state.pbc_info
-                )
-                l13 = np.linalg.norm(r13)
-                force_val = 2 * ku * (l13 - u0)
-                force_vec = r13 / l13 
-                self._forces[id1, :] += force_val * force_vec
-                self._forces[id3, :] -= force_val * force_vec
-                self._potential_energy += ku * (l13 - u0)**2
+        self._forces, self._potential_energy = cpu_kernel(
+            self._int_params, self._float_params, 
+            self._parent_ensemble.state.positions, 
+            *self._parent_ensemble.state.pbc_info
+        )
+
     @property
     def num_angles(self):
         return self._num_angles
