@@ -1,0 +1,4 @@
+namdEnergy) /home/zhenyuwei/Programs/namd_cpu/namd2 namd-temp.namd 
+
+Frame         Time          Bond          Angle         Dihed         Impr          Elec          VdW           Conf          Nonbond       Total         
+0             0             +113.457      +64.5265      +35.0067      +0.8788       +35.0883      +30.6593      +213.869      +65.7476      +279.616 30
