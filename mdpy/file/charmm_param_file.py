@@ -133,7 +133,9 @@ class CharmmParamFile:
             if len(info) == 5:
                 res = [
                     Quantity(float(info[3]), kilocalorie_permol).convert_to(default_energy_unit).value, 
-                    np.deg2rad(Quantity(float(info[4])).value)
+                    np.deg2rad(Quantity(float(info[4])).value),
+                    Quantity(0, kilocalorie_permol).convert_to(default_energy_unit).value, 
+                    Quantity(0, angstrom).convert_to(default_length_unit).value
                 ]
                 target_keys = self._embed_x_element('%s-%s-%s' %(info[0], info[1], info[2]))
                 target_keys.extend(self._embed_x_element('%s-%s-%s' %(info[2], info[1], info[0])))
