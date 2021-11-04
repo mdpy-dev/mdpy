@@ -128,7 +128,6 @@ class Topology:
                 )
             if matrix_id in matrix_ids[index+1:]:
                 raise ParticleConflictError('Particle appears twice in a topology connection')
-            
 
     def add_bond(self, bond):
         num_particles = len(bond)
