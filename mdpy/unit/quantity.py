@@ -11,10 +11,10 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 
 import numpy as np
 from copy import deepcopy
-from . import Unit
+from . import Unit, QUANTITY_PRECISION
+from .. import NUMPY_FLOAT
 from .unit_definition import *
 from ..error import *
-from .. import NUMPY_FLOAT
 
 class Quantity:
     def __init__(self, value, unit: Unit=no_unit) -> None:
@@ -110,12 +110,12 @@ class Quantity:
             self._value[key] =  Quantity(value, self._unit).value
 
     def __eq__(self, other) -> bool:
-        eq_judge = np.isclose
         if isinstance(other, Quantity):
             if self._unit == other.unit:
-                return eq_judge(self._value, other.value)
+                return np.isclose(self.value, other.value)
             elif self._unit.base_dimension == other.unit.base_dimension:
-                return eq_judge(self._value, other.unit.relative_value / self._unit.relative_value * other.value)
+                diff = self.value - (other.unit.relative_value / self._unit.relative_value * other.value)
+                return np.abs(diff) < QUANTITY_PRECISION
             else:
                 raise UnitDimensionDismatchedError(
                     'Quantity in %s can not be compared with quantity in %s'
@@ -123,9 +123,12 @@ class Quantity:
                 )
         # Value judgement, without relative value like 10*angstrom == 10
         elif self.is_dimension_less():
-            return eq_judge(self._value, other)
+            return np.isclose(self.value, other)
         else:
-            return NotImplemented
+            return NotImplementedError(
+                '== between %s and mdpy.unit.Quantity is not implemented' 
+                %(type(other))
+            )
 
     def __ne__(self, other) -> bool:
         return ~(self == other) # Invert the result
@@ -142,7 +145,10 @@ class Quantity:
                     %(self._unit.base_dimension, other.unit.base_dimension)
                 )
         else:
-            return NotImplemented
+            return NotImplementedError(
+                '< between %s and mdpy.unit.Quantity is not implemented' 
+                %(type(other))
+            )
 
     def __le__(self, other) -> bool:
         if isinstance(other, Quantity):
@@ -156,7 +162,10 @@ class Quantity:
                     %(self._unit.base_dimension, other.unit.base_dimension)
                 )
         else:
-            return NotImplemented
+            return NotImplementedError(
+                '<= between %s and mdpy.unit.Quantity is not implemented' 
+                %(type(other))
+            )
     
     def __gt__(self, other) -> bool:
         if isinstance(other, Quantity):
@@ -170,7 +179,10 @@ class Quantity:
                     %(self._unit.base_dimension, other.unit.base_dimension)
                 )
         else:
-            return NotImplemented
+            return NotImplementedError(
+                '> between %s and mdpy.unit.Quantity is not implemented' 
+                %(type(other))
+            )
 
     def __ge__(self, other) -> bool:
         if isinstance(other, Quantity):
@@ -184,7 +196,10 @@ class Quantity:
                     %(self._unit.base_dimension, other.unit.base_dimension)
                 )
         else:
-            return NotImplemented
+            return NotImplementedError(
+                '>= between %s and mdpy.unit.Quantity is not implemented' 
+                %(type(other))
+            )
 
     def __add__(self, other):
         if isinstance(other, Quantity):
@@ -193,7 +208,10 @@ class Quantity:
                 self._unit + other.unit # Test wether the base dimension is same Or the dimension will be changed in the next step
             )
         else:
-            return NotImplemented
+            return NotImplementedError(
+                '+ between %s and mdpy.unit.Quantity is not implemented' 
+                %(type(other))
+            )
 
     __iadd__ = __add__
     __radd__ = __add__
@@ -205,7 +223,10 @@ class Quantity:
                 self._unit - other.unit # Test wether the base dimension is same Or the dimension will be changed in the next step
             )
         else:
-            return NotImplemented
+            return NotImplementedError(
+                '- between %s and mdpy.unit.Quantity is not implemented' 
+                %(type(other))
+            )
 
     __isub__ = __sub__
 
@@ -216,7 +237,10 @@ class Quantity:
                 other.unit - self._unit
             )
         else:
-            return NotImplemented
+            return NotImplementedError(
+                '- between mdpy.unit.Quantity and %s is not implemented' 
+                %(type(other))
+            )
             
     def __neg__(self):
         return Quantity(
@@ -236,7 +260,10 @@ class Quantity:
                 self._unit * other
             )
         else:
-            return NotImplemented
+            return NotImplementedError(
+                '* between %s and mdpy.unit.Quantity is not implemented' 
+                %(type(other))
+            )
 
     __imul__ = __mul__
     __rmul__ = __mul__
@@ -253,7 +280,10 @@ class Quantity:
                 self._unit / other
             )
         else:
-            return NotImplemented
+            return NotImplementedError(
+                '/ between %s and mdpy.unit.Quantity is not implemented' 
+                %(type(other))
+            )
 
     __itruediv__ = __truediv__
 
@@ -269,7 +299,10 @@ class Quantity:
                 other / self._unit
             )
         else:
-            return NotImplemented
+            return NotImplementedError(
+                '-/between mdpy.unit.Quantity and %s is not implemented' 
+                %(type(other))
+            )
 
     def __pow__(self, value):
         try:
