@@ -11,10 +11,11 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 
 import itertools
 import numpy as np
+from .. import NUMPY_FLOAT
 from ..error import *
 from ..unit import *
 
-RMIN_TO_SIGMA_FACTOR = 2**(-1/6)
+RMIN_TO_SIGMA_FACTOR = NUMPY_FLOAT(2**(-1/6))
 USED_BLOCK_LABELS = ['ATOMS', 'BONDS', 'ANGLES', 'DIHEDRALS', 'IMPROPER', 'NONBONDED']
 UNUSED_BLOCK_LABELS = ['CMAP', 'NBFIX', 'HBOND', 'END']
 BLOCK_LABELS = USED_BLOCK_LABELS + UNUSED_BLOCK_LABELS
@@ -133,7 +134,9 @@ class CharmmParamFile:
             if len(info) == 5:
                 res = [
                     Quantity(float(info[3]), kilocalorie_permol).convert_to(default_energy_unit).value, 
-                    np.deg2rad(Quantity(float(info[4])).value)
+                    np.deg2rad(Quantity(float(info[4])).value),
+                    Quantity(0, kilocalorie_permol).convert_to(default_energy_unit).value, 
+                    Quantity(0, angstrom).convert_to(default_length_unit).value
                 ]
                 target_keys = self._embed_x_element('%s-%s-%s' %(info[0], info[1], info[2]))
                 target_keys.extend(self._embed_x_element('%s-%s-%s' %(info[2], info[1], info[0])))

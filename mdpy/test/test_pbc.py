@@ -13,11 +13,12 @@ import pytest
 import numpy as np
 from ..math import *
 from ..error import *
+from .. import NUMPY_FLOAT
 
-pbc_matrix = np.diag(np.ones(3)*10)
-pbc_inv = np.linalg.inv(pbc_matrix)
+pbc_matrix = np.diag(np.ones(3)*10).astype(NUMPY_FLOAT)
+pbc_inv = np.linalg.inv(pbc_matrix).astype(NUMPY_FLOAT)
 
-def test_wrap_pbc():
+def test_wrap_positions():
     positions = np.array([
         [0, 0, 0],
         [4, 5, 1],
@@ -31,8 +32,8 @@ def test_wrap_pbc():
     wrapped_positions = wrap_positions(positions, pbc_matrix, pbc_inv)
     assert wrapped_positions[0, 0] == 0
     assert wrapped_positions[3, 0] == -4
-    assert wrapped_positions[1, 1] == 5
-    assert wrapped_positions[2, 2] == -5
+    assert wrapped_positions[1, 1] == -5
+    assert wrapped_positions[2, 2] == 5
     assert wrapped_positions[-1, 1] == -2
     assert wrapped_positions[-2, 0] == 1
     assert wrapped_positions[-2, 2] == 3
@@ -41,22 +42,20 @@ def test_wrap_pbc():
         wrap_positions(np.array([16, 0, 1]), pbc_matrix, pbc_inv)
 
 def test_unwrap_vec():
-    vec = np.array([0, 6, 1])
+    vec = np.array([0, 6, 1]).astype(NUMPY_FLOAT)
     unwrapped_vec = unwrap_vec(vec, pbc_matrix, pbc_inv)
     assert unwrapped_vec[0] == 0
     assert unwrapped_vec[1] == pytest.approx(-4)
     assert unwrapped_vec[2] == 1
 
-    vec = np.array([
-        [0, 6, 1], [-5, -6, 9]
-    ])
+    vec = np.array([-5, -6, 9]).astype(NUMPY_FLOAT)
     unwrapped_vec = unwrap_vec(vec, pbc_matrix, pbc_inv)
-    assert unwrapped_vec[1, 0] == -5
-    assert unwrapped_vec[1, 1] == pytest.approx(4)
-    assert unwrapped_vec[1, 2] == pytest.approx(-1)
+    assert unwrapped_vec[0] == -5
+    assert unwrapped_vec[1] == pytest.approx(4)
+    assert unwrapped_vec[2] == pytest.approx(-1)
 
-    p1 = np.array([0, 0, 0])
-    p2 = np.array([0, 1, 0])
+    p1 = np.array([0, 0, 0]).astype(NUMPY_FLOAT)
+    p2 = np.array([0, 1, 0]).astype(NUMPY_FLOAT)
     vec1 = p1 - p2
     vec2 = unwrap_vec(p1 + 10 - p2, pbc_matrix, pbc_inv)
     vec3 = unwrap_vec(p1 - 10 - p2, pbc_matrix, pbc_inv)

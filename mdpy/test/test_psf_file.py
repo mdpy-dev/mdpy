@@ -10,6 +10,7 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 '''
 
 import pytest, os
+from .. import NUMPY_FLOAT
 from ..file import PSFFile
 
 cur_dir = os.path.dirname(os.path.abspath(__file__))
@@ -32,7 +33,7 @@ class TestPSFFile:
         assert psf.molecule_types[21] == 'LEU'
         assert psf.chain_ids[1616] == 'WT1'
         assert psf._charges[2] == pytest.approx(0.33)
-        assert psf._masses[5] == 1.008
+        assert psf._masses[5] == NUMPY_FLOAT(1.008)
 
     def test_create_topology(self):
         psf = PSFFile(self.file_path)

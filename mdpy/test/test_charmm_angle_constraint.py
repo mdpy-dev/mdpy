@@ -11,6 +11,7 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 
 import pytest, os
 import numpy as np
+from .. import NUMPY_FLOAT
 from ..constraint import CharmmAngleConstraint
 from ..core import Particle, Topology
 from ..ensemble import Ensemble
@@ -79,11 +80,11 @@ class TestCharmmAngleConstraint:
         assert self.constraint._parent_ensemble.num_constraints == 1
         assert self.constraint.num_angles == 1
 
-        assert self.constraint._angle_info[0][0] == 0
-        assert self.constraint._angle_info[0][1] == 1
-        assert self.constraint._angle_info[0][2] == 3
-        assert self.constraint._angle_info[0][3] == Quantity(40, kilocalorie_permol).convert_to(default_energy_unit).value
-        assert self.constraint._angle_info[0][4] == np.deg2rad(Quantity(120).value)
+        assert self.constraint._int_params[0][0] == 0
+        assert self.constraint._int_params[0][1] == 1
+        assert self.constraint._int_params[0][2] == 3
+        assert self.constraint._float_params[0][0] == Quantity(40, kilocalorie_permol).convert_to(default_energy_unit).value
+        assert self.constraint._float_params[0][1] == np.deg2rad(Quantity(120).value)
 
         # No exception
         self.constraint._check_bound_state()
@@ -112,16 +113,16 @@ class TestCharmmAngleConstraint:
         assert forces[3, 0] == pytest.approx(force2[0])
         assert forces[3, 1] == pytest.approx(force2[1])
         assert forces[3, 2] == pytest.approx(force2[2])
-        assert forces.sum() == pytest.approx(0, abs=1e-10)
+        assert forces.sum() == pytest.approx(0, abs=1e-8)
 
         vec1 = np.array([-1, 0, 1])
         torque = np.cross(vec0, forces[0, :]) + np.cross(vec1, forces[3, :])
-        assert torque[0] == pytest.approx(0, abs=1e-11)
-        assert torque[1] == pytest.approx(0, abs=1e-11)
-        assert torque[2] == pytest.approx(0, abs=1e-11)
+        assert torque[0] == pytest.approx(0, abs=1e-8)
+        assert torque[1] == pytest.approx(0, abs=1e-8)
+        assert torque[2] == pytest.approx(0, abs=1e-8)
 
         energy = self.constraint.potential_energy
         k, theta0, ku, u0 = self.params['angle']['CA-CA-CA']
         theta = get_angle([0, 0, 0], [1, 0, 0], [0, 0, 1])
-        assert energy == k * (theta - theta0)**2 + ku * (1 - u0)**2
+        assert energy == pytest.approx(NUMPY_FLOAT(k * (theta - theta0)**2 + ku * (1 - u0)**2))
         
