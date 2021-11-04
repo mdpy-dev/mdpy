@@ -10,15 +10,40 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 '''
 
 import numpy as np
+import numba as nb
 from . import Constraint
-from .. import SPATIAL_DIM
+from .. import NUMPY_INT, NUMPY_FLOAT, NUMBA_INT, NUMBA_FLOAT
 from ..ensemble import Ensemble
 from ..math import *
+
+@nb.njit((NUMBA_INT[:, :], NUMBA_FLOAT[:, :], NUMBA_FLOAT[:, :], NUMBA_FLOAT[:, :], NUMBA_FLOAT[:, :]))
+def cpu_kernel(int_params, float_params, positions, pbc_matrix, pbc_inv):
+    forces = np.zeros_like(positions, dtype=NUMPY_FLOAT)
+    potential_energy = NUMPY_FLOAT(0)
+    num_params = int_params.shape[0]
+    for bond in range(num_params):
+        id1, id2, = int_params[bond, :]
+        k, r0 = float_params[bond, :]
+        force_vec = unwrap_vec(
+            positions[id2, :] - positions[id1, :], 
+            pbc_matrix, pbc_inv
+        )
+        r = np.linalg.norm(force_vec)
+        force_vec /= r
+        # Forces
+        force_val = 2 * k * (r - r0)
+        force = force_val * force_vec
+        forces[id1, :] += force
+        forces[id2, :] -= force
+        # Potential energy
+        potential_energy += k * (r - r0)**2
+    return forces, potential_energy
 
 class CharmmBondConstraint(Constraint):
     def __init__(self, params, force_id: int = 0, force_group: int = 0) -> None:
         super().__init__(params, force_id=force_id, force_group=force_group)
-        self._bond_info = []
+        self._int_params = []
+        self._float_params = []
         self._num_bonds = 0
 
     def __repr__(self) -> str:
@@ -29,39 +54,30 @@ class CharmmBondConstraint(Constraint):
     def bind_ensemble(self, ensemble: Ensemble):
         self._parent_ensemble = ensemble
         self._force_id = ensemble.constraints.index(self)
-        self._bond_info = []
+        self._int_params = []
+        self._float_params = []
         self._num_bonds = 0
         for bond in self._parent_ensemble.topology.bonds:
             bond_type = '%s-%s' %(
                 self._parent_ensemble.topology.particles[bond[0]].particle_name,
                 self._parent_ensemble.topology.particles[bond[1]].particle_name
             )
-            matrix_id = [
+            self._int_params.append([
                 self._parent_ensemble.topology.particles[bond[0]].matrix_id,
                 self._parent_ensemble.topology.particles[bond[1]].matrix_id
-            ]
-            self._bond_info.append(matrix_id + self._params[bond_type])
+            ])
+            self._float_params.append(self._params[bond_type])
             self._num_bonds += 1
+        self._int_params = np.vstack(self._int_params).astype(NUMPY_INT)
+        self._float_params = np.vstack(self._float_params).astype(NUMPY_FLOAT)
 
     def update(self):
         self._check_bound_state()
-        self._forces = np.zeros([self._parent_ensemble.topology.num_particles, SPATIAL_DIM])
-        self._potential_energy = 0
-        for bond_info in self._bond_info:
-            id1, id2, k, r0 = bond_info
-            force_vec = unwrap_vec(
-                self._parent_ensemble.state.positions[id2, :] - 
-                self._parent_ensemble.state.positions[id1, :]
-            , *self._parent_ensemble.state.pbc_info)
-            r = np.linalg.norm(force_vec)
-            force_vec /= r
-            # Forces
-            force_val = 2 * k * (r - r0)
-            force = force_val * force_vec
-            self._forces[id1, :] += force
-            self._forces[id2, :] -= force
-            # Potential energy
-            self._potential_energy += k * (r - r0)**2
+        self._forces, self._potential_energy = cpu_kernel(
+            self._int_params, self._float_params, 
+            self._parent_ensemble.state.positions, 
+            *self._parent_ensemble.state.pbc_info
+        )
 
     @property
     def num_bonds(self):
