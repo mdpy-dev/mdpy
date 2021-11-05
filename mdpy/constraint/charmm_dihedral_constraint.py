@@ -17,7 +17,6 @@ from ..ensemble import Ensemble
 from ..math import *
 from ..unit import *
 
-@nb.njit((NUMBA_INT[:, :], NUMBA_FLOAT[:, :], NUMBA_FLOAT[:, ::1], NUMBA_FLOAT[:, ::1], NUMBA_FLOAT[:, ::1]))
 def cpu_kernel(int_params, float_params, positions, pbc_matrix, pbc_inv):
     forces = np.zeros_like(positions, dtype=NUMPY_FLOAT)
     potential_energy = NUMPY_FLOAT(0)
@@ -62,6 +61,9 @@ class CharmmDihedralConstraint(Constraint):
         self._int_params = []
         self._float_params = []
         self._num_dihedrals = 0
+        self._kernel = nb.njit(
+            (NUMBA_INT[:, :], NUMBA_FLOAT[:, :], NUMBA_FLOAT[:, ::1], NUMBA_FLOAT[:, ::1], NUMBA_FLOAT[:, ::1])
+        )(cpu_kernel)
 
     def __repr__(self) -> str:
         return '<mdpy.constraint.CharmmDihedralConstraint object>'
@@ -96,7 +98,7 @@ class CharmmDihedralConstraint(Constraint):
     def update(self):
         self._check_bound_state()
         # V(dihedral) = Kchi(1 + cos(n(chi) - delta))
-        self._forces, self._potential_energy = cpu_kernel(
+        self._forces, self._potential_energy = self._kernel(
             self._int_params, self._float_params, 
             self._parent_ensemble.state.positions, 
             *self._parent_ensemble.state.pbc_info
