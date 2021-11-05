@@ -11,7 +11,7 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 
 import numpy as np
 import numba as nb
-from .. import NUMPY_INT, NUMPY_FLOAT, NUMBA_INT, NUMBA_FLOAT
+from .. import env
 from . import Constraint
 from ..ensemble import Ensemble
 from ..math import *
@@ -25,7 +25,7 @@ class ElectrostaticConstraint(Constraint):
         self._int_params = []
         self._float_params = []
         self._kernel = nb.njit(
-            (NUMBA_INT[:, :], NUMBA_FLOAT[:, :], NUMBA_FLOAT[:, ::1], NUMBA_FLOAT[:, ::1], NUMBA_FLOAT[:, ::1])
+            (env.NUMBA_INT[:, :], env.NUMBA_FLOAT[:, :], env.NUMBA_FLOAT[:, ::1], env.NUMBA_FLOAT[:, ::1], env.NUMBA_FLOAT[:, ::1])
         )(self.kernel)
 
     def __repr__(self) -> str:
@@ -45,8 +45,8 @@ class ElectrostaticConstraint(Constraint):
                 if not id2 in particle1.bonded_particles:
                     self._int_params.append([id1, id2])
                     self._float_params.append(self._parent_ensemble.topology.charges[[id1, id2], 0])
-        self._int_params = np.vstack(self._int_params).astype(NUMPY_INT)
-        self._float_params = np.vstack(self._float_params).astype(NUMPY_FLOAT)
+        self._int_params = np.vstack(self._int_params).astype(env.NUMPY_INT)
+        self._float_params = np.vstack(self._float_params).astype(env.NUMPY_FLOAT)
 
     @staticmethod
     def kernel(int_params, float_params, positions, pbc_matrix, pbc_inv):

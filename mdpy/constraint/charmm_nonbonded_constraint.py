@@ -13,7 +13,7 @@ from cupy.cuda.nvtx import RangePush, RangePop
 import numpy as np
 import numba as nb
 from . import Constraint
-from .. import NUMPY_INT, NUMPY_FLOAT, NUMBA_INT, NUMBA_FLOAT
+from .. import env
 from ..ensemble import Ensemble
 from ..math import *
 from ..unit import *
@@ -27,7 +27,7 @@ class CharmmNonbondedConstraint(Constraint):
         self._neighbor_distance = []
         self._num_nonbonded_pairs = 0
         self._kernel = nb.njit(
-            (NUMBA_INT[:, :], NUMBA_FLOAT[:, :], NUMBA_FLOAT[:, ::1], NUMBA_FLOAT[:, ::1], NUMBA_FLOAT[:, ::1])
+            (env.NUMBA_INT[:, :], env.NUMBA_FLOAT[:, :], env.NUMBA_FLOAT[:, ::1], env.NUMBA_FLOAT[:, ::1], env.NUMBA_FLOAT[:, ::1])
         )(self.kernel)
 
     def __repr__(self) -> str:
@@ -125,8 +125,8 @@ class CharmmNonbondedConstraint(Constraint):
                     r = self._neighbor_distance[id1][i]
                     params.append([id1, id2, scaling_factor, epsilon, sigma, r])
         params = np.vstack(params)
-        int_params = params[:, 0:3].astype(NUMPY_INT)
-        float_params = params[:, 3:].astype(NUMPY_FLOAT)
+        int_params = params[:, 0:3].astype(env.NUMPY_INT)
+        float_params = params[:, 3:].astype(env.NUMPY_FLOAT)
         RangePop()
         self._forces, self._potential_energy = self._kernel(
             int_params, float_params, 
