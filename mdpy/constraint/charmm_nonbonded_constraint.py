@@ -13,32 +13,10 @@ from cupy.cuda.nvtx import RangePush, RangePop
 import numpy as np
 import numba as nb
 from . import Constraint
-from .. import NUMPY_INT, NUMPY_FLOAT, NUMBA_INT, NUMBA_FLOAT
+from .. import env
 from ..ensemble import Ensemble
 from ..math import *
 from ..unit import *
-
-RMIN_TO_SIGMA_FACTOR = 2**(-1/6)
-
-@nb.njit((NUMBA_INT[:, :], NUMBA_FLOAT[:, :], NUMBA_FLOAT[:, :], NUMBA_FLOAT[:, :], NUMBA_FLOAT[:, :]))
-def cpu_kernel(int_params, float_params, positions, pbc_matrix, pbc_inv):
-    forces = np.zeros_like(positions)
-    potential_energy = 0
-    num_params = int_params.shape[0]
-    for i in range(num_params):
-        id1, id2, scaling_factor = int_params[i, :]
-        epsilon, sigma, r = float_params[i, :]
-        scaled_r = sigma / r
-        force_val = - (2 * scaled_r**12 - scaled_r**6) / r * epsilon * 24 # Sequence for small number divide small number
-        force_vec = (unwrap_vec(
-            positions[id2] - positions[id1],
-            pbc_matrix, pbc_inv
-        )) / r
-        force = scaling_factor * force_vec * force_val
-        forces[id1, :] += force
-        forces[id2, :] -= force
-        potential_energy += scaling_factor * 4 * epsilon * (scaled_r**12 - scaled_r**6) 
-    return forces, potential_energy
 
 class CharmmNonbondedConstraint(Constraint):
     def __init__(self, params, cutoff_radius=12, force_id: int = 0, force_group: int = 0) -> None:
@@ -48,6 +26,9 @@ class CharmmNonbondedConstraint(Constraint):
         self._neighbor_list = []
         self._neighbor_distance = []
         self._num_nonbonded_pairs = 0
+        self._kernel = nb.njit(
+            (env.NUMBA_INT[:, :], env.NUMBA_FLOAT[:, :], env.NUMBA_FLOAT[:, ::1], env.NUMBA_FLOAT[:, ::1], env.NUMBA_FLOAT[:, ::1])
+        )(self.kernel)
 
     def __repr__(self) -> str:
         return '<mdpy.constraint.CharmmNonbondedConstraint object>'
@@ -105,6 +86,26 @@ class CharmmNonbondedConstraint(Constraint):
             self._neighbor_list.append(index + particle.matrix_id + 1)
             self._neighbor_distance.append(dist[index])
 
+    @staticmethod
+    def kernel(int_params, float_params, positions, pbc_matrix, pbc_inv):
+        forces = np.zeros_like(positions)
+        potential_energy = forces[0, 0]
+        num_params = int_params.shape[0]
+        for i in range(num_params):
+            id1, id2, scaling_factor = int_params[i, :]
+            epsilon, sigma, r = float_params[i, :]
+            scaled_r = sigma / r
+            force_val = - (2 * scaled_r**12 - scaled_r**6) / r * epsilon * 24 # Sequence for small number divide small number
+            force_vec = (unwrap_vec(
+                positions[id2] - positions[id1],
+                pbc_matrix, pbc_inv
+            )) / r
+            force = scaling_factor * force_vec * force_val
+            forces[id1, :] += force
+            forces[id2, :] -= force
+            potential_energy += scaling_factor * 4 * epsilon * (scaled_r**12 - scaled_r**6) 
+        return forces, potential_energy
+
     def update(self):
         self._check_bound_state()
         RangePush('Nonbonded IO')
@@ -124,10 +125,10 @@ class CharmmNonbondedConstraint(Constraint):
                     r = self._neighbor_distance[id1][i]
                     params.append([id1, id2, scaling_factor, epsilon, sigma, r])
         params = np.vstack(params)
-        int_params = params[:, 0:3].astype(NUMPY_INT)
-        float_params = params[:, 3:].astype(NUMPY_FLOAT)
+        int_params = params[:, 0:3].astype(env.NUMPY_INT)
+        float_params = params[:, 3:].astype(env.NUMPY_FLOAT)
         RangePop()
-        self._forces, self._potential_energy = cpu_kernel(
+        self._forces, self._potential_energy = self._kernel(
             int_params, float_params, 
             self._parent_ensemble.state.positions, 
             *self._parent_ensemble.state.pbc_info
