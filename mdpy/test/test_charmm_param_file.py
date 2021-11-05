@@ -11,7 +11,7 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 
 import pytest, os
 import numpy as np
-from .. import NUMPY_FLOAT
+from .. import env
 from ..unit import *
 from ..error import *
 from ..file import CharmmParamFile
@@ -68,7 +68,7 @@ class TestCharmmParamFile:
         assert charmm.params['bond']['CC-CP1'][1] == Quantity(1.49, angstrom).convert_to(default_length_unit).value # Test for opposite order
         # Angle
         assert charmm.params['angle']['NH2-CT1-HB1'][0] == Quantity(38, kilocalorie_permol).convert_to(default_energy_unit).value
-        assert charmm.params['angle']['CPH1-CPH1-CT2'][1] == NUMPY_FLOAT(np.deg2rad(130))
+        assert charmm.params['angle']['CPH1-CPH1-CT2'][1] == env.NUMPY_FLOAT(np.deg2rad(130))
         assert charmm.params['angle']['NH2-CT1-HB1'][2] == Quantity(50, kilocalorie_permol).convert_to(default_energy_unit).value
         assert charmm.params['angle']['CAI-CA-HP'][3] == Quantity(2.15250, angstrom).convert_to(default_length_unit).value
         # Dihedral
