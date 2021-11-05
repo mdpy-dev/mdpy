@@ -11,7 +11,7 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 
 import pytest, os
 import numpy as np
-from .. import NUMPY_FLOAT
+from .. import env
 from ..constraint import CharmmBondConstraint
 from ..core import Particle, Topology
 from ..ensemble import Ensemble
@@ -111,4 +111,4 @@ class TestCharmmBondConstraint:
         energy = self.constraint.potential_energy
         bond_length = get_bond([0, 0, 0], [0, 0, 1])
         k, r0 = self.params['bond']['CA-CA']
-        assert energy == pytest.approx(NUMPY_FLOAT(k * (bond_length - r0)**2))
+        assert energy == pytest.approx(env.NUMPY_FLOAT(k * (bond_length - r0)**2))
