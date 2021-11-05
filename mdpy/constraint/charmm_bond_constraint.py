@@ -16,7 +16,7 @@ from .. import NUMPY_INT, NUMPY_FLOAT, NUMBA_INT, NUMBA_FLOAT
 from ..ensemble import Ensemble
 from ..math import *
 
-@nb.njit((NUMBA_INT[:, :], NUMBA_FLOAT[:, :], NUMBA_FLOAT[:, :], NUMBA_FLOAT[:, :], NUMBA_FLOAT[:, :]))
+@nb.njit((NUMBA_INT[:, :], NUMBA_FLOAT[:, :], NUMBA_FLOAT[:, ::1], NUMBA_FLOAT[:, ::1], NUMBA_FLOAT[:, ::1]))
 def cpu_kernel(int_params, float_params, positions, pbc_matrix, pbc_inv):
     forces = np.zeros_like(positions, dtype=NUMPY_FLOAT)
     potential_energy = NUMPY_FLOAT(0)
