@@ -25,8 +25,8 @@ class State:
         self._positions = np.zeros(self._matrix_shape, dtype=NUMPY_FLOAT)
         self._velocities = np.zeros(self._matrix_shape, dtype=NUMPY_FLOAT)
 
-        self._pbc_matrix = np.zeros([SPATIAL_DIM, SPATIAL_DIM], dtype=NUMPY_FLOAT)
-        self._pbc_inv = np.zeros([SPATIAL_DIM, SPATIAL_DIM], dtype=NUMPY_FLOAT)
+        self._pbc_matrix = np.zeros([SPATIAL_DIM, SPATIAL_DIM], dtype=NUMPY_FLOAT, order='C')
+        self._pbc_inv = np.zeros([SPATIAL_DIM, SPATIAL_DIM], dtype=NUMPY_FLOAT, order='C')
 
     def __repr__(self) -> str:
         return '<mdpy.State object with %d particles at %x>' %(
@@ -59,9 +59,9 @@ class State:
         # The origin define of pbc_matrix is the stack of 3 column vector
         # While in MDPy the position is in shape of n x 3
         # So the scaled position will be Position * PBC instead of PBC * Position as usual
-        self._pbc_matrix = (pbc_matrix.T).astype(NUMPY_FLOAT)
+        self._pbc_matrix = np.ascontiguousarray(pbc_matrix.T, dtype=NUMPY_FLOAT)
         self.check_pbc_matrix()
-        self._pbc_inv = np.linalg.inv(self._pbc_matrix).astype(NUMPY_FLOAT)
+        self._pbc_inv = np.ascontiguousarray(np.linalg.inv(self._pbc_matrix), dtype=NUMPY_FLOAT)
     
     def check_pbc_matrix(self):
         if np.linalg.det(self._pbc_matrix) == 0:
