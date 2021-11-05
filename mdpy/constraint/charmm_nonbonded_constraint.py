@@ -18,9 +18,6 @@ from ..ensemble import Ensemble
 from ..math import *
 from ..unit import *
 
-RMIN_TO_SIGMA_FACTOR = 2**(-1/6)
-
-@nb.njit((NUMBA_INT[:, :], NUMBA_FLOAT[:, :], NUMBA_FLOAT[:, ::1], NUMBA_FLOAT[:, ::1], NUMBA_FLOAT[:, ::1]))
 def cpu_kernel(int_params, float_params, positions, pbc_matrix, pbc_inv):
     forces = np.zeros_like(positions)
     potential_energy = 0
@@ -48,6 +45,9 @@ class CharmmNonbondedConstraint(Constraint):
         self._neighbor_list = []
         self._neighbor_distance = []
         self._num_nonbonded_pairs = 0
+        self._kernel = nb.njit(
+            (NUMBA_INT[:, :], NUMBA_FLOAT[:, :], NUMBA_FLOAT[:, ::1], NUMBA_FLOAT[:, ::1], NUMBA_FLOAT[:, ::1])
+        )(cpu_kernel)
 
     def __repr__(self) -> str:
         return '<mdpy.constraint.CharmmNonbondedConstraint object>'
@@ -127,7 +127,7 @@ class CharmmNonbondedConstraint(Constraint):
         int_params = params[:, 0:3].astype(NUMPY_INT)
         float_params = params[:, 3:].astype(NUMPY_FLOAT)
         RangePop()
-        self._forces, self._potential_energy = cpu_kernel(
+        self._forces, self._potential_energy = self._kernel(
             int_params, float_params, 
             self._parent_ensemble.state.positions, 
             *self._parent_ensemble.state.pbc_info
