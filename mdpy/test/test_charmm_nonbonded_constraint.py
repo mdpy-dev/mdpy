@@ -11,8 +11,7 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 
 import pytest, os
 import numpy as np
-
-from .. import NUMPY_FLOAT
+from .. import env
 from ..constraint import CharmmNonbondedConstraint
 from ..core import Particle, Topology
 from ..ensemble import Ensemble
@@ -47,15 +46,15 @@ class TestCharmmNonbondedConstraint:
             particle_name='CA', molecule_type='ASN',
             mass=12, charge=0
         )
-        self.pbc = np.diag(np.ones(3) * 30).astype(NUMPY_FLOAT)
+        self.pbc = np.diag(np.ones(3) * 30).astype(env.NUMPY_FLOAT)
         t = Topology()
         t.add_particles([p1, p2, p3, p4])
         self.p = np.array([
             [0, 0, 0], [0, 10, 0], [0, 21, 0], [0, 11, 0]
-        ]).astype(NUMPY_FLOAT)
+        ]).astype(env.NUMPY_FLOAT)
         velocities = np.array([
             [0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 1, 0]
-        ]).astype(NUMPY_FLOAT)
+        ]).astype(env.NUMPY_FLOAT)
         self.ensemble = Ensemble(t)
         self.ensemble.state.set_positions(self.p)
         self.ensemble.state.set_velocities(velocities)
@@ -88,7 +87,7 @@ class TestCharmmNonbondedConstraint:
         # CPT    0.000000  -0.099000     1.860000
         self.ensemble.state.set_pbc_matrix(self.pbc)
         assert self.constraint._param_list[0][0] == Quantity(0.07, kilocalorie_permol).convert_to(default_energy_unit).value
-        assert self.constraint._param_list[1][1] == pytest.approx(NUMPY_FLOAT(1.85 * RMIN_TO_SIGMA_FACTOR * 2))
+        assert self.constraint._param_list[1][1] == pytest.approx(env.NUMPY_FLOAT(1.85 * RMIN_TO_SIGMA_FACTOR * 2))
 
         # No exception
         self.constraint._check_bound_state()
@@ -146,4 +145,4 @@ class TestCharmmNonbondedConstraint:
         sigma = (1.9924 + 1.85) * RMIN_TO_SIGMA_FACTOR
         scaled_r = sigma / 1
         energy_ref = 4 * epsilon * (scaled_r**12 - scaled_r**6) 
-        assert energy == pytest.approx(NUMPY_FLOAT(energy_ref), abs=1e-3)
+        assert energy == pytest.approx(env.NUMPY_FLOAT(energy_ref), abs=1e-3)

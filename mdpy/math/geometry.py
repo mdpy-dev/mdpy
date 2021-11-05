@@ -12,9 +12,10 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 import numpy as np
 import numba as nb
 from numpy import arccos
+from .. import env
 from .pbc import *
 
-@nb.jit()
+@nb.njit(env.NUMBA_FLOAT[::1](env.NUMBA_FLOAT[::1]))
 def get_unit_vec(vec):
     norm = np.linalg.norm(vec)
     return vec / norm if norm != 0 else vec
@@ -23,7 +24,7 @@ def get_norm_vec(p1, p2, p3):
     p1, p2, p3 = np.array(p1), np.array(p2), np.array(p3)
     v0 = p2 - p1
     v1 = p3 - p1
-    norm_vec = np.cross(v0, v1)
+    norm_vec = np.cross(v0, v1).astype(env.NUMPY_FLOAT)
     return get_unit_vec(norm_vec)
 
 def get_bond(p1, p2):
@@ -43,7 +44,9 @@ def get_angle(p1, p2, p3, is_angular=True):
     else:
         return arccos(cos_phi) / np.pi * 180
 
-@nb.njit()
+@nb.njit(env.NUMBA_FLOAT(
+    env.NUMBA_FLOAT[::1], env.NUMBA_FLOAT[::1], env.NUMBA_FLOAT[::1], env.NUMBA_FLOAT[:, ::1], env.NUMBA_FLOAT[:, ::1]
+))
 def get_pbc_angle(p1, p2, p3, pbc_matrix, pbc_inv):
     v0 = unwrap_vec(p1 - p2, pbc_matrix, pbc_inv)
     v1 = unwrap_vec(p3 - p2, pbc_matrix, pbc_inv)
@@ -75,7 +78,10 @@ def get_dihedral(p1, p2, p3, p4, is_angular=True):
     else:
         return np.arctan2(x, y) / np.pi * 180
 
-@nb.njit()
+@nb.njit(env.NUMBA_FLOAT(
+    env.NUMBA_FLOAT[::1], env.NUMBA_FLOAT[::1], env.NUMBA_FLOAT[::1], env.NUMBA_FLOAT[::1],
+    env.NUMBA_FLOAT[:, ::1], env.NUMBA_FLOAT[:, ::1]
+))
 def get_pbc_dihedral(p1, p2, p3, p4, pbc_matrix, pbc_inv):
     r1 = unwrap_vec(p2 - p1, pbc_matrix, pbc_inv)
     r2 = unwrap_vec(p3 - p2, pbc_matrix, pbc_inv)

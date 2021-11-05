@@ -9,6 +9,15 @@ contact : zhenyuwei99@gmail.com
 copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 '''
 
+class EnvironmentVariableError(Exception):
+    '''This error occurs when:
+    - The environment variable is not supported
+
+    Used in:
+    - mdpy.environment
+    '''
+    pass
+
 class UnitDimensionDismatchedError(Exception):
     '''This error occurs when:
     - The base dimension of two quantities is dismatched for a specific operation.
