@@ -111,4 +111,4 @@ class TestCharmmBondConstraint:
         energy = self.constraint.potential_energy
         bond_length = get_bond([0, 0, 0], [0, 0, 1])
         k, r0 = self.params['bond']['CA-CA']
-        assert energy == NUMPY_FLOAT(k * (bond_length - r0)**2)
+        assert energy == pytest.approx(NUMPY_FLOAT(k * (bond_length - r0)**2))
