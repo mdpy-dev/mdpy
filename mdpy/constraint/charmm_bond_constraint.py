@@ -16,7 +16,6 @@ from .. import NUMPY_INT, NUMPY_FLOAT, NUMBA_INT, NUMBA_FLOAT
 from ..ensemble import Ensemble
 from ..math import *
 
-@nb.njit((NUMBA_INT[:, :], NUMBA_FLOAT[:, :], NUMBA_FLOAT[:, ::1], NUMBA_FLOAT[:, ::1], NUMBA_FLOAT[:, ::1]))
 def cpu_kernel(int_params, float_params, positions, pbc_matrix, pbc_inv):
     forces = np.zeros_like(positions, dtype=NUMPY_FLOAT)
     potential_energy = NUMPY_FLOAT(0)
@@ -45,6 +44,9 @@ class CharmmBondConstraint(Constraint):
         self._int_params = []
         self._float_params = []
         self._num_bonds = 0
+        self._kernel = nb.njit(
+            (NUMBA_INT[:, :], NUMBA_FLOAT[:, :], NUMBA_FLOAT[:, ::1], NUMBA_FLOAT[:, ::1], NUMBA_FLOAT[:, ::1])
+        )(cpu_kernel)
 
     def __repr__(self) -> str:
         return '<mdpy.constraint.CharmmBondConstraint object>'
@@ -73,7 +75,7 @@ class CharmmBondConstraint(Constraint):
 
     def update(self):
         self._check_bound_state()
-        self._forces, self._potential_energy = cpu_kernel(
+        self._forces, self._potential_energy = self._kernel(
             self._int_params, self._float_params, 
             self._parent_ensemble.state.positions, 
             *self._parent_ensemble.state.pbc_info
