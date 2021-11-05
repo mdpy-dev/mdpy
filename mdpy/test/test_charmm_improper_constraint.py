@@ -125,7 +125,7 @@ class TestCharmmImproperConstraint:
         theta_abc = get_angle(
             positions[0, :], positions[1, :], positions[2, :]
         )
-        force_a = force_val / (np.linalg.norm(vec_ab) * np.sin(theta_abc)) * get_unit_vec(np.cross(-vec_ab, vec_bc))
+        force_a = force_val / (np.linalg.norm(vec_ab) * np.sin(theta_abc)) * get_unit_vec(np.cross(-vec_ab, vec_bc).astype(NUMPY_FLOAT))
         assert forces[0, 0] == NUMPY_FLOAT(force_a[0])
         assert forces[0, 1] == NUMPY_FLOAT(force_a[1])
         assert forces[0, 2] == NUMPY_FLOAT(force_a[2])

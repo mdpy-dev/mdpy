@@ -15,7 +15,7 @@ from .. import NUMPY_FLOAT
 from ..math import *
 
 def test_get_unit_vec():
-    vec = [1, 1]
+    vec = np.array([1, 1], dtype=NUMPY_FLOAT)
     unit_vec = get_unit_vec(vec)
     assert unit_vec[0] == pytest.approx(np.sqrt(2) / 2)
     assert unit_vec[1] == pytest.approx(np.sqrt(2) / 2)
