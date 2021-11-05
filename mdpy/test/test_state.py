@@ -11,7 +11,7 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 
 import pytest
 import numpy as np
-from .. import SPATIAL_DIM, NUMPY_FLOAT
+from .. import SPATIAL_DIM, env
 from ..core import Particle, Topology, State
 from ..error import *
 from ..unit import *
@@ -83,7 +83,7 @@ class TestState:
             self.state.set_pbc_matrix(np.ones([4, 3]))
 
         self.state.set_pbc_matrix(np.diag(np.ones(3)*10))
-        assert self.state.pbc_inv[1, 1] == NUMPY_FLOAT(0.1)
+        assert self.state.pbc_inv[1, 1] == env.NUMPY_FLOAT(0.1)
 
         self.state.set_pbc_matrix(Quantity(np.diag(np.ones(3)), nanometer))
-        assert self.state.pbc_inv[2, 2] == NUMPY_FLOAT(0.1)
+        assert self.state.pbc_inv[2, 2] == env.NUMPY_FLOAT(0.1)

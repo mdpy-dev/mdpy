@@ -11,7 +11,7 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 
 import pytest, os
 import numpy as np
-from .. import NUMPY_FLOAT
+from .. import env
 from ..constraint import CharmmImproperConstraint
 from ..core import Particle, Topology
 from ..ensemble import Ensemble
@@ -125,12 +125,12 @@ class TestCharmmImproperConstraint:
         theta_abc = get_angle(
             positions[0, :], positions[1, :], positions[2, :]
         )
-        force_a = force_val / (np.linalg.norm(vec_ab) * np.sin(theta_abc)) * get_unit_vec(np.cross(-vec_ab, vec_bc).astype(NUMPY_FLOAT))
-        assert forces[0, 0] == NUMPY_FLOAT(force_a[0])
-        assert forces[0, 1] == NUMPY_FLOAT(force_a[1])
-        assert forces[0, 2] == NUMPY_FLOAT(force_a[2])
+        force_a = force_val / (np.linalg.norm(vec_ab) * np.sin(theta_abc)) * get_unit_vec(np.cross(-vec_ab, vec_bc).astype(env.NUMPY_FLOAT))
+        assert forces[0, 0] == env.NUMPY_FLOAT(force_a[0])
+        assert forces[0, 1] == env.NUMPY_FLOAT(force_a[1])
+        assert forces[0, 2] == env.NUMPY_FLOAT(force_a[2])
 
         energy = self.constraint.potential_energy
         k, psi0 = self.params['improper']['HE2-HE2-CE2-CE2']
         psi = get_dihedral([0, 0, 0], [1, 0, 0], [0, 1, 0], [0.5, 0.5, 1])
-        assert energy == pytest.approx(NUMPY_FLOAT(k * (np.deg2rad(90) - psi0)**2))
+        assert energy == pytest.approx(env.NUMPY_FLOAT(k * (np.deg2rad(90) - psi0)**2))
