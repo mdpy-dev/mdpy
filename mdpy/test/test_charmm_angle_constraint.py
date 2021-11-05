@@ -98,7 +98,7 @@ class TestCharmmAngleConstraint:
         k, theta0, ku, u0 = self.params['angle']['CA-CA-CA']
         theta = get_angle([0, 0, 0], [1, 0, 0], [0, 0, 1])
         force_val = 2 * k * (np.deg2rad(45) - theta0) / np.abs(np.sin(theta))
-        vec0, vec1 = np.array([-1, 0, 0]), get_unit_vec(np.array([-1, 0, 1]))
+        vec0, vec1 = np.array([-1, 0, 0]), get_unit_vec(np.array([-1, 0, 1], dtype=NUMPY_FLOAT))
         force_vec0 = (vec1 - vec0 * np.cos(theta)) / 1
         force_vec2 = (vec0 - vec1 * np.cos(theta)) / np.sqrt(2)
         force0, force2 = force_val * force_vec0, force_val * force_vec2
@@ -107,7 +107,7 @@ class TestCharmmAngleConstraint:
         force_vec = np.array([0, 0, 1])
         force0 += force_val * force_vec
         force2 -= force_val * force_vec
-        assert forces[0, 0] == pytest.approx(force0[0], abs=1e-10)
+        assert forces[0, 0] == pytest.approx(force0[0], abs=1e-8)
         assert forces[0, 1] == pytest.approx(force0[1])
         assert forces[0, 2] == pytest.approx(force0[2])
         assert forces[3, 0] == pytest.approx(force2[0])
