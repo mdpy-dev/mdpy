@@ -24,10 +24,10 @@ def wrap_positions(positions: np.ndarray, pbc_matrix: np.ndarray, pbc_inv: np.ar
     move_vec = np.dot(move_vec, pbc_matrix)
     return positions + move_vec
 
-@nb.njit((NUMBA_FLOAT[:], NUMBA_FLOAT[:, :], NUMBA_FLOAT[:, :]))
+@nb.njit((NUMBA_FLOAT[::1], NUMBA_FLOAT[:, ::1], NUMBA_FLOAT[:, ::1]))
 def unwrap_vec(vec: np.ndarray, pbc_matrix: np.ndarray, pbc_inv: np.array):
-    scaled_vec = vec.dot(pbc_inv)
+    scaled_vec = np.dot(vec, pbc_inv)
     temp_vec = np.empty(scaled_vec.shape)
     np.round_(scaled_vec, 0, temp_vec)
     scaled_vec -= temp_vec
-    return scaled_vec.dot(pbc_matrix)
+    return np.dot(scaled_vec, pbc_matrix)
