@@ -13,7 +13,7 @@ import numpy as np
 from copy import deepcopy
 from . import BaseDimension, UNIT_PRECISION
 from ..error import UnitDimensionDismatchedError
-from .. import UNIT_FLOAT
+from .. import env
 
 class Unit:
     def __init__(self, base_dimension:BaseDimension, relative_value) -> None:
@@ -26,7 +26,7 @@ class Unit:
             the relative value of ``self`` to the basic unit of ``base_dimension``
         '''        
         self._base_dimension = base_dimension
-        self._relative_value = UNIT_FLOAT(relative_value) # The relative value to the normal unit like angstrom in Length 
+        self._relative_value = env.UNIT_FLOAT(relative_value) # The relative value to the normal unit like angstrom in Length 
 
     def is_dimension_less(self):
         '''
