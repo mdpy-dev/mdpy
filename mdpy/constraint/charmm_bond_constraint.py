@@ -16,28 +16,6 @@ from .. import NUMPY_INT, NUMPY_FLOAT, NUMBA_INT, NUMBA_FLOAT
 from ..ensemble import Ensemble
 from ..math import *
 
-def cpu_kernel(int_params, float_params, positions, pbc_matrix, pbc_inv):
-    forces = np.zeros_like(positions, dtype=NUMPY_FLOAT)
-    potential_energy = NUMPY_FLOAT(0)
-    num_params = int_params.shape[0]
-    for bond in range(num_params):
-        id1, id2, = int_params[bond, :]
-        k, r0 = float_params[bond, :]
-        force_vec = unwrap_vec(
-            positions[id2, :] - positions[id1, :], 
-            pbc_matrix, pbc_inv
-        )
-        r = np.linalg.norm(force_vec)
-        force_vec /= r
-        # Forces
-        force_val = 2 * k * (r - r0)
-        force = force_val * force_vec
-        forces[id1, :] += force
-        forces[id2, :] -= force
-        # Potential energy
-        potential_energy += k * (r - r0)**2
-    return forces, potential_energy
-
 class CharmmBondConstraint(Constraint):
     def __init__(self, params, force_id: int = 0, force_group: int = 0) -> None:
         super().__init__(params, force_id=force_id, force_group=force_group)
@@ -46,7 +24,7 @@ class CharmmBondConstraint(Constraint):
         self._num_bonds = 0
         self._kernel = nb.njit(
             (NUMBA_INT[:, :], NUMBA_FLOAT[:, :], NUMBA_FLOAT[:, ::1], NUMBA_FLOAT[:, ::1], NUMBA_FLOAT[:, ::1])
-        )(cpu_kernel)
+        )(self.kernel)
 
     def __repr__(self) -> str:
         return '<mdpy.constraint.CharmmBondConstraint object>'
@@ -72,6 +50,29 @@ class CharmmBondConstraint(Constraint):
             self._num_bonds += 1
         self._int_params = np.vstack(self._int_params).astype(NUMPY_INT)
         self._float_params = np.vstack(self._float_params).astype(NUMPY_FLOAT)
+
+    @staticmethod
+    def kernel(int_params, float_params, positions, pbc_matrix, pbc_inv):
+        forces = np.zeros_like(positions)
+        potential_energy = forces[0, 0]
+        num_params = int_params.shape[0]
+        for bond in range(num_params):
+            id1, id2, = int_params[bond, :]
+            k, r0 = float_params[bond, :]
+            force_vec = unwrap_vec(
+                positions[id2, :] - positions[id1, :], 
+                pbc_matrix, pbc_inv
+            )
+            r = np.linalg.norm(force_vec)
+            force_vec /= r
+            # Forces
+            force_val = 2 * k * (r - r0)
+            force = force_val * force_vec
+            forces[id1, :] += force
+            forces[id2, :] -= force
+            # Potential energy
+            potential_energy += k * (r - r0)**2
+        return forces, potential_energy
 
     def update(self):
         self._check_bound_state()

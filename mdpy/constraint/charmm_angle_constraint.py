@@ -24,7 +24,7 @@ class CharmmAngleConstraint(Constraint):
         self._num_angles = 0
         self._kernel = nb.njit(
             (NUMBA_INT[:, :], NUMBA_FLOAT[:, :], NUMBA_FLOAT[:, ::1], NUMBA_FLOAT[:, ::1], NUMBA_FLOAT[:, ::1])
-        )(self.cpu_kernel)
+        )(self.kernel)
 
     def __repr__(self) -> str:
         return '<mdpy.constraint.CharmmAngleConstraint object>'
@@ -54,9 +54,9 @@ class CharmmAngleConstraint(Constraint):
         self._float_params = np.vstack(self._float_params).astype(NUMPY_FLOAT)
 
     @staticmethod
-    def cpu_kernel(int_params, float_params, positions, pbc_matrix, pbc_inv):
+    def kernel(int_params, float_params, positions, pbc_matrix, pbc_inv):
         forces = np.zeros_like(positions)
-        potential_energy =forces[0, 0].copy()
+        potential_energy = forces[0, 0]
         num_angles = int_params.shape[0]
         for angle in range(num_angles):
             id1, id2, id3 = int_params[angle]
