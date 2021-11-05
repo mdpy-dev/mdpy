@@ -18,25 +18,6 @@ from ..ensemble import Ensemble
 from ..math import *
 from ..unit import *
 
-def cpu_kernel(int_params, float_params, positions, pbc_matrix, pbc_inv):
-    forces = np.zeros_like(positions)
-    potential_energy = 0
-    num_params = int_params.shape[0]
-    for i in range(num_params):
-        id1, id2, scaling_factor = int_params[i, :]
-        epsilon, sigma, r = float_params[i, :]
-        scaled_r = sigma / r
-        force_val = - (2 * scaled_r**12 - scaled_r**6) / r * epsilon * 24 # Sequence for small number divide small number
-        force_vec = (unwrap_vec(
-            positions[id2] - positions[id1],
-            pbc_matrix, pbc_inv
-        )) / r
-        force = scaling_factor * force_vec * force_val
-        forces[id1, :] += force
-        forces[id2, :] -= force
-        potential_energy += scaling_factor * 4 * epsilon * (scaled_r**12 - scaled_r**6) 
-    return forces, potential_energy
-
 class CharmmNonbondedConstraint(Constraint):
     def __init__(self, params, cutoff_radius=12, force_id: int = 0, force_group: int = 0) -> None:
         super().__init__(params, force_id=force_id, force_group=force_group)
@@ -47,7 +28,7 @@ class CharmmNonbondedConstraint(Constraint):
         self._num_nonbonded_pairs = 0
         self._kernel = nb.njit(
             (NUMBA_INT[:, :], NUMBA_FLOAT[:, :], NUMBA_FLOAT[:, ::1], NUMBA_FLOAT[:, ::1], NUMBA_FLOAT[:, ::1])
-        )(cpu_kernel)
+        )(self.kernel)
 
     def __repr__(self) -> str:
         return '<mdpy.constraint.CharmmNonbondedConstraint object>'
@@ -104,6 +85,26 @@ class CharmmNonbondedConstraint(Constraint):
             index = np.argwhere(dist <= self._cutoff_radius).reshape(-1)
             self._neighbor_list.append(index + particle.matrix_id + 1)
             self._neighbor_distance.append(dist[index])
+
+    @staticmethod
+    def kernel(int_params, float_params, positions, pbc_matrix, pbc_inv):
+        forces = np.zeros_like(positions)
+        potential_energy = forces[0, 0]
+        num_params = int_params.shape[0]
+        for i in range(num_params):
+            id1, id2, scaling_factor = int_params[i, :]
+            epsilon, sigma, r = float_params[i, :]
+            scaled_r = sigma / r
+            force_val = - (2 * scaled_r**12 - scaled_r**6) / r * epsilon * 24 # Sequence for small number divide small number
+            force_vec = (unwrap_vec(
+                positions[id2] - positions[id1],
+                pbc_matrix, pbc_inv
+            )) / r
+            force = scaling_factor * force_vec * force_val
+            forces[id1, :] += force
+            forces[id2, :] -= force
+            potential_energy += scaling_factor * 4 * epsilon * (scaled_r**12 - scaled_r**6) 
+        return forces, potential_energy
 
     def update(self):
         self._check_bound_state()

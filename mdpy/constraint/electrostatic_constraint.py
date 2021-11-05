@@ -19,28 +19,6 @@ from ..unit import *
 
 epsilon0 = EPSILON0.value
 
-def cpu_kernel(int_params, float_params, positions, pbc_matrix, pbc_inv):
-    forces = np.zeros_like(positions, dtype=NUMPY_FLOAT)
-    potential_energy = NUMPY_FLOAT(0.)
-    num_params = int_params.shape[0]
-    k = 4 * np.pi * epsilon0
-    for pair in range(num_params):
-        id1, id2 = int_params[pair, :]
-        e1, e2 = float_params[pair, :]
-        force_vec = unwrap_vec(
-            positions[id2, :] - positions[id1, :],
-            pbc_matrix, pbc_inv
-        )
-        dist = np.linalg.norm(force_vec)
-        force_vec /= dist
-        force_val = - e1 * e2 / k / dist**2
-        force = force_vec * force_val
-        forces[id1, :] += force
-        forces[id2, :] -= force
-        # Potential energy
-        potential_energy += e1 * e2 / k / dist
-    return forces, potential_energy
-
 class ElectrostaticConstraint(Constraint):
     def __init__(self, params=None, force_id: int = 0, force_group: int = 0) -> None:
         super().__init__(params, force_id=force_id, force_group=force_group)
@@ -48,7 +26,7 @@ class ElectrostaticConstraint(Constraint):
         self._float_params = []
         self._kernel = nb.njit(
             (NUMBA_INT[:, :], NUMBA_FLOAT[:, :], NUMBA_FLOAT[:, ::1], NUMBA_FLOAT[:, ::1], NUMBA_FLOAT[:, ::1])
-        )(cpu_kernel)
+        )(self.kernel)
 
     def __repr__(self) -> str:
         return '<mdpy.constraint.ElectrostaticConstraint object>'
@@ -69,6 +47,29 @@ class ElectrostaticConstraint(Constraint):
                     self._float_params.append(self._parent_ensemble.topology.charges[[id1, id2], 0])
         self._int_params = np.vstack(self._int_params).astype(NUMPY_INT)
         self._float_params = np.vstack(self._float_params).astype(NUMPY_FLOAT)
+
+    @staticmethod
+    def kernel(int_params, float_params, positions, pbc_matrix, pbc_inv):
+        forces = np.zeros_like(positions)
+        potential_energy = forces[0, 0]
+        num_params = int_params.shape[0]
+        k = 4 * np.pi * epsilon0
+        for pair in range(num_params):
+            id1, id2 = int_params[pair, :]
+            e1, e2 = float_params[pair, :]
+            force_vec = unwrap_vec(
+                positions[id2, :] - positions[id1, :],
+                pbc_matrix, pbc_inv
+            )
+            dist = np.linalg.norm(force_vec)
+            force_vec /= dist
+            force_val = - e1 * e2 / k / dist**2
+            force = force_vec * force_val
+            forces[id1, :] += force
+            forces[id2, :] -= force
+            # Potential energy
+            potential_energy += e1 * e2 / k / dist
+        return forces, potential_energy
 
     def update(self):
         self._check_bound_state()
