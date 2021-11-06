@@ -71,7 +71,8 @@ class TestPDBDumper:
         self.topology = Topology()
         self.topology.add_particles(self.particles)
         self.ensemble = Ensemble(self.topology)
-        self.ensemble.state.set_pbc_matrix(np.diag(np.ones(3)*10))
+        self.ensemble.state.set_pbc_matrix(np.diag(np.ones(3)*100))
+        self.ensemble.state.cell_list.set_cutoff_radius(12)
         positions = np.array(list(range(num_particles)))
         positions = np.vstack([positions, positions, positions]).T
         self.ensemble.state.set_positions(positions)

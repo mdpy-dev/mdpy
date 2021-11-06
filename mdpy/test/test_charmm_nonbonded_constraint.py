@@ -56,6 +56,8 @@ class TestCharmmNonbondedConstraint:
             [0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 1, 0]
         ]).astype(env.NUMPY_FLOAT)
         self.ensemble = Ensemble(t)
+        self.ensemble.state.set_pbc_matrix(np.eye(3)*30)
+        self.ensemble.state.cell_list.set_cutoff_radius(5)
         self.ensemble.state.set_positions(self.p)
         self.ensemble.state.set_velocities(velocities)
 
@@ -110,18 +112,15 @@ class TestCharmmNonbondedConstraint:
 
     def test_update(self):
         self.ensemble.state.set_pbc_matrix(self.pbc)
+        self.constraint.cutoff_radius = Quantity(0.91, nanometer)
         self.ensemble.add_constraints(self.constraint)
-        self.constraint.update()
+        self.ensemble.state.cell_list.update(self.ensemble.state.positions)
         # CA     0.000000  -0.070000     1.992400
         # NY     0.000000  -0.200000     1.850000 
         # CPT    0.000000  -0.099000     1.860000
-        forces = self.constraint.forces
-        assert forces.sum() == pytest.approx(0, abs=1e-9)
-
-        self.constraint.cutoff_radius = Quantity(0.91, nanometer)
         self.constraint.update()
         forces = self.constraint.forces
-        assert forces.sum() == pytest.approx(0, abs=10e-9)
+        assert forces.sum() == pytest.approx(0, abs=1e-8)
         
         epsilon = np.sqrt(
             Quantity(0.07, kilocalorie_permol).convert_to(default_energy_unit).value *
@@ -133,9 +132,9 @@ class TestCharmmNonbondedConstraint:
         force_val = - 24 * epsilon / r * (2 * scaled_r**12 - scaled_r**6)
         force_vec = - get_unit_vec(self.p[2, :] - self.p[0, :]) # Manually PBC Wrap
         force = force_val * force_vec
-        assert forces[0, 0] == pytest.approx(force[0], abs=10e-9)
-        assert forces[0, 1] == pytest.approx(force[1], abs=10e-9)
-        assert forces[0, 2] == pytest.approx(force[2], abs=10e-9)
+        assert forces[0, 0] == pytest.approx(force[0], abs=10e-8)
+        assert forces[0, 1] == pytest.approx(force[1], abs=1e-8)
+        assert forces[0, 2] == pytest.approx(force[2], abs=1e-8)
 
         energy = self.constraint.potential_energy
         epsilon = np.sqrt(
