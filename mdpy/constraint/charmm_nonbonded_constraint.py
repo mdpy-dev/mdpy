@@ -26,9 +26,10 @@ class CharmmNonbondedConstraint(Constraint):
         self._neighbor_list = []
         self._neighbor_distance = []
         self._num_nonbonded_pairs = 0
-        self._kernel = nb.njit(
-            (env.NUMBA_INT[:, :], env.NUMBA_FLOAT[:, :], env.NUMBA_FLOAT[:, ::1], env.NUMBA_FLOAT[:, ::1], env.NUMBA_FLOAT[:, ::1])
-        )(self.kernel)
+        self._kernel = nb.njit((
+            env.NUMBA_INT[:, :], env.NUMBA_FLOAT[:, :], env.NUMBA_FLOAT[:, ::1], 
+            env.NUMBA_FLOAT[:, ::1], env.NUMBA_FLOAT[:, ::1], env.NUMBA_FLOAT
+        ))(self.kernel)
 
     def __repr__(self) -> str:
         return '<mdpy.constraint.CharmmNonbondedConstraint object>'
@@ -87,61 +88,64 @@ class CharmmNonbondedConstraint(Constraint):
             self._neighbor_distance.append(dist[index])
 
     @staticmethod
-    def kernel(int_params, float_params, positions, pbc_matrix, pbc_inv):
+    def kernel(int_params, float_params, positions, pbc_matrix, pbc_inv, cutoff_radius):
         forces = np.zeros_like(positions)
         potential_energy = forces[0, 0]
         num_params = int_params.shape[0]
         for i in range(num_params):
-            id1, id2, scaling_factor = int_params[i, :]
-            epsilon, sigma, r = float_params[i, :]
-            scaled_r = sigma / r
-            force_val = - (2 * scaled_r**12 - scaled_r**6) / r * epsilon * 24 # Sequence for small number divide small number
-            force_vec = (unwrap_vec(
+            id1, id2 = int_params[i, :]
+            force_vec = unwrap_vec(
                 positions[id2] - positions[id1],
                 pbc_matrix, pbc_inv
-            )) / r
-            force = scaling_factor * force_vec * force_val
-            forces[id1, :] += force
-            forces[id2, :] -= force
-            potential_energy += scaling_factor * 4 * epsilon * (scaled_r**12 - scaled_r**6) 
+            )
+            r = np.linalg.norm(force_vec)
+            if r >= cutoff_radius:
+                continue
+            else:
+                force_vec /= r
+                epsilon, sigma, scaling_factor = float_params[i, :]
+                scaled_r = sigma / r
+                force_val = - (2 * scaled_r**12 - scaled_r**6) / r * epsilon * 24 # Sequence for small number divide small number
+                force = scaling_factor * force_vec * force_val 
+                forces[id1, :] += force
+                forces[id2, :] -= force
+                potential_energy += scaling_factor * 4 * epsilon * (scaled_r**12 - scaled_r**6)
         return forces, potential_energy
 
     def update(self):
         self._check_bound_state()
         RangePush('Nonbonded IO')
-        self._update_neighbor()
         params = []
         for particle in self._parent_ensemble.topology.particles:
             id1 = particle.matrix_id
             particle1 = self._parent_ensemble.topology.particles[id1]
-            for i, id2 in enumerate(self._neighbor_list[id1]):
-                if not id2 in particle1.bonded_particles:
-                    if id2 in particle1.scaling_particles:
-                        scaling_factor = particle1.scaling_factors[particle.scaling_particles.index(id2)]
-                        epsilon, sigma = self._mix_params(id1, id2, is_14=True)
-                    else:
-                        scaling_factor = 1
-                        epsilon, sigma = self._mix_params(id1, id2, is_14=False)
-                    r = self._neighbor_distance[id1][i]
-                    params.append([id1, id2, scaling_factor, epsilon, sigma, r])
+            neighbors = self._parent_ensemble.state.cell_list.get_neighbors(
+                self._parent_ensemble.state.positions[id1, :]
+            )
+            for i in particle1.bonded_particles:
+                del neighbors[neighbors.index(i)]
+            neighbors.sort()
+            neighbors = neighbors[neighbors.index(id1)+1:]
+            for id2 in neighbors:
+                if id2 in particle1.scaling_particles:
+                    scaling_factor = particle1.scaling_factors[particle.scaling_particles.index(id2)]
+                    epsilon, sigma = self._mix_params(id1, id2, is_14=True)
+                else:
+                    scaling_factor = 1
+                    epsilon, sigma = self._mix_params(id1, id2, is_14=False)
+                params.append([id1, id2, epsilon, sigma, scaling_factor])
+            
         params = np.vstack(params)
-        int_params = params[:, 0:3].astype(env.NUMPY_INT)
-        float_params = params[:, 3:].astype(env.NUMPY_FLOAT)
+        self._int_params = params[:, :2].astype(env.NUMPY_INT)
+        float_params = params[:, 2:].astype(env.NUMPY_FLOAT)
         RangePop()
         self._forces, self._potential_energy = self._kernel(
-            int_params, float_params, 
+            self._int_params, float_params, 
             self._parent_ensemble.state.positions, 
-            *self._parent_ensemble.state.pbc_info
+            *self._parent_ensemble.state.pbc_info,
+            self._cutoff_radius
         )
 
     @property
     def num_nonbonded_pairs(self):
         return self._num_nonbonded_pairs
-
-    @property
-    def cutoff_radius(self):
-        return self._cutoff_radius
-
-    @cutoff_radius.setter
-    def cutoff_radius(self, val):
-        self._cutoff_radius = check_quantity_value(val, default_length_unit)
