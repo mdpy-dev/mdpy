@@ -21,34 +21,40 @@ data_dir = os.path.join(cur_dir, 'data')
 
 class TestCellList:
     def setup(self):
-        pass
+        self.cell_list = CellList()
 
     def teardown(self):
-        pass
+        self.cell_list = None
 
     def test_attributes(self):
-        cell_list = CellList(Quantity(13, angstrom), np.diag([100, 100, 100]))
-        assert cell_list.cutoff_radius == 13
-        assert cell_list.pbc_matrix[0, 0] == 100
+        assert self.cell_list.cutoff_radius == 0
+        assert self.cell_list.pbc_matrix[0, 0] == 0
+        assert self.cell_list._is_poor_defined() == True
 
     def test_exceptions(self):
         with pytest.raises(UnitDimensionDismatchedError):
-            CellList(Quantity(1, second), 0)
+            self.cell_list.set_cutoff_radius(Quantity(1, second))
+
+        with pytest.raises(CellListPoorDefinedError):
+            self.cell_list.update(np.ones([4, 3]))
 
     def test_get_cell_index(self):
-        cell_list = CellList(Quantity(13, angstrom), np.diag([100, 100, 100]))
-        assert cell_list._get_cell_index(0, 0, 0) == 0
-        assert cell_list._get_cell_index(0., 0., 1.) == 1
-        assert cell_list._get_cell_index(7, 0, 0) == 0
-        assert cell_list._get_cell_index(-1, 0, 0) == 6 * 7 * 7
-        assert cell_list._get_cell_index(0, 0, 6) == 6 
-        assert cell_list._get_cell_index(0, 1, 9) == 1 * 7 + 2
+        self.cell_list.set_cutoff_radius(Quantity(13, angstrom))
+        self.cell_list.set_pbc_matrix(np.diag([100, 100, 100]))
+        assert self.cell_list._get_cell_index(0, 0, 0) == 0
+        assert self.cell_list._get_cell_index(0., 0., 1.) == 1
+        assert self.cell_list._get_cell_index(7, 0, 0) == 0
+        assert self.cell_list._get_cell_index(-1, 0, 0) == 6 * 7 * 7
+        assert self.cell_list._get_cell_index(0, 0, 6) == 6 
+        assert self.cell_list._get_cell_index(0, 1, 9) == 1 * 7 + 2
 
     def test_update(self):
         pdb = PDBFile(os.path.join(data_dir, '6PO6.pdb'))
-        cell_list = CellList(Quantity(9, angstrom), np.diag([30, 30, 30]))
-        cell_list.update(pdb.positions)
-        cell_id = np.floor(np.dot(pdb.positions, cell_list.cell_inv))
+        self.cell_list.set_cutoff_radius(Quantity(9, angstrom))
+        self.cell_list.set_pbc_matrix(np.diag([30, 30, 30]))
+        self.cell_list.update(pdb.positions)
+        cell_id = np.floor(np.dot(pdb.positions, self.cell_list.cell_inv))
+        # cell_id -= cell_id.min(0)
         num_atoms = pdb.positions.shape[0]
         atoms = []
         for atom in range(num_atoms):
@@ -56,32 +62,11 @@ class TestCellList:
                 atoms.append(atom)
         assert len(atoms) != 0
         for index, atom in enumerate(atoms):
-            assert atom == cell_list[0, 0, 0][index]
+            assert atom == self.cell_list[0, 0, 0][index]
 
         # ATOM     24  HB1 PHE A   2      -2.752  -0.222   1.686  1.00  0.00      A     
-        assert 23 in cell_list[-1, -1, 0]
+        assert 23 in self.cell_list[-1, -1, 0]
         # ATOM     39  N   ALA A   3      -0.248  -0.263  -1.755  1.00  0.00      A    N
-        assert 38 in cell_list[-1, -1, -1]
-
-    def test_get_neighbor(self):
-        pdb = PDBFile(os.path.join(data_dir, '6PO6.pdb'))
-        cell_list = CellList(Quantity(2, angstrom), np.diag([30, 30, 30]))
-        cell_list.update(pdb.positions)
-        matrix_ids = cell_list.get_neighbors(np.array([0, 0, 0]))
-        atoms = []
-        num_atoms = pdb.positions.shape[0]
-        for atom in range(num_atoms):
-            position = pdb.positions[atom, :]
-            is_in_cell = True
-            for p in position:
-                if p > 4:
-                    is_in_cell = False
-                    break
-                elif p < -2:
-                    is_in_cell = False
-                    break
-            if is_in_cell:
-                atoms.append(atom)
-        assert len(matrix_ids) == len(atoms)
+        assert 38 in self.cell_list[-1, -1, -1]
 
     
