@@ -43,7 +43,7 @@ class TestCellList:
         self.cell_list.set_cutoff_radius(Quantity(9, angstrom))
         self.cell_list.set_pbc_matrix(np.diag([30, 30, 30]))
         self.cell_list.update(pdb.positions)
-        cell_id = np.floor(np.dot(pdb.positions, self.cell_list.cell_inv))
+        cell_id = np.floor(np.dot(pdb.positions - pdb.positions.min(0), self.cell_list.cell_inv))
         # cell_id -= cell_id.min(0)
         num_atoms = pdb.positions.shape[0]
         atoms = []
