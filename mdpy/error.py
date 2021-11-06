@@ -108,6 +108,15 @@ class PBCPoorDefinedError(Exception):
     '''
     pass
 
+class CellListPoorDefinedError(Exception):
+    '''This error occurs when:
+    - The pbc info of cell list is not defined well
+    - The cutoff_radius of cell list is not defined well
+
+    Used in:
+    - mdpy.core.cell_list
+    '''
+
 class ParameterPoorDefinedError(Exception):
     '''This error occurs when:
     - Topology connections' parameter is not defined in selected parameter file
