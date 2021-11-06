@@ -82,37 +82,20 @@ class TestCharmmNonbondedConstraint:
         self.ensemble.state.set_pbc_matrix(self.pbc)
         self.ensemble.add_constraints(self.constraint)
         assert self.constraint._parent_ensemble.num_constraints == 1
-        assert self.constraint.num_nonbonded_pairs == 6
 
         # CA     0.000000  -0.070000     1.992400
         # NY     0.000000  -0.200000     1.850000 
         # CPT    0.000000  -0.099000     1.860000
         self.ensemble.state.set_pbc_matrix(self.pbc)
-        assert self.constraint._param_list[0][0] == Quantity(0.07, kilocalorie_permol).convert_to(default_energy_unit).value
-        assert self.constraint._param_list[1][1] == pytest.approx(env.NUMPY_FLOAT(1.85 * RMIN_TO_SIGMA_FACTOR * 2))
+        assert self.constraint._params_list[0, 0] == Quantity(0.07, kilocalorie_permol).convert_to(default_energy_unit).value
+        assert self.constraint._params_list[1, 1] == pytest.approx(env.NUMPY_FLOAT(1.85 * RMIN_TO_SIGMA_FACTOR * 2))
 
         # No exception
         self.constraint._check_bound_state()
-    
-    def test_update_neighbor(self):
-        self.ensemble.state.set_pbc_matrix(self.pbc)
-        self.ensemble.add_constraints(self.constraint)
-        self.constraint._update_neighbor()
-        assert len(self.constraint._neighbor_list[0]) == 3
-        
-        self.constraint.cutoff_radius = 9.5
-        self.constraint._update_neighbor()
-        assert len(self.constraint._neighbor_list[0]) == 1
-        assert self.constraint._neighbor_distance[0][0] == pytest.approx(9)
-
-        self.constraint.cutoff_radius = Quantity(0.91, nanometer)
-        self.constraint._update_neighbor()
-        assert len(self.constraint._neighbor_list[0]) == 1
-        assert self.constraint._neighbor_distance[0][0] == pytest.approx(9)
 
     def test_update(self):
         self.ensemble.state.set_pbc_matrix(self.pbc)
-        self.constraint.cutoff_radius = Quantity(0.91, nanometer)
+        self.constraint.set_cutoff_radius(Quantity(0.91, nanometer))
         self.ensemble.add_constraints(self.constraint)
         self.ensemble.state.cell_list.update(self.ensemble.state.positions)
         # CA     0.000000  -0.070000     1.992400
@@ -132,7 +115,7 @@ class TestCharmmNonbondedConstraint:
         force_val = - 24 * epsilon / r * (2 * scaled_r**12 - scaled_r**6)
         force_vec = - get_unit_vec(self.p[2, :] - self.p[0, :]) # Manually PBC Wrap
         force = force_val * force_vec
-        assert forces[0, 0] == pytest.approx(force[0], abs=10e-8)
+        assert forces[0, 0] == pytest.approx(force[0], abs=1e-8)
         assert forces[0, 1] == pytest.approx(force[1], abs=1e-8)
         assert forces[0, 2] == pytest.approx(force[2], abs=1e-8)
 
