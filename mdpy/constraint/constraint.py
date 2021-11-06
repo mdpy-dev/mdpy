@@ -9,7 +9,10 @@ contact : zhenyuwei99@gmail.com
 copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 '''
 
+from .. import env
+from ..math import check_quantity_value
 from ..error import *
+from ..unit import *
 from ..ensemble import Ensemble
 
 class Constraint:
@@ -20,6 +23,7 @@ class Constraint:
         self._parent_ensemble = None
         self._forces = None
         self._potential_energy = None
+        self._cutoff_radius = env.NUMPY_FLOAT(0)
 
     def __repr__(self) -> str:
         return '<mdpy.constraint.Constraint class>'
@@ -62,3 +66,11 @@ class Constraint:
     @property
     def potential_energy(self):
         return self._potential_energy
+
+    @property
+    def cutoff_radius(self):
+        return self._cutoff_radius
+
+    @cutoff_radius.setter
+    def cutoff_radius(self, val):
+        self._cutoff_radius = check_quantity_value(val, default_length_unit)
