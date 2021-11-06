@@ -67,10 +67,9 @@ class Constraint:
     def potential_energy(self):
         return self._potential_energy
 
+    def set_cutoff_radius(self, val):
+        self._cutoff_radius = check_quantity_value(val, default_length_unit)
+
     @property
     def cutoff_radius(self):
         return self._cutoff_radius
-
-    @cutoff_radius.setter
-    def cutoff_radius(self, val):
-        self._cutoff_radius = check_quantity_value(val, default_length_unit)
