@@ -10,6 +10,8 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 '''
 
 import numpy as np
+from cupy.cuda.nvtx import RangePush, RangePop
+from .cell_list import CellList
 from .topology import Topology
 from .. import SPATIAL_DIM, env
 from ..unit import *
@@ -27,6 +29,7 @@ class State:
 
         self._pbc_matrix = np.zeros([SPATIAL_DIM, SPATIAL_DIM], dtype=env.NUMPY_FLOAT, order='C')
         self._pbc_inv = np.zeros([SPATIAL_DIM, SPATIAL_DIM], dtype=env.NUMPY_FLOAT, order='C')
+        self._cell_list = CellList()
 
     def __repr__(self) -> str:
         return '<mdpy.State object with %d particles at %x>' %(
@@ -48,6 +51,12 @@ class State:
                 %(self._matrix_shape[1], col)
             ) 
 
+    def check_pbc_matrix(self):
+        if np.linalg.det(self._pbc_matrix) == 0:
+            raise PBCPoorDefinedError(
+                'PBC of %s is poor defined. Two or more column vectors are linear corellated'
+            )
+
     def set_pbc_matrix(self, pbc_matrix):
         pbc_matrix = check_quantity_value(pbc_matrix, default_length_unit)
         row, col = pbc_matrix.shape
@@ -62,16 +71,14 @@ class State:
         self._pbc_matrix = np.ascontiguousarray(pbc_matrix.T, dtype=env.NUMPY_FLOAT)
         self.check_pbc_matrix()
         self._pbc_inv = np.ascontiguousarray(np.linalg.inv(self._pbc_matrix), dtype=env.NUMPY_FLOAT)
-    
-    def check_pbc_matrix(self):
-        if np.linalg.det(self._pbc_matrix) == 0:
-            raise PBCPoorDefinedError(
-                'PBC of %s is poor defined. Two or more column vectors are linear corellated'
-            )
+        self._cell_list.set_pbc_matrix(self._pbc_matrix)
 
     def set_positions(self, positions: np.ndarray):
         self._check_matrix_shape(positions)
         self._positions = positions.astype(env.NUMPY_FLOAT)
+        RangePush('Cell list creation')
+        self._cell_list.update(self._positions)
+        RangePop()
     
     def set_velocities(self, velocities: np.ndarray):
         self._check_matrix_shape(velocities)
@@ -110,3 +117,7 @@ class State:
     @property
     def pbc_info(self):
         return self._pbc_matrix, self._pbc_inv
+
+    @property
+    def cell_list(self):
+        return self._cell_list
