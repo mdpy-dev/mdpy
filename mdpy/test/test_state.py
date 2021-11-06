@@ -53,6 +53,8 @@ class TestState:
             self.state.set_velocities(np.ones([self.num_particles, 4]))
 
     def test_set_positions(self):
+        self.state.set_pbc_matrix(np.eye(3) * 100)
+        self.state.cell_list.set_cutoff_radius(12)
         self.state.set_positions(np.ones([self.num_particles, SPATIAL_DIM]) * 10)
         assert self.state.positions[0, 2] == 10
 
