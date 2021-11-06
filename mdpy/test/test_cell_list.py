@@ -38,16 +38,6 @@ class TestCellList:
         with pytest.raises(CellListPoorDefinedError):
             self.cell_list.update(np.ones([4, 3]))
 
-    def test_get_cell_index(self):
-        self.cell_list.set_cutoff_radius(Quantity(13, angstrom))
-        self.cell_list.set_pbc_matrix(np.diag([100, 100, 100]))
-        assert self.cell_list._get_cell_index(0, 0, 0) == 0
-        assert self.cell_list._get_cell_index(0., 0., 1.) == 1
-        assert self.cell_list._get_cell_index(7, 0, 0) == 0
-        assert self.cell_list._get_cell_index(-1, 0, 0) == 6 * 7 * 7
-        assert self.cell_list._get_cell_index(0, 0, 6) == 6 
-        assert self.cell_list._get_cell_index(0, 1, 9) == 1 * 7 + 2
-
     def test_update(self):
         pdb = PDBFile(os.path.join(data_dir, '6PO6.pdb'))
         self.cell_list.set_cutoff_radius(Quantity(9, angstrom))
@@ -62,7 +52,7 @@ class TestCellList:
                 atoms.append(atom)
         assert len(atoms) != 0
         for index, atom in enumerate(atoms):
-            assert atom == self.cell_list[0, 0, 0][index]
+            assert atom == self.cell_list.cell_list[0, 0, 0, index]
 
         # ATOM     24  HB1 PHE A   2      -2.752  -0.222   1.686  1.00  0.00      A     
         assert 23 in self.cell_list[-1, -1, 0]
