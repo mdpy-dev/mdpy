@@ -59,6 +59,8 @@ class TestEnsemble:
             [0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]
         ])
         self.ensemble = Ensemble(t)
+        self.ensemble.state.set_pbc_matrix(np.eye(3)*30)
+        self.ensemble.state.cell_list.set_cutoff_radius(12)
         self.ensemble.state.set_positions(positions)
         self.ensemble.state.set_velocities(velocities)
 
@@ -79,11 +81,10 @@ class TestEnsemble:
         params = charmm_file.params
         topology = PSFFile(psf_file_path).create_topology()
         ensemble = Ensemble(topology)
-        ensemble.state.set_pbc_matrix(np.diag(np.ones(3)*10))
+        ensemble.state.set_pbc_matrix(np.diag(np.ones(3)*30))
         constraint = CharmmNonbondedConstraint(params['nonbonded'])
         ensemble.add_constraints(constraint)
         assert ensemble.num_constraints == 1
-
         
         with pytest.raises(ConstraintConflictError):
             ensemble.add_constraints(constraint)
