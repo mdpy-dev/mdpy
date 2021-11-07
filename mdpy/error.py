@@ -27,15 +27,6 @@ class UnitDimensionDismatchedError(Exception):
     '''
     pass
 
-class ChangeDeviceBoundedDataError(Exception):
-    '''This error occurs when:
-    - Users try to change the immutable jax.DeviceArray
-    
-    Used in:
-    - mdpy.unit.quantity
-    '''
-    pass
-
 class SpatialDimError(Exception):
     '''This error occurs when:
     - The dimension of quantity in cartesian reference is not 3
@@ -81,6 +72,15 @@ class ConstraintConflictError(Exception):
     '''
     pass
 
+class ModifyJoinedTopologyError(Exception):
+    '''This error occurs when:
+    - Adding particle or topology geometry to a joined Topology object
+    
+    Used in:
+    - mdpy.core.topology
+    '''
+    pass
+
 class NonBoundedError(Exception):
     '''This error occurs when:
     - Parent object is not bounded 
@@ -107,6 +107,15 @@ class PBCPoorDefinedError(Exception):
     - mdpy.core.state
     '''
     pass
+
+class CellListPoorDefinedError(Exception):
+    '''This error occurs when:
+    - The pbc info of cell list is not defined well
+    - The cutoff_radius of cell list is not defined well
+
+    Used in:
+    - mdpy.core.cell_list
+    '''
 
 class ParameterPoorDefinedError(Exception):
     '''This error occurs when:

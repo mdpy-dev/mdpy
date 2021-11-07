@@ -55,6 +55,8 @@ class TestCharmmAngleConstraint:
             [0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]
         ])
         self.ensemble = Ensemble(t)
+        self.ensemble.state.set_pbc_matrix(np.eye(3)*30)
+        self.ensemble.state.cell_list.set_cutoff_radius(12)
         self.ensemble.state.set_positions(positions)
         self.ensemble.state.set_velocities(velocities)
 
@@ -91,7 +93,6 @@ class TestCharmmAngleConstraint:
 
     def test_update(self):
         self.ensemble.add_constraints(self.constraint)
-        self.ensemble.state.set_pbc_matrix(np.diag(np.ones(3)*10))
         self.constraint.update()
 
         forces = self.constraint.forces
