@@ -43,6 +43,7 @@ class TestTopology:
         p2 = Particle(mass=2, charge=1)
         p3 = Particle(mass=3, charge=0)
         self.topology.add_particles([p1, p2, p3])
+        self.topology.join()
         assert self.topology.charges[0] == 2
         assert self.topology.charges[-1] == 0
         assert self.topology.masses[1] == 2
