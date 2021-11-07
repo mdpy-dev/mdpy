@@ -50,13 +50,7 @@ class CharmmNonbondedConstraint(Constraint):
         self._parent_ensemble = ensemble
         self._force_id = ensemble.constraints.index(self)
         self._params_list = []
-        max_num_bonded_particles = 0
-        max_num_scaling_particles = 0
         for particle in self._parent_ensemble.topology.particles:
-            if particle.num_bonded_particles > max_num_bonded_particles:
-                max_num_bonded_particles = particle.num_bonded_particles
-            if particle.num_scaling_particles > max_num_scaling_particles:
-                max_num_scaling_particles = particle.num_scaling_particles
             param = self._params[particle.particle_name]
             if len(param) == 2:
                 epsilon, sigma = param
@@ -65,16 +59,6 @@ class CharmmNonbondedConstraint(Constraint):
                 epsilon, sigma, epsilon14, sigma14 = param
                 self._params_list.append([epsilon, sigma, epsilon14, sigma14])
         self._params_list = np.vstack(self._params_list).astype(env.NUMPY_FLOAT)
-        self._bonded_particles = np.ones([
-            self._parent_ensemble.topology.num_particles, max_num_bonded_particles
-        ], dtype=env.NUMPY_INT) * -1
-        self._scaling_particles = np.ones([
-            self._parent_ensemble.topology.num_particles, max_num_bonded_particles
-        ], dtype=env.NUMPY_INT) * -1
-        for particle in self._parent_ensemble.topology.particles:
-            index = particle.matrix_id
-            self._bonded_particles[index, :particle.num_bonded_particles] = particle.bonded_particles
-            self._scaling_particles[index, :particle.num_scaling_particles] = particle.scaling_particles
 
     @staticmethod
     def kernel(
@@ -125,9 +109,10 @@ class CharmmNonbondedConstraint(Constraint):
     def update(self):
         self._check_bound_state()
         self._forces, self._potential_energy = self._kernel(
-            self._parent_ensemble.state.positions, 
-            self._params_list, *self._parent_ensemble.state.pbc_info,
-            self._cutoff_radius, self._bonded_particles, self._scaling_particles,
+            self._parent_ensemble.state.positions, self._params_list, 
+            *self._parent_ensemble.state.pbc_info, self._cutoff_radius, 
+            self._parent_ensemble.topology.bonded_particles, 
+            self._parent_ensemble.topology.scaling_particles,
             self._parent_ensemble.state.cell_list.particle_cell_index,
             self._parent_ensemble.state.cell_list.cell_list,
             self._parent_ensemble.state.cell_list.num_cell_vec,
