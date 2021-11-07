@@ -27,8 +27,11 @@ class Topology:
         self._num_dihedrals = 0
         self._impropers = []
         self._num_impropers = 0
+        self._is_joined = False
         self._masses = []
         self._charges = []
+        self._bonded_particles = []
+        self._scaling_pactiles = []
         
     def __repr__(self) -> str:
         return '<Toplogy object: %d particles at %x>' %(self._num_particles, id(self))
@@ -39,7 +42,54 @@ class Topology:
             %(self._num_particles, self._num_bonds, self._num_angles, self._num_dihedrals, self._num_impropers)
         )
 
+    def _check_matrix_ids(self, *matrix_ids):
+        for index, matrix_id in enumerate(matrix_ids):
+            if matrix_id >= self._num_particles:
+                raise ParticleConflictError(
+                    'Matrix id %d beyonds the range of particles contain in toplogy, can not be added as part of topology connection' 
+                    %matrix_id
+                )
+            if matrix_id in matrix_ids[index+1:]:
+                raise ParticleConflictError('Particle appears twice in a topology connection')
+
+    def _check_joined(self):
+        if self._is_joined:
+            raise  ModifyJoinedTopologyError(
+                '%s has been joined. No change can be made.' %self
+            )   
+    
+    def join(self):
+        self._masses = np.zeros([self._num_particles, 1], dtype=env.NUMPY_FLOAT)
+        self._charges = np.zeros([self._num_particles, 1], dtype=env.NUMPY_FLOAT)
+        max_num_bonded_particles = 0
+        max_num_scaling_particles = 0
+        for index, particle in enumerate(self._particles):
+            if particle.num_bonded_particles > max_num_bonded_particles:
+                max_num_bonded_particles = particle.num_bonded_particles
+            if particle.num_scaling_particles > max_num_scaling_particles:
+                max_num_scaling_particles = particle.num_scaling_particles
+            self._masses[index, 0] = particle.mass
+            self._charges[index, 0] = particle.charge
+        self._bonded_particles = np.ones([
+            self._num_particles, max_num_bonded_particles
+        ], dtype=env.NUMPY_INT) * -1
+        self._scaling_particles = np.ones([
+            self._num_particles, max_num_bonded_particles
+        ], dtype=env.NUMPY_INT) * -1
+        for index, particle in enumerate(self._particles):
+            self._bonded_particles[index, :particle.num_bonded_particles] = particle.bonded_particles
+            self._scaling_particles[index, :particle.num_scaling_particles] = particle.scaling_particles
+        self._is_joined = True
+
+    def split(self):
+        self._masses = []
+        self._charges = []
+        self._bonded_particles = []
+        self._scaling_pactiles = []
+        self._is_joined = False
+
     def add_particles(self, particles):
+        self._check_joined()
         for particle in particles:
             if not isinstance(particle, Particle):
                 raise TypeError('mdpy.core.Particle type is excepted, while %s provided' %type(particle))
@@ -49,14 +99,6 @@ class Topology:
             particle.change_matrix_id(self._num_particles)
             self._particles.append(particle)
             self._num_particles += 1
-        self._update_particles_properties()
-
-    def _update_particles_properties(self):
-        self._masses = np.zeros([self._num_particles, 1], dtype=env.NUMPY_FLOAT)
-        self._charges = np.zeros([self._num_particles, 1], dtype=env.NUMPY_FLOAT)
-        for index, particle in enumerate(self._particles):
-            self._masses[index, 0] = particle.mass
-            self._charges[index, 0] = particle.charge
 
     def select_particles(self, keywords):
         ''' Example:
@@ -100,6 +142,7 @@ class Topology:
         return selected_particles
 
     def del_particles(self, particles):
+        self._check_joined()
         particle_list, bond_list, angle_list, dihedral_list, improper_list = [], [], [], [], []
         for particle in particles:
             if particle in self._particles:
@@ -119,17 +162,8 @@ class Topology:
         _ = [self._impropers.remove(i) for i in improper_list]
         self._num_impropers -= len(improper_list)
 
-    def _check_matrix_ids(self, *matrix_ids):
-        for index, matrix_id in enumerate(matrix_ids):
-            if matrix_id >= self._num_particles:
-                raise ParticleConflictError(
-                    'Matrix id %d beyonds the range of particles contain in toplogy, can not be added as part of topology connection' 
-                    %matrix_id
-                )
-            if matrix_id in matrix_ids[index+1:]:
-                raise ParticleConflictError('Particle appears twice in a topology connection')
-
     def add_bond(self, bond):
+        self._check_joined()
         num_particles = len(bond)
         if num_particles != 2:
             raise GeomtryDimError('Bond should be a matrix id list of 2 Particles, instead of %d' %num_particles)
@@ -143,6 +177,7 @@ class Topology:
         self._num_bonds += 1
         
     def del_bond(self, bond):
+        self._check_joined()
         num_particles = len(bond)
         if num_particles != 2:
             raise GeomtryDimError('Bond should be a matrix id list of 2 Particles, instead of %d' %num_particles)
@@ -161,6 +196,7 @@ class Topology:
             self._num_bonds -= 1
 
     def add_angle(self, angle):
+        self._check_joined()
         num_particles = len(angle)
         if num_particles != 3:
             raise GeomtryDimError('Angle should be a matrix id list of 3 Particles, instead of %d' %num_particles)
@@ -174,6 +210,7 @@ class Topology:
         self._num_angles += 1
         
     def del_angle(self, angle):
+        self._check_joined()
         num_particles = len(angle)
         if num_particles != 3:
             raise GeomtryDimError('Angle should be a matrix id list of 3 Particles, instead of %d' %num_particles)
@@ -192,6 +229,7 @@ class Topology:
             self._num_angles -= 1
         
     def add_dihedral(self, dihedral, scaling_factor=1):
+        self._check_joined()
         num_particles = len(dihedral)
         if num_particles != 4:
             raise GeomtryDimError('Dihedral should be a matrix id list of 4 Particles, instead of %d' %num_particles)
@@ -205,6 +243,7 @@ class Topology:
         self._num_dihedrals += 1
         
     def del_dihedral(self, dihedral):
+        self._check_joined()
         num_particles = len(dihedral)
         if num_particles != 4:
             raise GeomtryDimError('Dihedral should be a matrix id list of 4 Particles, instead of %d' %num_particles)
@@ -223,6 +262,7 @@ class Topology:
             self._num_dihedrals -= 1
 
     def add_improper(self, improper):
+        self._check_joined()
         num_particles = len(improper)
         if num_particles != 4:
             raise GeomtryDimError('Improper should be a matrix id list of 4 Particles, instead of %d' %num_particles)
@@ -233,6 +273,7 @@ class Topology:
         self._num_impropers += 1
         
     def del_improper(self, improper):
+        self._check_joined()
         num_particles = len(improper)
         if num_particles != 4:
             raise GeomtryDimError('Improper should be a matrix id list of 4 Particles, instead of %d' %num_particles)
@@ -249,6 +290,14 @@ class Topology:
     @property
     def charges(self):
         return self._charges
+
+    @property
+    def bonded_particles(self):
+        return self._bonded_particles
+
+    @property
+    def scaling_particles(self):
+        return self._scaling_particles
 
     @property
     def particles(self):
@@ -289,3 +338,7 @@ class Topology:
     @property
     def num_impropers(self):
         return self._num_impropers
+
+    @property
+    def is_joined(self):
+        return self._is_joined
