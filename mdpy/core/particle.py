@@ -9,7 +9,6 @@ contact : zhenyuwei99@gmail.com
 copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 '''
 
-from numpy.testing._private.utils import raises
 from ..math import check_quantity_value
 from ..unit import *
 from ..error import *
