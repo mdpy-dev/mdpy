@@ -51,6 +51,8 @@ class TestElectrostaticConstraint:
             [0, 0, 0], [0, 10, 0], [0, 21, 0], [0, 11, 0]
         ])
         self.ensemble = Ensemble(t)
+        self.ensemble.state.set_pbc_matrix(np.eye(3)*30)
+        self.ensemble.state.cell_list.set_cutoff_radius(12)
         self.ensemble.state.set_positions(self.p)
         self.constraint = ElectrostaticConstraint()
 
@@ -68,8 +70,6 @@ class TestElectrostaticConstraint:
         self.ensemble.state.set_pbc_matrix(self.pbc)
         self.ensemble.add_constraints(self.constraint)
         assert self.constraint._parent_ensemble.num_constraints == 1
-        assert self.constraint._float_params[0, 0] == 1
-        assert self.constraint._float_params[1, 1] == 0
 
     def test_update(self):
         self.ensemble.state.set_pbc_matrix(self.pbc)

@@ -39,9 +39,10 @@ class TestVerletIntegrator:
         forcefield = CharmmForcefield(topology)
         forcefield.set_param_files(os.path.join(data_dir, 'par_all36_prot.prm'))
         ensemble = forcefield.create_ensemble()
+        ensemble.state.set_pbc_matrix(np.diag(np.ones(3)*100))
+        ensemble.state.cell_list.set_cutoff_radius(12)
         ensemble.state.set_positions(pdb.positions)
         ensemble.state.set_velocities_to_temperature(300)
-        ensemble.state.set_pbc_matrix(np.diag(np.ones(3) * 40))
         integrator = VerletIntegrator(1)
         integrator.sample(ensemble, 1)
 

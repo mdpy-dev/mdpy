@@ -13,8 +13,7 @@ import numpy as np
 from MDAnalysis.coordinates.PDB import PDBReader
 from MDAnalysis.topology.PDBParser import PDBParser
 from MDAnalysis.topology.guessers import guess_atom_type
-
-from mdpy.core.particle import Particle
+from .. import env
 
 class PDBFile:
     def __init__(self, file_path) -> None:
@@ -27,7 +26,7 @@ class PDBFile:
         self._particle_ids = list(self._parser.ids.values)
         self._particle_types = list(map(guess_atom_type, self._parser.names.values))
         self._particle_names = list(self._parser.names.values)
-        self._matrix_ids = list(np.linspace(0, self._num_particles-1, self._num_particles, dtype=np.int))
+        self._matrix_ids = list(np.linspace(0, self._num_particles-1, self._num_particles, dtype=env.NUMPY_INT))
         molecule_ids, molecule_types = self._parser.resids.values, self._parser.resnames.values
         self._molecule_ids, self._molecule_types = [], []
         for i in range(self._parser.n_atoms):
