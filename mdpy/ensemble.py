@@ -17,6 +17,8 @@ from .unit import *
 
 class Ensemble:
     def __init__(self, topology: Topology) -> None:
+        if not topology.is_joined:
+            topology.join()
         # Read input
         self._topology = topology
         self._state = State(self._topology)
