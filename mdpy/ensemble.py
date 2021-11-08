@@ -17,6 +17,8 @@ from .unit import *
 
 class Ensemble:
     def __init__(self, topology: Topology) -> None:
+        if not topology.is_joined:
+            topology.join()
         # Read input
         self._topology = topology
         self._state = State(self._topology)
@@ -50,6 +52,8 @@ class Ensemble:
                 )
             self._constraints.append(constraint)
             constraint.bind_ensemble(self)
+            if constraint.cutoff_radius > self.state.cell_list.cutoff_radius:
+                self.state.cell_list.set_cutoff_radius(constraint.cutoff_radius)
             self._num_constraints += 1
 
     def update(self):
