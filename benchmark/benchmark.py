@@ -66,7 +66,7 @@ nvtx.RangePop()
 
 nvtx.RangePop()
 
-ensemble.state.set_pbc_matrix(np.diag(np.ones(3)*100.))
+ensemble.state.set_pbc_matrix(np.diag(np.ones(3)*30))
 ensemble.state.set_positions(pdb.positions)
 ensemble.state.set_velocities_to_temperature(Quantity(273, kelvin))
 

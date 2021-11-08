@@ -12,18 +12,19 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 import pytest
 
 test_order = [
-    'base_dimension', 'unit', 'unit_definition', 'quantity',
-    'particle', 'topology', 'state', 'cell_list', 'segment',
-    'pdb_file', 'psf_file', 'charmm_param_file',
-    'constraint', 
-    'electrostatic_constraint'
-    'charmm_nonbonded_constraint', 'charmm_bond_constraint', 'charmm_angle_constraint',
-    'charmm_dihedral_constraint', 'charmm_improper_constraint',
-    'forcefield', 'charmm_forcefield'
-    'ensemble',
-    'integrator', 'verlet_integrator', 'langevin_integrator'
-    'simulation',
-    'dumper', 'pdb_dumper', 'log_dumper'
+     'environment',
+     'base_dimension', 'unit', 'unit_definition', 'quantity',
+     'particle', 'topology', 'state', 'cell_list', 'segment',
+     'pdb_file', 'psf_file', 'charmm_param_file',
+     'constraint', 
+     'electrostatic_constraint'
+     'charmm_nonbonded_constraint', 'charmm_bond_constraint', 'charmm_angle_constraint',
+     'charmm_dihedral_constraint', 'charmm_improper_constraint',
+     'forcefield', 'charmm_forcefield'
+     'ensemble',
+     'integrator', 'verlet_integrator', 'langevin_integrator'
+     'simulation',
+     'dumper', 'pdb_dumper', 'log_dumper'
 ]
 
 def pytest_collection_modifyitems(items):

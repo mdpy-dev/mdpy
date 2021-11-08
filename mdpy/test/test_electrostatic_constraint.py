@@ -11,7 +11,7 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 
 import pytest, os
 import numpy as np
-from .. import NUMPY_FLOAT
+from .. import env
 from ..constraint import ElectrostaticConstraint
 from ..core import Particle, Topology
 from ..ensemble import Ensemble
@@ -51,6 +51,8 @@ class TestElectrostaticConstraint:
             [0, 0, 0], [0, 10, 0], [0, 21, 0], [0, 11, 0]
         ])
         self.ensemble = Ensemble(t)
+        self.ensemble.state.set_pbc_matrix(np.eye(3)*30)
+        self.ensemble.state.cell_list.set_cutoff_radius(12)
         self.ensemble.state.set_positions(self.p)
         self.constraint = ElectrostaticConstraint()
 
@@ -68,8 +70,6 @@ class TestElectrostaticConstraint:
         self.ensemble.state.set_pbc_matrix(self.pbc)
         self.ensemble.add_constraints(self.constraint)
         assert self.constraint._parent_ensemble.num_constraints == 1
-        assert self.constraint._float_params[0, 0] == 1
-        assert self.constraint._float_params[1, 1] == 0
 
     def test_update(self):
         self.ensemble.state.set_pbc_matrix(self.pbc)
@@ -81,7 +81,7 @@ class TestElectrostaticConstraint:
         assert forces[3, 1] == 0
         k = Quantity(4 * np.pi) * EPSILON0
         force_val = - Quantity(1, e) * Quantity(2, e) / k / Quantity(10, angstrom)**2
-        force_vec = get_unit_vec(np.array([0, 10, 0], dtype=NUMPY_FLOAT))
+        force_vec = get_unit_vec(np.array([0, 10, 0], dtype=env.NUMPY_FLOAT))
         force1 = force_val.convert_to(default_force_unit).value * force_vec
         assert forces[0, 0] == pytest.approx(force1[0])
         assert forces[0, 1] == pytest.approx(force1[1])

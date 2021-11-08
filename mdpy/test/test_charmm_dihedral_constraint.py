@@ -11,7 +11,7 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 
 import pytest, os
 import numpy as np
-from .. import NUMPY_FLOAT
+from .. import env
 from ..constraint import CharmmDihedralConstraint
 from ..core import Particle, Topology
 from ..ensemble import Ensemble
@@ -56,6 +56,8 @@ class TestCharmmDihedralConstraint:
             [0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]
         ])
         self.ensemble = Ensemble(t)
+        self.ensemble.state.set_pbc_matrix(np.eye(3)*30)
+        self.ensemble.state.cell_list.set_cutoff_radius(12)
         self.ensemble.state.set_positions(positions)
         self.ensemble.state.set_velocities(velocities)
 
@@ -95,7 +97,6 @@ class TestCharmmDihedralConstraint:
 
     def test_update(self):    
         self.ensemble.add_constraints(self.constraint)
-        self.ensemble.state.set_pbc_matrix(np.diag(np.ones(3)*10))
         self.constraint.update()
         
         forces = self.constraint.forces
@@ -124,4 +125,4 @@ class TestCharmmDihedralConstraint:
         energy = self.constraint.potential_energy
         k, n, delta = self.params['dihedral']['CA-NY-CPT-CA'][0]
         theta = get_dihedral([0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1])
-        assert energy == pytest.approx(NUMPY_FLOAT(k * (1 + np.cos(n*theta - delta))))
+        assert energy == pytest.approx(env.NUMPY_FLOAT(k * (1 + np.cos(n*theta - delta))))
