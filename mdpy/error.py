@@ -9,21 +9,21 @@ contact : zhenyuwei99@gmail.com
 copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 '''
 
+class EnvironmentVariableError(Exception):
+    '''This error occurs when:
+    - The environment variable is not supported
+
+    Used in:
+    - mdpy.environment
+    '''
+    pass
+
 class UnitDimensionDismatchedError(Exception):
     '''This error occurs when:
     - The base dimension of two quantities is dismatched for a specific operation.
     
     Used in:
     - mdpy.unit.base_dimension
-    '''
-    pass
-
-class ChangeDeviceBoundedDataError(Exception):
-    '''This error occurs when:
-    - Users try to change the immutable jax.DeviceArray
-    
-    Used in:
-    - mdpy.unit.quantity
     '''
     pass
 
@@ -72,6 +72,15 @@ class ConstraintConflictError(Exception):
     '''
     pass
 
+class ModifyJoinedTopologyError(Exception):
+    '''This error occurs when:
+    - Adding particle or topology geometry to a joined Topology object
+    
+    Used in:
+    - mdpy.core.topology
+    '''
+    pass
+
 class NonBoundedError(Exception):
     '''This error occurs when:
     - Parent object is not bounded 
@@ -98,6 +107,15 @@ class PBCPoorDefinedError(Exception):
     - mdpy.core.state
     '''
     pass
+
+class CellListPoorDefinedError(Exception):
+    '''This error occurs when:
+    - The pbc info of cell list is not defined well
+    - The cutoff_radius of cell list is not defined well
+
+    Used in:
+    - mdpy.core.cell_list
+    '''
 
 class ParameterPoorDefinedError(Exception):
     '''This error occurs when:

@@ -51,7 +51,8 @@ class TestLogDumper:
         )
 
         ensemble = forcefield.create_ensemble()
-        ensemble.state.set_pbc_matrix(np.eye(3) * 10)
+        ensemble.state.set_pbc_matrix(np.eye(3) * 100)
+        ensemble.state.cell_list.set_cutoff_radius(12)
         ensemble.state.set_positions(pdb.positions)
         ensemble.state.set_velocities_to_temperature(Quantity(300, kelvin))
 

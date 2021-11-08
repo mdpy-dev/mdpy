@@ -1,5 +1,5 @@
-HEADER    PDB FILE CREATED WITH MDPY              05-NOV-2021
-CRYSY1   10.000   10.000   10.000  90.00  90.00  90.00
+HEADER    PDB FILE CREATED WITH MDPY              07-NOV-2021
+CRYSY1  100.000  100.000  100.000  90.00  90.00  90.00
 MODEL        0
 ATOM      1  CA  ALA A   0       0.000   0.000   0.000  0.00  0.00          C 
 ATOM      2  N   ALA A   0       1.000   1.000   1.000  0.00  0.00          N 
