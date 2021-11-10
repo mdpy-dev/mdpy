@@ -21,7 +21,7 @@ from ..math import *
 class State:
     def __init__(self, topology: Topology) -> None:
         self._particles = topology.particles
-        self._masses = [particle.mass for particle in self._particles]
+        self._masses = topology.masses
         self._num_particles = len(self._particles)
         self._matrix_shape = [self._num_particles, SPATIAL_DIM]
         self._positions = np.zeros(self._matrix_shape, dtype=env.NUMPY_FLOAT)
@@ -86,13 +86,18 @@ class State:
 
     def set_velocities_to_temperature(self, temperature):
         temperature = check_quantity(temperature, default_temperature_unit)
-        masses = Quantity(self._masses)
-        velocities = []
         factor = Quantity(3) * KB * temperature / default_mass_unit
-        for i in range(self._num_particles):
-            width = (factor/masses[i]).sqrt().convert_to(default_velocity_unit).value
-            velocities.append(np.random.rand(3) * 2 * width - width)
-        self.set_velocities(np.vstack(velocities))
+        factor = factor.convert_to(default_velocity_unit**2).value
+        self.set_velocities(self.generator(self._masses, factor))
+
+    @staticmethod
+    def generator(masses, factor):
+        num_particles = masses.shape[0]
+        velocities = np.random.rand(num_particles, 3).astype(masses.dtype)
+        for particle in range(num_particles):
+            width = np.sqrt(factor/masses[particle])
+            velocities[particle, :] = velocities[particle, :] * 2 * width - width
+        return velocities
 
     @property
     def positions(self):
