@@ -22,7 +22,8 @@ class CellList:
         self._pbc_diag = np.zeros(SPATIAL_DIM, env.NUMPY_FLOAT)
         self._num_particles = 0
         self._particle_cell_index = None # N x 3
-        self._cell_list = None # n x n x n
+        self._cell_list = None # n x n x n x Nb
+        self._num_particles_per_cell = 0
         self._kernel = nb.njit(
             (env.NUMBA_FLOAT[:, ::1], env.NUMBA_FLOAT[:, ::1], env.NUMBA_INT[::1])
         )(self.kernel)
@@ -80,6 +81,7 @@ class CellList:
             self._particle_cell_index, self._cell_list = self._kernel(
                 positive_position, self._cell_inv, self._num_cells_vec
             )
+            self._num_particles_per_cell = self._cell_list.shape[3]
         else:
             self._is_poor_defined(verbose=True)
             raise CellListPoorDefinedError('Cell list is poorly defined.')
@@ -137,3 +139,7 @@ class CellList:
     @property
     def num_cell_vec(self):
         return self._num_cells_vec
+
+    @property
+    def num_particles_per_cell(self):
+        return self._num_particles_per_cell
