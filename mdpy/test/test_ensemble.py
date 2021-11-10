@@ -76,7 +76,7 @@ class TestEnsemble:
     def test_add_constraints(self):
         f2 = os.path.join(data_dir, 'par_all36_prot.prm')
         f3 = os.path.join(data_dir, 'toppar_water_ions_namd.str')
-        psf_file_path = os.path.join(data_dir, '6PO6.psf')
+        psf_file_path = os.path.join(data_dir, '1M9Z.psf')
         charmm_file = CharmmParamFile(f2, f3)
         params = charmm_file.params
         topology = PSFFile(psf_file_path).create_topology()
