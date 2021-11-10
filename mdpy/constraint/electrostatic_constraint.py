@@ -13,13 +13,22 @@ import math
 import numpy as np
 import numba as nb
 from numba import cuda
-from .. import env
+from operator import floordiv
+from .. import env, SPATIAL_DIM
 from . import Constraint
 from ..ensemble import Ensemble
 from ..math import *
 from ..unit import *
 
 epsilon0 = EPSILON0.value
+NUM_NEIGHBOR_CELLS = 27
+NEIGHBOR_CELL_TEMPLATE = np.zeros([NUM_NEIGHBOR_CELLS, SPATIAL_DIM], dtype=env.NUMPY_INT)
+index = 0
+for i in range(-1, 2):
+    for j in range(-1, 2):
+        for k in range(-1, 2):
+            NEIGHBOR_CELL_TEMPLATE[index, :] = [i, j, k]
+            index += 1
 
 class ElectrostaticConstraint(Constraint):
     def __init__(self, params=None, force_id: int = 0, force_group: int = 0) -> None:
@@ -33,8 +42,8 @@ class ElectrostaticConstraint(Constraint):
             ))(self.cpu_kernel)
         elif env.platform == 'CUDA':
             self._kernel = cuda.jit(nb.void(
-                env.NUMBA_FLOAT[:, ::1], env.NUMBA_FLOAT[:, ::1], env.NUMBA_FLOAT[::1],
-                env.NUMBA_INT[:, ::1], env.NUMBA_FLOAT[:, ::1], 
+                env.NUMBA_FLOAT[:, ::1], env.NUMBA_FLOAT[:, ::1], env.NUMBA_FLOAT[::1], env.NUMBA_INT[:, ::1], env.NUMBA_FLOAT[:, ::1], 
+                env.NUMBA_INT[:, ::1], env.NUMBA_INT[:, :, :, ::1], env.NUMBA_INT[::1], env.NUMBA_INT[:, ::1],
                 env.NUMBA_FLOAT[:, ::1], env.NUMBA_FLOAT[::1]
             ))(self.cuda_kernel)
 
@@ -80,20 +89,33 @@ class ElectrostaticConstraint(Constraint):
 
     @staticmethod
     def cuda_kernel(
-        positions, charges, k, 
-        bonded_particles, pbc_matrix, 
+        positions, charges, k, bonded_particles, pbc_matrix, 
+        particle_cell_index, cell_list, num_cell_vec, neighbor_cell_template,
         forces, potential_energy
     ):
         thread_x = cuda.blockIdx.x * cuda.blockDim.x + cuda.threadIdx.x
         thread_y = cuda.blockIdx.y * cuda.blockDim.y + cuda.threadIdx.y
+        num_particles_per_cell = cell_list.shape[3]
         num_particles = positions.shape[0]
-        id1, id2 = thread_x, thread_y
+
+        id1 = thread_x
         if id1 >= num_particles:
             return None
-        elif id2 >= num_particles:
+        cell_id = floordiv(thread_y, num_particles_per_cell)
+        cell_particle_id = thread_y % num_particles_per_cell
+        if cell_id >= 27:
             return None
-        elif id1 == id2:
+        x = particle_cell_index[id1, 0] + neighbor_cell_template[cell_id, 0]
+        x = x - num_cell_vec[0] if x >= num_cell_vec[0] else x
+        y = particle_cell_index[id1, 1] + neighbor_cell_template[cell_id, 1]
+        y = y - num_cell_vec[1] if y >= num_cell_vec[1] else y
+        z = particle_cell_index[id1, 2] + neighbor_cell_template[cell_id, 2]
+        z = z - num_cell_vec[2] if z >= num_cell_vec[2] else z
+        id2 = cell_list[x, y, z, cell_particle_id]
+        if id1 == id2:
             return None
+        if id2 == -1:
+            return None 
         for i in bonded_particles[id1, :]:
             if i == -1:
                 break
@@ -137,6 +159,10 @@ class ElectrostaticConstraint(Constraint):
             d_positions = cuda.to_device(self._parent_ensemble.state.positions)
             d_bonded_particles = cuda.to_device(self._parent_ensemble.topology.bonded_particles)
             d_pbc_matrix = cuda.to_device(self._parent_ensemble.state.pbc_matrix)
+            d_particle_cell_index = cuda.to_device(self._parent_ensemble.state.cell_list.particle_cell_index)
+            d_cell_list = cuda.to_device(self._parent_ensemble.state.cell_list.cell_list)
+            d_num_cell_vec = cuda.to_device(self._parent_ensemble.state.cell_list.num_cell_vec)
+            d_neighbor_cell_template = cuda.to_device(NEIGHBOR_CELL_TEMPLATE)
             d_forces = cuda.to_device(self._forces)
             d_potential_energy = cuda.to_device(self._potential_energy)
 
@@ -148,6 +174,8 @@ class ElectrostaticConstraint(Constraint):
             self._kernel[block_per_grid, thread_per_block](
                 d_positions, self._device_charges, self._device_k,
                 d_bonded_particles, d_pbc_matrix,
+                d_particle_cell_index, d_cell_list, 
+                d_num_cell_vec, d_neighbor_cell_template,
                 d_forces, d_potential_energy
             )
             self._forces = d_forces.copy_to_host()
