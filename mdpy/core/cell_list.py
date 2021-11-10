@@ -22,7 +22,7 @@ class CellList:
         self._pbc_diag = np.zeros(SPATIAL_DIM, env.NUMPY_FLOAT)
         self._num_particles = 0
         self._particle_cell_index = None # N x 3
-        self._cell_list = None # n x n x n
+        self._cell_list = None # n x n x n x Nb
         self._num_particles_per_cell = 0
         self._kernel = nb.njit(
             (env.NUMBA_FLOAT[:, ::1], env.NUMBA_FLOAT[:, ::1], env.NUMBA_INT[::1])
