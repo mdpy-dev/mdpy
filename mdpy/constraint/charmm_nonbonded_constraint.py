@@ -38,11 +38,10 @@ class CharmmNonbondedConstraint(Constraint):
         self._neighbor_distance = []
         self._num_nonbonded_pairs = 0
         if env.platform == 'CPU':
-            self._kernel = nb.njit(nb.void(
+            self._kernel = nb.njit((
                 env.NUMBA_FLOAT[:, ::1], env.NUMBA_FLOAT[:, ::1], env.NUMBA_FLOAT[:, ::1], env.NUMBA_FLOAT[:, ::1],
                 env.NUMBA_FLOAT, env.NUMBA_INT[:, ::1], env.NUMBA_INT[:, ::1],
-                env.NUMBA_INT[:, ::1], env.NUMBA_INT[:, :, :, ::1], env.NUMBA_INT[::1], env.NUMBA_INT[:, ::1],
-                env.NUMBA_FLOAT[:, ::1], env.NUMBA_FLOAT[::1]
+                env.NUMBA_INT[:, ::1], env.NUMBA_INT[:, :, :, ::1], env.NUMBA_INT[::1], env.NUMBA_INT[:, ::1]
             ))(self.cpu_kernel)
         elif env.platform == 'CUDA':
             self._kernel = cuda.jit(nb.void(
@@ -50,7 +49,7 @@ class CharmmNonbondedConstraint(Constraint):
                 env.NUMBA_FLOAT[::1], env.NUMBA_INT[:, ::1], env.NUMBA_INT[:, ::1],
                 env.NUMBA_INT[:, ::1], env.NUMBA_INT[:, :, :, ::1], env.NUMBA_INT[::1], env.NUMBA_INT[:, ::1],
                 env.NUMBA_FLOAT[:, ::1], env.NUMBA_FLOAT[::1]
-            ))(self.gpu_kernel)
+            ))(self.cuda_kernel)
         
     def __repr__(self) -> str:
         return '<mdpy.constraint.CharmmNonbondedConstraint object>'
@@ -119,7 +118,7 @@ class CharmmNonbondedConstraint(Constraint):
         return forces, potential_energy
 
     @staticmethod
-    def gpu_kernel(
+    def cuda_kernel(
         positions, params, pbc_matrix, cutoff_radius,
         bonded_particles, scaling_particles, 
         particle_cell_index, cell_list, num_cell_vec, neighbor_cell_template,
@@ -150,8 +149,8 @@ class CharmmNonbondedConstraint(Constraint):
             return None 
         for i in bonded_particles[id1, :]:
             if i == -1:
-                continue
-            if id2 == i:
+                break
+            elif id2 == i:
                 return None
         x = (positions[id2, 0] - positions[id1, 0]) / pbc_matrix[0, 0]
         x = (x - round(x)) * pbc_matrix[0, 0]
@@ -164,7 +163,9 @@ class CharmmNonbondedConstraint(Constraint):
             scaled_x, scaled_y, scaled_z = x / r, y / r, z / r
             is_scaled = False
             for i in scaling_particles[id1, :]:
-                if id2 == i:
+                if i == -1:
+                    break
+                elif id2 == i:
                     is_scaled = True
                     break
             if not is_scaled:
@@ -218,12 +219,13 @@ class CharmmNonbondedConstraint(Constraint):
             d_neighbor_cell_template = cuda.to_device(NEIGHBOR_CELL_TEMPLATE)
             d_forces = cuda.to_device(self._forces)
             d_potential_energy = cuda.to_device(self._potential_energy)
+            
             thread_per_block = (32, 32)
             block_per_grid_x = int(np.ceil(
-                self._parent_ensemble.topology.num_particles / thread_per_block[1]
+                self._parent_ensemble.topology.num_particles / thread_per_block[0]
             ))
             block_per_grid_y = int(np.ceil(
-                self._parent_ensemble.state.cell_list.num_particles_per_cell * 27 / thread_per_block[0]
+                self._parent_ensemble.state.cell_list.num_particles_per_cell * 27 / thread_per_block[1]
             ))
             block_per_grid = (block_per_grid_x, block_per_grid_y)
             self._kernel[block_per_grid, thread_per_block](
