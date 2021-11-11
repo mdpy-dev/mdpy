@@ -17,15 +17,17 @@ toppar_dir = os.path.join(cur_dir, '../data/charmm')
 data_dir = os.path.join(cur_dir, 'data')
 out_dir = os.path.join(cur_dir, 'out')
 sys.path.append(os.path.join(cur_dir, '..'))
-import numpy as np
 import mdpy as md
 from mdpy.unit import *
+md.env.set_platform('CUDA')
 
-prot_name = '6PO6_ionized'
+nvtx.RangePush('Create Topology')
+prot_name = '1M9Z'
 psf = md.file.PSFFile(os.path.join(data_dir, prot_name + '.psf'))
 pdb = md.file.PDBFile(os.path.join(data_dir, prot_name + '.pdb'))
 
 topology = psf.create_topology()
+nvtx.RangePop()
 
 nvtx.RangePush('Create Ensemble')
 params = md.file.CharmmParamFile(
@@ -66,9 +68,17 @@ nvtx.RangePop()
 
 nvtx.RangePop()
 
-ensemble.state.set_pbc_matrix(np.diag(np.ones(3)*30))
+nvtx.RangePush('State Initialization')
+ensemble.state.set_pbc_matrix(pdb.pbc_matrix)
+nvtx.RangePush('Positions')
 ensemble.state.set_positions(pdb.positions)
+nvtx.RangePop()
+nvtx.RangePush('Velocities')
 ensemble.state.set_velocities_to_temperature(Quantity(273, kelvin))
+nvtx.RangePop()
+nvtx.RangePop()
+
+print('Start calculation')
 
 for constraint in ensemble.constraints:
     job_name = '%s' %constraint
