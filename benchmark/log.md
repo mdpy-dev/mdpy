@@ -66,10 +66,57 @@
 - Date: 2021-11-07
 - Commit: 9ac62a0c8aa556c59caef6381d5ea08c97089d5f
 - Modification:
-    - Add `join` and `split` method to mdpy.core.Topology class
+    - Add `join` and `split` method to `mdpy.core.Topology` class
     - Add `bonded_particle` params to the kernel function of `mdpy.constraint.ElectrostaticConstraint` class
     - Update `bind_ensemble` method of `mdpy.constraint.CharmmNonbondedConstraint`, removing most of IO to `mdpy.core.Topology.join()`
 - Conclusion
     - Fix bug of `mdpy.constraint.ElectrostaticConstraint`
     - No big change on Ensemble creation
     - Little increase on computation speed of `mdpy.constraint.CharmmNonbondedConstraint`
+
+## 07_gpu_numba_nonbonded_constraint
+
+- Date: 2021-11-10
+- Commit: 7c084337e0c8f1138d04ae20431546bd6af3b681
+- Modification:
+    - Add gpu_kernel to `mdpy.constraint.NonbondedConstraint` class
+- Conclusion:
+    - Calculation speed of `mdpy.constraint.NonbondedConstraint.update()` accelerate 100x faster
+
+## 08_gpu_numba_electrostatic_constraint
+
+- Date: 2021-11-10
+- Commit: 44284e1db5bf6fd1439bc10f3a28409c17cd01ec
+- Modification:
+    - Add cuda_kernel to `mdpy.constraint.ElectrostaticConstraint` class
+- Conclusion:
+    - Calculation speed of `mdpy.constraint.ElectrostaticConstraint.update()` accelerate 100x faster
+    - The speed of `ensemble.update` increase from 105s to 6s to 50ms
+
+## 09_numba_cpu_large_system
+
+- Date: 2021-11-10
+- Commit: None
+- Modification:
+    - Replace benchmark data file with file with 100k atoms and run on cpu
+- Conclusion:
+    - The time is intolerable
+
+## 10_numba_gpu_large_system
+
+- Date: 2021-11-10
+- Commit: None
+- Modification:
+    - Replace benchmark data file with file with 100k atoms and run on gpu
+- Conclusion:
+    - 200x faster
+    - `mdpy.core.State.set_velocities_to_temperature` occupied too long time
+
+## 11_state_update
+
+- Date: 2021-11-11
+- Commit: fe87c8b29ef94a2b4ad06cbd4f051d4717133cc6
+- Modification:
+    - Update `mdpy.core.State.set_velocities_to_temperature` method, removing Quantity calculation
+- Conclusion:
+    - The time waste in `mdpy.core.State.set_velocities_to_temperature` is decreased dramatically: 22.205s to 0.5s
