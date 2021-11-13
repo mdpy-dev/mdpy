@@ -90,7 +90,6 @@ class ElectrostaticConstraint(Constraint):
         thread_y = cuda.blockIdx.y * cuda.blockDim.y + cuda.threadIdx.y
         num_particles_per_cell = cell_list.shape[3]
         num_particles = positions.shape[0]
-
         id1 = thread_x
         if id1 >= num_particles:
             return None
@@ -108,11 +107,11 @@ class ElectrostaticConstraint(Constraint):
         if id1 == id2:
             return None
         if id2 == -1:
-            return None 
+            return None    
         for i in bonded_particles[id1, :]:
             if i == -1:
                 break
-            elif id2 == i:
+            if id2 == i:
                 return None
         e1 = charges[id1, 0]
         e2 = charges[id2, 0]
@@ -155,10 +154,9 @@ class ElectrostaticConstraint(Constraint):
             d_particle_cell_index = cuda.to_device(self._parent_ensemble.state.cell_list.particle_cell_index)
             d_cell_list = cuda.to_device(self._parent_ensemble.state.cell_list.cell_list)
             d_num_cell_vec = cuda.to_device(self._parent_ensemble.state.cell_list.num_cell_vec)
-            d_neighbor_cell_template = cuda.to_device(NEIGHBOR_CELL_TEMPLATE)
+            d_neighbor_cell_template = cuda.to_device(NEIGHBOR_CELL_TEMPLATE.astype(env.NUMPY_INT))
             d_forces = cuda.to_device(self._forces)
             d_potential_energy = cuda.to_device(self._potential_energy)
-
             thread_per_block = (8, 8)
             block_per_grid_x = int(np.ceil(
                 self._parent_ensemble.topology.num_particles / thread_per_block[0]
