@@ -10,6 +10,7 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 '''
 
 from . import Integrator
+from .. import env
 from ..ensemble import Ensemble
 from ..math import *
 
@@ -42,13 +43,11 @@ class VerletIntegrator(Integrator):
                 2 * self._cur_positions - self._pre_positions + 
                 accelration * self._time_step_square
             ), self._cur_positions
-            self.wrap_pbc(
-                ensemble.state.pbc_matrix, ensemble.state.pbc_inv
-            )
+            self._cur_positions = wrap_positions(self._cur_positions, *ensemble.state.pbc_info)
             ensemble.state.set_positions(self._cur_positions)
             # Update step
             cur_step += 1
-        # Set ensemble attributes
-        ensemble.state.set_velocities(
-            (self._cur_positions - self._pre_positions) / 2 / self._time_step
-        )
+        ensemble.state.set_velocities(unwrap_vec(
+            (self._cur_positions - self._pre_positions).astype(env.NUMPY_FLOAT), 
+            *ensemble.state.pbc_info
+        ) / 2 / self._time_step)

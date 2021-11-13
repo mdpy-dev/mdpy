@@ -29,11 +29,10 @@ class CharmmNonbondedConstraint(Constraint):
         self._neighbor_distance = []
         self._num_nonbonded_pairs = 0
         if env.platform == 'CPU':
-            self._kernel = nb.njit(nb.void(
+            self._kernel = nb.njit((
                 env.NUMBA_FLOAT[:, ::1], env.NUMBA_FLOAT[:, ::1], env.NUMBA_FLOAT[:, ::1], env.NUMBA_FLOAT[:, ::1],
                 env.NUMBA_FLOAT, env.NUMBA_INT[:, ::1], env.NUMBA_INT[:, ::1],
-                env.NUMBA_INT[:, ::1], env.NUMBA_INT[:, :, :, ::1], env.NUMBA_INT[::1], env.NUMBA_INT[:, ::1],
-                env.NUMBA_FLOAT[:, ::1], env.NUMBA_FLOAT[::1]
+                env.NUMBA_INT[:, ::1], env.NUMBA_INT[:, :, :, ::1], env.NUMBA_INT[::1], env.NUMBA_INT[:, ::1]
             ))(self.cpu_kernel)
         elif env.platform == 'CUDA':
             self._kernel = cuda.jit(nb.void(
