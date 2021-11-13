@@ -15,7 +15,7 @@ from numpy import arccos
 from .. import env
 from .pbc import *
 
-@nb.njit(env.NUMBA_FLOAT[::1](env.NUMBA_FLOAT[::1]))
+@nb.njit()
 def get_unit_vec(vec):
     norm = np.linalg.norm(vec)
     return vec / norm if norm != 0 else vec
@@ -44,9 +44,7 @@ def get_angle(p1, p2, p3, is_angular=True):
     else:
         return arccos(cos_phi) / np.pi * 180
 
-@nb.njit(env.NUMBA_FLOAT(
-    env.NUMBA_FLOAT[::1], env.NUMBA_FLOAT[::1], env.NUMBA_FLOAT[::1], env.NUMBA_FLOAT[:, ::1], env.NUMBA_FLOAT[:, ::1]
-))
+@nb.njit()
 def get_pbc_angle(p1, p2, p3, pbc_matrix, pbc_inv):
     v0 = unwrap_vec(p1 - p2, pbc_matrix, pbc_inv)
     v1 = unwrap_vec(p3 - p2, pbc_matrix, pbc_inv)
@@ -78,10 +76,7 @@ def get_dihedral(p1, p2, p3, p4, is_angular=True):
     else:
         return np.arctan2(x, y) / np.pi * 180
 
-@nb.njit(env.NUMBA_FLOAT(
-    env.NUMBA_FLOAT[::1], env.NUMBA_FLOAT[::1], env.NUMBA_FLOAT[::1], env.NUMBA_FLOAT[::1],
-    env.NUMBA_FLOAT[:, ::1], env.NUMBA_FLOAT[:, ::1]
-))
+@nb.njit()
 def get_pbc_dihedral(p1, p2, p3, p4, pbc_matrix, pbc_inv):
     r1 = unwrap_vec(p2 - p1, pbc_matrix, pbc_inv)
     r2 = unwrap_vec(p3 - p2, pbc_matrix, pbc_inv)
