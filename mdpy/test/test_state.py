@@ -32,6 +32,7 @@ class TestState:
         self.num_particles = len(self.particles)
         self.topology = Topology()
         self.topology.add_particles(self.particles)
+        self.topology.join()
         self.state = State(self.topology)
 
     def teardown(self):
