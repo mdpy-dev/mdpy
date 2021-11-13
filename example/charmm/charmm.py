@@ -14,15 +14,19 @@ cur_dir = os.path.dirname(os.path.abspath(__file__))
 toppar_dir = os.path.join(cur_dir, '../../data/charmm')
 str_dir = os.path.join(cur_dir, 'str')
 out_dir = os.path.join(cur_dir, 'out')
+if not os.path.exists(out_dir):
+    os.mkdir(out_dir)
 sys.path.append(os.path.join(cur_dir, '../..'))
 import numpy as np
 import mdpy as md
 from mdpy.unit import *
 
 # Simulation paramters
+md.env.set_platform('CUDA')
+md.env.set_precision('DOUBLE')
 prot_name = '6PO6_ionized'
-dump_interval = 20
-sim_step = 10000
+dump_interval = 50
+sim_step = 100000
 
 # Read input
 psf = md.file.PSFFile(os.path.join(str_dir, prot_name + '.psf'))
@@ -36,9 +40,9 @@ forcefield.set_param_files(
 )
 ensemble = forcefield.create_ensemble()
 ensemble.state.set_pbc_matrix(pdb.pbc_matrix)
-# ensemble.state.set_pbc_matrix(np.diag(np.ones(3)*100))
+# ensemble.state.set_pbc_matrix(np.diag(np.ones(3)*20))
 ensemble.state.set_positions(pdb.positions)
-ensemble.state.set_velocities_to_temperature(Quantity(273, kelvin))
+ensemble.state.set_velocities_to_temperature(Quantity(300, kelvin))
 # Set simlation
 integrator = md.integrator.VerletIntegrator(Quantity(0.05, femtosecond))
 # integrator = md.integrator.LangevinIntegrator(Quantity(0.05, femtosecond), Quantity(300, kelvin), Quantity(1, 1 / picosecond))
@@ -55,8 +59,9 @@ energy = Quantity(simulation.ensemble.potential_energy, default_energy_unit).con
 for constraint in simulation.ensemble.constraints:
     energy = Quantity(constraint.potential_energy, default_energy_unit).convert_to(kilocalorie_permol).value
     print(constraint, energy)
-simulation.minimize_energy(0.01, max_iterations=250)
+simulation.minimize_energy(0.001, max_iterations=250)
 for constraint in simulation.ensemble.constraints:
     energy = Quantity(constraint.potential_energy, default_energy_unit).convert_to(kilocalorie_permol).value
     print(constraint, energy)
+
 simulation.sample(sim_step)

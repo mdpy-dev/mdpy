@@ -3,6 +3,12 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# Benchmark file
+benchmark/
+
+# Output file
+out/
+
 # Vscode
 .vscode/
 .VSCodeCounter
