@@ -15,7 +15,7 @@ import math
 from numba import cuda
 from operator import floordiv
 from . import Constraint, NUM_NEIGHBOR_CELLS, NEIGHBOR_CELL_TEMPLATE
-from .. import env, SPATIAL_DIM
+from .. import env
 from ..ensemble import Ensemble
 from ..math import *
 from ..unit import *
@@ -140,8 +140,8 @@ class CharmmNonbondedConstraint(Constraint):
             return None 
         for i in bonded_particles[id1, :]:
             if i == -1:
-                continue
-            if id2 == i:
+                break
+            elif id2 == i:
                 return None
         x = (positions[id2, 0] - positions[id1, 0]) / pbc_matrix[0, 0]
         x = (x - round(x)) * pbc_matrix[0, 0]
@@ -178,7 +178,7 @@ class CharmmNonbondedConstraint(Constraint):
             cuda.atomic.add(forces, (id2, 0), -force_x)
             cuda.atomic.add(forces, (id2, 1), -force_y)
             cuda.atomic.add(forces, (id2, 2), -force_z)
-            energy = 4 * epsilon * (scaled_r**12 - scaled_r**6) / 2
+            energy = 2 * epsilon * (scaled_r**12 - scaled_r**6) 
             cuda.atomic.add(potential_energy, 0, energy)
 
     def update(self):
@@ -192,7 +192,7 @@ class CharmmNonbondedConstraint(Constraint):
                 self._parent_ensemble.state.cell_list.particle_cell_index,
                 self._parent_ensemble.state.cell_list.cell_list,
                 self._parent_ensemble.state.cell_list.num_cell_vec,
-                NEIGHBOR_CELL_TEMPLATE
+                NEIGHBOR_CELL_TEMPLATE.astype(env.NUMPY_INT)
             )
         elif env.platform == 'CUDA':
             self._forces = np.zeros_like(self._parent_ensemble.state.positions)
@@ -205,7 +205,7 @@ class CharmmNonbondedConstraint(Constraint):
             d_particle_cell_index = cuda.to_device(self._parent_ensemble.state.cell_list.particle_cell_index)
             d_cell_list = cuda.to_device(self._parent_ensemble.state.cell_list.cell_list)
             d_num_cell_vec = cuda.to_device(self._parent_ensemble.state.cell_list.num_cell_vec)
-            d_neighbor_cell_template = cuda.to_device(NEIGHBOR_CELL_TEMPLATE)
+            d_neighbor_cell_template = cuda.to_device(NEIGHBOR_CELL_TEMPLATE.astype(env.NUMPY_INT))
             d_forces = cuda.to_device(self._forces)
             d_potential_energy = cuda.to_device(self._potential_energy)
             thread_per_block = (8, 8)
