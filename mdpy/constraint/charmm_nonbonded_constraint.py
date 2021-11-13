@@ -14,20 +14,11 @@ import numba as nb
 import math
 from numba import cuda
 from operator import floordiv
-from . import Constraint
+from . import Constraint, NUM_NEIGHBOR_CELLS, NEIGHBOR_CELL_TEMPLATE
 from .. import env, SPATIAL_DIM
 from ..ensemble import Ensemble
 from ..math import *
 from ..unit import *
-
-NUM_NEIGHBOR_CELLS = 27
-NEIGHBOR_CELL_TEMPLATE = np.zeros([NUM_NEIGHBOR_CELLS, SPATIAL_DIM], dtype=env.NUMPY_INT)
-index = 0
-for i in range(-1, 2):
-    for j in range(-1, 2):
-        for k in range(-1, 2):
-            NEIGHBOR_CELL_TEMPLATE[index, :] = [i, j, k]
-            index += 1
 
 class CharmmNonbondedConstraint(Constraint):
     def __init__(self, params, cutoff_radius=12, force_id: int = 0, force_group: int = 0) -> None:
@@ -38,10 +29,11 @@ class CharmmNonbondedConstraint(Constraint):
         self._neighbor_distance = []
         self._num_nonbonded_pairs = 0
         if env.platform == 'CPU':
-            self._kernel = nb.njit((
+            self._kernel = nb.njit(nb.void(
                 env.NUMBA_FLOAT[:, ::1], env.NUMBA_FLOAT[:, ::1], env.NUMBA_FLOAT[:, ::1], env.NUMBA_FLOAT[:, ::1],
                 env.NUMBA_FLOAT, env.NUMBA_INT[:, ::1], env.NUMBA_INT[:, ::1],
-                env.NUMBA_INT[:, ::1], env.NUMBA_INT[:, :, :, ::1], env.NUMBA_INT[::1], env.NUMBA_INT[:, ::1]
+                env.NUMBA_INT[:, ::1], env.NUMBA_INT[:, :, :, ::1], env.NUMBA_INT[::1], env.NUMBA_INT[:, ::1],
+                env.NUMBA_FLOAT[:, ::1], env.NUMBA_FLOAT[::1]
             ))(self.cpu_kernel)
         elif env.platform == 'CUDA':
             self._kernel = cuda.jit(nb.void(
@@ -132,8 +124,9 @@ class CharmmNonbondedConstraint(Constraint):
         id1 = thread_x
         if id1 >= num_particles:
             return None
-        cell_id = thread_y
-        if cell_id >= 27:
+        cell_id = floordiv(thread_y, num_particles_per_cell)
+        cell_particle_id = thread_y % num_particles_per_cell
+        if cell_id >= NUM_NEIGHBOR_CELLS:
             return None
         x = particle_cell_index[id1, 0] + neighbor_cell_template[cell_id, 0]
         x = x - num_cell_vec[0] if x >= num_cell_vec[0] else x
@@ -141,57 +134,53 @@ class CharmmNonbondedConstraint(Constraint):
         y = y - num_cell_vec[1] if y >= num_cell_vec[1] else y
         z = particle_cell_index[id1, 2] + neighbor_cell_template[cell_id, 2]
         z = z - num_cell_vec[2] if z >= num_cell_vec[2] else z
-        particles_list = cell_list[x, y, z, :]
-        bonded_particles = bonded_particles[id1, :]
-        for id2 in particles_list:
-            if id1 == id2:
+        id2 = cell_list[x, y, z, cell_particle_id]
+        if id1 == id2:
+            return None
+        if id2 == -1:
+            return None 
+        for i in bonded_particles[id1, :]:
+            if i == -1:
+                continue
+            if id2 == i:
                 return None
-            if id2 == -1:
-                return None 
-            for i in bonded_particles:
-                if i == -1:
+        x = (positions[id2, 0] - positions[id1, 0]) / pbc_matrix[0, 0]
+        x = (x - round(x)) * pbc_matrix[0, 0]
+        y = (positions[id2, 1] - positions[id1, 1]) / pbc_matrix[1, 1]
+        y = (y - round(y)) * pbc_matrix[1, 1]
+        z = (positions[id2, 2] - positions[id1, 2]) / pbc_matrix[2, 2]
+        z = (z - round(z)) * pbc_matrix[2, 2]
+        r = math.sqrt(x**2 + y**2 + z**2)
+        if r <= cutoff_radius[0]:
+            scaled_x, scaled_y, scaled_z = x / r, y / r, z / r
+            is_scaled = False
+            for i in scaling_particles[id1, :]:
+                if id2 == i:
+                    is_scaled = True
                     break
-                elif id2 == i:
-                    return None
-            x = (positions[id2, 0] - positions[id1, 0]) / pbc_matrix[0, 0]
-            x = (x - round(x)) * pbc_matrix[0, 0]
-            y = (positions[id2, 1] - positions[id1, 1]) / pbc_matrix[1, 1]
-            y = (y - round(y)) * pbc_matrix[1, 1]
-            z = (positions[id2, 2] - positions[id1, 2]) / pbc_matrix[2, 2]
-            z = (z - round(z)) * pbc_matrix[2, 2]
-            r = math.sqrt(x**2 + y**2 + z**2)
-            if r <= cutoff_radius[0]:
-                scaled_x, scaled_y, scaled_z = x / r, y / r, z / r
-                is_scaled = False
-                for i in scaling_particles[id1, :]:
-                    if i == -1:
-                        break
-                    elif id2 == i:
-                        is_scaled = True
-                        break
-                if not is_scaled:
-                    epsilon1, sigma1 = params[id1, :2]
-                    epsilon2, sigma2 = params[id2, :2]
-                else:
-                    epsilon1, sigma1 = params[id1, 2:]
-                    epsilon2, sigma2 = params[id2, 2:]
-                epsilon, sigma = (
-                    math.sqrt(epsilon1 * epsilon2),
-                    (sigma1 + sigma2) / 2
-                )
-                scaled_r = sigma / r
-                force_val = - (2 * scaled_r**12 - scaled_r**6) / r * epsilon * 24 # Sequence for small number divide small number
-                force_x = scaled_x * force_val / 2
-                force_y = scaled_y * force_val / 2
-                force_z = scaled_z * force_val / 2
-                cuda.atomic.add(forces, (id1, 0), force_x)
-                cuda.atomic.add(forces, (id1, 1), force_y)
-                cuda.atomic.add(forces, (id1, 2), force_z)
-                cuda.atomic.add(forces, (id2, 0), -force_x)
-                cuda.atomic.add(forces, (id2, 1), -force_y)
-                cuda.atomic.add(forces, (id2, 2), -force_z)
-                energy = 4 * epsilon * (scaled_r**12 - scaled_r**6) / 2
-                cuda.atomic.add(potential_energy, 0, energy)
+            if not is_scaled:
+                epsilon1, sigma1 = params[id1, :2]
+                epsilon2, sigma2 = params[id2, :2]
+            else:
+                epsilon1, sigma1 = params[id1, 2:]
+                epsilon2, sigma2 = params[id2, 2:]
+            epsilon, sigma = (
+                math.sqrt(epsilon1 * epsilon2),
+                (sigma1 + sigma2) / 2
+            )
+            scaled_r = sigma / r
+            force_val = - (2 * scaled_r**12 - scaled_r**6) / r * epsilon * 24 # Sequence for small number divide small number
+            force_x = scaled_x * force_val / 2
+            force_y = scaled_y * force_val / 2
+            force_z = scaled_z * force_val / 2
+            cuda.atomic.add(forces, (id1, 0), force_x)
+            cuda.atomic.add(forces, (id1, 1), force_y)
+            cuda.atomic.add(forces, (id1, 2), force_z)
+            cuda.atomic.add(forces, (id2, 0), -force_x)
+            cuda.atomic.add(forces, (id2, 1), -force_y)
+            cuda.atomic.add(forces, (id2, 2), -force_z)
+            energy = 4 * epsilon * (scaled_r**12 - scaled_r**6) / 2
+            cuda.atomic.add(potential_energy, 0, energy)
 
     def update(self):
         self._check_bound_state()
@@ -220,13 +209,12 @@ class CharmmNonbondedConstraint(Constraint):
             d_neighbor_cell_template = cuda.to_device(NEIGHBOR_CELL_TEMPLATE)
             d_forces = cuda.to_device(self._forces)
             d_potential_energy = cuda.to_device(self._potential_energy)
-            
-            thread_per_block = (32, 1)
+            thread_per_block = (8, 8)
             block_per_grid_x = int(np.ceil(
                 self._parent_ensemble.topology.num_particles / thread_per_block[0]
             ))
             block_per_grid_y = int(np.ceil(
-                27 / thread_per_block[1]
+                self._parent_ensemble.state.cell_list.num_particles_per_cell * NUM_NEIGHBOR_CELLS / thread_per_block[1]
             ))
             block_per_grid = (block_per_grid_x, block_per_grid_y)
             self._kernel[block_per_grid, thread_per_block](
