@@ -14,21 +14,14 @@ import numpy as np
 import numba as nb
 from numba import cuda
 from operator import floordiv
-from .. import env, SPATIAL_DIM
-from . import Constraint
+from . import Constraint, NUM_NEIGHBOR_CELLS, NEIGHBOR_CELL_TEMPLATE
+from .. import env
 from ..ensemble import Ensemble
 from ..math import *
 from ..unit import *
 
 epsilon0 = EPSILON0.value
-NUM_NEIGHBOR_CELLS = 27
-NEIGHBOR_CELL_TEMPLATE = np.zeros([NUM_NEIGHBOR_CELLS, SPATIAL_DIM], dtype=env.NUMPY_INT)
-index = 0
-for i in range(-1, 2):
-    for j in range(-1, 2):
-        for k in range(-1, 2):
-            NEIGHBOR_CELL_TEMPLATE[index, :] = [i, j, k]
-            index += 1
+
 
 class ElectrostaticConstraint(Constraint):
     def __init__(self, params=None, force_id: int = 0, force_group: int = 0) -> None:
@@ -103,7 +96,7 @@ class ElectrostaticConstraint(Constraint):
             return None
         cell_id = floordiv(thread_y, num_particles_per_cell)
         cell_particle_id = thread_y % num_particles_per_cell
-        if cell_id >= 27:
+        if cell_id >= NUM_NEIGHBOR_CELLS:
             return None
         x = particle_cell_index[id1, 0] + neighbor_cell_template[cell_id, 0]
         x = x - num_cell_vec[0] if x >= num_cell_vec[0] else x
@@ -166,11 +159,14 @@ class ElectrostaticConstraint(Constraint):
             d_forces = cuda.to_device(self._forces)
             d_potential_energy = cuda.to_device(self._potential_energy)
 
-            thread_per_block = (32, 32)
-            block_per_grid = int(np.ceil(
+            thread_per_block = (8, 8)
+            block_per_grid_x = int(np.ceil(
                 self._parent_ensemble.topology.num_particles / thread_per_block[0]
             ))
-            block_per_grid = (block_per_grid, block_per_grid)
+            block_per_grid_y = int(np.ceil(
+                self._parent_ensemble.state.cell_list.num_particles_per_cell * NUM_NEIGHBOR_CELLS / thread_per_block[1]
+            ))
+            block_per_grid = (block_per_grid_x, block_per_grid_y)
             self._kernel[block_per_grid, thread_per_block](
                 d_positions, self._device_charges, self._device_k,
                 d_bonded_particles, d_pbc_matrix,
