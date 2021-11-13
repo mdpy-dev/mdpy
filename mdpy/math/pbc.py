@@ -12,7 +12,6 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 import numpy as np
 import numba as nb
 from ..error import *
-from .. import env
 
 def wrap_positions(positions: np.ndarray, pbc_matrix: np.ndarray, pbc_inv: np.array):
     move_vec = - np.round(np.dot(positions, pbc_inv))
@@ -24,7 +23,7 @@ def wrap_positions(positions: np.ndarray, pbc_matrix: np.ndarray, pbc_inv: np.ar
     move_vec = np.dot(move_vec, pbc_matrix)
     return positions + move_vec
 
-@nb.njit((env.NUMBA_FLOAT[::1], env.NUMBA_FLOAT[:, ::1], env.NUMBA_FLOAT[:, ::1]))
+@nb.njit()
 def unwrap_vec(vec: np.ndarray, pbc_matrix: np.ndarray, pbc_inv: np.array):
     scaled_vec = np.dot(vec, pbc_inv)
     temp_vec = np.empty(scaled_vec.shape)
