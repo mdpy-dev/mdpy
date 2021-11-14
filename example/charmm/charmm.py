@@ -14,8 +14,6 @@ cur_dir = os.path.dirname(os.path.abspath(__file__))
 toppar_dir = os.path.join(cur_dir, '../../data/charmm')
 str_dir = os.path.join(cur_dir, 'str')
 out_dir = os.path.join(cur_dir, 'out')
-if not os.path.exists(out_dir):
-    os.mkdir(out_dir)
 sys.path.append(os.path.join(cur_dir, '../..'))
 import numpy as np
 import mdpy as md
@@ -23,8 +21,7 @@ from mdpy.unit import *
 
 # Simulation paramters
 md.env.set_platform('CUDA')
-md.env.set_precision('DOUBLE')
-prot_name = '6PO6_ionized'
+prot_name = 'solvate'
 dump_interval = 50
 sim_step = 100000
 
@@ -40,7 +37,7 @@ forcefield.set_param_files(
 )
 ensemble = forcefield.create_ensemble()
 ensemble.state.set_pbc_matrix(pdb.pbc_matrix)
-# ensemble.state.set_pbc_matrix(np.diag(np.ones(3)*20))
+# ensemble.state.set_pbc_matrix(np.diag(np.ones(3)*30))
 ensemble.state.set_positions(pdb.positions)
 ensemble.state.set_velocities_to_temperature(Quantity(300, kelvin))
 # Set simlation
