@@ -96,15 +96,17 @@ class CharmmForcefield(Forcefield):
     def create_ensemble(self):
         self.check_params()
         ensemble = Ensemble(self._topology)
-        ele_constraint = ElectrostaticConstraint()
-        nonbonded_constraint = CharmmNonbondedConstraint(self._params['nonbonded'], self._cutoff_radius)
-        bond_constraint = CharmmBondConstraint(self._params['bond'])
-        angle_constraint = CharmmAngleConstraint(self._params['angle'])
-        dihedral_constraint = CharmmDihedralConstraint(self._params['dihedral'])
-        improper_constraint = CharmmImproperConstraint(self._params['improper'])
-        ensemble.add_constraints(
-            ele_constraint, nonbonded_constraint, 
-            bond_constraint, angle_constraint,
-            dihedral_constraint, improper_constraint
-        )
+        constraints = []
+        if self._topology.num_particles != 0:
+            constraints.append(ElectrostaticConstraint())
+            constraints.append(CharmmNonbondedConstraint(self._params['nonbonded'], self._cutoff_radius))
+        if self._topology.num_bonds != 0:
+            constraints.append(CharmmBondConstraint(self._params['bond']))
+        if self._topology.num_angles != 0:
+            constraints.append(CharmmAngleConstraint(self._params['angle']))
+        if self._topology.num_dihedrals != 0:
+            constraints.append(CharmmDihedralConstraint(self._params['dihedral']))
+        if self._topology.num_impropers != 0:
+            constraints.append(CharmmImproperConstraint(self._params['improper']))
+        ensemble.add_constraints(*constraints)
         return ensemble
