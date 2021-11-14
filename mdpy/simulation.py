@@ -17,6 +17,7 @@ from .integrator import Integrator
 from .error import *
 from .unit import *
 
+
 class Simulation:
     def __init__(self, ensemble: Ensemble, integrator: Integrator) -> None:
         self._ensemble = ensemble
@@ -52,7 +53,8 @@ class Simulation:
         target_step = self._cur_step + num_steps
         self._dump()
         while self._cur_step < target_step:
-            self._integrator.sample(self._ensemble, self._minimum_dump_frequency)
+            self._integrator.sample(
+                self._ensemble, self._minimum_dump_frequency)
             self._cur_step += self._minimum_dump_frequency
             self._dump()
 
@@ -61,8 +63,8 @@ class Simulation:
         self.ensemble.update()
         print('Start energy minimization:')
         print(
-            'Initial potential energy: %.5f kj/mol' 
-            %Quantity(self._ensemble.potential_energy, energy_convert_unit).value
+            'Initial potential energy: %.5f kj/mol'
+            % Quantity(self._ensemble.potential_energy, energy_convert_unit).value
         )
         self._dump()
         cur_iteration = 0
@@ -76,13 +78,17 @@ class Simulation:
             cur_energy = self._ensemble.potential_energy
             energy_error = np.abs((cur_energy - pre_energy) / pre_energy)
             if energy_error < energy_tolerance:
-                print('Penultimate potential energy: %.5f kj/mol' %(Quantity(pre_energy, energy_convert_unit).value))
-                print('Final potential energy: %.5f kj/mol' %(Quantity(cur_energy, energy_convert_unit).value))
-                print('Energy error: %s < %e' %(energy_error, energy_tolerance))
+                print('Penultimate potential energy: %.5f kj/mol' %
+                      (Quantity(pre_energy, energy_convert_unit).value))
+                print('Final potential energy: %.5f kj/mol' %
+                      (Quantity(cur_energy, energy_convert_unit).value))
+                print('Energy error: %s < %e' %
+                      (energy_error, energy_tolerance))
                 self._dump()
                 return None
             cur_iteration += 1
-        print('Final potential energy: %.5f kj/mol' %(Quantity(cur_energy, energy_convert_unit).value))
+        print('Final potential energy: %.5f kj/mol' %
+              (Quantity(cur_energy, energy_convert_unit).value))
         self._dump()
 
     @property
