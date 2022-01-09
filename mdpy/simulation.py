@@ -45,7 +45,7 @@ class Simulation:
     def reset_simulation_step(self):
         self._cur_step = 0
 
-    def sample(self, num_steps: int):
+    def integrate(self, num_steps: int):
         if self._num_dumpers == 0 or self._minimum_dump_frequency == 0:
             raise DumperPoorDefinedError(
                 'No dumper has been added to Simulation yet.'
@@ -53,7 +53,7 @@ class Simulation:
         target_step = self._cur_step + num_steps
         self._dump()
         while self._cur_step < target_step:
-            self._integrator.sample(
+            self._integrator.integrate(
                 self._ensemble, self._minimum_dump_frequency)
             self._cur_step += self._minimum_dump_frequency
             self._dump()
