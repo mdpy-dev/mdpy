@@ -22,7 +22,7 @@ class Minimizer:
         self._output_unit_label = output_unit_label
         self._is_verbose = is_verbose
 
-    def minimize(self, ensemble: Ensemble, energy_tolerance=1e-6, max_iterations: int=1000):
+    def minimize(self, ensemble: Ensemble, energy_tolerance=0.001, max_iterations: int=1000):
         raise NotImplementedError(
             'The subclass of mdpy.minimizer.Minimizer class should overload minimize method'
         )
