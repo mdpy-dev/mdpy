@@ -36,7 +36,7 @@ class LangevinIntegrator(Integrator):
         self._cur_acceleration = None
         self._pre_acceleration = None
 
-    def sample(self, ensemble: Ensemble, num_steps: int=1):
+    def integrate(self, ensemble: Ensemble, num_steps: int=1):
         # Setting variables
         cur_step = 0
         masses = ensemble.topology.masses
