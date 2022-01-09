@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- encoding: utf-8 -*-
 '''
-file : steepest_gradient_minimizer.py
+file : steepest_descent_minimizer.py
 created time : 2022/01/09
 author : Zhenyu Wei
 version : 1.0
