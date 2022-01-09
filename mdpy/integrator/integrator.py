@@ -23,9 +23,9 @@ class Integrator:
         self._cur_positions = None
         self._pre_positions = None
 
-    def sample(self, ensemble: Ensemble, num_steps: int=1):
+    def integrate(self, ensemble: Ensemble, num_steps: int=1):
         raise NotImplementedError(
-            'The subclass of mdpy.integrator.Integrator class should overload sample method'
+            'The subclass of mdpy.integrator.Integrator class should overload integrate method'
         )
 
     def wrap_pbc(self, pbc_matrix, pbc_inv):

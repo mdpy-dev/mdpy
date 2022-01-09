@@ -32,7 +32,7 @@ class TestVerletIntegrator:
     def test_exceptions(self):
         pass
 
-    def test_sample(self):
+    def test_integrate(self):
         pdb = PDBFile(os.path.join(data_dir, '6PO6.pdb'))
         topology = PSFFile(os.path.join(data_dir, '6PO6.psf')).create_topology()
 
@@ -44,7 +44,7 @@ class TestVerletIntegrator:
         ensemble.state.set_positions(pdb.positions)
         ensemble.state.set_velocities_to_temperature(300)
         integrator = VerletIntegrator(1)
-        integrator.sample(ensemble, 1)
+        integrator.integrate(ensemble, 1)
 
         # ATOM      1  N   VAL A   1       2.347  -0.970   3.962  1.00  0.00      A    N
         assert ensemble.state.positions[0, 1] == pytest.approx(-0.970, abs=0.01)

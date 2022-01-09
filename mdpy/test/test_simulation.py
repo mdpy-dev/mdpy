@@ -88,4 +88,4 @@ class TestSimulation:
 
     def test_exceptions(self):
         with pytest.raises(DumperPoorDefinedError):
-            self.simulation.sample(1)
+            self.simulation.integrate(1)
