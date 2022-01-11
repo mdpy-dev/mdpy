@@ -10,8 +10,6 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 '''
 
 import numpy as np
-
-from mdpy.math.pbc import wrap_positions
 from .ensemble import Ensemble
 from .integrator import Integrator
 from .minimizer import Minimizer
@@ -19,7 +17,7 @@ from .minimizer import *
 from .error import *
 from .unit import *
 
-default_minimizer = SteepestDescentMinimizer(kilojoule_permol, 'kj/mol', is_verbose=False)
+default_minimizer = SteepestDescentMinimizer(0.1, kilojoule_permol, 'kj/mol', is_verbose=False)
 
 class Simulation:
     def __init__(self, ensemble: Ensemble, integrator: Integrator, minimizer: Minimizer=default_minimizer) -> None:
@@ -42,12 +40,16 @@ class Simulation:
             )
 
     def set_minimizer(self, minimizer: Minimizer):
-        self._minimizer = Minimizer
+        self._minimizer = minimizer
 
     def _dump(self):
         for dumper in self._dumpers:
             if self._cur_step % dumper.dump_frequency == 0:
                 dumper.dump(self)
+    
+    def dump_initial_state(self):
+        for dumper in self._dumpers:
+            dumper.dump(self)
 
     def reset_simulation_step(self):
         self._cur_step = 0
