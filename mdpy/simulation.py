@@ -17,7 +17,7 @@ from .minimizer import *
 from .error import *
 from .unit import *
 
-default_minimizer = SteepestDescentMinimizer(0.1, kilojoule_permol, 'kj/mol', is_verbose=False)
+default_minimizer = SteepestDescentMinimizer(0.01, kilojoule_permol, 'kj/mol', is_verbose=False)
 
 class Simulation:
     def __init__(self, ensemble: Ensemble, integrator: Integrator, minimizer: Minimizer=default_minimizer) -> None:
