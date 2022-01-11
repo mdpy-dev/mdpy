@@ -6,7 +6,8 @@ __license__ = "GPLv3"
 
 from .minimizer import Minimizer
 from .steepest_descent_minimizer import SteepestDescentMinimizer
+from .conjugate_gradient_minimizer import ConjugateGradientMinimizer
 
 __all__ = [
-    'SteepestDescentMinimizer'
+    'SteepestDescentMinimizer', 'ConjugateGradientMinimizer'
 ]
