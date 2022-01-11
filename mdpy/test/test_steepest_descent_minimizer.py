@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- encoding: utf-8 -*-
 '''
-file : test_steepest_gradient_minimizer.py
+file : test_steepest_descent_minimizer.py
 created time : 2022/01/09
 author : Zhenyu Wei
 version : 1.0
@@ -20,7 +20,7 @@ cur_dir = os.path.dirname(os.path.abspath(__file__))
 data_dir = os.path.join(cur_dir, 'data')
 out_dir = os.path.join(cur_dir, 'out')
 
-class TestSteepestGradientMinimizer:
+class TestSteepestDescentMinimizer:
     def setup(self):
         pass
 
@@ -47,5 +47,5 @@ class TestSteepestGradientMinimizer:
         ensemble.update()
         pre_energy = ensemble.potential_energy
         minimizer = SteepestDescentMinimizer()
-        minimizer.minimize(ensemble, 0.01, 300)
+        minimizer.minimize(ensemble, 0.01, 10)
         assert ensemble.potential_energy < pre_energy
