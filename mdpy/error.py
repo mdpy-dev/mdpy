@@ -129,7 +129,7 @@ class ParameterPoorDefinedError(Exception):
 class DumperPoorDefinedError(Exception):
     '''This error occurs when:
     - Dump frequency of dumper object is 0
-    - Simulation samples without adding dumper
+    - Simulation integrates without adding dumper
     - LogDumper requires rest_time without providing total_step
     
     Used in:

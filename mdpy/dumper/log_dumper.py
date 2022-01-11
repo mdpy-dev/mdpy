@@ -57,7 +57,7 @@ class LogDumper(Dumper):
                 'mdpy.core.LogDumper cannot provide rest_time without specifying total_step'
             )
         # Variables
-        self._is_sample_start = False
+        self._is_integrate_start = False
         self._initial_time = self._now()
         self._cur_dump_time = self._now()
         self._pre_dump_time = self._now()
@@ -69,9 +69,9 @@ class LogDumper(Dumper):
     def dump(self, simulation: Simulation):
         if self._num_dumpped_frames == 0:
             self._dump_header()
-        if simulation.cur_step != 0 and self._is_sample_start == False:
+        if simulation.cur_step != 0 and self._is_integrate_start == False:
             self._initial_time = self._now()
-            self._is_sample_start = True
+            self._is_integrate_start = True
         self._dump_log(simulation)
         self._num_dumpped_frames += 1
 
