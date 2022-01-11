@@ -17,7 +17,8 @@ from ..math import *
 
 class SteepestDescentMinimizer(Minimizer):
     def __init__(
-        self, output_unit=kilojoule_permol, 
+        self, alpha=0.1,
+        output_unit=kilojoule_permol, 
         output_unit_label='kj/mol', is_verbose=False
     ) -> None:
         super().__init__(
@@ -25,6 +26,7 @@ class SteepestDescentMinimizer(Minimizer):
             output_unit_label=output_unit_label, 
             is_verbose=is_verbose
         )
+        self._alpha = alpha
 
     def minimize(self, ensemble: Ensemble, energy_tolerance=0.001, max_iterations: int = 1000):
         ensemble.update()
@@ -35,7 +37,7 @@ class SteepestDescentMinimizer(Minimizer):
         print('Initial potential energy: %s' %self._energy2str(cur_energy))
         while cur_iteration < max_iterations:
             ensemble.state.set_positions(wrap_positions(
-                ensemble.state.positions + 0.005 * ensemble.forces / np.linalg.norm(ensemble.forces, axis=1).reshape([-1, 1]),
+                ensemble.state.positions + self._alpha * ensemble.forces / np.linalg.norm(ensemble.forces, axis=1).reshape([-1, 1]),
                 *ensemble.state.pbc_info
             ))
             ensemble.update()
