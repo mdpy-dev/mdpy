@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 # -*- encoding: utf-8 -*-
 '''
-file : test_verlet_integrator.py
-created time : 2021/10/18
+file : test_conjugate_gradient_minimizer.py
+created time : 2022/01/11
 author : Zhenyu Wei
 version : 1.0
 contact : zhenyuwei99@gmail.com
@@ -13,13 +13,14 @@ import pytest, os
 import numpy as np 
 from ..file import PDBFile, PSFFile 
 from ..forcefield import CharmmForcefield
-from ..integrator import VerletIntegrator
+from ..minimizer import ConjugateGradientMinimizer
+from ..unit import *
 
 cur_dir = os.path.dirname(os.path.abspath(__file__))
 data_dir = os.path.join(cur_dir, 'data')
 out_dir = os.path.join(cur_dir, 'out')
 
-class TestVerletIntegrator:
+class TestConjugrateGradientMinimizer:
     def setup(self):
         pass
 
@@ -32,7 +33,7 @@ class TestVerletIntegrator:
     def test_exceptions(self):
         pass
 
-    def test_integrate(self):
+    def test_minimize(self):
         pdb = PDBFile(os.path.join(data_dir, '6PO6.pdb'))
         topology = PSFFile(os.path.join(data_dir, '6PO6.psf')).create_topology()
 
@@ -43,9 +44,8 @@ class TestVerletIntegrator:
         ensemble.state.cell_list.set_cutoff_radius(12)
         ensemble.state.set_positions(pdb.positions)
         ensemble.state.set_velocities_to_temperature(300)
-        integrator = VerletIntegrator(1)
-        integrator.integrate(ensemble, 1)
-
-        # ATOM      1  N   VAL A   1       2.347  -0.970   3.962  1.00  0.00      A    N
-        assert ensemble.state.positions[0, 1] == pytest.approx(-0.970, abs=0.01)
-        assert ensemble.state.positions[0, 0] == pytest.approx(2.347, abs=0.01)
+        ensemble.update()
+        pre_energy = ensemble.potential_energy
+        minimizer = ConjugateGradientMinimizer()
+        minimizer.minimize(ensemble, 0.01, 10)
+        assert ensemble.potential_energy < pre_energy
