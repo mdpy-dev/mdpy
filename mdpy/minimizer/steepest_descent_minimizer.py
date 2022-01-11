@@ -17,14 +17,15 @@ from ..math import *
 
 class SteepestDescentMinimizer(Minimizer):
     def __init__(
-        self, alpha=0.1,
+        self, alpha=0.01,
         output_unit=kilojoule_permol, 
-        output_unit_label='kj/mol', is_verbose=False
+        output_unit_label='kj/mol', is_verbose=False, log_freq=5
     ) -> None:
         super().__init__(
             output_unit=output_unit, 
             output_unit_label=output_unit_label, 
-            is_verbose=is_verbose
+            is_verbose=is_verbose, 
+            log_freq=log_freq
         )
         self._alpha = alpha
 
@@ -42,16 +43,14 @@ class SteepestDescentMinimizer(Minimizer):
             ))
             ensemble.update()
             cur_energy = ensemble.potential_energy
-            energy_error = Quantity(np.abs(cur_energy - pre_energy), default_energy_unit).convert_to(self._output_unit).value
-            if self._is_verbose:
+            energy_error = np.abs((cur_energy - pre_energy) / pre_energy)
+            cur_iteration += 1
+            if self._is_verbose and cur_iteration % self._log_freq == 0:
                 print('Iteration %d: %s %.4f' %(cur_iteration+1, self._energy2str(cur_energy), energy_error))
             if energy_error < energy_tolerance:
                 print('Penultimate potential energy %s' %self._energy2str(pre_energy))
                 print('Final potential energy %s' %self._energy2str(cur_energy))
-                print('Energy error: %e %s < %e %s' %(
-                    energy_error, self._output_unit_label, energy_tolerance, self._output_unit_label
-                ))
+                print('Energy error: %e < %e' %(energy_error, energy_tolerance))
                 return None
             pre_energy = cur_energy
-            cur_iteration += 1
         print('Final potential energy: %s' %self._energy2str(cur_energy))
