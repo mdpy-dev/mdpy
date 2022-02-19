@@ -116,6 +116,16 @@ class CellListPoorDefinedError(Exception):
     Used in:
     - mdpy.core.cell_list
     '''
+    pass
+
+class TrajectoryPoorDefinedError(Exception):
+    '''This error occurs when:
+    - Extrating information that have not been contained
+    
+    Used in:
+    -mdpy.core.trajectory
+    '''
+    pass
 
 class ParameterPoorDefinedError(Exception):
     '''This error occurs when:
