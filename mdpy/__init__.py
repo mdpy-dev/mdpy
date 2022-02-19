@@ -20,3 +20,4 @@ import mdpy.integrator as integrator
 import mdpy.minimizer as minimizer
 from mdpy.simulation import Simulation
 import mdpy.dumper as dumper
+import mdpy.analyser as analyser
