@@ -27,23 +27,22 @@ class UnitDimensionDismatchedError(Exception):
     '''
     pass
 
-class SpatialDimError(Exception):
-    '''This error occurs when:
-    - The dimension of quantity in cartesian reference is not 3
-    
-    Used in:
-    - mdpy.core.topology
-    - mdpy.core.state
-    - mdpy.ensemble
-    '''
-    pass
-
 class GeomtryDimError(Exception):
     '''This error occurs when:
     - The dimension of geometry, like bond, angle, is mismatched
     
     Used in:
     - mdpy.core.topology
+    '''
+    pass
+
+class ArrayDimError(Exception):
+    '''This error occurs when:
+    - The dimension of argument does not meet the requirement
+
+    Used in:
+    - mdpy.core.state
+    - mdpy.core.trajectory
     '''
     pass
 
@@ -59,6 +58,7 @@ class ParticleConflictError(Exception):
     - mdpy.core.particle
     - mdpy.core.topology
     - mdpy.core.state
+    - mdpy.core.trajectory
     - mdpy.ensemble
     '''
     pass
