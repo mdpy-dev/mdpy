@@ -53,6 +53,9 @@ class TestState:
         with pytest.raises(ArrayDimError):
             self.state.set_velocities(np.ones([self.num_particles, 4]))
 
+        with pytest.raises(TypeError):
+            self.state.set_positions([1, 2, 3])
+
     def test_set_positions(self):
         self.state.set_pbc_matrix(np.eye(3) * 100)
         self.state.cell_list.set_cutoff_radius(12)
@@ -76,9 +79,6 @@ class TestState:
         assert temperature > Quantity(285, default_temperature_unit)
 
     def test_pbc(self):
-        with pytest.raises(PBCPoorDefinedError):
-            self.state.check_pbc_matrix()
-
         with pytest.raises(PBCPoorDefinedError):
             self.state.set_pbc_matrix(np.ones([3, 3]))
 
