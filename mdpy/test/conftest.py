@@ -21,7 +21,7 @@ test_order = [
      'charmm_nonbonded_constraint', 'charmm_bond_constraint', 'charmm_angle_constraint',
      'charmm_dihedral_constraint', 'charmm_improper_constraint',
      'forcefield', 
-     'charmm_forcefield'
+     'charmm_forcefield',
      'ensemble',
      'minimizer', 
      'steepest_descent_minimizer', 'conjugate_gradient_minimizer',
