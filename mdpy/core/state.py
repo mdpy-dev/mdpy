@@ -10,7 +10,7 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 '''
 
 import numpy as np
-from cupy.cuda.nvtx import RangePush, RangePop
+# from cupy.cuda.nvtx import RangePush, RangePop
 from .cell_list import CellList
 from .topology import Topology
 from .. import SPATIAL_DIM, env
@@ -40,16 +40,11 @@ class State:
 
     def _check_matrix_shape(self, matrix: np.ndarray):
         row, col = matrix.shape
-        if row != self._matrix_shape[0]:
-            raise ParticleConflictError(
-                'The dimension of position matrix [%d, %d] do not match the number of particles (%d) contained in topology'
-                %(row, col, self._num_particles)
+        if row != self._matrix_shape[0] or col != self._matrix_shape[1]:
+            raise ArrayDimError(
+                'The dimension of array should be [%d, %d], while array [%d, %d] is provided'
+                %(self._matrix_shape[0], self._matrix_shape[1], row, col)
             )
-        if col != self._matrix_shape[1]:
-            raise SpatialDimError(
-                'The column dimension of matrix should be %d, instead of %d' 
-                %(self._matrix_shape[1], col)
-            ) 
 
     def check_pbc_matrix(self):
         if np.linalg.det(self._pbc_matrix) == 0:
@@ -61,7 +56,7 @@ class State:
         pbc_matrix = check_quantity_value(pbc_matrix, default_length_unit)
         row, col = pbc_matrix.shape
         if row != SPATIAL_DIM or col != SPATIAL_DIM:
-            raise SpatialDimError(
+            raise ArrayDimError(
                 'The pbc matrix should have shape [%d, %d], while matrix [%d %d] is provided'
                 %(SPATIAL_DIM, SPATIAL_DIM, row, col)
             )
@@ -76,9 +71,9 @@ class State:
     def set_positions(self, positions: np.ndarray):
         self._check_matrix_shape(positions)
         self._positions = positions.astype(env.NUMPY_FLOAT)
-        RangePush('Cell list creation')
+        # RangePush('Cell list creation')
         self._cell_list.update(self._positions)
-        RangePop()
+        # RangePop()
     
     def set_velocities(self, velocities: np.ndarray):
         self._check_matrix_shape(velocities)
