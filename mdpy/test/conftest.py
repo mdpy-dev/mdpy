@@ -20,12 +20,15 @@ test_order = [
      'electrostatic_constraint'
      'charmm_nonbonded_constraint', 'charmm_bond_constraint', 'charmm_angle_constraint',
      'charmm_dihedral_constraint', 'charmm_improper_constraint',
-     'forcefield', 'charmm_forcefield'
+     'forcefield', 
+     'charmm_forcefield'
      'ensemble',
-     'minimizer', 'steepest_descent_minimizer', 'conjugate_gradient_minimizer',
+     'minimizer', 
+     'steepest_descent_minimizer', 'conjugate_gradient_minimizer',
      'integrator', 'verlet_integrator', 'langevin_integrator'
      'simulation',
-     'dumper', 'pdb_dumper', 'log_dumper',
+     'dumper', 
+     'pdb_dumper', 'log_dumper',
      'analyser'
 ]
 
