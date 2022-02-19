@@ -31,8 +31,10 @@ class Trajectory:
 
         self._num_frames = 0
         self._positions = np.zeros([self._num_frames, self._topology.num_particles, SPATIAL_DIM], dtype=env.NUMPY_FLOAT)
+        self._unwrapped_positions = np.zeros([self._num_frames, self._topology.num_particles, SPATIAL_DIM], dtype=env.NUMPY_FLOAT)
         self._velocities = np.zeros([self._num_frames, self._topology.num_particles, SPATIAL_DIM], dtype=env.NUMPY_FLOAT)
         self._forces = np.zeros([self._num_frames, self._topology.num_particles, SPATIAL_DIM], dtype=env.NUMPY_FLOAT)
+
         self._pbc_matrix = np.zeros([SPATIAL_DIM, SPATIAL_DIM], dtype=env.NUMPY_FLOAT)
         self._pbc_inv = np.zeros([SPATIAL_DIM, SPATIAL_DIM], dtype=env.NUMPY_FLOAT)
         self._time_step = None
@@ -139,6 +141,17 @@ class Trajectory:
 
         self._num_frames += num_frames
 
+    def unwrap_positions(self):
+        self._check_pbc_matrix(self._pbc_matrix)
+        scaled_positions = np.dot(self._positions, self._pbc_inv)
+        scaled_diff = scaled_positions[1:, :, :] - scaled_positions[0:-1, :, :]
+        scaled_diff -= np.round(scaled_diff)
+        diff = np.dot(scaled_diff, self._pbc_matrix)
+        self._unwrapped_positions = np.zeros_like(self._positions, dtype=env.NUMPY_FLOAT)
+        self._unwrapped_positions[0, :, :] = self._positions[0, :, :]
+        for frame in range(1, self._num_frames):
+            self._unwrapped_positions[frame, :, :] = self._unwrapped_positions[frame-1, :, :] + diff[frame-1, :, :]
+
     @property
     def topology(self):
         return self._topology
@@ -170,6 +183,10 @@ class Trajectory:
         if self._contain_positions == False:
             raise TrajectoryPoorDefinedError('Positions is not contained in this mdpy.core.Trajectory instance')
         return self._positions
+
+    @property
+    def unwrapped_position(self):
+        return self._unwrapped_positions
 
     @property
     def velocities(self):
