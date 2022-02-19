@@ -25,7 +25,8 @@ test_order = [
      'minimizer', 'steepest_descent_minimizer', 'conjugate_gradient_minimizer',
      'integrator', 'verlet_integrator', 'langevin_integrator'
      'simulation',
-     'dumper', 'pdb_dumper', 'log_dumper'
+     'dumper', 'pdb_dumper', 'log_dumper',
+     'analyser'
 ]
 
 def pytest_collection_modifyitems(items):
