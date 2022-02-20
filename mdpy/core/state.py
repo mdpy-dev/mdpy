@@ -32,7 +32,7 @@ class State:
         self._cell_list = CellList()
 
     def __repr__(self) -> str:
-        return '<mdpy.State object with %d particles at %x>' %(
+        return '<mdpy.core.State object with %d particles at %x>' %(
             self._num_particles, id(self)
         )
 
