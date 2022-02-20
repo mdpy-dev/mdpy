@@ -34,7 +34,7 @@ class Topology:
         self._scaling_pactiles = []
         
     def __repr__(self) -> str:
-        return '<Toplogy object: %d particles at %x>' %(self._num_particles, id(self))
+        return '<mdpy.core.Toplogy object: %d particles at %x>' %(self._num_particles, id(self))
     
     def __str__(self) -> str:
         return(

@@ -86,7 +86,7 @@ class NonBoundedError(Exception):
     - Parent object is not bounded 
     
     Used in:
-    - mdpy.core.segment
+    - mdpy.constraint.constraint
     '''
     pass
 

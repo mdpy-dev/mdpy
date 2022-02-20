@@ -28,6 +28,14 @@ class CellList:
             (env.NUMBA_FLOAT[:, ::1], env.NUMBA_FLOAT[:, ::1], env.NUMBA_INT[::1])
         )(self.kernel)
 
+    def __repr__(self) -> str:
+        x, y, z, _ = self._cell_list.shape
+        return '<mdpy.core.CellList object with %d x %d x %d cells at %x>' %(
+            x, y, z, id(self)
+        )
+        
+    __str__ = __repr__
+
     def __getitem__(self, matrix_id):
         x, y, z = self._particle_cell_index[matrix_id, :]
         return self._cell_list[x, y, z, :]
