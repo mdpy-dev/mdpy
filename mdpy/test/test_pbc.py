@@ -65,3 +65,12 @@ def test_unwrap_vec():
     assert vec1[1] == pytest.approx(vec3[1])
     assert vec1[2] == pytest.approx(vec2[2])
     assert vec1[2] == pytest.approx(vec3[2])
+
+    vec = unwrap_vec(np.array([
+        [0, 9, 0],
+        [0, 1, 0],
+        [9, -1, 0],
+        [0, 1, -8]
+    ]).astype(env.NUMPY_FLOAT), pbc_matrix, pbc_inv)
+    assert vec[0, 1] == pytest.approx(-1)
+    assert vec[3, 2] == pytest.approx(2)
