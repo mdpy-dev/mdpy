@@ -14,7 +14,7 @@ from numpy.random import randn
 from . import Integrator
 from ..ensemble import Ensemble
 from ..unit import *
-from ..math import *
+from ..utils import *
 
 class LangevinIntegrator(Integrator):
     def __init__(self, time_step, temperature, friction_factor) -> None:

@@ -27,23 +27,22 @@ class UnitDimensionDismatchedError(Exception):
     '''
     pass
 
-class SpatialDimError(Exception):
-    '''This error occurs when:
-    - The dimension of quantity in cartesian reference is not 3
-    
-    Used in:
-    - mdpy.core.topology
-    - mdpy.core.state
-    - mdpy.ensemble
-    '''
-    pass
-
 class GeomtryDimError(Exception):
     '''This error occurs when:
     - The dimension of geometry, like bond, angle, is mismatched
     
     Used in:
     - mdpy.core.topology
+    '''
+    pass
+
+class ArrayDimError(Exception):
+    '''This error occurs when:
+    - The dimension of argument does not meet the requirement
+
+    Used in:
+    - mdpy.core.state
+    - mdpy.core.trajectory
     '''
     pass
 
@@ -59,6 +58,7 @@ class ParticleConflictError(Exception):
     - mdpy.core.particle
     - mdpy.core.topology
     - mdpy.core.state
+    - mdpy.core.trajectory
     - mdpy.ensemble
     '''
     pass
@@ -86,7 +86,7 @@ class NonBoundedError(Exception):
     - Parent object is not bounded 
     
     Used in:
-    - mdpy.core.segment
+    - mdpy.constraint.constraint
     '''
     pass
 
@@ -116,6 +116,16 @@ class CellListPoorDefinedError(Exception):
     Used in:
     - mdpy.core.cell_list
     '''
+    pass
+
+class TrajectoryPoorDefinedError(Exception):
+    '''This error occurs when:
+    - Extrating information that have not been contained
+    
+    Used in:
+    -mdpy.core.trajectory
+    '''
+    pass
 
 class ParameterPoorDefinedError(Exception):
     '''This error occurs when:
@@ -139,10 +149,20 @@ class DumperPoorDefinedError(Exception):
     '''
     pass
 
+class SelectConditionPoorDefinedError(Exception):
+    '''This error occurs when:
+    - Unsupported select condition has been used
+    
+    Used in:
+    - mdpy.utils.select_particle
+    '''
+    pass
+
 class AtomLossError(Exception):
     '''This error occurs when:
     - The atom go beyond the range of two PBC images
     
     Used in:
-    - mdpy.core.state'''
+    - mdpy.core.state
+    '''
     pass

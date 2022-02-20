@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- encoding: utf-8 -*-
 '''
-file : utils.py
+file : check_quantity.py
 created time : 2021/10/10
 author : Zhenyu Wei
 version : 1.0
