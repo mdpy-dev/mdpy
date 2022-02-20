@@ -149,10 +149,20 @@ class DumperPoorDefinedError(Exception):
     '''
     pass
 
+class SelectConditionPoorDefinedError(Exception):
+    '''This error occurs when:
+    - Unsupported select condition has been used
+    
+    Used in:
+    - mdpy.utils.select_particle
+    '''
+    pass
+
 class AtomLossError(Exception):
     '''This error occurs when:
     - The atom go beyond the range of two PBC images
     
     Used in:
-    - mdpy.core.state'''
+    - mdpy.core.state
+    '''
     pass
