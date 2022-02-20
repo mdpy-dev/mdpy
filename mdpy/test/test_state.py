@@ -47,11 +47,20 @@ class TestState:
         assert self.state.velocities.shape[1] == SPATIAL_DIM
 
     def test_exceptions(self):
-        with pytest.raises(ParticleConflictError):
+        with pytest.raises(ArrayDimError):
             self.state.set_positions(np.ones([5, 3]))
 
-        with pytest.raises(SpatialDimError):
+        with pytest.raises(ArrayDimError):
             self.state.set_velocities(np.ones([self.num_particles, 4]))
+
+        with pytest.raises(PBCPoorDefinedError):
+            self.state.pbc_matrix
+
+        with pytest.raises(PBCPoorDefinedError):
+            self.state.pbc_inv
+
+        with pytest.raises(TypeError):
+            self.state.set_positions([1, 2, 3])
 
     def test_set_positions(self):
         self.state.set_pbc_matrix(np.eye(3) * 100)
@@ -77,12 +86,9 @@ class TestState:
 
     def test_pbc(self):
         with pytest.raises(PBCPoorDefinedError):
-            self.state.check_pbc_matrix()
-
-        with pytest.raises(PBCPoorDefinedError):
             self.state.set_pbc_matrix(np.ones([3, 3]))
 
-        with pytest.raises(SpatialDimError):
+        with pytest.raises(ArrayDimError):
             self.state.set_pbc_matrix(np.ones([4, 3]))
 
         self.state.set_pbc_matrix(np.diag(np.ones(3)*10))

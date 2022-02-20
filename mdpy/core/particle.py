@@ -9,7 +9,7 @@ contact : zhenyuwei99@gmail.com
 copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 '''
 
-from ..math import check_quantity_value
+from ..utils import check_quantity_value
 from ..unit import *
 from ..error import *
 
@@ -38,7 +38,7 @@ class Particle:
         self._num_scaling_particles = 0
 
     def __repr__(self) -> str:
-        return '<Particle %s-%d at %x>' %(self._particle_name, self._particle_id, id(self))
+        return '<<mdpy.core.Particle %s-%d at %x>' %(self._particle_name, self._particle_id, id(self))
         # return '<Particle object: ID %d, Type %s at %x>' %(self._particle_id, self._particle_type, id(self))
 
     __str__ = __repr__    

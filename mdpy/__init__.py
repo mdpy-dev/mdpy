@@ -10,7 +10,7 @@ SPATIAL_DIM = 3
 # Import
 from mdpy.environment import env
 import mdpy.unit as unit
-import mdpy.math as math
+import mdpy.utils as utils
 import mdpy.core as core
 import mdpy.file as file
 import mdpy.constraint as constraint
@@ -20,3 +20,4 @@ import mdpy.integrator as integrator
 import mdpy.minimizer as minimizer
 from mdpy.simulation import Simulation
 import mdpy.dumper as dumper
+import mdpy.analyser as analyser 

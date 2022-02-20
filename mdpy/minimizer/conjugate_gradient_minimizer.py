@@ -14,21 +14,22 @@ from . import Minimizer
 from .. import SPATIAL_DIM
 from ..ensemble import Ensemble
 from ..unit import *
-from ..math import *
+from ..utils import *
 
 class ConjugateGradientMinimizer(Minimizer):
     def __init__(
-        self, theta=0.001, stop_tol=0.1, max_sub_iterations=10,
+        self, theta=0.001, force_tol=0.01, max_sub_iterations=10,
         output_unit=kilojoule_permol, 
-        output_unit_label='kj/mol', is_verbose=False
+        output_unit_label='kj/mol', is_verbose=False, log_freq=5
     ) -> None:
         super().__init__(
             output_unit=output_unit, 
             output_unit_label=output_unit_label, 
-            is_verbose=is_verbose
+            is_verbose=is_verbose, 
+            log_freq=log_freq
         )
         self._theta = theta
-        self._stop_tol = stop_tol
+        self._force_tol = force_tol
         self._max_sub_iterations = max_sub_iterations
 
     def minimize(self, ensemble: Ensemble, energy_tolerance=0.001, max_iterations: int = 1000):
@@ -56,7 +57,7 @@ class ConjugateGradientMinimizer(Minimizer):
                 alpha = np.matmul(cur_f.T, cur_f) / (np.matmul(omega.T, t))
                 d += alpha * t
                 cur_f, pre_f = cur_f + alpha * omega, cur_f
-                if (cur_f**2).sum() / (f0**2).sum() < self._stop_tol:
+                if (cur_f**2).sum() / (f0**2).sum() < self._force_tol:
                     break
                 beta = np.matmul(cur_f.T, cur_f) / (np.matmul(pre_f.T, pre_f))
                 t = cur_f + beta * t
@@ -67,15 +68,13 @@ class ConjugateGradientMinimizer(Minimizer):
             ))
             ensemble.update()
             cur_energy = ensemble.potential_energy
-            energy_error = Quantity(np.abs(cur_energy - pre_energy), default_energy_unit).convert_to(self._output_unit).value
-            if self._is_verbose:
-                print('Iteration %d: %s %.4f' %(cur_iteration+1, self._energy2str(cur_energy), energy_error))
+            energy_error = np.abs((cur_energy - pre_energy) / pre_energy)
+            cur_iteration += 1
+            if self._is_verbose and cur_iteration % self._log_freq == 0:
+                print('Iteration %d: %s %.4f' %(cur_iteration, self._energy2str(cur_energy), energy_error))
             if energy_error < energy_tolerance:
                 print('Penultimate potential energy %s' %self._energy2str(pre_energy))
                 print('Final potential energy %s' %self._energy2str(cur_energy))
-                print('Energy error: %e %s < %e %s' %(
-                    energy_error, self._output_unit_label, energy_tolerance, self._output_unit_label
-                ))
+                print('Energy error: %e < %e' %(energy_error, energy_tolerance))
                 return None
-            cur_iteration += 1
         print('Final potential energy: %s' %self._energy2str(cur_energy))

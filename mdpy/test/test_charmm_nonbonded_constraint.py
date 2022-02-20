@@ -17,7 +17,7 @@ from ..core import Particle, Topology
 from ..ensemble import Ensemble
 from ..file import CharmmParamFile
 from ..file.charmm_param_file import RMIN_TO_SIGMA_FACTOR
-from ..math import get_unit_vec
+from ..utils import get_unit_vec
 from ..error import *
 from ..unit import *
 

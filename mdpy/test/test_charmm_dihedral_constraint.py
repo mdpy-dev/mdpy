@@ -16,7 +16,7 @@ from ..constraint import CharmmDihedralConstraint
 from ..core import Particle, Topology
 from ..ensemble import Ensemble
 from ..file import CharmmParamFile
-from ..math import get_dihedral
+from ..utils import get_dihedral
 from ..error import *
 from ..unit import *
 
