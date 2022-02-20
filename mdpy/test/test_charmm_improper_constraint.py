@@ -16,7 +16,7 @@ from ..constraint import CharmmImproperConstraint
 from ..core import Particle, Topology
 from ..ensemble import Ensemble
 from ..file import CharmmParamFile
-from ..math import *
+from ..utils import *
 from ..error import *
 from ..unit import *
 
