@@ -10,7 +10,7 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 '''
 
 from .. import env
-from ..math import check_quantity_value
+from ..utils import check_quantity_value
 from ..error import *
 from ..unit import *
 from ..ensemble import Ensemble

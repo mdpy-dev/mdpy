@@ -14,7 +14,7 @@ import numba as nb
 from . import Constraint
 from .. import env
 from ..ensemble import Ensemble
-from ..math import *
+from ..utils import *
 from ..unit import *
         
 class CharmmDihedralConstraint(Constraint):
