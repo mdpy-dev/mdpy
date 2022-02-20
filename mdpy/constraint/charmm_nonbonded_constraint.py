@@ -17,7 +17,7 @@ from operator import floordiv
 from . import Constraint, NUM_NEIGHBOR_CELLS, NEIGHBOR_CELL_TEMPLATE
 from .. import env
 from ..ensemble import Ensemble
-from ..math import *
+from ..utils import *
 from ..unit import *
 
 class CharmmNonbondedConstraint(Constraint):
