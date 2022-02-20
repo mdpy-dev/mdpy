@@ -11,7 +11,7 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 
 import pytest
 import numpy as np
-from ..math import *
+from ..utils import *
 from ..error import *
 from .. import env
 

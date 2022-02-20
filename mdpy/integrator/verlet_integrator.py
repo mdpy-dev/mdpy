@@ -12,7 +12,7 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 from . import Integrator
 from .. import env
 from ..ensemble import Ensemble
-from ..math import *
+from ..utils import *
 
 class VerletIntegrator(Integrator):
     def __init__(self, time_step) -> None:

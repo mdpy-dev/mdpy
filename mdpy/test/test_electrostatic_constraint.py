@@ -15,7 +15,7 @@ from .. import env
 from ..constraint import ElectrostaticConstraint
 from ..core import Particle, Topology
 from ..ensemble import Ensemble
-from ..math import get_unit_vec
+from ..utils import get_unit_vec
 from ..error import *
 from ..unit import *
 
