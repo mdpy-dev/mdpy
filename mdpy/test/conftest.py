@@ -14,18 +14,22 @@ import pytest
 test_order = [
      'environment',
      'base_dimension', 'unit', 'unit_definition', 'quantity',
-     'particle', 'topology', 'state', 'cell_list', 'segment',
+     'particle', 'topology', 'state', 'cell_list', 'segment', 'trajectory'
      'pdb_file', 'psf_file', 'charmm_param_file',
      'constraint', 
      'electrostatic_constraint'
      'charmm_nonbonded_constraint', 'charmm_bond_constraint', 'charmm_angle_constraint',
      'charmm_dihedral_constraint', 'charmm_improper_constraint',
-     'forcefield', 'charmm_forcefield'
+     'forcefield', 
+     'charmm_forcefield',
      'ensemble',
-     'minimizer', 'steepest_descent_minimizer', 'conjugate_gradient_minimizer',
+     'minimizer', 
+     'steepest_descent_minimizer', 'conjugate_gradient_minimizer',
      'integrator', 'verlet_integrator', 'langevin_integrator'
      'simulation',
-     'dumper', 'pdb_dumper', 'log_dumper'
+     'dumper', 
+     'pdb_dumper', 'log_dumper',
+     'analyser'
 ]
 
 def pytest_collection_modifyitems(items):
