@@ -39,6 +39,13 @@ class Trajectory:
         self._pbc_inv = np.zeros([SPATIAL_DIM, SPATIAL_DIM], dtype=env.NUMPY_FLOAT)
         self._time_step = None
 
+    def __repr__(self) -> str:
+        return '<mdpy.core.Trajectory object of %d particles with %d frames at %x>' %(
+            self._topology.num_particles, self._num_frames, id(self)
+        )
+
+    __str__ = __repr__
+
     def set_time_step(self, time_step):
         self._time_step = check_quantity_value(time_step, default_time_unit)
 
