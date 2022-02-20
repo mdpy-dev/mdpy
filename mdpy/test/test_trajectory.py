@@ -66,6 +66,12 @@ class TestTrajectory:
         with pytest.raises(TrajectoryPoorDefinedError):
             self.trajectory.time_series
 
+        with pytest.raises(PBCPoorDefinedError):
+            self.trajectory.pbc_matrix
+
+        with pytest.raises(PBCPoorDefinedError):
+            self.trajectory.pbc_inv
+
         with pytest.raises(TypeError):
             self.trajectory.append(positions=[1])
 
