@@ -13,7 +13,7 @@ import numpy as np
 from . import Minimizer
 from ..ensemble import Ensemble
 from ..unit import *
-from ..math import *
+from ..utils import *
 
 class SteepestDescentMinimizer(Minimizer):
     def __init__(

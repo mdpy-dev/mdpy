@@ -16,7 +16,7 @@ from .topology import Topology
 from .. import SPATIAL_DIM, env
 from ..unit import *
 from ..error import *
-from ..math import *
+from ..utils import *
 
 class State:
     def __init__(self, topology: Topology) -> None:
