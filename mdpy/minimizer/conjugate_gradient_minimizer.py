@@ -14,7 +14,7 @@ from . import Minimizer
 from .. import SPATIAL_DIM
 from ..ensemble import Ensemble
 from ..unit import *
-from ..math import *
+from ..utils import *
 
 class ConjugateGradientMinimizer(Minimizer):
     def __init__(
