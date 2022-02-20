@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- encoding: utf-8 -*-
 '''
-file : test_utils.py
+file : test_check_quantity.py
 created time : 2021/10/10
 author : Zhenyu Wei
 version : 1.0
@@ -11,7 +11,7 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 
 import pytest
 import numpy as np
-from ..math import check_quantity, check_quantity_value
+from ..utils import check_quantity, check_quantity_value
 from ..unit import *
 from ..error import *
 

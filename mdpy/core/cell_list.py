@@ -12,7 +12,7 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 import numpy as np
 import numba as nb
 from .. import SPATIAL_DIM, env
-from ..math import *
+from ..utils import *
 from ..unit import *
 from ..error import *
 
@@ -27,6 +27,14 @@ class CellList:
         self._kernel = nb.njit(
             (env.NUMBA_FLOAT[:, ::1], env.NUMBA_FLOAT[:, ::1], env.NUMBA_INT[::1])
         )(self.kernel)
+
+    def __repr__(self) -> str:
+        x, y, z, _ = self._cell_list.shape
+        return '<mdpy.core.CellList object with %d x %d x %d cells at %x>' %(
+            x, y, z, id(self)
+        )
+        
+    __str__ = __repr__
 
     def __getitem__(self, matrix_id):
         x, y, z = self._particle_cell_index[matrix_id, :]

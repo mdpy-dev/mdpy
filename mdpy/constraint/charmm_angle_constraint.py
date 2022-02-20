@@ -14,7 +14,7 @@ import numba as nb
 from . import Constraint
 from .. import env
 from ..ensemble import Ensemble
-from ..math import *
+from ..utils import *
 
 class CharmmAngleConstraint(Constraint):
     def __init__(self, params, force_id: int = 0, force_group: int = 0) -> None:
