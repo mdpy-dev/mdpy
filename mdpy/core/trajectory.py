@@ -16,7 +16,7 @@ from .. import SPATIAL_DIM, env
 from ..utils import check_quantity_value
 from ..error import *
 from ..unit import *
-from ..utils.select_particle import *
+from ..utils.select import *
 
 class Trajectory:
     def __init__(
