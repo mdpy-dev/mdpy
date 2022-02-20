@@ -9,7 +9,8 @@ from .topology import Topology
 from .cell_list import CellList
 from .state import State
 from .segment import Segment
+from .trajectory import Trajectory
 
 __all__ = [
-    'Particle', 'Topology', 'CellList', 'State', 'Segment'
+    'Particle', 'Topology', 'CellList', 'State', 'Segment', 'Trajectory'
 ]
