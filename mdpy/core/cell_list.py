@@ -12,7 +12,7 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 import numpy as np
 import numba as nb
 from .. import SPATIAL_DIM, env
-from ..math import *
+from ..utils import *
 from ..unit import *
 from ..error import *
 
