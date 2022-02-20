@@ -14,7 +14,7 @@ import numpy as np
 from . import Dumper
 from ..ensemble import Ensemble
 from ..simulation import Simulation
-from ..math import get_included_angle
+from ..utils import get_included_angle
 
 STD_RES_NAMES = [
     'ALA', 'ARG', 'ASN', 'ASP',
