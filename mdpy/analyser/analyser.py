@@ -17,5 +17,10 @@ class Analyser:
 
     def analysis(self, trajectory: Trajectory):
         raise NotImplementedError(
-            'The subclass of mdpy.dumper.Dumper class should overload update_ensemble method.'
+            'The subclass of mdpy.analyser.Analyser class should overload analysis method.'
+        )
+
+    def save(self, file_path):
+        raise NotImplementedError(
+            'The subclass of mdpy.analyser.Analyser class should overload save method.'
         )
