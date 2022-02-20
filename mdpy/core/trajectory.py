@@ -9,13 +9,14 @@ contact : zhenyuwei99@gmail.com
 copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 '''
 
+import numpy as np
 from pytest import raises
 from . import Topology
 from .. import SPATIAL_DIM, env
-from ..math import check_quantity_value
+from ..utils import check_quantity_value
 from ..error import *
 from ..unit import *
-import numpy as np
+from ..utils.select import *
 
 class Trajectory:
     def __init__(
@@ -37,6 +38,7 @@ class Trajectory:
 
         self._pbc_matrix = np.zeros([SPATIAL_DIM, SPATIAL_DIM], dtype=env.NUMPY_FLOAT)
         self._pbc_inv = np.zeros([SPATIAL_DIM, SPATIAL_DIM], dtype=env.NUMPY_FLOAT)
+        self._is_pbc_specified = False
         self._time_step = None
 
     def __repr__(self) -> str:
@@ -69,6 +71,7 @@ class Trajectory:
         # So the scaled position will be Position * PBC instead of PBC * Position as usual
         self._pbc_matrix = np.ascontiguousarray(pbc_matrix.T, dtype=env.NUMPY_FLOAT)
         self._pbc_inv = np.ascontiguousarray(np.linalg.inv(self._pbc_matrix), dtype=env.NUMPY_FLOAT)
+        self._is_pbc_specified = True
 
     def _check_array(self, array: np.ndarray):
         if not isinstance(array, np.ndarray):
@@ -159,6 +162,18 @@ class Trajectory:
         for frame in range(1, self._num_frames):
             self._unwrapped_positions[frame, :, :] = self._unwrapped_positions[frame-1, :, :] + diff[frame-1, :, :]
 
+    def select_particle(self):
+        pass
+
+    def get_positions(self, selection=''):
+        pass
+
+    def get_velocities(self, selection=''):
+        pass
+
+    def get_forces(self, selection=''):
+        pass
+
     @property
     def topology(self):
         return self._topology
@@ -179,10 +194,14 @@ class Trajectory:
 
     @property
     def pbc_matrix(self):
+        if not self._is_pbc_specified:
+            raise PBCPoorDefinedError('PBC has not been specified before calling.')
         return self._pbc_matrix
     
     @property
     def pbc_inv(self):
+        if not self._is_pbc_specified:
+            raise PBCPoorDefinedError('PBC has not been specified before calling.')
         return self._pbc_inv
 
     @property

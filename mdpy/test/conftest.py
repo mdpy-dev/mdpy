@@ -14,6 +14,7 @@ import pytest
 test_order = [
      'environment',
      'base_dimension', 'unit', 'unit_definition', 'quantity',
+     'check_quantity', 'geometry', 'pbc', 'select'
      'particle', 'topology', 'state', 'cell_list', 'trajectory'
      'pdb_file', 'psf_file', 'charmm_param_file',
      'constraint', 

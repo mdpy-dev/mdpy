@@ -53,6 +53,12 @@ class TestState:
         with pytest.raises(ArrayDimError):
             self.state.set_velocities(np.ones([self.num_particles, 4]))
 
+        with pytest.raises(PBCPoorDefinedError):
+            self.state.pbc_matrix
+
+        with pytest.raises(PBCPoorDefinedError):
+            self.state.pbc_inv
+
         with pytest.raises(TypeError):
             self.state.set_positions([1, 2, 3])
 

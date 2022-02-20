@@ -13,7 +13,7 @@ from . import Forcefield
 from ..ensemble import Ensemble
 from ..core import Topology
 from ..file import CharmmParamFile
-from ..math import check_quantity_value
+from ..utils import check_quantity_value
 from ..constraint import LONG_RANGE_SOLVER
 from ..constraint import *
 from ..unit import *

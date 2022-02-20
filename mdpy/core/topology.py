@@ -300,7 +300,7 @@ class Topology:
         return self._scaling_particles
 
     @property
-    def particles(self):
+    def particles(self) -> list[Particle]:
         return self._particles
     
     @property
