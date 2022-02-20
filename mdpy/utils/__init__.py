@@ -9,7 +9,10 @@ from .geometry import get_bond, get_pbc_bond
 from .geometry import get_angle, get_pbc_angle, get_included_angle 
 from .geometry import get_dihedral, get_pbc_dihedral
 from .pbc import wrap_positions, unwrap_vec
-from .utils import check_quantity, check_quantity_value
+from .check_quantity import check_quantity, check_quantity_value
+from .select import select
+from .select import SELECT_SUPPORTED_KEYWORDS
+from .select import SELECT_SUPPORTED_STERIC_KEYWORDS, SELECT_SUPPORTED_TOPOLOGICAL_KEYWORDS
 
 __all__ = [
     'get_unit_vec', 'get_norm_vec', 
@@ -17,5 +20,7 @@ __all__ = [
     'get_angle', 'get_pbc_angle', 'get_included_angle', 
     'get_dihedral', 'get_pbc_dihedral',
     'wrap_positions', 'unwrap_vec',
-    'check_quantity', 'check_quantity_value'
+    'check_quantity', 'check_quantity_value',
+    'select', 'SELECT_SUPPORTED_KEYWORDS',
+    'SELECT_SUPPORTED_STERIC_KEYWORDS', 'SELECT_SUPPORTED_TOPOLOGICAL_KEYWORDS'
 ]
