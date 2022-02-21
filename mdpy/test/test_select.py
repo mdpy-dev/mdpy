@@ -11,11 +11,10 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 
 import os
 import pytest
-import sys
-sys.path.append('/home/zhenyuwei/nutstore/ZhenyuWei/Note_Research/mdpy/mdpy')
-from mdpy.core import Particle, Topology, Trajectory
-from mdpy.file import PSFFile, PDBFile
-from mdpy.utils.select import *
+from ..core import Particle, Topology, Trajectory
+from ..file import PSFFile, PDBFile
+from ..utils.select import *
+from ..error import *
 
 cur_dir = os.path.dirname(os.path.abspath(__file__))
 data_dir = os.path.join(cur_dir, 'data')
@@ -82,3 +81,11 @@ def test_select():
     ]
     res = select(trajectory, condition)
     assert 4 in res[0]
+
+    with pytest.raises(SelectionConditionPoorDefinedError):
+        condition = [{'nearby': [[0], 3]}]
+        select(topology, condition)
+
+    with pytest.raises(SelectionConditionPoorDefinedError):
+        condition = [{'earby': [[0], 3]}]
+        select(trajectory, condition)
