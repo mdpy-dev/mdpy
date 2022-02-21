@@ -197,6 +197,19 @@ def check_topological_keyword(conditions: list[dict]):
                         ', please check mdpy.utils.SELECTION_SUPPORTED_TOPOLOGICAL_KEYWORDS' %key
                     )
 
+def parse_selection_condition(conditions: list[dict]):
+    res = []
+    for condition in conditions:
+        cur_string = []
+        for key, value in condition.items():
+            string = '%s: ' %key
+            for i in value:
+                string += '%s, ' %i
+            cur_string.append(string[:-2]) # Remove last ', '
+        cur_string = ' and '.join(cur_string)
+        res.append(cur_string)
+    return ' or '.join(res)
+
 def select(target, conditions: list[dict]):
     if isinstance(target, Topology): # Single frame
         num_particles = target.num_particles
