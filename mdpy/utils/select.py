@@ -179,7 +179,7 @@ METHOD_DICT = {
     'in cylinder': select_in_cylinder
 }
 
-def check_keyword(conditions: list[dict]):
+def check_selection_condition(conditions: list[dict]):
     for condition in conditions:
         for key, _ in condition.items():
             if not key in SELECTION_SUPPORTED_KEYWORDS:
@@ -188,7 +188,7 @@ def check_keyword(conditions: list[dict]):
                         ', please check mdpy.utils.SELECTION_SUPPORTED_TOPOLOGICAL_KEYWORDS' %key
                     )
 
-def check_topological_keyword(conditions: list[dict]):
+def check_topological_selection_condition(conditions: list[dict]):
     for condition in conditions:
         for key, _ in condition.items():
             if not key in SELECTION_SUPPORTED_TOPOLOGICAL_KEYWORDS:
