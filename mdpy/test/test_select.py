@@ -66,6 +66,17 @@ def test_select_particle_type():
     assert selected_particles[0] == 0
     assert len(selected_particles) == 7
 
+def test_parse_selection_condition():
+    condition = [
+        {
+            'particle type': [['C', 'CA']],
+            'not molecule type': [['VAL']]
+        },
+        {'molecule id': [[3]]}
+    ]
+    res = parse_selection_condition(condition)
+    assert res == 'particle type: [\'C\', \'CA\'] and not molecule type: [\'VAL\'] or molecule id: [3]'
+
 def test_select():
     topology = PSFFile(os.path.join(data_dir, '6PO6.psf')).create_topology()
     position = PDBFile(os.path.join(data_dir, '6PO6.pdb')).positions
