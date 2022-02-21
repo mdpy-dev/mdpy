@@ -147,18 +147,18 @@ def select_in_cylinder():
     pass
 
 # select main function
-SELECT_SUPPORTED_TOPOLOGICAL_KEYWORDS = [
+SELECTION_SUPPORTED_TOPOLOGICAL_KEYWORDS = [
     'particle type', 'particle name', 'particle id', 
     'molecule type', 'molecule id',
     'chain id',
     'water', 'ion', 'protein', 'nucleic acid'
 ]
 
-SELECT_SUPPORTED_STERIC_KEYWORDS = [
+SELECTION_SUPPORTED_STERIC_KEYWORDS = [
     'nearby', 'in sphere', 'in cubic', 'in cylinder'
 ]
 
-SELECT_SUPPORTED_KEYWORDS = SELECT_SUPPORTED_TOPOLOGICAL_KEYWORDS + SELECT_SUPPORTED_STERIC_KEYWORDS
+SELECTION_SUPPORTED_KEYWORDS = SELECTION_SUPPORTED_TOPOLOGICAL_KEYWORDS + SELECTION_SUPPORTED_STERIC_KEYWORDS
 
 METHOD_DICT = {
     'particle type': select_particle_type,
@@ -179,6 +179,24 @@ METHOD_DICT = {
     'in cylinder': select_in_cylinder
 }
 
+def check_keyword(conditions: list[dict]):
+    for condition in conditions:
+        for key, _ in condition.items():
+            if not key in SELECTION_SUPPORTED_KEYWORDS:
+                raise SelectionConditionPoorDefinedError(
+                        '%s is unsupported selection keyword' \
+                        ', please check mdpy.utils.SELECTION_SUPPORTED_TOPOLOGICAL_KEYWORDS' %key
+                    )
+
+def check_topological_keyword(conditions: list[dict]):
+    for condition in conditions:
+        for key, _ in condition.items():
+            if not key in SELECTION_SUPPORTED_TOPOLOGICAL_KEYWORDS:
+                raise SelectionConditionPoorDefinedError(
+                        '%s is unsupported selection topological keyword' \
+                        ', please check mdpy.utils.SELECTION_SUPPORTED_TOPOLOGICAL_KEYWORDS' %key
+                    )
+
 def select(target, conditions: list[dict]):
     if isinstance(target, Topology): # Single frame
         num_particles = target.num_particles
@@ -191,10 +209,10 @@ def select(target, conditions: list[dict]):
                 if 'not' in key:
                     is_verse = True
                     key = key.split('not')[-1].strip()
-                if not key in SELECT_SUPPORTED_TOPOLOGICAL_KEYWORDS:
+                if not key in SELECTION_SUPPORTED_TOPOLOGICAL_KEYWORDS:
                     raise SelectionConditionPoorDefinedError(
-                        '%s is unsupported selection condition for mdpy.core.Topology instance' \
-                        ', please check mdpy.utils.SELECT_SUPPORTED_TOPOLOGICAL_KEYWORDS' %key
+                        '%s is unsupported selection keyword for mdpy.core.Topology instance' \
+                        ', please check mdpy.utils.SELECTION_SUPPORTED_TOPOLOGICAL_KEYWORDS' %key
                     )
                 res = set(METHOD_DICT[key](target, *value))
                 if not is_verse:
@@ -217,18 +235,18 @@ def select(target, conditions: list[dict]):
                     if 'not' in key:
                         is_verse = True
                         key = key.split('not')[-1].strip()
-                    if key in SELECT_SUPPORTED_TOPOLOGICAL_KEYWORDS:
+                    if key in SELECTION_SUPPORTED_TOPOLOGICAL_KEYWORDS:
                         if frame == 0:
                             res = set(METHOD_DICT[key](target, *value))
                             topological_res['%d-%s-%s' %(index, key, value)] = res
                         else:
                             res = topological_res['%d-%s-%s' %(index, key, value)]
-                    elif key in SELECT_SUPPORTED_STERIC_KEYWORDS:
+                    elif key in SELECTION_SUPPORTED_STERIC_KEYWORDS:
                         res = set(METHOD_DICT[key](target, frame, *value))
                     else:
                         raise SelectionConditionPoorDefinedError(
-                            '%s is unsupported selection condition for mdpy.core.Trajectory instance' \
-                            ', please check mdpy.utils.SELECT_SUPPORTED_KEYWORDS' %key
+                            '%s is unsupported selection keyword for mdpy.core.Trajectory instance' \
+                            ', please check mdpy.utils.SELECTION_SUPPORTED_KEYWORDS' %key
                         )
                     if not is_verse:
                         current_matrix_id &= res
