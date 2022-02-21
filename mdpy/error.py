@@ -149,9 +149,9 @@ class DumperPoorDefinedError(Exception):
     '''
     pass
 
-class SelectConditionPoorDefinedError(Exception):
+class SelectionConditionPoorDefinedError(Exception):
     '''This error occurs when:
-    - Unsupported select condition has been used
+    - Unsupported selection condition has been used
     
     Used in:
     - mdpy.utils.select_particle
