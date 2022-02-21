@@ -192,8 +192,8 @@ def select(target, conditions: list[dict]):
                     is_verse = True
                     key = key.split('not')[-1].strip()
                 if not key in SELECT_SUPPORTED_TOPOLOGICAL_KEYWORDS:
-                    raise SelectConditionPoorDefinedError(
-                        '%s is unsupported select condition for mdpy.core.Topology instance' \
+                    raise SelectionConditionPoorDefinedError(
+                        '%s is unsupported selection condition for mdpy.core.Topology instance' \
                         ', please check mdpy.utils.SELECT_SUPPORTED_TOPOLOGICAL_KEYWORDS' %key
                     )
                 res = set(METHOD_DICT[key](target, *value))
@@ -226,8 +226,8 @@ def select(target, conditions: list[dict]):
                     elif key in SELECT_SUPPORTED_STERIC_KEYWORDS:
                         res = set(METHOD_DICT[key](target, frame, *value))
                     else:
-                        raise SelectConditionPoorDefinedError(
-                            '%s is unsupported select condition for mdpy.core.Trajectory instance' \
+                        raise SelectionConditionPoorDefinedError(
+                            '%s is unsupported selection condition for mdpy.core.Trajectory instance' \
                             ', please check mdpy.utils.SELECT_SUPPORTED_KEYWORDS' %key
                         )
                     if not is_verse:
