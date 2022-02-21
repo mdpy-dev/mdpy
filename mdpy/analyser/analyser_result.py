@@ -19,7 +19,12 @@ class AnalyserResult:
         self._result = result
 
     def __repr__(self):
-        return '<mdpy.analyser.AnalyserResult object of %s at %x>' %(self._title, id(self))
+        descrption = '------------\nDescription of AnalyserResult object at %x\n' %id(self)
+        descrption += 'Title: \n- %s\n' %self._title
+        descrption += 'Keys: \n'
+        for key, value in self._description.items():
+            descrption += '- %s: %s\n' %(key, value)
+        return descrption + '------------'
 
     __str__ = __repr__
 
@@ -29,13 +34,8 @@ class AnalyserResult:
     
     @property
     def description(self):
-        descrption = '------------\nDescription of %s\n' %self
-        descrption += 'Title: \n- %s\n' %self._title
-        descrption += 'Keys: \n'
-        for key, value in self._description.items():
-            descrption += '- %s: %s\n' %(key, value)
-        return descrption + '------------'
-
+        return self._description
+    
     @property
     def result(self):
         return self._result
