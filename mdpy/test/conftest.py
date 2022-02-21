@@ -29,8 +29,7 @@ test_order = [
      'integrator', 'verlet_integrator', 'langevin_integrator'
      'simulation',
      'dumper', 
-     'pdb_dumper', 'log_dumper',
-     'analyser'
+     'pdb_dumper', 'log_dumper'
 ]
 
 def pytest_collection_modifyitems(items):
