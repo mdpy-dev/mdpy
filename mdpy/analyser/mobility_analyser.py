@@ -10,7 +10,7 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 '''
 
 import numpy as np
-from . import Analyser, AnalyserResult
+from . import AnalyserResult
 from .. import SPATIAL_DIM
 from ..core import Trajectory
 from ..utils import check_quantity_value
@@ -18,13 +18,13 @@ from ..utils import select, check_topological_selection_condition, parse_selecti
 from ..unit import *
 from ..error import *
 
-class MobilityAnalyser(Analyser):
+class MobilityAnalyser:
     def __init__(
         self, selection_condition: list[dict], 
         electric_intensity, drift_velocity_interval
     ) -> None:
         check_topological_selection_condition(selection_condition)
-        super().__init__(selection_condition)
+        self._selection_condition = selection_condition
         electric_intensity = check_quantity_value(electric_intensity, default_electric_intensity_unit)
         if electric_intensity.size != SPATIAL_DIM:
             raise ArrayDimError(
@@ -68,6 +68,15 @@ class MobilityAnalyser(Analyser):
         }
         result = {'mean': mean_mobility, 'std': std_mobility}
         return AnalyserResult(title=title, description=description, result=result)
+
+    @property
+    def selection_condition(self):
+        return self._selection_condition
+    
+    @selection_condition.setter
+    def selection_condition(self, selection_condition):
+        check_topological_selection_condition(selection_condition)
+        self._selection_condition = selection_condition
 
     @property
     def electirc_intensity(self):
