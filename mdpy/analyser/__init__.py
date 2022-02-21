@@ -4,6 +4,15 @@ __email__ = "zhenyuwei99@gmail.com"
 __copyright__ = "Copyright 2021-2021, Southeast University and Zhenyu Wei"
 __license__ = "GPLv3"
 
-from .analyser import Analyser
+from .analyser_result import AnalyserResult
 
-__all__ = []
+# Dynamics properties
+from .mobility_analyser import MobilityAnalyser
+
+# Thermodynamics properties
+from .rdf_analyser import RDFAnalyser
+
+__all__ = [
+    'MobilityAnalyser',
+    'RDFAnalyser'
+]

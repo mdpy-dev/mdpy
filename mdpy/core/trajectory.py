@@ -10,7 +10,6 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 '''
 
 import numpy as np
-from pytest import raises
 from . import Topology
 from .. import SPATIAL_DIM, env
 from ..utils import check_quantity_value
@@ -161,18 +160,6 @@ class Trajectory:
         self._unwrapped_positions[0, :, :] = self._positions[0, :, :]
         for frame in range(1, self._num_frames):
             self._unwrapped_positions[frame, :, :] = self._unwrapped_positions[frame-1, :, :] + diff[frame-1, :, :]
-
-    def select_particle(self):
-        pass
-
-    def get_positions(self, selection=''):
-        pass
-
-    def get_velocities(self, selection=''):
-        pass
-
-    def get_forces(self, selection=''):
-        pass
 
     @property
     def topology(self):

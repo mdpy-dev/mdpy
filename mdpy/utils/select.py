@@ -40,6 +40,10 @@ def check_trajectory(target) -> Trajectory:
         )
 
 # Topological
+def select_all(target):
+    topology = check_topology(target)
+    return list(range(topology.num_particles))
+
 def select_particle_type(target, particle_types: list[str]):
     selected_matrix_ids = []
     topology = check_topology(target)
@@ -147,20 +151,21 @@ def select_in_cylinder():
     pass
 
 # select main function
-SELECT_SUPPORTED_TOPOLOGICAL_KEYWORDS = [
+SELECTION_SUPPORTED_TOPOLOGICAL_KEYWORDS = [
+    'all',
     'particle type', 'particle name', 'particle id', 
-    'molecule type', 'molecule id',
-    'chain id',
+    'molecule type', 'molecule id', 'chain id',
     'water', 'ion', 'protein', 'nucleic acid'
 ]
 
-SELECT_SUPPORTED_STERIC_KEYWORDS = [
+SELECTION_SUPPORTED_STERIC_KEYWORDS = [
     'nearby', 'in sphere', 'in cubic', 'in cylinder'
 ]
 
-SELECT_SUPPORTED_KEYWORDS = SELECT_SUPPORTED_TOPOLOGICAL_KEYWORDS + SELECT_SUPPORTED_STERIC_KEYWORDS
+SELECTION_SUPPORTED_KEYWORDS = SELECTION_SUPPORTED_TOPOLOGICAL_KEYWORDS + SELECTION_SUPPORTED_STERIC_KEYWORDS
 
 METHOD_DICT = {
+    'all': select_all,
     'particle type': select_particle_type,
     'particle name': select_particle_name,
     'particle id': select_particle_id,
@@ -179,6 +184,45 @@ METHOD_DICT = {
     'in cylinder': select_in_cylinder
 }
 
+def check_selection_condition(conditions: list[dict]):
+    if not isinstance(conditions, list) or not isinstance(conditions[0], dict):
+        raise SelectionConditionPoorDefinedError(
+            'selection condition should be list[dict]'
+        )
+    for condition in conditions:
+        for key, _ in condition.items():
+            if not key in SELECTION_SUPPORTED_KEYWORDS:
+                raise SelectionConditionPoorDefinedError(
+                        '%s is unsupported selection keyword' \
+                        ', please check mdpy.utils.SELECTION_SUPPORTED_TOPOLOGICAL_KEYWORDS' %key
+                    )
+
+def check_topological_selection_condition(conditions: list[dict]):
+    if not isinstance(conditions, list) or not isinstance(conditions[0], dict):
+        raise SelectionConditionPoorDefinedError(
+            'selection condition should be list[dict]'
+        )
+    for condition in conditions:
+        for key, _ in condition.items():
+            if not key in SELECTION_SUPPORTED_TOPOLOGICAL_KEYWORDS:
+                raise SelectionConditionPoorDefinedError(
+                        '%s is unsupported selection topological keyword' \
+                        ', please check mdpy.utils.SELECTION_SUPPORTED_TOPOLOGICAL_KEYWORDS' %key
+                    )
+
+def parse_selection_condition(conditions: list[dict]):
+    res = []
+    for condition in conditions:
+        cur_string = []
+        for key, value in condition.items():
+            string = '%s: ' %key
+            for i in value:
+                string += '%s, ' %i
+            cur_string.append(string[:-2]) # Remove last ', '
+        cur_string = ' and '.join(cur_string)
+        res.append(cur_string)
+    return ' or '.join(res)
+
 def select(target, conditions: list[dict]):
     if isinstance(target, Topology): # Single frame
         num_particles = target.num_particles
@@ -191,10 +235,10 @@ def select(target, conditions: list[dict]):
                 if 'not' in key:
                     is_verse = True
                     key = key.split('not')[-1].strip()
-                if not key in SELECT_SUPPORTED_TOPOLOGICAL_KEYWORDS:
-                    raise SelectConditionPoorDefinedError(
-                        '%s is unsupported select condition for mdpy.core.Topology instance' \
-                        ', please check mdpy.utils.SELECT_SUPPORTED_TOPOLOGICAL_KEYWORDS' %key
+                if not key in SELECTION_SUPPORTED_TOPOLOGICAL_KEYWORDS:
+                    raise SelectionConditionPoorDefinedError(
+                        '%s is unsupported selection keyword for mdpy.core.Topology instance' \
+                        ', please check mdpy.utils.SELECTION_SUPPORTED_TOPOLOGICAL_KEYWORDS' %key
                     )
                 res = set(METHOD_DICT[key](target, *value))
                 if not is_verse:
@@ -217,18 +261,18 @@ def select(target, conditions: list[dict]):
                     if 'not' in key:
                         is_verse = True
                         key = key.split('not')[-1].strip()
-                    if key in SELECT_SUPPORTED_TOPOLOGICAL_KEYWORDS:
+                    if key in SELECTION_SUPPORTED_TOPOLOGICAL_KEYWORDS:
                         if frame == 0:
                             res = set(METHOD_DICT[key](target, *value))
                             topological_res['%d-%s-%s' %(index, key, value)] = res
                         else:
                             res = topological_res['%d-%s-%s' %(index, key, value)]
-                    elif key in SELECT_SUPPORTED_STERIC_KEYWORDS:
+                    elif key in SELECTION_SUPPORTED_STERIC_KEYWORDS:
                         res = set(METHOD_DICT[key](target, frame, *value))
                     else:
-                        raise SelectConditionPoorDefinedError(
-                            '%s is unsupported select condition for mdpy.core.Trajectory instance' \
-                            ', please check mdpy.utils.SELECT_SUPPORTED_KEYWORDS' %key
+                        raise SelectionConditionPoorDefinedError(
+                            '%s is unsupported selection keyword for mdpy.core.Trajectory instance' \
+                            ', please check mdpy.utils.SELECTION_SUPPORTED_KEYWORDS' %key
                         )
                     if not is_verse:
                         current_matrix_id &= res
