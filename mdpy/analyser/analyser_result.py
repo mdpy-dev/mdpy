@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- encoding: utf-8 -*-
 '''
-file : analyser.py
+file : analyser_result.py
 created time : 2022/02/20
 author : Zhenyu Wei
 version : 1.0
@@ -39,26 +39,3 @@ class AnalyserResult:
     @property
     def result(self):
         return self._result
-
-class Analyser:
-    def __init__(self, selection_condition: list[dict]) -> None:
-        check_selection_condition(selection_condition)
-        self._selection_condition = selection_condition
-
-    def analysis(self, trajectory: Trajectory) -> AnalyserResult:
-        raise NotImplementedError(
-            'The subclass of mdpy.analyser.Analyser class should overload analysis method.'
-        )
-
-    def save(self, file_path):
-        raise NotImplementedError(
-            'The subclass of mdpy.analyser.Analyser class should overload save method.'
-        )
-
-    @property
-    def selection_condition(self):
-        return self._selection_condition 
-
-    @selection_condition.setter
-    def selection_condition(self, condition: list[dict]):
-        self._selection_condition = condition
