@@ -11,8 +11,8 @@ from .geometry import get_dihedral, get_pbc_dihedral
 from .pbc import wrap_positions, unwrap_vec
 from .check_quantity import check_quantity, check_quantity_value
 from .select import select
-from .select import SELECT_SUPPORTED_KEYWORDS
-from .select import SELECT_SUPPORTED_STERIC_KEYWORDS, SELECT_SUPPORTED_TOPOLOGICAL_KEYWORDS
+from .select import SELECTION_SUPPORTED_KEYWORDS
+from .select import SELECTION_SUPPORTED_STERIC_KEYWORDS, SELECTION_SUPPORTED_TOPOLOGICAL_KEYWORDS
 
 __all__ = [
     'get_unit_vec', 'get_norm_vec', 
@@ -21,6 +21,6 @@ __all__ = [
     'get_dihedral', 'get_pbc_dihedral',
     'wrap_positions', 'unwrap_vec',
     'check_quantity', 'check_quantity_value',
-    'select', 'SELECT_SUPPORTED_KEYWORDS',
-    'SELECT_SUPPORTED_STERIC_KEYWORDS', 'SELECT_SUPPORTED_TOPOLOGICAL_KEYWORDS'
+    'select', 'SELECTION_SUPPORTED_KEYWORDS',
+    'SELECTION_SUPPORTED_STERIC_KEYWORDS', 'SELECTION_SUPPORTED_TOPOLOGICAL_KEYWORDS'
 ]
