@@ -4,6 +4,10 @@ __email__ = "zhenyuwei99@gmail.com"
 __copyright__ = "Copyright 2021-2021, Southeast University and Zhenyu Wei"
 __license__ = "GPLv3"
 
-from .analyser import Analyser
+from .analyser import Analyser, AnalyserResult
 
-__all__ = []
+from .mobility_analyser import MobilityAnalyser
+
+__all__ = [
+    'MobilityAnalyser'
+]
