@@ -180,6 +180,10 @@ METHOD_DICT = {
 }
 
 def check_selection_condition(conditions: list[dict]):
+    if not isinstance(conditions, list) or not isinstance(conditions[0], dict):
+        raise SelectionConditionPoorDefinedError(
+            'selection condition should be list[dict]'
+        )
     for condition in conditions:
         for key, _ in condition.items():
             if not key in SELECTION_SUPPORTED_KEYWORDS:
@@ -189,6 +193,10 @@ def check_selection_condition(conditions: list[dict]):
                     )
 
 def check_topological_selection_condition(conditions: list[dict]):
+    if not isinstance(conditions, list) or not isinstance(conditions[0], dict):
+        raise SelectionConditionPoorDefinedError(
+            'selection condition should be list[dict]'
+        )
     for condition in conditions:
         for key, _ in condition.items():
             if not key in SELECTION_SUPPORTED_TOPOLOGICAL_KEYWORDS:
