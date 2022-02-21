@@ -46,6 +46,15 @@ def test_check_target():
     with pytest.raises(TypeError):
         check_trajectory(1)
 
+def test_check_keyword():
+    with pytest.raises(SelectionConditionPoorDefinedError):
+        condition = [{'earby': [[0], 3]}]
+        check_keyword(condition)
+
+    with pytest.raises(SelectionConditionPoorDefinedError):
+        condition = [{'nearby': [[0], 3]}]
+        check_topological_keyword(condition)
+
 def test_select_particle_type():
     topology = create_topology()
     selected_particles = select_particle_type(topology, ['H'])
