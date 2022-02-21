@@ -71,6 +71,10 @@ def test_charge():
     force_val_newton = force_val.convert_to(newton)
     assert force_val_newton.value == pytest.approx(2.3e-8, abs=1e-10)
 
+    assert Quantity(1, ohm) == Quantity(1, volt / ampere)
+    assert Quantity(1, default_electric_intensity_unit * default_charge_unit) == Quantity(1, default_force_unit)
+    assert Quantity(1, volt / meter * coulomb) == Quantity(1, newton)
+
 def test_mol():
     assert Quantity(1) * kilomol / mol == 1e3
 
