@@ -31,6 +31,7 @@ accelration = length / time**2
 ######################
 ## Constant Unit    ##
 ######################
+
 no_unit = Unit(constant, 1)
 
 ######################
@@ -45,8 +46,6 @@ micrometer = Unit(length, 1e-6)
 nanometer = Unit(length, 1e-9)
 angstrom = Unit(length, 1e-10)
 
-default_length_unit = angstrom
-
 ######################
 ## Mass Unit        ##
 ######################
@@ -55,8 +54,6 @@ kilogram = Unit(mass, 1)
 gram = Unit(mass, 1e-3)
 amu = Unit(mass, 1.66053904e-27)
 dalton = Unit(mass, 1.66053904e-27)
-
-default_mass_unit = dalton
 
 ######################
 ## Time Unit        ##
@@ -72,8 +69,7 @@ nanosecond = Unit(time, 1e-9)
 picosecond = Unit(time, 1e-12)
 femtosecond = Unit(time, 1e-15)
 
-default_time_unit = femtosecond
-default_velocity_unit = default_length_unit / default_time_unit
+hertz = 1 / second
 
 ######################
 ## Temperature Unit ##
@@ -81,16 +77,25 @@ default_velocity_unit = default_length_unit / default_time_unit
 
 kelvin = Unit(temperature, 1)
 
-default_temperature_unit = kelvin
+######################
+## Power Unit       ##
+######################
+
+watt = Unit(power, 1)
+kilowatt = Unit(power, 1e3)
 
 ######################
-## Charge Unit      ##
+## Electrical Unit      ##
 ######################
 
 coulomb = Unit(charge, 1)
 e = Unit(charge, 1.602176634e-19)
 
-default_charge_unit = e
+ampere = coulomb / second
+volt = watt / ampere
+ohm = volt / ampere
+farad = coulomb / volt
+siemens = 1 / ohm
 
 ######################
 ## Mol Unit         ##
@@ -98,8 +103,6 @@ default_charge_unit = e
 
 mol = Unit(mol_dimension, 1)
 kilomol = Unit(mol_dimension, 1e3)
-
-default_mol_unit = mol
 
 ######################
 ## Energy Unit      ##
@@ -118,9 +121,6 @@ kilocalorie_permol = Unit(energy, 4.184e3/6.0221e23)
 ev = Unit(energy, 1.60217662e-19)
 hartree = Unit(energy, 4.3597447222071e-18)
 
-default_energy_unit = default_mass_unit * default_length_unit**2 / default_time_unit**2 #kilojoule_permol
-default_force_unit = default_energy_unit / default_length_unit
-
 ######################
 ## Force Unit       ##
 ######################
@@ -131,10 +131,3 @@ kilojoule_permol_over_angstrom = kilojoule_permol / angstrom
 kilojoule_permol_over_nanometer = kilojoule_permol / nanometer
 kilocalorie_permol_over_angstrom = kilocalorie_permol / angstrom
 kilocalorie_permol_over_nanometer = kilocalorie_permol / nanometer
-
-######################
-## Power Unit       ##
-######################
-
-watt = Unit(power, 1)
-kilowatt = Unit(power, 1e3)
