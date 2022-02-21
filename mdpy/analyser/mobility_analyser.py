@@ -60,13 +60,16 @@ class MobilityAnalyser:
             unit = default_velocity_unit / default_electric_intensity_unit
             mean_mobility = Quantity(mean_mobility, unit)
             std_mobility = Quantity(std_mobility, unit)
-
-        title =  'Mobility of particle meet selection condition: %s' %parse_selection_condition(self._selection_condition)
+            time_step = Quantity(trajectory.time_step * self._drift_velocity_interval, default_time_unit)
+            electric_intensity = Quantity(self._electric_intensity, default_electric_intensity_unit)
+        title =  'Mobility of %s' %parse_selection_condition(self._selection_condition)
         description = {
             'mean': 'The mean of mobility result, unit: default_velocities_unit / default_electric_intensity_unit',
             'std': 'The std of mobility result, unit: default_velocities_unit / default_electric_intensity_unit',
+            'time_step': 'Time step used to calculate the drift velocities, unit: default_time_unit',
+            'electric_intensity': 'Electric intensity used to calculate the mobility, unit: default_electric_intensity_unit'
         }
-        result = {'mean': mean_mobility, 'std': std_mobility}
+        result = {'mean': mean_mobility, 'std': std_mobility, 'time_step': time_step, 'electric_intensity': electric_intensity}
         return AnalyserResult(title=title, description=description, result=result)
 
     @property
