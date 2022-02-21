@@ -67,61 +67,16 @@ class TestTopology:
         # with pytest.raises(ParticleConflictError):
         #     self.topology.add_particles([p1])
 
-    def test_select_particles(self):
-        p1 = Particle(0, 'CA')
-        p2 = Particle(1, 'CB')
-        p3 = Particle(2, 'N')
-        self.topology.add_particles([p1, p2, p3])
-        particles = self.topology.select_particles('particle_type = CA')
-        assert particles[0].particle_id == 0
-        assert self.topology.num_particles == 3
-        assert len(particles) == 1
-
-        p1 = Particle(0, 'CA', molecule_id=0, molecule_type='ASN')
-        p2 = Particle(1, 'CB', molecule_id=0, molecule_type='ASN')
-        p3 = Particle(2, 'N', molecule_id=0, molecule_type='ASN')
-        p4 = Particle(3, 'H', molecule_id=1, molecule_type='HOH')
-        self.topology.add_particles([p1, p2, p3, p4])
-        particles = self.topology.select_particles('particle_id=0 and molecule_id=0 or molecule_id=1')
-        assert len(particles) == 2
-        assert self.topology.num_particles == 7
-        assert particles[0].molecule_type == 'ASN'
-        assert particles[1].molecule_type == 'HOH'
-
-        particles = self.topology.select_particles('particle_id=0 and molecule_id=0 or molecule_id=2')
-        assert len(particles) == 1
-        assert self.topology.num_particles == 7
-        assert particles[0].molecule_type == 'ASN'
-
-        particles = self.topology.select_particles('not particle_id=0')
-        assert len(particles) == 5
-        assert self.topology.num_particles == 7
-        assert particles[0].molecule_type == None
-        assert particles[4].molecule_type == 'HOH'
-
-        particles = self.topology.select_particles('not particle_id=0 or particle_type=CA')
-        assert len(particles) == 7
-        assert self.topology.num_particles == 7
-        assert particles[0].molecule_type == None
-        assert particles[6].molecule_type == 'ASN'
-
-        particles = self.topology.select_particles('all')
-        assert len(particles) == 7
-
-        particles = self.topology.select_particles('all and particle_id=0')
-        assert len(particles) == 2
-
     def test_del_particles(self):
         p1 = Particle(0, 'CA', molecule_id=0, molecule_type='ASN')
         p2 = Particle(1, 'CB', molecule_id=0, molecule_type='ASN')
         p3 = Particle(2, 'N', molecule_id=0, molecule_type='ASN')
         p4 = Particle(3, 'H', molecule_id=1, molecule_type='HOH')
         self.topology.add_particles([p1, p2, p3, p4])
-        particles = self.topology.select_particles('not molecule_id=1')
-        self.topology.del_particles(particles)
+        self.topology.del_particles([p1, p2, p3])
         assert self.topology.num_particles == 1
 
-        self.topology.del_particles(self.topology.select_particles('all'))
+        self.topology.del_particles([p4])
         assert self.topology.num_particles == 0
 
         self.topology.add_particles([p1, p2, p3, p4])
