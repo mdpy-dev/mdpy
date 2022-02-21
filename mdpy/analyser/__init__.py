@@ -10,8 +10,9 @@ from .analyser_result import AnalyserResult
 from .mobility_analyser import MobilityAnalyser
 
 # Thermodynamics properties
-
+from .rdf_analyser import RDFAnalyser
 
 __all__ = [
-    'MobilityAnalyser'
+    'MobilityAnalyser',
+    'RDFAnalyser'
 ]
