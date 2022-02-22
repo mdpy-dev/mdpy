@@ -38,7 +38,7 @@ class Particle:
         self._num_scaling_particles = 0
 
     def __repr__(self) -> str:
-        return '<<mdpy.core.Particle %s-%d at %x>' %(self._particle_name, self._particle_id, id(self))
+        return '<mdpy.core.Particle object: %s-%d at %x>' %(self._particle_name, self._particle_id, id(self))
         # return '<Particle object: ID %d, Type %s at %x>' %(self._particle_id, self._particle_type, id(self))
 
     __str__ = __repr__    

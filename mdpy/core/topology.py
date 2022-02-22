@@ -100,67 +100,26 @@ class Topology:
             self._particles.append(particle)
             self._num_particles += 1
 
-    def select_particles(self, keywords):
-        ''' Example:
-        particle_id=1 and molecule_type=ASN or particle_type=CB
-        '''
-        target_partiles = self._particles.copy()
-        selected_particles = []
-        or_selections = [i.strip() for i in keywords.split('or')]
-        for or_selection in or_selections:
-            and_particles = []
-            and_selections = [i.strip() for i in or_selection.split('and')]
-            key_val_pairs = []
-            for and_selection in and_selections:
-                key_val_pair = [i.strip() for i in and_selection.split('=')]
-                if 'not' in key_val_pair[0]:
-                    key_val_pair = ['not', key_val_pair[0].split('not')[-1].strip(), key_val_pair[-1]]
-                try:
-                    key_val_pair[-1] = float(key_val_pair[-1][-1]) # Turn str to int if it is possible
-                except:
-                    pass
-                if not 'all' in key_val_pair[0]:
-                    key_val_pairs.append(key_val_pair) # Don't select atom to delete in the following section
-                
-            # Select particle doesn't match condition to delete
-            and_particles = target_partiles.copy()
-            for particle in target_partiles:
-                is_deleted = False # First assume will not be deleted, once condition is not matched turn to True
-                for key_val in key_val_pairs:
-                    if not 'not' in key_val:
-                        if particle.__getattribute__(key_val[0]) != key_val[-1]:
-                            is_deleted = True
-                            break
-                    elif 'not' in key_val:
-                        if particle.__getattribute__(key_val[1]) == key_val[-1]:
-                            is_deleted = True
-                            break
-                if is_deleted == True:
-                    and_particles.remove(particle)
-            [target_partiles.remove(particle) for particle in and_particles] # Remove selected particles, reduce computation time for next or condition
-            selected_particles.extend(and_particles)
-        return selected_particles
-
     def del_particles(self, particles):
         self._check_joined()
         particle_list, bond_list, angle_list, dihedral_list, improper_list = [], [], [], [], []
-        for particle in particles:
+        for index, particle in enumerate(particles):
             if particle in self._particles:
-                particle_list.append(particle)
-                bond_list.extend([bond for bond in self._bonds if particle.matrix_id in bond])
-                angle_list.extend([angle for angle in self._angles if particle.matrix_id in angle])
-                dihedral_list.extend([dihedral for dihedral in self._dihedrals if particle.matrix_id in dihedral])
-                improper_list.extend([improper for improper in self._impropers if particle.matrix_id in improper])
-        _ = [self._particles.remove(i) for i in particle_list]
-        self._num_particles -= len(particle_list)
-        _ = [self._bonds.remove(i) for i in bond_list]
-        self._num_bonds -= len(bond_list)
-        _ = [self._angles.remove(i) for i in angle_list]
-        self._num_angles -= len(angle_list)
-        _ = [self._dihedrals.remove(i) for i in dihedral_list]
-        self._num_dihedrals -= len(dihedral_list)
-        _ = [self._impropers.remove(i) for i in improper_list]
-        self._num_impropers -= len(improper_list)
+                particle_list.append(index)
+                bond_list.extend([index for index, bond in enumerate(self._bonds) if particle.matrix_id in bond])
+                angle_list.extend([index for index, angle in enumerate(self._angles) if particle.matrix_id in angle])
+                dihedral_list.extend([index for index, dihedral in enumerate(self._dihedrals) if particle.matrix_id in dihedral])
+                improper_list.extend([index for index, improper in enumerate(self._impropers) if particle.matrix_id in improper])
+        self._particles = [self._particles[i] for i in set(range(self._num_particles))^set(particle_list)]
+        self._num_particles = len(self._particles)
+        self._bonds = [self._bonds[i] for i in set(range(self._num_bonds))^set(bond_list)]
+        self._num_bonds = len(self._bonds)
+        self._angles = [self._angles[i] for i in set(range(self._num_angles))^set(angle_list)]
+        self._num_angles = len(self._angles)
+        self._dihedrals = [self._dihedrals[i] for i in set(range(self._num_dihedrals))^set(dihedral_list)]
+        self._num_dihedrals = len(self._dihedrals)
+        self._impropers = [self._impropers[i] for i in set(range(self._num_impropers))^set(improper_list)]
+        self._num_impropers = len(self._impropers)
 
     def add_bond(self, bond):
         self._check_joined()
