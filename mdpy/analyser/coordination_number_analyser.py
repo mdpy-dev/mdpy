@@ -73,11 +73,11 @@ class CoordinationNumberAnalyser:
             'num_bins': 'The number of bins used to construct coordination number curve, unit: dimensionless',
             'bin_edge': 'The bin edge of coordination number function, unit: dimensionless'
         }
-        result = {
+        data = {
             'mean': mean_coordination_number, 'std': std_coordination_number, 'cutoff_radius': cutoff_radius,
             'num_bins': self._num_bins, 'bin_edge': bin_edge
         }
-        return AnalyserResult(title=title, description=description, result=result)
+        return AnalyserResult(title=title, description=description, data=data)
 
     @property
     def selection_condition_1(self):
