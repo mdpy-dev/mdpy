@@ -49,7 +49,7 @@ class RDFAnalyser:
                     trajectory.pbc_matrix, trajectory.pbc_inv
                 )
                 dist = np.sqrt((vec**2).sum(1))
-                cur_hist_id1, bin_edge = np.histogram(dist, self._num_bins, [0, self._cutoff_radius], density=True)
+                cur_hist_id1, bin_edge = np.histogram(dist, self._num_bins, [0, self._cutoff_radius])
                 hist_id1.append(cur_hist_id1)
             hist.append(np.vstack(hist_id1).mean(0))
             bin_edge = bin_edge
@@ -117,4 +117,3 @@ class RDFAnalyser:
         if not isinstance(num_bins, int):
             raise TypeError('num_bins should be integer, while %s is provided' %type(num_bins))
         self._num_bins = num_bins
-        self._bin_edge = np.linspace(0, self._cutoff_radius, self._num_bins + 1)
