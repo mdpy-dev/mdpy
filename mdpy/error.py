@@ -43,6 +43,7 @@ class ArrayDimError(Exception):
     Used in:
     - mdpy.core.state
     - mdpy.core.trajectory
+    - mdpy.analyser.mobility_analyser
     '''
     pass
 
@@ -96,6 +97,7 @@ class FileFormatError(Exception):
     
     Used in:
     - mdpy.file.charmm_file
+    - mdpy.analyser.analyser_result
     '''
     pass
 
