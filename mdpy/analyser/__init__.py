@@ -7,6 +7,7 @@ __license__ = "GPLv3"
 from .analyser_result import AnalyserResult, load_analyser_result
 
 # Dynamics properties
+from .diffusion_analyser import DiffusionAnalyser
 from .mobility_analyser import MobilityAnalyser
 
 # Thermodynamics properties
@@ -15,6 +16,6 @@ from .coordination_number_analyser import CoordinationNumberAnalyser
 
 __all__ = [
     'load_analyser_result',
-    'MobilityAnalyser',
+    'DiffusionAnalyser', 'MobilityAnalyser',
     'RDFAnalyser', 'CoordinationNumberAnalyser'
 ]
