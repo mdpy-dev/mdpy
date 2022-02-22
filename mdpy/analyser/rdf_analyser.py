@@ -76,11 +76,11 @@ class RDFAnalyser:
             'num_bins': 'The number of bins used to construct RDF curve, unit: dimensionless',
             'bin_edge': 'The bin edge of RDF function, unit: dimensionless'
         }
-        result = {
+        data = {
             'mean': mean_hist, 'std': std_hist, 'cutoff_radius': cutoff_radius,
             'num_bins': self._num_bins, 'bin_edge': bin_edge
         }
-        return AnalyserResult(title=title, description=description, result=result)
+        return AnalyserResult(title=title, description=description, data=data)
 
     @property
     def selection_condition_1(self):
