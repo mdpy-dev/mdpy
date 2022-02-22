@@ -9,8 +9,9 @@ contact : zhenyuwei99@gmail.com
 copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 '''
 
-from ..core import Trajectory
-from ..utils import check_selection_condition
+import numpy as np
+from ..unit import *
+from ..error import *
 
 class AnalyserResult:
     def __init__(self, title: str, description: dict, result: dict) -> None:
@@ -28,6 +29,17 @@ class AnalyserResult:
 
     __str__ = __repr__
 
+    def save(self, file_path: str):
+        if not file_path.endswith('npz'):
+            raise FileFormatError('mdpy.analyser.AnalyerResult should be save to a .npz file')
+        save_dict = {}
+        save_dict['title'] = self._title
+        for key, value in self._description.items():
+            save_dict['description-%s' %key] = value
+        for key, value in self._result.items():
+            save_dict[key] = value.value if isinstance(value, Quantity) else value
+        np.savez(file_path, **save_dict)
+
     @property
     def title(self):
         return self._title
@@ -39,3 +51,16 @@ class AnalyserResult:
     @property
     def result(self):
         return self._result
+
+def load_analyser_result(file_path: str):
+    if not file_path.endswith('npz'):
+            raise FileFormatError('mdpy.analyser.AnalyerResult should be save to a .npz file')
+    data = np.load(file_path)
+    title = data['title'].item()
+    description, result = {}, {}
+    for key in data.keys():
+        if key.startswith('description'):
+            target_key = key.split('description-')[-1]
+            description[target_key] = data[key].item()
+            result[target_key] = data[target_key]
+    return AnalyserResult(title=title, description=description, result=result)
