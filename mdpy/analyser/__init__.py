@@ -11,8 +11,9 @@ from .mobility_analyser import MobilityAnalyser
 
 # Thermodynamics properties
 from .rdf_analyser import RDFAnalyser
+from .coordination_number_analyser import CoordinationNumberAnalyser
 
 __all__ = [
     'MobilityAnalyser',
-    'RDFAnalyser'
+    'RDFAnalyser', 'CoordinationNumberAnalyser'
 ]
