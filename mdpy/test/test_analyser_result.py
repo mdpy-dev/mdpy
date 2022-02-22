@@ -36,8 +36,8 @@ class TestAnalyserResult:
     def test_save(self):
         title = 'a'
         description = {'a': 'test'}
-        result = {'a': np.ones([10, 1])}
-        result = AnalyserResult(title=title, description=description, result=result)
+        data = {'a': np.ones([10, 1])}
+        result = AnalyserResult(title=title, description=description, data=data)
         with pytest.raises(FileFormatError):
             result.save('a')
         result.save(os.path.join(out_dir, 'analyser_result.npz'))
@@ -46,4 +46,4 @@ def test_load_analyser_result():
     result = load_analyser_result(os.path.join(data_dir, 'analyser_result.npz'))
     assert result.title == 'a'
     assert result.description['a'] == 'test'
-    assert result.result['a'][0] == 1
+    assert result.data['a'][0] == 1
