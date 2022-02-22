@@ -4,6 +4,7 @@ __email__ = "zhenyuwei99@gmail.com"
 __copyright__ = "Copyright 2021-2021, Southeast University and Zhenyu Wei"
 __license__ = "GPLv3"
 
+from .math import sigmoid
 from .geometry import get_unit_vec, get_norm_vec
 from .geometry import get_bond, get_pbc_bond
 from .geometry import get_angle, get_pbc_angle, get_included_angle 
@@ -15,6 +16,7 @@ from .select import SELECTION_SUPPORTED_KEYWORDS
 from .select import SELECTION_SUPPORTED_STERIC_KEYWORDS, SELECTION_SUPPORTED_TOPOLOGICAL_KEYWORDS
 
 __all__ = [
+    'sigmoid',
     'get_unit_vec', 'get_norm_vec', 
     'get_bond', 'get_pbc_bond', 
     'get_angle', 'get_pbc_angle', 'get_included_angle', 
