@@ -1,0 +1,9 @@
+*.py linguist-detectable=true
+
+*.rtf linguist-detectable=false
+*.pdb linguist-detectable=false
+*.psf linguist-detectable=false
+*.txt linguist-detectable=false
+
+data/* linguist-vendored
+mdpy/test/data/* linguist-vendored

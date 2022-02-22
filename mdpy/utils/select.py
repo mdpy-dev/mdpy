@@ -40,6 +40,10 @@ def check_trajectory(target) -> Trajectory:
         )
 
 # Topological
+def select_all(target):
+    topology = check_topology(target)
+    return list(range(topology.num_particles))
+
 def select_particle_type(target, particle_types: list[str]):
     selected_matrix_ids = []
     topology = check_topology(target)
@@ -148,9 +152,9 @@ def select_in_cylinder():
 
 # select main function
 SELECTION_SUPPORTED_TOPOLOGICAL_KEYWORDS = [
+    'all',
     'particle type', 'particle name', 'particle id', 
-    'molecule type', 'molecule id',
-    'chain id',
+    'molecule type', 'molecule id', 'chain id',
     'water', 'ion', 'protein', 'nucleic acid'
 ]
 
@@ -161,6 +165,7 @@ SELECTION_SUPPORTED_STERIC_KEYWORDS = [
 SELECTION_SUPPORTED_KEYWORDS = SELECTION_SUPPORTED_TOPOLOGICAL_KEYWORDS + SELECTION_SUPPORTED_STERIC_KEYWORDS
 
 METHOD_DICT = {
+    'all': select_all,
     'particle type': select_particle_type,
     'particle name': select_particle_name,
     'particle id': select_particle_id,
