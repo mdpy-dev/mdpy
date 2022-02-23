@@ -78,11 +78,11 @@ class TestEnsemble:
         f3 = os.path.join(data_dir, 'toppar_water_ions_namd.str')
         psf_file_path = os.path.join(data_dir, '1M9Z.psf')
         charmm_file = CharmmTopparParser(f2, f3)
-        params = charmm_file.parameters
+        parameters = charmm_file.parameters
         topology = PSFParser(psf_file_path).topology
         ensemble = Ensemble(topology)
         ensemble.state.set_pbc_matrix(np.diag(np.ones(3)*30))
-        constraint = CharmmNonbondedConstraint(params['nonbonded'])
+        constraint = CharmmNonbondedConstraint(parameters['nonbonded'])
         ensemble.add_constraints(constraint)
         assert ensemble.num_constraints == 1
         
