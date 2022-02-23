@@ -57,7 +57,7 @@ class TestElectrostaticConstraint:
         self.constraint = ElectrostaticConstraint()
 
     def teardown(self):
-        self.ensemble, self.params, self.constraint = None, None, None
+        self.ensemble, self.parameters, self.constraint = None, None, None
 
     def test_attributes(self):
         pass
