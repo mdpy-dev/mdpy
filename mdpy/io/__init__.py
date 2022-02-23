@@ -12,10 +12,10 @@ from .charmm_toppar_parser import CharmmTopparParser
 from .psf_file import PSFFile
 
 # Position file
-from .pdb_file import PDBFile
+from .pdb_parser import PDBParser
 
 __all__ = [ 
     'CharmmTopparParser',
     'PSFFile',
-    'PDBFile',
+    'PDBParser',
 ]
