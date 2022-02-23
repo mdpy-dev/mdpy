@@ -59,8 +59,9 @@ class CoordinationNumberAnalyser:
         mean_coordination_number[0] = mean_coordination_number[1] # Prevent counting self
         std_coordination_number[0] = std_coordination_number[1]
         # Output
+        cutoff_radius = self._cutoff_radius
         if not is_dimensionless:
-            cutoff_radius = Quantity(self._cutoff_radius, default_length_unit)
+            cutoff_radius = Quantity(cutoff_radius, default_length_unit)
             bin_edge = Quantity(bin_edge, default_length_unit)
         title = 'Coordination number function between %s --- %s' %(
             parse_selection_condition(self._selection_condition_1),

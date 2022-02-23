@@ -62,8 +62,9 @@ class RDFAnalyser:
         std_hist /= factor
         mean_hist[0], std_hist[0] = mean_hist[1], std_hist[1] # Prevent counting self in RDF
         # Output
+        cutoff_radius = self._cutoff_radius
         if not is_dimensionless:
-            cutoff_radius = Quantity(self._cutoff_radius, default_length_unit)
+            cutoff_radius = Quantity(cutoff_radius, default_length_unit)
             bin_edge = Quantity(bin_edge, default_length_unit)
         title = 'RDF between %s --- %s' %(
             parse_selection_condition(self._selection_condition_1),
@@ -74,7 +75,7 @@ class RDFAnalyser:
             'std': 'The std value of RDF function, unit: dimensionless',
             'cutoff_radius': 'The cutoff radius of RDF function, unit: default_length_unit',
             'num_bins': 'The number of bins used to construct RDF curve, unit: dimensionless',
-            'bin_edge': 'The bin edge of RDF function, unit: dimensionless'
+            'bin_edge': 'The bin edge of RDF function, unit: default_length_unit'
         }
         data = {
             'mean': mean_hist, 'std': std_hist, 'cutoff_radius': cutoff_radius,
