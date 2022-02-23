@@ -33,7 +33,7 @@ class MobilityAnalyser:
         self._electric_intensity = electric_intensity.reshape([3]) # vector 3
         self._drift_velocity_interval = drift_velocity_interval
 
-    def analysis(self, trajectory: Trajectory, is_dimensionless=False) -> AnalyserResult:
+    def analysis(self, trajectory: Trajectory, is_dimensionless=True) -> AnalyserResult:
         # Read input
         trajectory.unwrap_positions()
         selected_matrix_ids = select(trajectory, self._selection_condition)[0] # Topological selection for Trajectory will return a list with same list
