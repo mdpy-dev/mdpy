@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- encoding: utf-8 -*-
 '''
-file : test_pdb_file.py
+file : test_pdb_parser.py
 created time : 2021/10/05
 author : Zhenyu Wei
 version : 1.0
@@ -11,12 +11,12 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 
 
 import pytest, os
-from ..io import PDBFile
+from ..io import PDBParser
 
 cur_dir = os.path.dirname(os.path.abspath(__file__))
 data_dir = os.path.join(cur_dir, 'data')
 
-class TestPDBFile:
+class TestPDBParser:
     def setup(self):
         self.file_path = os.path.join(data_dir, '1M9Z.pdb')
 
@@ -24,7 +24,7 @@ class TestPDBFile:
         pass 
 
     def test_attributes(self):
-        pdb = PDBFile(self.file_path)
+        pdb = PDBParser(self.file_path)
         assert pdb.num_particles == 95567
         assert pdb.particle_ids[2] == 3
         assert pdb.particle_types[4] == 'C'
@@ -43,7 +43,7 @@ class TestPDBFile:
         pass
 
     def test_get_particle_info(self):
-        pdb = PDBFile(self.file_path)
+        pdb = PDBParser(self.file_path)
         particle_info = pdb.get_particle_info(1)
         assert particle_info['particle_id'] == 1
         assert particle_info['particle_type'] == 'N'
