@@ -33,7 +33,7 @@ class CoordinationNumberAnalyser:
             raise TypeError('num_bins should be integer, while %s is provided' %type(num_bins))
         self._num_bins = num_bins
 
-    def analysis(self, trajectory: Trajectory, is_dimensionless=False) -> AnalyserResult:
+    def analysis(self, trajectory: Trajectory, is_dimensionless=True) -> AnalyserResult:
         # Extract positions
         # Topological selection for Trajectory will return a list with same list
         selected_matrix_ids_1 = select(trajectory, self._selection_condition_1)[0] 
