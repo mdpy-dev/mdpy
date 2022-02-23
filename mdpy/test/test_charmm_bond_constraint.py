@@ -83,10 +83,10 @@ class TestCharmmBondConstraint:
         assert self.constraint.num_bonds == 1
 
         # CA   CA    305.000     1.3750
-        assert self.constraint._int_params[0][0] == 0
-        assert self.constraint._int_params[0][1] == 3
-        assert self.constraint._float_params[0][0] == Quantity(305, kilocalorie_permol).convert_to(default_energy_unit).value
-        assert self.constraint._float_params[0][1] == Quantity(1.3750, angstrom).convert_to(default_length_unit).value
+        assert self.constraint._int_parameters[0][0] == 0
+        assert self.constraint._int_parameters[0][1] == 3
+        assert self.constraint._float_parameters[0][0] == Quantity(305, kilocalorie_permol).convert_to(default_energy_unit).value
+        assert self.constraint._float_parameters[0][1] == Quantity(1.3750, angstrom).convert_to(default_length_unit).value
         
         # No exception
         self.constraint._check_bound_state()

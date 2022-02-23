@@ -31,16 +31,16 @@ class TestCharmmForcefield:
     def test_exceptions(self):
         pass
 
-    def test_check_params(self):
+    def test_check_parameters(self):
         f1 = os.path.join(data_dir, 'toppar_water_ions_namd.str')
         f2 = os.path.join(data_dir, 'par_all36_prot.prm')
         f3 = os.path.join(data_dir, 'top_all36_prot.rtf')
         charmm_file = CharmmTopparParser(f1, f2, f3)
-        params = charmm_file.parameters
+        parameters = charmm_file.parameters
         topology = PSFParser(self.psf_file_path).topology
         forcefield = CharmmForcefield(topology)
-        forcefield._params = params
-        forcefield.check_params()
+        forcefield._parameters = parameters
+        forcefield.check_parameters()
 
     def test_create_ensemble(self):
         f1 = os.path.join(data_dir, 'toppar_water_ions_namd.str')

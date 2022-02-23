@@ -84,12 +84,12 @@ class TestCharmmImproperConstraint:
         assert self.constraint.num_impropers == 1
 
         # HE2  HE2  CE2  CE2     3.0            0      0.00   
-        assert self.constraint._int_params[0][0] == 0
-        assert self.constraint._int_params[0][1] == 1
-        assert self.constraint._int_params[0][2] == 2
-        assert self.constraint._int_params[0][3] == 3
-        assert self.constraint._float_params[0][0] == Quantity(3, kilocalorie_permol).convert_to(default_energy_unit).value
-        assert self.constraint._float_params[0][1] == Quantity(0).value
+        assert self.constraint._int_parameters[0][0] == 0
+        assert self.constraint._int_parameters[0][1] == 1
+        assert self.constraint._int_parameters[0][2] == 2
+        assert self.constraint._int_parameters[0][3] == 3
+        assert self.constraint._float_parameters[0][0] == Quantity(3, kilocalorie_permol).convert_to(default_energy_unit).value
+        assert self.constraint._float_parameters[0][1] == Quantity(0).value
 
         # No exception
         self.constraint._check_bound_state()
