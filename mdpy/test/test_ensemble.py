@@ -15,7 +15,7 @@ import pytest, os
 import numpy as np
 from ..core import Particle, Topology
 from ..ensemble import Ensemble
-from ..io import CharmmTopparParser, PSFFile
+from ..io import CharmmTopparParser, PSFParser
 from ..constraint import *
 from ..error import *
 from ..unit import *
@@ -79,7 +79,7 @@ class TestEnsemble:
         psf_file_path = os.path.join(data_dir, '1M9Z.psf')
         charmm_file = CharmmTopparParser(f2, f3)
         params = charmm_file.parameters
-        topology = PSFFile(psf_file_path).create_topology()
+        topology = PSFParser(psf_file_path).topology
         ensemble = Ensemble(topology)
         ensemble.state.set_pbc_matrix(np.diag(np.ones(3)*30))
         constraint = CharmmNonbondedConstraint(params['nonbonded'])
