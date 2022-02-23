@@ -16,7 +16,7 @@ test_order = [
      'base_dimension', 'unit', 'unit_definition', 'quantity',
      'check_quantity', 'geometry', 'pbc', 'select'
      'particle', 'topology', 'state', 'cell_list', 'trajectory'
-     'pdb_file', 'psf_file', 'charmm_param_file',
+     'pdb_parser', 'psf_parser', 'charmm_toppar_parser',
      'constraint', 
      'electrostatic_constraint'
      'charmm_nonbonded_constraint', 'charmm_bond_constraint', 'charmm_angle_constraint',

@@ -33,7 +33,7 @@ class CoordinationNumberAnalyser:
             raise TypeError('num_bins should be integer, while %s is provided' %type(num_bins))
         self._num_bins = num_bins
 
-    def analysis(self, trajectory: Trajectory, is_dimensionless=False) -> AnalyserResult:
+    def analysis(self, trajectory: Trajectory, is_dimensionless=True) -> AnalyserResult:
         # Extract positions
         # Topological selection for Trajectory will return a list with same list
         selected_matrix_ids_1 = select(trajectory, self._selection_condition_1)[0] 
@@ -59,8 +59,9 @@ class CoordinationNumberAnalyser:
         mean_coordination_number[0] = mean_coordination_number[1] # Prevent counting self
         std_coordination_number[0] = std_coordination_number[1]
         # Output
+        cutoff_radius = self._cutoff_radius
         if not is_dimensionless:
-            cutoff_radius = Quantity(self._cutoff_radius, default_length_unit)
+            cutoff_radius = Quantity(cutoff_radius, default_length_unit)
             bin_edge = Quantity(bin_edge, default_length_unit)
         title = 'Coordination number function between %s --- %s' %(
             parse_selection_condition(self._selection_condition_1),

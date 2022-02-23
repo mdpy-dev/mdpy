@@ -11,7 +11,7 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 
 import pytest, os
 import numpy as np 
-from ..file import PDBFile, PSFFile 
+from ..io import PDBParser, PSFParser 
 from ..forcefield import CharmmForcefield
 from ..integrator import LangevinIntegrator
 from ..unit import *
@@ -34,8 +34,8 @@ class TestVerletIntegrator:
         pass
 
     def test_integrate(self):
-        pdb = PDBFile(os.path.join(data_dir, '6PO6.pdb'))
-        topology = PSFFile(os.path.join(data_dir, '6PO6.psf')).create_topology()
+        pdb = PDBParser(os.path.join(data_dir, '6PO6.pdb'))
+        topology = PSFParser(os.path.join(data_dir, '6PO6.psf')).topology
 
         forcefield = CharmmForcefield(topology)
         forcefield.set_param_files(os.path.join(data_dir, 'par_all36_prot.prm'))
