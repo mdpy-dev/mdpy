@@ -12,7 +12,7 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 from . import Forcefield
 from ..ensemble import Ensemble
 from ..core import Topology
-from ..file import CharmmParamFile
+from ..io import CharmmParamFile
 from ..utils import check_quantity_value
 from ..constraint import LONG_RANGE_SOLVER
 from ..constraint import *
