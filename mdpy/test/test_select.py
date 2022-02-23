@@ -12,7 +12,7 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 import os
 import pytest
 from ..core import Particle, Topology, Trajectory
-from ..file import PSFFile, PDBFile
+from ..io import PSFFile, PDBFile
 from ..utils.select import *
 from ..error import *
 
