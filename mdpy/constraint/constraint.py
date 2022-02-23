@@ -16,8 +16,8 @@ from ..unit import *
 from ..ensemble import Ensemble
 
 class Constraint:
-    def __init__(self, params, force_id: int=0, force_group: int=0) -> None:
-        self._params = params
+    def __init__(self, parameters, force_id: int=0, force_group: int=0) -> None:
+        self._parameters = parameters
         self._force_id = force_id
         self._force_group = force_group
         self._parent_ensemble = None
