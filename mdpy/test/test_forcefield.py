@@ -30,7 +30,7 @@ class TestForcefield:
             forcefield.set_param_files()
 
         with pytest.raises(NotImplementedError):
-            forcefield.check_params()
+            forcefield.check_parameters()
         
         with pytest.raises(NotImplementedError):
             forcefield.create_ensemble()

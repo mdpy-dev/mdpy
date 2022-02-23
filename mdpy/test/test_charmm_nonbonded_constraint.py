@@ -15,8 +15,8 @@ from .. import env
 from ..constraint import CharmmNonbondedConstraint
 from ..core import Particle, Topology
 from ..ensemble import Ensemble
-from ..file import CharmmParamFile
-from ..file.charmm_param_file import RMIN_TO_SIGMA_FACTOR
+from ..io import CharmmTopparParser
+from ..io.charmm_toppar_parser import RMIN_TO_SIGMA_FACTOR
 from ..utils import get_unit_vec
 from ..error import *
 from ..unit import *
@@ -64,12 +64,12 @@ class TestCharmmNonbondedConstraint:
         f1 = os.path.join(data_dir, 'toppar_water_ions_namd.str')
         f2 = os.path.join(data_dir, 'par_all36_prot.prm')
         f3 = os.path.join(data_dir, 'top_all36_na.rtf')
-        charmm = CharmmParamFile(f1, f2, f3)
-        self.params = charmm.params
-        self.constraint = CharmmNonbondedConstraint(self.params['nonbonded'])
+        charmm = CharmmTopparParser(f1, f2, f3)
+        self.parameters = charmm.parameters
+        self.constraint = CharmmNonbondedConstraint(self.parameters['nonbonded'])
 
     def teardown(self):
-        self.ensemble, self.params, self.constraint = None, None, None
+        self.ensemble, self.parameters, self.constraint = None, None, None
 
     def test_attributes(self):
         pass
@@ -87,8 +87,8 @@ class TestCharmmNonbondedConstraint:
         # NY     0.000000  -0.200000     1.850000 
         # CPT    0.000000  -0.099000     1.860000
         self.ensemble.state.set_pbc_matrix(self.pbc)
-        assert self.constraint._params_list[0, 0] == Quantity(0.07, kilocalorie_permol).convert_to(default_energy_unit).value
-        assert self.constraint._params_list[1, 1] == pytest.approx(env.NUMPY_FLOAT(1.85 * RMIN_TO_SIGMA_FACTOR * 2))
+        assert self.constraint._parameters_list[0, 0] == Quantity(0.07, kilocalorie_permol).convert_to(default_energy_unit).value
+        assert self.constraint._parameters_list[1, 1] == pytest.approx(env.NUMPY_FLOAT(1.85 * RMIN_TO_SIGMA_FACTOR * 2))
 
         # No exception
         self.constraint._check_bound_state()

@@ -12,7 +12,7 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 from . import Forcefield
 from ..ensemble import Ensemble
 from ..core import Topology
-from ..file import CharmmParamFile
+from ..io import CharmmTopparParser
 from ..utils import check_quantity_value
 from ..constraint import LONG_RANGE_SOLVER
 from ..constraint import *
@@ -32,14 +32,14 @@ class CharmmForcefield(Forcefield):
         self._is_SHAKE = is_SHAKE
 
     def set_param_files(self, *file_pathes) -> None:
-        self._params = CharmmParamFile(*file_pathes).params
+        self._parameters = CharmmTopparParser(*file_pathes).parameters
 
-    def check_params(self):
-        particle_keys = self._params['nonbonded'].keys()
-        bond_keys = self._params['bond'].keys()
-        angle_keys = self._params['angle'].keys()
-        dihedral_keys = self._params['dihedral'].keys()
-        improper_keys = self._params['improper'].keys()
+    def check_parameters(self):
+        particle_keys = self._parameters['nonbonded'].keys()
+        bond_keys = self._parameters['bond'].keys()
+        angle_keys = self._parameters['angle'].keys()
+        dihedral_keys = self._parameters['dihedral'].keys()
+        improper_keys = self._parameters['improper'].keys()
         for particle in self._topology.particles:
             particle_name = particle.particle_name
             if not particle_name in particle_keys:
@@ -94,19 +94,19 @@ class CharmmForcefield(Forcefield):
                 ) 
             
     def create_ensemble(self):
-        self.check_params()
+        self.check_parameters()
         ensemble = Ensemble(self._topology)
         constraints = []
         if self._topology.num_particles != 0:
             constraints.append(ElectrostaticConstraint())
-            constraints.append(CharmmNonbondedConstraint(self._params['nonbonded'], self._cutoff_radius))
+            constraints.append(CharmmNonbondedConstraint(self._parameters['nonbonded'], self._cutoff_radius))
         if self._topology.num_bonds != 0:
-            constraints.append(CharmmBondConstraint(self._params['bond']))
+            constraints.append(CharmmBondConstraint(self._parameters['bond']))
         if self._topology.num_angles != 0:
-            constraints.append(CharmmAngleConstraint(self._params['angle']))
+            constraints.append(CharmmAngleConstraint(self._parameters['angle']))
         if self._topology.num_dihedrals != 0:
-            constraints.append(CharmmDihedralConstraint(self._params['dihedral']))
+            constraints.append(CharmmDihedralConstraint(self._parameters['dihedral']))
         if self._topology.num_impropers != 0:
-            constraints.append(CharmmImproperConstraint(self._params['improper']))
+            constraints.append(CharmmImproperConstraint(self._parameters['improper']))
         ensemble.add_constraints(*constraints)
         return ensemble

@@ -1,2 +1,2 @@
 # mdpy
-MDPy is a python framework for highly extensible and flexible molecular dynamics simulation
+MDPy is a python framework for conducting highly extensible and flexible molecular dynamics simulation
