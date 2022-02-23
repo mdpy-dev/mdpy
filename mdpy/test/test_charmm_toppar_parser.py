@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- encoding: utf-8 -*-
 '''
-file : test_charmm_file.py
+file : test_charmm_toppar_parser.py
 created time : 2021/10/08
 author : Zhenyu Wei
 version : 1.0
