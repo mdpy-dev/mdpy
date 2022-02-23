@@ -11,7 +11,7 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 
 import pytest, os
 import numpy as np 
-from ..io import PDBFile, PSFFile 
+from ..io import PDBParser, PSFFile 
 from ..forcefield import CharmmForcefield
 from ..minimizer import SteepestDescentMinimizer
 from ..unit import *
@@ -34,7 +34,7 @@ class TestSteepestDescentMinimizer:
         pass
 
     def test_minimize(self):
-        pdb = PDBFile(os.path.join(data_dir, '6PO6.pdb'))
+        pdb = PDBParser(os.path.join(data_dir, '6PO6.pdb'))
         topology = PSFFile(os.path.join(data_dir, '6PO6.psf')).create_topology()
 
         forcefield = CharmmForcefield(topology)

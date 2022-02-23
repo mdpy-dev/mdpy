@@ -11,7 +11,7 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 
 import pytest, os
 import numpy as np
-from ..io import PSFFile, PDBFile
+from ..io import PSFFile, PDBParser
 from ..forcefield import CharmmForcefield
 from ..integrator import VerletIntegrator
 from ..simulation import Simulation
@@ -40,7 +40,7 @@ class TestLogDumper:
     def test_dump(self):
         prot_name = '6PO6'
         psf = PSFFile(os.path.join(data_dir, prot_name + '.psf'))
-        pdb = PDBFile(os.path.join(data_dir, prot_name + '.pdb'))
+        pdb = PDBParser(os.path.join(data_dir, prot_name + '.pdb'))
 
         topology = psf.create_topology()
 

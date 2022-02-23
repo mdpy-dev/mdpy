@@ -12,7 +12,7 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 import os
 import pytest
 from ..core import Particle, Topology, Trajectory
-from ..io import PSFFile, PDBFile
+from ..io import PSFFile, PDBParser
 from ..utils.select import *
 from ..error import *
 
@@ -79,7 +79,7 @@ def test_parse_selection_condition():
 
 def test_select():
     topology = PSFFile(os.path.join(data_dir, '6PO6.psf')).create_topology()
-    position = PDBFile(os.path.join(data_dir, '6PO6.pdb')).positions
+    position = PDBParser(os.path.join(data_dir, '6PO6.pdb')).positions
     condition = [
         {
             'particle type': [['C', 'CA']],

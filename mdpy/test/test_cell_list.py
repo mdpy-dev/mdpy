@@ -12,7 +12,7 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 import pytest, os
 import numpy as np
 from ..core import CellList
-from ..io import PDBFile
+from ..io import PDBParser
 from ..unit import *
 from ..error import *
 
@@ -39,7 +39,7 @@ class TestCellList:
             self.cell_list.update(np.ones([4, 3]))
 
     def test_update(self):
-        pdb = PDBFile(os.path.join(data_dir, '6PO6.pdb'))
+        pdb = PDBParser(os.path.join(data_dir, '6PO6.pdb'))
         self.cell_list.set_cutoff_radius(Quantity(9, angstrom))
         self.cell_list.set_pbc_matrix(np.diag([30, 30, 30]))
         self.cell_list.update(pdb.positions)
