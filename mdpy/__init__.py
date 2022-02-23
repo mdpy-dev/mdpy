@@ -12,7 +12,7 @@ from mdpy.environment import env
 import mdpy.unit as unit
 import mdpy.utils as utils
 import mdpy.core as core
-import mdpy.file as file
+import mdpy.io as io
 import mdpy.constraint as constraint
 import mdpy.forcefield as forcefield
 from mdpy.ensemble import Ensemble
