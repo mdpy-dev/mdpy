@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- encoding: utf-8 -*-
 '''
-file : charmm_param_file.py
+file : charmm_param_parser.py
 created time : 2021/10/08
 author : Zhenyu Wei
 version : 1.0
@@ -20,12 +20,12 @@ USED_BLOCK_LABELS = ['ATOMS', 'BONDS', 'ANGLES', 'DIHEDRALS', 'IMPROPER', 'NONBO
 UNUSED_BLOCK_LABELS = ['CMAP', 'NBFIX', 'HBOND', 'END']
 BLOCK_LABELS = USED_BLOCK_LABELS + UNUSED_BLOCK_LABELS
 
-class CharmmParamFile:
+class CharmmTopparParser:
     def __init__(self, *file_path_list) -> None:
         # Read input
         self._file_path_list = file_path_list
         # Set attributes
-        self._params = {
+        self._parameters = {
             'atom': [], 'mass': {}, 'charge': {},
             'bond': {}, 'angle':{},
             'nonbonded': {}, 'dihedral': {}, 'improper': {}
@@ -40,13 +40,13 @@ class CharmmParamFile:
                 self.parse_top_file(file_path)
             else:
                 raise FileFormatError(
-                    'Keyword: top, par, or toppar do not appear in %s, unsupported by CharmmParamFile.'
+                    'Keyword: top, par, or toppar do not appear in %s, unsupported by CharmmTopparParser.'
                     %file_path.split('/')[-1]
                 )
 
     @property
-    def params(self):
-        return self._params
+    def parameters(self):
+        return self._parameters
 
     def parse_par_file(self, file_path):
         ''' Data info:
@@ -106,7 +106,7 @@ class CharmmParamFile:
             return [pair]
         else:
             res = []
-            pair = [[i] if i != 'X' else self._params['atom'] for i in pair.split('-')]
+            pair = [[i] if i != 'X' else self._parameters['atom'] for i in pair.split('-')]
             pairs = itertools.product(*pair)
             for pair in pairs:
                 res.append('-'.join(pair))
@@ -114,8 +114,8 @@ class CharmmParamFile:
 
     def _parse_par_mass_block(self, infos):
         for info in infos:
-            self._params['atom'].append(info[2])
-            self._params['mass'][info[2]] = Quantity(float(info[3]), dalton).convert_to(default_mass_unit).value
+            self._parameters['atom'].append(info[2])
+            self._parameters['mass'][info[2]] = Quantity(float(info[3]), dalton).convert_to(default_mass_unit).value
 
     def _parse_par_bond_block(self, infos):
         for info in infos:
@@ -126,8 +126,8 @@ class CharmmParamFile:
             target_keys = self._embed_x_element('%s-%s' %(info[0], info[1]))
             target_keys.extend(self._embed_x_element('%s-%s' %(info[1], info[0])))
             for key in target_keys:
-                if not key in self._params['bond'].keys():
-                    self._params['bond'][key] = res
+                if not key in self._parameters['bond'].keys():
+                    self._parameters['bond'][key] = res
 
     def _parse_par_angle_block(self, infos):
         for info in infos:
@@ -141,8 +141,8 @@ class CharmmParamFile:
                 target_keys = self._embed_x_element('%s-%s-%s' %(info[0], info[1], info[2]))
                 target_keys.extend(self._embed_x_element('%s-%s-%s' %(info[2], info[1], info[0])))
                 for key in target_keys:
-                    if not key in self._params['angle'].keys():
-                        self._params['angle'][key] = res
+                    if not key in self._parameters['angle'].keys():
+                        self._parameters['angle'][key] = res
             elif len(info) == 7:
                 res = [
                     Quantity(float(info[3]), kilocalorie_permol).convert_to(default_energy_unit).value, 
@@ -153,8 +153,8 @@ class CharmmParamFile:
                 target_keys = self._embed_x_element('%s-%s-%s' %(info[0], info[1], info[2]))
                 target_keys.extend(self._embed_x_element('%s-%s-%s' %(info[2], info[1], info[0])))
                 for key in target_keys:
-                    if not key in self._params['angle'].keys():
-                        self._params['angle'][key] = res
+                    if not key in self._parameters['angle'].keys():
+                        self._parameters['angle'][key] = res
 
     def _parse_par_dihedral_block(self, infos):
         x_include_pairs = []
@@ -172,11 +172,11 @@ class CharmmParamFile:
                     '%s-%s-%s-%s' %(info[3], info[2], info[1], info[0])
                 ]
                 for key in target_keys:
-                    # if not key in self._params['dihedral'].keys():
-                    if not key in self._params['dihedral'].keys():
-                        self._params['dihedral'][key] = [res]
+                    # if not key in self._parameters['dihedral'].keys():
+                    if not key in self._parameters['dihedral'].keys():
+                        self._parameters['dihedral'][key] = [res]
                     else:
-                        self._params['dihedral'][key].append(res)
+                        self._parameters['dihedral'][key].append(res)
         for info in x_include_pairs:
             res = [
                 Quantity(float(info[4]), kilocalorie_permol).convert_to(default_energy_unit).value, 
@@ -190,8 +190,8 @@ class CharmmParamFile:
                 '%s-%s-%s-%s' %(info[3], info[2], info[1], info[0])
             ))
             for key in target_keys:
-                if not key in self._params['dihedral'].keys():
-                    self._params['dihedral'][key] = [res]
+                if not key in self._parameters['dihedral'].keys():
+                    self._parameters['dihedral'][key] = [res]
 
     def _parse_par_improper_block(self, infos):
         for info in infos:
@@ -205,18 +205,18 @@ class CharmmParamFile:
                     '%s-%s-%s-%s' %(target_key)
                 ))
             for key in target_keys:
-                if not key in self._params['improper'].keys():
-                    self._params['improper'][key] = res
+                if not key in self._parameters['improper'].keys():
+                    self._parameters['improper'][key] = res
 
     def _parse_par_nonbonded_block(self, infos):
         for info in infos[1:]:
             if len(info) == 4:
-                self._params['nonbonded'][info[0]] = [
+                self._parameters['nonbonded'][info[0]] = [
                     - Quantity(float(info[2]), kilocalorie_permol).convert_to(default_energy_unit).value,
                     Quantity(float(info[3]), angstrom).convert_to(default_length_unit).value * 2 * RMIN_TO_SIGMA_FACTOR
                 ]
             else:
-                self._params['nonbonded'][info[0]] = [
+                self._parameters['nonbonded'][info[0]] = [
                     - Quantity(float(info[2]), kilocalorie_permol).convert_to(default_energy_unit).value,
                     Quantity(float(info[3]), angstrom).convert_to(default_length_unit).value * 2 * RMIN_TO_SIGMA_FACTOR,
                     - Quantity(float(info[5]), kilocalorie_permol).convert_to(default_energy_unit).value,
@@ -251,9 +251,9 @@ class CharmmParamFile:
         for key, val in info_dict.items():
             for line in val:
                 if key != line[2]:
-                    self._params['charge']['%s-%s' %(key, line[2])] = Quantity(float(line[3]), e).convert_to(default_charge_unit).value
+                    self._parameters['charge']['%s-%s' %(key, line[2])] = Quantity(float(line[3]), e).convert_to(default_charge_unit).value
                 else: # group name is the same as atom name: ion
-                    self._params['charge']['%s' %key] = Quantity(float(line[3]), e).convert_to(default_charge_unit).value
+                    self._parameters['charge']['%s' %key] = Quantity(float(line[3]), e).convert_to(default_charge_unit).value
 
     def parse_toppar_file(self, file_path):
         with open(file_path, 'r') as f:
