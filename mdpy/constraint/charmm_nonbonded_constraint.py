@@ -21,10 +21,10 @@ from ..utils import *
 from ..unit import *
 
 class CharmmNonbondedConstraint(Constraint):
-    def __init__(self, params, cutoff_radius=12, force_id: int = 0, force_group: int = 0) -> None:
-        super().__init__(params, force_id=force_id, force_group=force_group)
+    def __init__(self, parameters, cutoff_radius=12, force_id: int = 0, force_group: int = 0) -> None:
+        super().__init__(parameters, force_id=force_id, force_group=force_group)
         self._cutoff_radius = check_quantity_value(cutoff_radius, default_length_unit)
-        self._params_list = []
+        self._parameters_list = []
         self._neighbor_list = []
         self._neighbor_distance = []
         self._num_nonbonded_pairs = 0
@@ -50,21 +50,21 @@ class CharmmNonbondedConstraint(Constraint):
     def bind_ensemble(self, ensemble: Ensemble):
         self._parent_ensemble = ensemble
         self._force_id = ensemble.constraints.index(self)
-        self._params_list = []
+        self._parameters_list = []
         for particle in self._parent_ensemble.topology.particles:
-            param = self._params[particle.particle_name]
+            param = self._parameters[particle.particle_name]
             if len(param) == 2:
                 epsilon, sigma = param
-                self._params_list.append([epsilon, sigma, epsilon, sigma])
+                self._parameters_list.append([epsilon, sigma, epsilon, sigma])
             elif len(param) == 4:
                 epsilon, sigma, epsilon14, sigma14 = param
-                self._params_list.append([epsilon, sigma, epsilon14, sigma14])
-        self._params_list = np.vstack(self._params_list).astype(env.NUMPY_FLOAT)
-        self._device_params_list = cuda.to_device(self._params_list)
+                self._parameters_list.append([epsilon, sigma, epsilon14, sigma14])
+        self._parameters_list = np.vstack(self._parameters_list).astype(env.NUMPY_FLOAT)
+        self._device_parameters_list = cuda.to_device(self._parameters_list)
 
     @staticmethod
     def cpu_kernel(
-        positions, params, pbc_matrix, pbc_inv, cutoff_radius,
+        positions, parameters, pbc_matrix, pbc_inv, cutoff_radius,
         bonded_particles, scaling_particles, 
         particle_cell_index, cell_list, num_cell_vec, neighbor_cell_template,
     ):
@@ -91,11 +91,11 @@ class CharmmNonbondedConstraint(Constraint):
                     if r <= cutoff_radius:
                         force_vec /= r
                         if id2 in cur_scaling_particles:
-                            epsilon1, sigma1 = params[id1, 2:]
-                            epsilon2, sigma2 = params[id2, 2:]
+                            epsilon1, sigma1 = parameters[id1, 2:]
+                            epsilon2, sigma2 = parameters[id2, 2:]
                         else:
-                            epsilon1, sigma1 = params[id1, :2]
-                            epsilon2, sigma2 = params[id2, :2]
+                            epsilon1, sigma1 = parameters[id1, :2]
+                            epsilon2, sigma2 = parameters[id2, :2]
                         epsilon, sigma = (
                             np.sqrt(epsilon1 * epsilon2),
                             (sigma1 + sigma2) / 2
@@ -110,7 +110,7 @@ class CharmmNonbondedConstraint(Constraint):
 
     @staticmethod
     def cuda_kernel(
-        positions, params, pbc_matrix, cutoff_radius,
+        positions, parameters, pbc_matrix, cutoff_radius,
         bonded_particles, scaling_particles, 
         particle_cell_index, cell_list, num_cell_vec, neighbor_cell_template,
         forces, potential_energy
@@ -158,11 +158,11 @@ class CharmmNonbondedConstraint(Constraint):
                     is_scaled = True
                     break
             if not is_scaled:
-                epsilon1, sigma1 = params[id1, :2]
-                epsilon2, sigma2 = params[id2, :2]
+                epsilon1, sigma1 = parameters[id1, :2]
+                epsilon2, sigma2 = parameters[id2, :2]
             else:
-                epsilon1, sigma1 = params[id1, 2:]
-                epsilon2, sigma2 = params[id2, 2:]
+                epsilon1, sigma1 = parameters[id1, 2:]
+                epsilon2, sigma2 = parameters[id2, 2:]
             epsilon, sigma = (
                 math.sqrt(epsilon1 * epsilon2),
                 (sigma1 + sigma2) / 2
@@ -185,7 +185,7 @@ class CharmmNonbondedConstraint(Constraint):
         self._check_bound_state()
         if env.platform == 'CPU':
                 self._forces, self._potential_energy = self._kernel(
-                self._parent_ensemble.state.positions, self._params_list, 
+                self._parent_ensemble.state.positions, self._parameters_list, 
                 *self._parent_ensemble.state.pbc_info, self._cutoff_radius, 
                 self._parent_ensemble.topology.bonded_particles, 
                 self._parent_ensemble.topology.scaling_particles,
@@ -217,7 +217,7 @@ class CharmmNonbondedConstraint(Constraint):
             ))
             block_per_grid = (block_per_grid_x, block_per_grid_y)
             self._kernel[block_per_grid, thread_per_block](
-                d_positions, self._device_params_list, d_pbc_martix, d_cutoff_radius, 
+                d_positions, self._device_parameters_list, d_pbc_martix, d_cutoff_radius, 
                 d_bonded_particles, d_scaling_particles, 
                 d_particle_cell_index, d_cell_list, d_num_cell_vec,
                 d_neighbor_cell_template,
