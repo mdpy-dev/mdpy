@@ -12,7 +12,7 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 from . import Forcefield
 from ..ensemble import Ensemble
 from ..core import Topology
-from ..io import CharmmParamFile
+from ..io import CharmmTopparParser
 from ..utils import check_quantity_value
 from ..constraint import LONG_RANGE_SOLVER
 from ..constraint import *
@@ -32,7 +32,7 @@ class CharmmForcefield(Forcefield):
         self._is_SHAKE = is_SHAKE
 
     def set_param_files(self, *file_pathes) -> None:
-        self._params = CharmmParamFile(*file_pathes).params
+        self._params = CharmmTopparParser(*file_pathes).parameters
 
     def check_params(self):
         particle_keys = self._params['nonbonded'].keys()
