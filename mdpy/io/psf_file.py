@@ -9,6 +9,7 @@ contact : zhenyuwei99@gmail.com
 copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 '''
 
+import warnings
 import numpy as np
 from MDAnalysis.topology.PSFParser import PSFParser
 from ..core import Particle, Topology
@@ -16,8 +17,8 @@ from ..unit import *
 
 class PSFFile:
     def __init__(self, file_path: str) -> None:
-        self._parser = PSFParser(file_path).parse()
-        
+        with warnings.catch_warnings():
+            self._parser = PSFParser(file_path).parse()
         self._num_particles = self._parser.n_atoms
         self._particle_ids = list(self._parser.ids.values)
         # The definition of type in PSFParser corresponding to name in Particle class
