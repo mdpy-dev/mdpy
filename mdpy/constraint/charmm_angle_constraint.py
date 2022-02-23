@@ -17,10 +17,10 @@ from ..ensemble import Ensemble
 from ..utils import *
 
 class CharmmAngleConstraint(Constraint):
-    def __init__(self, params, force_id: int = 0, force_group: int = 0) -> None:
-        super().__init__(params, force_id=force_id, force_group=force_group)
-        self._int_params = []
-        self._float_params = []
+    def __init__(self, parameters, force_id: int = 0, force_group: int = 0) -> None:
+        super().__init__(parameters, force_id=force_id, force_group=force_group)
+        self._int_parameters = []
+        self._float_parameters = []
         self._num_angles = 0
         self._kernel = nb.njit(
             (env.NUMBA_INT[:, :], env.NUMBA_FLOAT[:, :], env.NUMBA_FLOAT[:, ::1], env.NUMBA_FLOAT[:, ::1], env.NUMBA_FLOAT[:, ::1])
@@ -34,8 +34,8 @@ class CharmmAngleConstraint(Constraint):
     def bind_ensemble(self, ensemble: Ensemble):
         self._parent_ensemble = ensemble
         self._force_id = ensemble.constraints.index(self)
-        self._int_params = []
-        self._float_params = []
+        self._int_parameters = []
+        self._float_parameters = []
         self._num_angles = 0
         for angle in self._parent_ensemble.topology.angles:
             angle_type = '%s-%s-%s' %(
@@ -43,24 +43,24 @@ class CharmmAngleConstraint(Constraint):
                 self._parent_ensemble.topology.particles[angle[1]].particle_name,
                 self._parent_ensemble.topology.particles[angle[2]].particle_name
             )
-            self._int_params.append([
+            self._int_parameters.append([
                 self._parent_ensemble.topology.particles[angle[0]].matrix_id,
                 self._parent_ensemble.topology.particles[angle[1]].matrix_id,
                 self._parent_ensemble.topology.particles[angle[2]].matrix_id
             ])
-            self._float_params.append(self._params[angle_type])
+            self._float_parameters.append(self._parameters[angle_type])
             self._num_angles += 1
-        self._int_params = np.vstack(self._int_params).astype(env.NUMPY_INT)
-        self._float_params = np.vstack(self._float_params).astype(env.NUMPY_FLOAT)
+        self._int_parameters = np.vstack(self._int_parameters).astype(env.NUMPY_INT)
+        self._float_parameters = np.vstack(self._float_parameters).astype(env.NUMPY_FLOAT)
 
     @staticmethod
-    def kernel(int_params, float_params, positions, pbc_matrix, pbc_inv):
+    def kernel(int_parameters, float_parameters, positions, pbc_matrix, pbc_inv):
         forces = np.zeros_like(positions)
         potential_energy = forces[0, 0]
-        num_angles = int_params.shape[0]
+        num_angles = int_parameters.shape[0]
         for angle in range(num_angles):
-            id1, id2, id3 = int_params[angle]
-            k, theta0, ku, u0 = float_params[angle, :]
+            id1, id2, id3 = int_parameters[angle]
+            k, theta0, ku, u0 = float_parameters[angle, :]
             r21 = unwrap_vec(
                 positions[id1, :] - positions[id2, :],
                 pbc_matrix, pbc_inv
@@ -100,7 +100,7 @@ class CharmmAngleConstraint(Constraint):
         self._check_bound_state()
         # V(angle) = Ktheta(Theta - Theta0)**2
         self._forces, self._potential_energy = self._kernel(
-            self._int_params, self._float_params, 
+            self._int_parameters, self._float_parameters, 
             self._parent_ensemble.state.positions, 
             *self._parent_ensemble.state.pbc_info
         )
