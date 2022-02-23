@@ -11,14 +11,15 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 
 import warnings
 import numpy as np
-from MDAnalysis.topology.PSFParser import PSFParser
+import MDAnalysis as mda
+from copy import copy
 from ..core import Particle, Topology
 from ..unit import *
 
-class PSFFile:
+class PSFParser:
     def __init__(self, file_path: str) -> None:
         with warnings.catch_warnings():
-            self._parser = PSFParser(file_path).parse()
+            self._parser = mda.topology.PSFParser.PSFParser(file_path).parse()
         self._num_particles = self._parser.n_atoms
         self._particle_ids = list(self._parser.ids.values)
         # The definition of type in PSFParser corresponding to name in Particle class
@@ -46,8 +47,10 @@ class PSFFile:
         self._num_dihedrals = len(self._dihedrals)
         self._impropers = [list(i) for i in self._parser.impropers.values]
         self._num_impropers = len(self._impropers)
+        
+        self._topology = self._create_topology()
 
-    def create_topology(self):
+    def _create_topology(self):
         topology = Topology()
         particles = []
         for i in range(self._num_particles):
@@ -129,3 +132,7 @@ class PSFFile:
     @property
     def chain_ids(self):
         return self._chain_ids
+
+    @property
+    def topology(self):
+        return copy(self._topology)
