@@ -14,16 +14,16 @@ from ..core import Topology
 class Forcefield:
     def __init__(self, topology: Topology) -> None:
         self._topology = topology
-        self._params = None
+        self._parameters = None
 
     def set_param_files(self):
         raise NotImplementedError(
             'The subclass of mdpy.forcefield.Forcefield class should overload set_param_files method'
         )
 
-    def check_params(self):
+    def check_parameters(self):
         raise NotImplementedError(
-            'The subclass of mdpy.forcefield.Forcefield class should overload check_params method'
+            'The subclass of mdpy.forcefield.Forcefield class should overload check_parameters method'
         )
 
     def create_ensemble(self):
@@ -32,5 +32,5 @@ class Forcefield:
         )
 
     @property
-    def params(self):
+    def parameters(self):
         pass
