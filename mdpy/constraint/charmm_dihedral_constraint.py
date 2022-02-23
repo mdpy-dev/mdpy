@@ -18,10 +18,10 @@ from ..utils import *
 from ..unit import *
         
 class CharmmDihedralConstraint(Constraint):
-    def __init__(self, params, force_id: int = 0, force_group: int = 0) -> None:
-        super().__init__(params, force_id=force_id, force_group=force_group)
-        self._int_params = []
-        self._float_params = []
+    def __init__(self, parameters, force_id: int = 0, force_group: int = 0) -> None:
+        super().__init__(parameters, force_id=force_id, force_group=force_group)
+        self._int_parameters = []
+        self._float_parameters = []
         self._num_dihedrals = 0
         self._kernel = nb.njit(
             (env.NUMBA_INT[:, :], env.NUMBA_FLOAT[:, :], env.NUMBA_FLOAT[:, ::1], env.NUMBA_FLOAT[:, ::1], env.NUMBA_FLOAT[:, ::1])
@@ -35,8 +35,8 @@ class CharmmDihedralConstraint(Constraint):
     def bind_ensemble(self, ensemble: Ensemble):
         self._parent_ensemble = ensemble
         self._force_id = ensemble.constraints.index(self)
-        self._int_params = []
-        self._float_params = []
+        self._int_parameters = []
+        self._float_parameters = []
         self._num_dihedrals = 0
         for dihedral in self._parent_ensemble.topology.dihedrals:
             dihedral_type = '%s-%s-%s-%s' %(
@@ -45,25 +45,25 @@ class CharmmDihedralConstraint(Constraint):
                 self._parent_ensemble.topology.particles[dihedral[2]].particle_name,
                 self._parent_ensemble.topology.particles[dihedral[3]].particle_name
             )
-            for float_param in self._params[dihedral_type]:
-                self._int_params.append([
+            for float_param in self._parameters[dihedral_type]:
+                self._int_parameters.append([
                     self._parent_ensemble.topology.particles[dihedral[0]].matrix_id,
                     self._parent_ensemble.topology.particles[dihedral[1]].matrix_id,
                     self._parent_ensemble.topology.particles[dihedral[2]].matrix_id,
                     self._parent_ensemble.topology.particles[dihedral[3]].matrix_id
                 ])
-                self._float_params.append(float_param)
+                self._float_parameters.append(float_param)
             self._num_dihedrals += 1
-        self._int_params = np.vstack(self._int_params).astype(env.NUMPY_INT)
-        self._float_params = np.vstack(self._float_params).astype(env.NUMPY_FLOAT)
+        self._int_parameters = np.vstack(self._int_parameters).astype(env.NUMPY_INT)
+        self._float_parameters = np.vstack(self._float_parameters).astype(env.NUMPY_FLOAT)
     
     @staticmethod
-    def kernel(int_params, float_params, positions, pbc_matrix, pbc_inv):
+    def kernel(int_parameters, float_parameters, positions, pbc_matrix, pbc_inv):
         forces = np.zeros_like(positions)
         potential_energy = forces[0, 0]
-        num_params = int_params.shape[0]
-        for dihedral in range(num_params):
-            id1, id2, id3, id4= int_params[dihedral, :]
+        num_parameters = int_parameters.shape[0]
+        for dihedral in range(num_parameters):
+            id1, id2, id3, id4= int_parameters[dihedral, :]
             theta = get_pbc_dihedral(
                 positions[id1, :], positions[id2, :],
                 positions[id3, :], positions[id4, :],
@@ -78,7 +78,7 @@ class CharmmDihedralConstraint(Constraint):
             lcd = np.linalg.norm(vcd)
             theta_abc = np.arccos(np.dot(-vab, vbc) / (lab * lbc))
             theta_bcd = np.arccos(np.dot(-vbc, vcd) / (lbc * lcd))
-            k, n, delta = float_params[dihedral, :]
+            k, n, delta = float_parameters[dihedral, :]
             # Forces
             force_val = - k * (1 - n * np.sin(n*theta - delta))
             force_a = force_val / (lab * np.sin(theta_abc)) * get_unit_vec(np.cross(-vab, vbc))
@@ -100,7 +100,7 @@ class CharmmDihedralConstraint(Constraint):
         self._check_bound_state()
         # V(dihedral) = Kchi(1 + cos(n(chi) - delta))
         self._forces, self._potential_energy = self._kernel(
-            self._int_params, self._float_params, 
+            self._int_parameters, self._float_parameters, 
             self._parent_ensemble.state.positions, 
             *self._parent_ensemble.state.pbc_info
         )
