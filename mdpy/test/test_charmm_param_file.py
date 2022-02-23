@@ -14,8 +14,8 @@ import numpy as np
 from .. import env
 from ..unit import *
 from ..error import *
-from ..file import CharmmParamFile
-from ..file.charmm_param_file import RMIN_TO_SIGMA_FACTOR
+from ..io import CharmmParamFile
+from ..io.charmm_param_file import RMIN_TO_SIGMA_FACTOR
 
 cur_dir = os.path.dirname(os.path.abspath(__file__))
 data_dir = os.path.join(cur_dir, 'data')

@@ -11,7 +11,7 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 
 import pytest, os
 import numpy as np
-from ..file import PSFFile, CharmmParamFile
+from ..io import PSFFile, CharmmParamFile
 from ..forcefield import CharmmForcefield
 from ..error import *
 

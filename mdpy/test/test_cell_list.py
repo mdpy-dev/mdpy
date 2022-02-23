@@ -12,7 +12,7 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 import pytest, os
 import numpy as np
 from ..core import CellList
-from ..file import PDBFile
+from ..io import PDBFile
 from ..unit import *
 from ..error import *
 
