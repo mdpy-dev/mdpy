@@ -5,17 +5,17 @@ __copyright__ = "Copyright 2021-2021, Southeast University and Zhenyu Wei"
 __license__ = "GPLv3"
 
 
-# Position file
-from .pdb_file import PDBFile
+# Parameter file
+from .charmm_toppar_parser import CharmmTopparParser
 
 # Topology file
 from .psf_file import PSFFile
 
-# Forcefield file
-from .charmm_param_file import CharmmParamFile
+# Position file
+from .pdb_file import PDBFile
 
-__all__ = [
-    'PDBFile',
+__all__ = [ 
+    'CharmmTopparParser',
     'PSFFile',
-    'CharmmParamFile'
+    'PDBFile',
 ]
