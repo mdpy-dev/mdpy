@@ -15,7 +15,7 @@ import pytest, os
 import numpy as np
 from ..core import Particle, Topology
 from ..ensemble import Ensemble
-from ..file import CharmmParamFile, PSFFile
+from ..io import CharmmParamFile, PSFFile
 from ..constraint import *
 from ..error import *
 from ..unit import *
