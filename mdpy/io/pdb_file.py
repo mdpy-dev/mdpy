@@ -9,6 +9,7 @@ contact : zhenyuwei99@gmail.com
 copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 '''
 
+import warnings
 import numpy as np
 from MDAnalysis.coordinates.PDB import PDBReader
 from MDAnalysis.topology.PDBParser import PDBParser
@@ -19,8 +20,10 @@ class PDBFile:
     def __init__(self, file_path) -> None:
         # Initial reader and parser setting
         self._file_path = file_path
-        self._reader = PDBReader(self._file_path)
-        self._parser = PDBParser(self._file_path).parse()
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            self._reader = PDBReader(self._file_path)
+            self._parser = PDBParser(self._file_path).parse()
         # Parse data
         self._num_particles = self._parser.n_atoms
         self._particle_ids = list(self._parser.ids.values)
@@ -34,7 +37,11 @@ class PDBFile:
             self._molecule_ids.append(molecule_ids[resid])
             self._molecule_types.append(molecule_types[resid])
         self._chain_ids = list(self._parser.chainIDs.values)
-        self._positions = self._reader.ts.positions
+        if self._reader.n_frames == 1:
+            self._positions = self._reader.ts.positions.astype(env.NUMPY_FLOAT)
+        else:
+            self._positions = [ts.positions.astype(env.NUMPY_FLOAT) for ts in self._reader.trajectory]
+            self._positions = np.stack(self._positions)
         self._pbc_matrix = self._reader.ts.triclinic_dimensions
 
     def get_matrix_id(self, particle_id):
