@@ -24,10 +24,10 @@ epsilon0 = EPSILON0.value
 
 
 class ElectrostaticConstraint(Constraint):
-    def __init__(self, params=None, force_id: int = 0, force_group: int = 0) -> None:
-        super().__init__(params, force_id=force_id, force_group=force_group)
-        self._int_params = []
-        self._float_params = []
+    def __init__(self, parameters=None, force_id: int = 0, force_group: int = 0) -> None:
+        super().__init__(parameters, force_id=force_id, force_group=force_group)
+        self._int_parameters = []
+        self._float_parameters = []
         if env.platform == 'CPU':
             self._kernel = nb.njit((
                 env.NUMBA_FLOAT[:, ::1], env.NUMBA_FLOAT[:, ::1], env.NUMBA_INT[:, ::1], 

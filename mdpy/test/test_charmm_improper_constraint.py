@@ -15,7 +15,7 @@ from .. import env
 from ..constraint import CharmmImproperConstraint
 from ..core import Particle, Topology
 from ..ensemble import Ensemble
-from ..file import CharmmParamFile
+from ..io import CharmmTopparParser
 from ..utils import *
 from ..error import *
 from ..unit import *
@@ -64,12 +64,12 @@ class TestCharmmImproperConstraint:
         f1 = os.path.join(data_dir, 'toppar_water_ions_namd.str')
         f2 = os.path.join(data_dir, 'par_all36_prot.prm')
         f3 = os.path.join(data_dir, 'top_all36_na.rtf')
-        charmm = CharmmParamFile(f1, f2, f3)
-        self.params = charmm.params
-        self.constraint = CharmmImproperConstraint(self.params['improper'], 0, 0)
+        charmm = CharmmTopparParser(f1, f2, f3)
+        self.parameters = charmm.parameters
+        self.constraint = CharmmImproperConstraint(self.parameters['improper'], 0, 0)
 
     def teardown(self):
-        self.ensemble, self.params, self.constraint = None, None, None
+        self.ensemble, self.parameters, self.constraint = None, None, None
 
     def test_attributes(self):
         pass
@@ -84,12 +84,12 @@ class TestCharmmImproperConstraint:
         assert self.constraint.num_impropers == 1
 
         # HE2  HE2  CE2  CE2     3.0            0      0.00   
-        assert self.constraint._int_params[0][0] == 0
-        assert self.constraint._int_params[0][1] == 1
-        assert self.constraint._int_params[0][2] == 2
-        assert self.constraint._int_params[0][3] == 3
-        assert self.constraint._float_params[0][0] == Quantity(3, kilocalorie_permol).convert_to(default_energy_unit).value
-        assert self.constraint._float_params[0][1] == Quantity(0).value
+        assert self.constraint._int_parameters[0][0] == 0
+        assert self.constraint._int_parameters[0][1] == 1
+        assert self.constraint._int_parameters[0][2] == 2
+        assert self.constraint._int_parameters[0][3] == 3
+        assert self.constraint._float_parameters[0][0] == Quantity(3, kilocalorie_permol).convert_to(default_energy_unit).value
+        assert self.constraint._float_parameters[0][1] == Quantity(0).value
 
         # No exception
         self.constraint._check_bound_state()
@@ -99,7 +99,7 @@ class TestCharmmImproperConstraint:
         self.constraint.update()
 
         forces = self.constraint.forces
-        k, psi0 = self.params['improper']['HE2-HE2-CE2-CE2']
+        k, psi0 = self.parameters['improper']['HE2-HE2-CE2-CE2']
         psi = get_dihedral([0, 0, 0], [1, 0, 0], [0, 1, 0], [0.5, 0.5, 1])
         assert forces.sum() == pytest.approx(0, abs=1e-8)
 
@@ -132,6 +132,6 @@ class TestCharmmImproperConstraint:
         assert forces[0, 2] == env.NUMPY_FLOAT(force_a[2])
 
         energy = self.constraint.potential_energy
-        k, psi0 = self.params['improper']['HE2-HE2-CE2-CE2']
+        k, psi0 = self.parameters['improper']['HE2-HE2-CE2-CE2']
         psi = get_dihedral([0, 0, 0], [1, 0, 0], [0, 1, 0], [0.5, 0.5, 1])
         assert energy == pytest.approx(env.NUMPY_FLOAT(k * (np.deg2rad(90) - psi0)**2))
