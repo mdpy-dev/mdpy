@@ -9,13 +9,13 @@ __license__ = "GPLv3"
 from .charmm_toppar_parser import CharmmTopparParser
 
 # Topology file
-from .psf_file import PSFFile
+from .psf_parser import PSFParser
 
 # Position file
 from .pdb_parser import PDBParser
 
 __all__ = [ 
     'CharmmTopparParser',
-    'PSFFile',
+    'PSFParser',
     'PDBParser',
 ]
