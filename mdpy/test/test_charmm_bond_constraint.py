@@ -15,7 +15,7 @@ from .. import env
 from ..constraint import CharmmBondConstraint
 from ..core import Particle, Topology
 from ..ensemble import Ensemble
-from ..file import CharmmParamFile
+from ..io import CharmmTopparParser
 from ..utils import get_bond
 from ..error import *
 from ..unit import *
@@ -63,12 +63,12 @@ class TestCharmmBondConstraint:
         f1 = os.path.join(data_dir, 'toppar_water_ions_namd.str')
         f2 = os.path.join(data_dir, 'par_all36_prot.prm')
         f3 = os.path.join(data_dir, 'top_all36_na.rtf')
-        charmm = CharmmParamFile(f1, f2, f3)
-        self.params = charmm.params
-        self.constraint = CharmmBondConstraint(self.params['bond'], 0, 0)
+        charmm = CharmmTopparParser(f1, f2, f3)
+        self.parameters = charmm.parameters
+        self.constraint = CharmmBondConstraint(self.parameters['bond'], 0, 0)
 
     def teardown(self):
-        self.ensemble, self.params, self.constraint = None, None, None
+        self.ensemble, self.parameters, self.constraint = None, None, None
 
     def test_attributes(self):
         pass
@@ -83,10 +83,10 @@ class TestCharmmBondConstraint:
         assert self.constraint.num_bonds == 1
 
         # CA   CA    305.000     1.3750
-        assert self.constraint._int_params[0][0] == 0
-        assert self.constraint._int_params[0][1] == 3
-        assert self.constraint._float_params[0][0] == Quantity(305, kilocalorie_permol).convert_to(default_energy_unit).value
-        assert self.constraint._float_params[0][1] == Quantity(1.3750, angstrom).convert_to(default_length_unit).value
+        assert self.constraint._int_parameters[0][0] == 0
+        assert self.constraint._int_parameters[0][1] == 3
+        assert self.constraint._float_parameters[0][0] == Quantity(305, kilocalorie_permol).convert_to(default_energy_unit).value
+        assert self.constraint._float_parameters[0][1] == Quantity(1.3750, angstrom).convert_to(default_length_unit).value
         
         # No exception
         self.constraint._check_bound_state()
@@ -99,7 +99,7 @@ class TestCharmmBondConstraint:
         assert forces[2, 1] == 0 
 
         bond_length = get_bond([0, 0, 0], [0, 0, 1])
-        k, r0 = self.params['bond']['CA-CA']
+        k, r0 = self.parameters['bond']['CA-CA']
         force_val = - 2 * k * (bond_length - r0)
         assert forces[0, 0] == 0
         assert forces[0, 1] == 0
@@ -111,5 +111,5 @@ class TestCharmmBondConstraint:
 
         energy = self.constraint.potential_energy
         bond_length = get_bond([0, 0, 0], [0, 0, 1])
-        k, r0 = self.params['bond']['CA-CA']
+        k, r0 = self.parameters['bond']['CA-CA']
         assert energy == pytest.approx(env.NUMPY_FLOAT(k * (bond_length - r0)**2))

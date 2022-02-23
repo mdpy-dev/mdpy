@@ -15,7 +15,7 @@ from .. import env
 from ..constraint import CharmmDihedralConstraint
 from ..core import Particle, Topology
 from ..ensemble import Ensemble
-from ..file import CharmmParamFile
+from ..io import CharmmTopparParser
 from ..utils import get_dihedral
 from ..error import *
 from ..unit import *
@@ -64,12 +64,12 @@ class TestCharmmDihedralConstraint:
         f1 = os.path.join(data_dir, 'toppar_water_ions_namd.str')
         f2 = os.path.join(data_dir, 'par_all36_prot.prm')
         f3 = os.path.join(data_dir, 'top_all36_na.rtf')
-        charmm = CharmmParamFile(f1, f2, f3)
-        self.params = charmm.params
-        self.constraint = CharmmDihedralConstraint(self.params['dihedral'], 0, 0)
+        charmm = CharmmTopparParser(f1, f2, f3)
+        self.parameters = charmm.parameters
+        self.constraint = CharmmDihedralConstraint(self.parameters['dihedral'], 0, 0)
 
     def teardown(self):
-        self.ensemble, self.params, self.constraint = None, None, None
+        self.ensemble, self.parameters, self.constraint = None, None, None
 
     def test_attributes(self):
         pass
@@ -84,13 +84,13 @@ class TestCharmmDihedralConstraint:
         assert self.constraint.num_dihedrals == 1
 
         # CA   NY   CPT  CA       3.0000  2   180.00
-        assert self.constraint._int_params[0][0] == 0
-        assert self.constraint._int_params[0][1] == 1
-        assert self.constraint._int_params[0][2] == 2
-        assert self.constraint._int_params[0][3] == 3
-        assert self.constraint._float_params[0][0] == Quantity(3, kilocalorie_permol).convert_to(default_energy_unit).value
-        assert self.constraint._float_params[0][1] == Quantity(2).value
-        assert self.constraint._float_params[0][2] == np.deg2rad(Quantity(180).value)
+        assert self.constraint._int_parameters[0][0] == 0
+        assert self.constraint._int_parameters[0][1] == 1
+        assert self.constraint._int_parameters[0][2] == 2
+        assert self.constraint._int_parameters[0][3] == 3
+        assert self.constraint._float_parameters[0][0] == Quantity(3, kilocalorie_permol).convert_to(default_energy_unit).value
+        assert self.constraint._float_parameters[0][1] == Quantity(2).value
+        assert self.constraint._float_parameters[0][2] == np.deg2rad(Quantity(180).value)
 
         # No exception
         self.constraint._check_bound_state() 
@@ -100,7 +100,7 @@ class TestCharmmDihedralConstraint:
         self.constraint.update()
         
         forces = self.constraint.forces
-        k, n, delta = self.params['dihedral']['CA-NY-CPT-CA'][0]
+        k, n, delta = self.parameters['dihedral']['CA-NY-CPT-CA'][0]
         theta = get_dihedral([0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1], is_angular=False)
         assert forces.sum() == pytest.approx(0, abs=1e-8)
 
@@ -123,6 +123,6 @@ class TestCharmmDihedralConstraint:
         assert res[2] == pytest.approx(0, abs=1e-8)
 
         energy = self.constraint.potential_energy
-        k, n, delta = self.params['dihedral']['CA-NY-CPT-CA'][0]
+        k, n, delta = self.parameters['dihedral']['CA-NY-CPT-CA'][0]
         theta = get_dihedral([0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1])
         assert energy == pytest.approx(env.NUMPY_FLOAT(k * (1 + np.cos(n*theta - delta))))
