@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 # -*- encoding: utf-8 -*-
 '''
-file : rdf_analyser.py
-created time : 2022/02/20
+file : coordination_number_analyser.py
+created time : 2022/02/22
 author : Zhenyu Wei
 version : 1.0
 contact : zhenyuwei99@gmail.com
@@ -17,12 +17,12 @@ from ..utils import select, check_topological_selection_condition, parse_selecti
 from ..unit import *
 from ..error import *
 
-class RDFAnalyser:
+class CoordinationNumberAnalyser:
     def __init__(
         self, 
         selection_condition_1: list[dict], 
         selection_condition_2: list[dict],
-        cutoff_radius, num_bins: int
+        cutoff_radius, num_bins: int,
     ) -> None:
         check_topological_selection_condition(selection_condition_1)
         check_topological_selection_condition(selection_condition_2)
@@ -39,9 +39,9 @@ class RDFAnalyser:
         selected_matrix_ids_1 = select(trajectory, self._selection_condition_1)[0] 
         selected_matrix_ids_2 = select(trajectory, self._selection_condition_2)[0]
         # Analysis
-        hist, bin_edge = [], []
+        coordination_number, bin_edge = [], []
         for id1 in selected_matrix_ids_1:
-            hist_id1 = []
+            cur_coordination_number = []
             for frame in range(trajectory.num_frames):
                 vec = unwrap_vec(
                     trajectory.positions[frame, id1, :] - 
@@ -49,35 +49,32 @@ class RDFAnalyser:
                     trajectory.pbc_matrix, trajectory.pbc_inv
                 )
                 dist = np.sqrt((vec**2).sum(1))
-                cur_hist_id1, bin_edge = np.histogram(dist, self._num_bins, [0, self._cutoff_radius])
-                hist_id1.append(cur_hist_id1)
-            hist.append(np.vstack(hist_id1).mean(0))
+                hist, bin_edge = np.histogram(dist, self._num_bins, [0, self._cutoff_radius])
+                cur_coordination_number.append(np.cumsum(hist))
+            coordination_number.append(np.vstack(cur_coordination_number).mean(0))
             bin_edge = bin_edge
-        bin_width = bin_edge[1] - bin_edge[0]
-        hist = np.vstack(hist) / (4 * np.pi * bin_edge[1:]**2 * bin_width)
-        mean_hist = hist.mean(0)
-        std_hist = hist.std(0)
-        factor = mean_hist.mean()
-        mean_hist /= factor
-        std_hist /= factor
-        mean_hist[0], std_hist[0] = mean_hist[1], std_hist[1] # Prevent counting self in RDF
+        coordination_number = np.vstack(coordination_number) # num_particle_id1 x num_bins
+        mean_coordination_number = coordination_number.mean(0) # Vector num_bins,
+        std_coordination_number = coordination_number.std(0) # Vector num_bins,
+        mean_coordination_number[0] = mean_coordination_number[1] # Prevent counting self
+        std_coordination_number[0] = std_coordination_number[1]
         # Output
         if not is_dimensionless:
             cutoff_radius = Quantity(self._cutoff_radius, default_length_unit)
             bin_edge = Quantity(bin_edge, default_length_unit)
-        title = 'RDF between %s --- %s' %(
+        title = 'Coordination number function between %s --- %s' %(
             parse_selection_condition(self._selection_condition_1),
             parse_selection_condition(self._selection_condition_2)
         )
         description = {
-            'mean': 'The mean value of RDF function, unit: dimesionless',
-            'std': 'The std value of RDF function, unit: dimensionless',
-            'cutoff_radius': 'The cutoff radius of RDF function, unit: default_length_unit',
-            'num_bins': 'The number of bins used to construct RDF curve, unit: dimensionless',
-            'bin_edge': 'The bin edge of RDF function, unit: dimensionless'
+            'mean': 'The mean value of coordination number function, unit: dimesionless',
+            'std': 'The std value of coordination number function, unit: dimensionless',
+            'cutoff_radius': 'The cutoff radius of coordination number function, unit: default_length_unit',
+            'num_bins': 'The number of bins used to construct coordination number curve, unit: dimensionless',
+            'bin_edge': 'The bin edge of coordination number function, unit: dimensionless'
         }
         data = {
-            'mean': mean_hist, 'std': std_hist, 'cutoff_radius': cutoff_radius,
+            'mean': mean_coordination_number, 'std': std_coordination_number, 'cutoff_radius': cutoff_radius,
             'num_bins': self._num_bins, 'bin_edge': bin_edge
         }
         return AnalyserResult(title=title, description=description, data=data)

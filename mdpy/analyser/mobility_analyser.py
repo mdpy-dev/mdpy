@@ -69,8 +69,8 @@ class MobilityAnalyser:
             'time_step': 'Time step used to calculate the drift velocities, unit: default_time_unit',
             'electric_intensity': 'Electric intensity used to calculate the mobility, unit: default_electric_intensity_unit'
         }
-        result = {'mean': mean_mobility, 'std': std_mobility, 'time_step': time_step, 'electric_intensity': electric_intensity}
-        return AnalyserResult(title=title, description=description, result=result)
+        data = {'mean': mean_mobility, 'std': std_mobility, 'time_step': time_step, 'electric_intensity': electric_intensity}
+        return AnalyserResult(title=title, description=description, data=data)
 
     @property
     def selection_condition(self):

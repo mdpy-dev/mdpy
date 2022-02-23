@@ -51,13 +51,13 @@ class Unit:
 
     def __repr__(self):
         return (
-            '<Unit object: %e %s at 0x%x>'
+            '<Unit object: %.2e %s at 0x%x>'
             %(self._relative_value, self._base_dimension.name, id(self))
         )
 
     def __str__(self):
         return (
-            '%e %s' %(self._relative_value, self._base_dimension.name)
+            '%.2e %s' %(self._relative_value, self._base_dimension.name)
         )
 
     def __eq__(self, other) -> bool:
