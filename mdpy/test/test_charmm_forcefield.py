@@ -11,7 +11,7 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 
 import pytest, os
 import numpy as np
-from ..io import PSFFile, CharmmParamFile
+from ..io import PSFFile, CharmmTopparParser
 from ..forcefield import CharmmForcefield
 from ..error import *
 
@@ -35,8 +35,8 @@ class TestCharmmForcefield:
         f1 = os.path.join(data_dir, 'toppar_water_ions_namd.str')
         f2 = os.path.join(data_dir, 'par_all36_prot.prm')
         f3 = os.path.join(data_dir, 'top_all36_prot.rtf')
-        charmm_file = CharmmParamFile(f1, f2, f3)
-        params = charmm_file.params
+        charmm_file = CharmmTopparParser(f1, f2, f3)
+        params = charmm_file.parameters
         topology = PSFFile(self.psf_file_path).create_topology()
         forcefield = CharmmForcefield(topology)
         forcefield._params = params

@@ -15,7 +15,7 @@ import pytest, os
 import numpy as np
 from ..core import Particle, Topology
 from ..ensemble import Ensemble
-from ..io import CharmmParamFile, PSFFile
+from ..io import CharmmTopparParser, PSFFile
 from ..constraint import *
 from ..error import *
 from ..unit import *
@@ -77,8 +77,8 @@ class TestEnsemble:
         f2 = os.path.join(data_dir, 'par_all36_prot.prm')
         f3 = os.path.join(data_dir, 'toppar_water_ions_namd.str')
         psf_file_path = os.path.join(data_dir, '1M9Z.psf')
-        charmm_file = CharmmParamFile(f2, f3)
-        params = charmm_file.params
+        charmm_file = CharmmTopparParser(f2, f3)
+        params = charmm_file.parameters
         topology = PSFFile(psf_file_path).create_topology()
         ensemble = Ensemble(topology)
         ensemble.state.set_pbc_matrix(np.diag(np.ones(3)*30))
