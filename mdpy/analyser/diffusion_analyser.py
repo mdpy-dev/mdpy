@@ -54,12 +54,13 @@ class DiffusionAnalyser:
             mean_diffusion_coefficient[i] = para[0]
             std_diffusion_coefficient[i] = np.sqrt(pcov[0, 0])
         # Output
+        msd_interval_series = self._msd_interval_series*trajectory.time_step
         if not is_dimensionless:
             mean_msd = Quantity(mean_msd, default_length_unit**2)
             std_msd = Quantity(std_msd, default_length_unit**2)
             mean_diffusion_coefficient = Quantity(mean_diffusion_coefficient, default_length_unit**2/default_time_unit)
             std_diffusion_coefficient = Quantity(std_diffusion_coefficient, default_length_unit**2/default_time_unit)
-            msd_interval_series = Quantity(self._msd_interval_series*trajectory.time_step, default_time_unit)
+            msd_interval_series = Quantity(msd_interval_series, default_time_unit)
         title = 'Diffusion coefficient of %s' %parse_selection_condition(self._selection_condition)
         description = {
             'mean_msd': 'The mean value of MSD, unit: default_length_unit**2',
