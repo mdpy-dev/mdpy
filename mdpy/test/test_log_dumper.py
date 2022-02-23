@@ -11,7 +11,7 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 
 import pytest, os
 import numpy as np
-from ..file import PSFFile, PDBFile
+from ..io import PSFFile, PDBFile
 from ..forcefield import CharmmForcefield
 from ..integrator import VerletIntegrator
 from ..simulation import Simulation

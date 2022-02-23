@@ -11,7 +11,7 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 
 import pytest, os
 import numpy as np 
-from ..file import PDBFile, PSFFile 
+from ..io import PDBFile, PSFFile 
 from ..forcefield import CharmmForcefield
 from ..integrator import LangevinIntegrator
 from ..unit import *
