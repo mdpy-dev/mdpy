@@ -30,7 +30,7 @@ class DiffusionAnalyser:
         self._max_msd_interval = max_msd_interval
         self._msd_interval_series = np.arange(1, self._max_msd_interval + 1)
 
-    def analysis(self, trajectory: Trajectory, is_dimensionless=False) -> AnalyserResult:
+    def analysis(self, trajectory: Trajectory, is_dimensionless=True) -> AnalyserResult:
         # Extract positions
         # Topological selection for Trajectory will return a list with same list
         selected_matrix_ids = select(trajectory, self._selection_condition)[0]

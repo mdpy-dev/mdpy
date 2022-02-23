@@ -38,7 +38,7 @@ class ResidenceTimeAnalyser:
         self._bin_width = self._bin_edge[1] - self._bin_edge[0]
         self._max_coorelation_time = check_quantity_value(max_coorelation_time, default_time_unit)
 
-    def analysis(self, trajectory:Trajectory, is_dimensionless=False) -> AnalyserResult:
+    def analysis(self, trajectory:Trajectory, is_dimensionless=True) -> AnalyserResult:
         # Extract positions
         # Topological selection for Trajectory will return a list with same list
         selected_matrix_ids_1 = select(trajectory, self._selection_condition_1)[0]
