@@ -12,7 +12,7 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 import os
 import pytest
 from ..core import Particle, Topology, Trajectory
-from ..io import PSFFile, PDBParser
+from ..io import PSFParser, PDBParser
 from ..utils.select import *
 from ..error import *
 
@@ -78,7 +78,7 @@ def test_parse_selection_condition():
     assert res == 'particle type: [\'C\', \'CA\'] and not molecule type: [\'VAL\'] or molecule id: [3]'
 
 def test_select():
-    topology = PSFFile(os.path.join(data_dir, '6PO6.psf')).create_topology()
+    topology = PSFParser(os.path.join(data_dir, '6PO6.psf')).topology
     position = PDBParser(os.path.join(data_dir, '6PO6.pdb')).positions
     condition = [
         {
