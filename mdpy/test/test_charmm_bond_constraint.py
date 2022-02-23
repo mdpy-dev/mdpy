@@ -15,7 +15,7 @@ from .. import env
 from ..constraint import CharmmBondConstraint
 from ..core import Particle, Topology
 from ..ensemble import Ensemble
-from ..file import CharmmParamFile
+from ..io import CharmmParamFile
 from ..utils import get_bond
 from ..error import *
 from ..unit import *

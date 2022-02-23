@@ -15,8 +15,8 @@ from .. import env
 from ..constraint import CharmmNonbondedConstraint
 from ..core import Particle, Topology
 from ..ensemble import Ensemble
-from ..file import CharmmParamFile
-from ..file.charmm_param_file import RMIN_TO_SIGMA_FACTOR
+from ..io import CharmmParamFile
+from ..io.charmm_param_file import RMIN_TO_SIGMA_FACTOR
 from ..utils import get_unit_vec
 from ..error import *
 from ..unit import *

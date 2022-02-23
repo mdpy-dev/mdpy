@@ -15,7 +15,7 @@ from .. import env
 from ..constraint import CharmmAngleConstraint
 from ..core import Particle, Topology
 from ..ensemble import Ensemble
-from ..file import CharmmParamFile
+from ..io import CharmmParamFile
 from ..utils import get_angle, get_unit_vec
 from ..error import *
 from ..unit import *
