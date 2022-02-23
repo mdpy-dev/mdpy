@@ -39,7 +39,7 @@ class MDPYEnvironment:
             self.UNIT_FLOAT = np.float128
         else:
             raise EnvironmentVariableError(
-                'Precision %s is not supported.\n' %precision +
+                'Precision %s is not supported. ' %precision +
                 'Check supported precision with `mdpy.env.supported_precisions`'
             )
 
@@ -49,8 +49,8 @@ class MDPYEnvironment:
             self._platform = platform
         else:
             raise EnvironmentVariableError(
-                'Platform %s is not supported.\n' %platform +
-                'Check supported precision with `mdpy.env.supported_platforms`'
+                'Platform %s is not supported. ' %platform +
+                'Check supported platform with `mdpy.env.supported_platforms`'
             )
 
     def set_default(self):
