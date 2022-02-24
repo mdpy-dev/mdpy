@@ -135,8 +135,8 @@ END = 'END'
 
 class PDBWriter:
     def __init__(
-        self, file_path: str, mode: str, 
-        topology: Topology, 
+        self, file_path: str, mode: str = 'w', 
+        topology: Topology=Topology(), 
         pbc_matrix = np.diag([0]*3).astype(env.NUMPY_FLOAT)
     ) -> None:
         if not file_path.endswith('.pdb'):
@@ -279,4 +279,4 @@ class PDBWriter:
     @pbc_matrix.setter
     def pbc_matrix(self, pbc_matrix: np.ndarray):
         check_pbc_matrix(pbc_matrix)
-        self._pbc_matrix = pbc_matrix
+        self._pbc_matrix = check_quantity_value(pbc_matrix, default_length_unit)
