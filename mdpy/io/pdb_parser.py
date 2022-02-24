@@ -14,10 +14,13 @@ import numpy as np
 import MDAnalysis as mda
 from MDAnalysis.topology.guessers import guess_atom_type
 from .. import env
+from ..error import *
 
 class PDBParser:
     def __init__(self, file_path) -> None:
         # Initial reader and parser setting
+        if not file_path.endswith('.pdb'):
+            raise FileFormatError('The file should end with .pdb suffix')
         self._file_path = file_path
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
