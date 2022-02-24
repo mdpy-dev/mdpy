@@ -91,9 +91,9 @@ class PDBParser:
         return self._chain_ids
     
     @property
-    def positions(self):
+    def positions(self) -> np.ndarray:
         return self._positions.copy()
 
     @property
-    def pbc_matrix(self):
+    def pbc_matrix(self) -> np.ndarray:
         return self._pbc_matrix.copy()
