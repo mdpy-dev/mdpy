@@ -89,8 +89,8 @@ class PDBParser:
     
     @property
     def positions(self):
-        return self._positions
+        return self._positions.copy()
 
     @property
     def pbc_matrix(self):
-        return self._pbc_matrix
+        return self._pbc_matrix.copy()
