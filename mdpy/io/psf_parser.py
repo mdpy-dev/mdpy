@@ -137,5 +137,5 @@ class PSFParser:
         return self._chain_ids
 
     @property
-    def topology(self):
+    def topology(self) -> Topology:
         return copy(self._topology)
