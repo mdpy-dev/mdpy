@@ -11,6 +11,7 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 
 import pytest, os
 import numpy as np
+from .. import env
 from ..core import Particle, Topology
 from ..ensemble import Ensemble
 from ..integrator import Integrator
@@ -75,7 +76,7 @@ class TestPDBDumper:
         self.ensemble.state.cell_list.set_cutoff_radius(12)
         positions = np.array(list(range(num_particles)))
         positions = np.vstack([positions, positions, positions]).T
-        self.ensemble.state.set_positions(positions)
+        self.ensemble.state.set_positions(np.ascontiguousarray(positions).astype(env.NUMPY_FLOAT))
         self.integrator = Integrator(1)
         self.simulation = Simulation(self.ensemble, self.integrator)
         self.file_path = os.path.join(out_dir, 'test_pdb_dumper.pdb')
@@ -91,15 +92,6 @@ class TestPDBDumper:
 
     def test_exceptions(self):
         pass
-
-    def test_dump_header(self):
-        dumper = PDBDumper(self.file_path, 1)
-        dumper._dump_pdb_header(self.ensemble)
-
-    def test_dump_model(self):
-        dumper = PDBDumper(self.file_path, 1)
-        dumper._dump_pdb_header(self.ensemble)
-        dumper._dump_pdb_model(self.ensemble, 0)
 
     def test_dump(self):
         dumper = PDBDumper(self.file_path, 1)
