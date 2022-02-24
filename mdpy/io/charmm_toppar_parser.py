@@ -46,7 +46,7 @@ class CharmmTopparParser:
 
     @property
     def parameters(self):
-        return self._parameters
+        return self._parameters.copy()
 
     def parse_par_file(self, file_path):
         ''' Data info:
