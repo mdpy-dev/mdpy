@@ -11,7 +11,20 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 
 import numpy as np
 import numba as nb
+from .. import SPATIAL_DIM
 from ..error import *
+
+def check_pbc_matrix(pbc_matrix):
+    row, col = pbc_matrix.shape
+    if row != SPATIAL_DIM or col != SPATIAL_DIM:
+        raise ArrayDimError(
+            'The pbc matrix should have shape [%d, %d], while matrix [%d %d] is provided'
+            %(SPATIAL_DIM, SPATIAL_DIM, row, col)
+        )
+    if np.linalg.det(pbc_matrix) == 0:
+        raise PBCPoorDefinedError(
+            'PBC of %s is poor defined. Two or more column vectors are linear corellated'
+        )
 
 def wrap_positions(positions: np.ndarray, pbc_matrix: np.ndarray, pbc_inv: np.array):
     move_vec = - np.round(np.dot(positions, pbc_inv))
