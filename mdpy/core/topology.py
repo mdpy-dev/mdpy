@@ -31,7 +31,7 @@ class Topology:
         self._masses = []
         self._charges = []
         self._bonded_particles = []
-        self._scaling_pactiles = []
+        self._scaling_particles = []
         
     def __repr__(self) -> str:
         return '<mdpy.core.Toplogy object: %d particles at %x>' %(self._num_particles, id(self))
@@ -46,8 +46,8 @@ class Topology:
         for index, matrix_id in enumerate(matrix_ids):
             if matrix_id >= self._num_particles:
                 raise ParticleConflictError(
-                    'Matrix id %d beyonds the range of particles contain in toplogy, can not be added as part of topology connection' 
-                    %matrix_id
+                    'Matrix id %d beyonds the range of particles contain in toplogy, ' \
+                    'can not be added as part of topology connection' %matrix_id
                 )
             if matrix_id in matrix_ids[index+1:]:
                 raise ParticleConflictError('Particle appears twice in a topology connection')
@@ -85,7 +85,7 @@ class Topology:
         self._masses = []
         self._charges = []
         self._bonded_particles = []
-        self._scaling_pactiles = []
+        self._scaling_particles = []
         self._is_joined = False
 
     def add_particles(self, particles):

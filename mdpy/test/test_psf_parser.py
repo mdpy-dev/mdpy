@@ -35,7 +35,7 @@ class TestPSFParser:
         assert psf._charges[2] == pytest.approx(0.33)
         assert psf._masses[5] == env.NUMPY_FLOAT(1.008)
 
-    def test_create_topology(self):
+    def test_topology(self):
         psf = PSFParser(self.file_path)
         topology = psf.topology
         assert topology.num_particles == psf.num_particles

@@ -28,6 +28,7 @@ class TestPDBWriter:
 
     def teardown(self):
         self.topology = None
+        self.positions = None
 
     def test_attributes(self):
         pass

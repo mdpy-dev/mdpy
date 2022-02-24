@@ -45,7 +45,7 @@ class CharmmTopparParser:
                 )
 
     @property
-    def parameters(self):
+    def parameters(self) -> dict:
         return self._parameters.copy()
 
     def parse_par_file(self, file_path):

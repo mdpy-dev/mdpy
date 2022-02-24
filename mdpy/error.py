@@ -142,6 +142,15 @@ class ParameterPoorDefinedError(Exception):
     '''
     pass
 
+class HDF5FilePoorDefinedError(Exception):
+    '''This error occurs when:
+    - Use hdf5 file that does not meet the requirement of mdpy
+    
+    Used in:
+    - mdpy.io.hdf5_parser
+    '''
+    pass
+
 class DumperPoorDefinedError(Exception):
     '''This error occurs when:
     - Dump frequency of dumper object is 0

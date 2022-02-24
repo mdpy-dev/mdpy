@@ -11,13 +11,12 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 
 from . import Dumper
 from ..io import PDBWriter
-from ..core import Topology
 from ..simulation import Simulation
 
 class PDBDumper(Dumper):
     def __init__(self, file_path: str, dump_frequency: int) -> None:
         super().__init__(file_path, dump_frequency)
-        self._writer = PDBWriter(file_path, 'w', Topology())
+        self._writer = PDBWriter(file_path, 'w')
 
     def dump(self, simulation: Simulation):
         self._writer.topology = simulation.ensemble.topology
