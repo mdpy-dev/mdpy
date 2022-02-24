@@ -15,6 +15,7 @@ from .. import SPATIAL_DIM, env
 from ..utils import check_quantity_value
 from ..error import *
 from ..unit import *
+from ..utils import *
 from ..utils.select import *
 
 class Trajectory:
@@ -50,21 +51,9 @@ class Trajectory:
     def set_time_step(self, time_step):
         self._time_step = check_quantity_value(time_step, default_time_unit)
 
-    def _check_pbc_matrix(self, pbc_matrix):
-        row, col = pbc_matrix.shape
-        if row != SPATIAL_DIM or col != SPATIAL_DIM:
-            raise ArrayDimError(
-                'The pbc matrix should have shape [%d, %d], while matrix [%d %d] is provided'
-                %(SPATIAL_DIM, SPATIAL_DIM, row, col)
-            )
-        if np.linalg.det(pbc_matrix) == 0:
-            raise PBCPoorDefinedError(
-                'PBC of %s is poor defined. Two or more column vectors are linear corellated'
-            )
-
     def set_pbc_matrix(self, pbc_matrix):
         pbc_matrix = check_quantity_value(pbc_matrix, default_length_unit)
-        self._check_pbc_matrix(pbc_matrix)
+        check_pbc_matrix(pbc_matrix)
         # The origin define of pbc_matrix is the stack of 3 column vector
         # While in MDPy the position is in shape of n x 3
         # So the scaled position will be Position * PBC instead of PBC * Position as usual
@@ -151,7 +140,7 @@ class Trajectory:
         self._num_frames += num_frames
 
     def unwrap_positions(self):
-        self._check_pbc_matrix(self._pbc_matrix)
+        check_pbc_matrix(self._pbc_matrix)
         scaled_positions = np.dot(self._positions, self._pbc_inv)
         scaled_diff = scaled_positions[1:, :, :] - scaled_positions[0:-1, :, :]
         scaled_diff -= np.round(scaled_diff)
