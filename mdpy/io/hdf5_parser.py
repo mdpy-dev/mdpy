@@ -46,6 +46,7 @@ class HDF5Parser:
         self._pbc_matrix = self._parse_pbc_matrix()
         self._trajectory = Trajectory(self._topology)
         self._trajectory.append(positions=self._positions)
+        self._file.close()
 
     def _check_hdf5_file(self):
         is_hdf5_file_poor_defined = False
@@ -142,7 +143,7 @@ class HDF5Parser:
             return None
         postions = np.empty([num_frames, num_particles, SPATIAL_DIM])
         for frame in range(num_frames):
-            postions[frame, :, :] = self._file['positions/frame-%d' %frame].astype(env.NUMPY_FLOAT)
+            postions[frame, :, :] = self._file['positions/frame-%d' %frame][()].astype(env.NUMPY_FLOAT)
         return postions if num_frames != 1 else postions[0, :, :]
 
     def _parse_pbc_matrix(self):
