@@ -18,8 +18,6 @@ setup(
         'Topic :: Scientific/Engineering :: Physics',
         'Topic :: Scientific/Engineering :: Chemistry',
         'License :: OSI Approved :: GNU General Public License v3 (GPLv3)',
-        'Programming Language :: Python :: 3.7',
-        'Programming Language :: Python :: 3.8',
         'Programming Language :: Python :: 3.9'
     ],
     url = 'https://mdpy.net/',
@@ -42,7 +40,8 @@ setup(
         'matplotlib >= 3.0.0',
         'pytest >= 6.2.0',
         'pytest-xdist >= 2.3.0',
-        'MDAnalysis'
+        'MDAnalysis >= 2.0.0',
+        'h5py >= 3.6.0'
     ],
-    python_requires = '>=3.7'
+    python_requires = '>=3.9'
 )
