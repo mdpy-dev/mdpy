@@ -13,6 +13,7 @@ import warnings
 import numpy as np
 import MDAnalysis as mda
 from copy import copy
+from .. import env
 from ..core import Particle, Topology
 from ..unit import *
 from ..error import *
@@ -28,7 +29,7 @@ class PSFParser:
         # The definition of type in PSFParser corresponding to name in Particle class
         self._particle_types = list(self._parser.names.values)
         self._particle_names = list(self._parser.types.values)
-        self._matrix_ids = list(np.linspace(0, self._num_particles-1, self._num_particles, dtype=np.int))
+        self._matrix_ids = list(np.linspace(0, self._num_particles-1, self._num_particles, dtype=env.NUMPY_INT))
         molecule_ids, molecule_types = self._parser.resids.values, self._parser.resnames.values
         chain_ids = self._parser.segids.values
         self._molecule_ids, self._molecule_types = [], []
@@ -137,5 +138,5 @@ class PSFParser:
         return self._chain_ids
 
     @property
-    def topology(self):
+    def topology(self) -> Topology:
         return copy(self._topology)
