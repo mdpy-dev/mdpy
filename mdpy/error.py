@@ -96,7 +96,10 @@ class FileFormatError(Exception):
     - file suffix or prefix appears in an unexpected way
     
     Used in:
-    - mdpy.file.charmm_file
+    - mdpy.io.charmm_toppar_parser
+    - mdpy.io.PDBParser
+    - mdpy.io.PDBWriter
+    - mdpy.io.PSFParser
     - mdpy.analyser.analyser_result
     '''
     pass
