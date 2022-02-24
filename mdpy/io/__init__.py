@@ -13,9 +13,10 @@ from .psf_parser import PSFParser
 
 # Position file
 from .pdb_parser import PDBParser
+from .pdb_writer import PDBWriter
 
 __all__ = [ 
     'CharmmTopparParser',
     'PSFParser',
-    'PDBParser',
+    'PDBParser','PDBWriter'
 ]

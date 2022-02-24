@@ -49,21 +49,9 @@ class State:
                 %(self._matrix_shape[0], self._matrix_shape[1], row, col)
             )
 
-    def _check_pbc_matrix(self, pbc_matrix):
-        row, col = pbc_matrix.shape
-        if row != SPATIAL_DIM or col != SPATIAL_DIM:
-            raise ArrayDimError(
-                'The pbc matrix should have shape [%d, %d], while matrix [%d %d] is provided'
-                %(SPATIAL_DIM, SPATIAL_DIM, row, col)
-            )
-        if np.linalg.det(pbc_matrix) == 0:
-            raise PBCPoorDefinedError(
-                'PBC of %s is poor defined. Two or more column vectors are linear corellated'
-            )
-
     def set_pbc_matrix(self, pbc_matrix):
         pbc_matrix = check_quantity_value(pbc_matrix, default_length_unit)
-        self._check_pbc_matrix(pbc_matrix)
+        check_pbc_matrix(pbc_matrix)
         # The origin define of pbc_matrix is the stack of 3 column vector
         # While in MDPy the position is in shape of n x 3
         # So the scaled position will be Position * PBC instead of PBC * Position as usual
