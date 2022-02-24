@@ -39,7 +39,7 @@ class TestCharmmTopparParser:
 
     def test_embed_x_element(self):
         charmm = CharmmTopparParser()
-        charmm.parameters['atom'] = 'C CA N H S'.split()
+        charmm._parameters['atom'] = 'C CA N H S'.split()
         embed_res = charmm._embed_x_element('SS-CS')
         assert len(embed_res) == 1
 
