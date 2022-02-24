@@ -18,6 +18,13 @@ from .. import env
 pbc_matrix = np.diag(np.ones(3)*10).astype(env.NUMPY_FLOAT)
 pbc_inv = np.linalg.inv(pbc_matrix).astype(env.NUMPY_FLOAT)
 
+def test_check_pbc_matrix():
+    with pytest.raises(PBCPoorDefinedError):
+        check_pbc_matrix(np.ones([3, 3]))
+
+    with pytest.raises(ArrayDimError):
+        check_pbc_matrix(np.ones([4, 3]))
+
 def test_wrap_positions():
     positions = np.array([
         [0, 0, 0],
