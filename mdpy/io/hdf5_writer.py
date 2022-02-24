@@ -21,7 +21,7 @@ class HDF5Writer:
     def __init__(
         self, file_path: str, mode: str = 'w', 
         topology: Topology = Topology(),
-        pbc_matrix = np.diag([0]*3).astype(env.NUMPY_FLOAT)
+        pbc_matrix = np.diag([1]*3).astype(env.NUMPY_FLOAT)
     ) -> None:
         if not file_path.endswith('.hdf5'):
             raise FileFormatError('The file should end with .hdf5 suffix')
@@ -32,7 +32,9 @@ class HDF5Writer:
                 'The topology attribute should be the instance of mdpy.core.Topology class'
             )
         self._topology = topology
-        self._pbc_matrix = check_quantity_value(pbc_matrix, default_length_unit)
+        pbc_matrix = check_quantity_value(pbc_matrix, default_length_unit)
+        check_pbc_matrix(pbc_matrix)
+        self._pbc_matrix = pbc_matrix
 
         with h5py.File(self._file_path, self._mode) as f:
             f.create_group('topology')
@@ -148,6 +150,7 @@ class HDF5Writer:
 
     @pbc_matrix.setter
     def pbc_matrix(self, pbc_matrix: np.ndarray):
+        pbc_matrix = check_quantity_value(pbc_matrix, default_length_unit)
         check_pbc_matrix(pbc_matrix)
         self._pbc_matrix = check_quantity_value(pbc_matrix, default_length_unit)
         self._write_pbc_matrix()
