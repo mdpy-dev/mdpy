@@ -15,8 +15,11 @@ test_order = [
      'environment',
      'base_dimension', 'unit', 'unit_definition', 'quantity',
      'check_quantity', 'geometry', 'pbc', 'select'
-     'particle', 'topology', 'state', 'cell_list', 'trajectory'
-     'pdb_parser', 'psf_parser', 'charmm_toppar_parser',
+     'particle', 'topology', 'state', 'cell_list', 'trajectory',
+     'charmm_toppar_parser',
+     'psf_parser', 
+     'pdb_parser', 'pdb_writer',
+     'hdf5_parser', 'hdf5_writer',
      'constraint', 
      'electrostatic_constraint'
      'charmm_nonbonded_constraint', 'charmm_bond_constraint', 'charmm_angle_constraint',
