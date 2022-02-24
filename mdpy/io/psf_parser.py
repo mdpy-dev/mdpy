@@ -15,9 +15,12 @@ import MDAnalysis as mda
 from copy import copy
 from ..core import Particle, Topology
 from ..unit import *
+from ..error import *
 
 class PSFParser:
     def __init__(self, file_path: str) -> None:
+        if not file_path.endswith('.psf'):
+            raise FileFormatError('The file should end with .psf suffix')
         with warnings.catch_warnings():
             self._parser = mda.topology.PSFParser.PSFParser(file_path).parse()
         self._num_particles = self._parser.n_atoms
