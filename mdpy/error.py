@@ -43,6 +43,7 @@ class ArrayDimError(Exception):
     Used in:
     - mdpy.core.state
     - mdpy.core.trajectory
+    - mdpy.utils.pbc
     - mdpy.analyser.mobility_analyser
     '''
     pass
