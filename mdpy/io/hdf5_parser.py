@@ -46,6 +46,7 @@ class HDF5Parser:
         self._pbc_matrix = self._parse_pbc_matrix()
         self._trajectory = Trajectory(self._topology)
         self._trajectory.append(positions=self._positions)
+        self._trajectory.set_pbc_matrix(self._pbc_matrix)
         self._file.close()
 
     def _check_hdf5_file(self):
