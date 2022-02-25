@@ -19,6 +19,8 @@ class PDBDumper(Dumper):
         self._writer = PDBWriter(file_path, 'w')
 
     def dump(self, simulation: Simulation):
-        self._writer.topology = simulation.ensemble.topology
-        self._writer.pbc_matrix = simulation.ensemble.state.pbc_matrix
+        if self._num_dumpped_frames == 0:
+            self._writer.topology = simulation.ensemble.topology
+            self._writer.pbc_matrix = simulation.ensemble.state.pbc_matrix
         self._writer.write(simulation.ensemble.state.positions)
+        self._num_dumpped_frames += 1
