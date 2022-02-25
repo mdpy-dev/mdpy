@@ -48,8 +48,9 @@ class ElectrostaticConstraint(Constraint):
     def bind_ensemble(self, ensemble: Ensemble):
         self._parent_ensemble = ensemble
         self._force_id = ensemble.constraints.index(self)
-        self._device_charges = cuda.to_device(self._parent_ensemble.topology.charges)
-        self._device_k = cuda.to_device(np.array([4 * np.pi * epsilon0], dtype=env.NUMPY_FLOAT))
+        if env.platform == 'CUDA':
+            self._device_charges = cuda.to_device(self._parent_ensemble.topology.charges)
+            self._device_k = cuda.to_device(np.array([4 * np.pi * epsilon0], dtype=env.NUMPY_FLOAT))
 
     @staticmethod
     def cpu_kernel(
