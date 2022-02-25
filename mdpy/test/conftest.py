@@ -32,7 +32,7 @@ test_order = [
      'integrator', 'verlet_integrator', 'langevin_integrator'
      'simulation',
      'dumper', 
-     'pdb_dumper', 'log_dumper',
+     'pdb_dumper', 'log_dumper', 'hdf5_dumper',
      'analyser_result'
 ]
 
