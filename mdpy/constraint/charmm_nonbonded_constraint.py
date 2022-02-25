@@ -60,7 +60,8 @@ class CharmmNonbondedConstraint(Constraint):
                 epsilon, sigma, epsilon14, sigma14 = param
                 self._parameters_list.append([epsilon, sigma, epsilon14, sigma14])
         self._parameters_list = np.vstack(self._parameters_list).astype(env.NUMPY_FLOAT)
-        self._device_parameters_list = cuda.to_device(self._parameters_list)
+        if env.platform == 'CUDA':
+            self._device_parameters_list = cuda.to_device(self._parameters_list)
 
     @staticmethod
     def cpu_kernel(

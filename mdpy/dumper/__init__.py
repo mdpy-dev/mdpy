@@ -8,8 +8,10 @@ from .dumper import Dumper
 
 from .pdb_dumper import PDBDumper
 from .log_dumper import LogDumper
+from .hdf5_dumper import HDF5Dumper
 
 __all__ = [
     'PDBDumper',
-    'LogDumper'
+    'LogDumper',
+    'HDF5Dumper'
 ]
