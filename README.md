@@ -17,8 +17,9 @@ git clone https://github.com/mdpy-dev/mdpy.git
 Then go to the path of mdpy, running:
 
 ```
-pip install -e .
+conda install --file requirements.txt -c defaults -c conda-forge
+conda develop .
 ```
 
-Then all the extension on mdpy code can be reveal in your code without reinstalling mdpy package.
+Now all the change made on the mdpy source code can be reveal in your code without reinstalling mdpy package.
 
