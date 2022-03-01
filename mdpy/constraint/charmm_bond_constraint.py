@@ -39,8 +39,8 @@ class CharmmBondConstraint(Constraint):
         self._num_bonds = 0
         for bond in self._parent_ensemble.topology.bonds:
             bond_type = '%s-%s' %(
-                self._parent_ensemble.topology.particles[bond[0]].particle_name,
-                self._parent_ensemble.topology.particles[bond[1]].particle_name
+                self._parent_ensemble.topology.particles[bond[0]].particle_type,
+                self._parent_ensemble.topology.particles[bond[1]].particle_type
             )
             self._int_parameters.append([
                 self._parent_ensemble.topology.particles[bond[0]].matrix_id,

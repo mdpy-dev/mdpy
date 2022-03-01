@@ -38,10 +38,10 @@ class CharmmImproperConstraint(Constraint):
         self._num_impropers = 0
         for improper in self._parent_ensemble.topology.impropers:
             improper_type = '%s-%s-%s-%s' %(
-                self._parent_ensemble.topology.particles[improper[0]].particle_name,
-                self._parent_ensemble.topology.particles[improper[1]].particle_name,
-                self._parent_ensemble.topology.particles[improper[2]].particle_name,
-                self._parent_ensemble.topology.particles[improper[3]].particle_name
+                self._parent_ensemble.topology.particles[improper[0]].particle_type,
+                self._parent_ensemble.topology.particles[improper[1]].particle_type,
+                self._parent_ensemble.topology.particles[improper[2]].particle_type,
+                self._parent_ensemble.topology.particles[improper[3]].particle_type
             )
             self._int_parameters.append([
                 self._parent_ensemble.topology.particles[improper[0]].matrix_id,
