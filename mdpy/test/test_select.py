@@ -21,15 +21,15 @@ data_dir = os.path.join(cur_dir, 'data')
 
 def create_topology():
     particles = []
-    particles.append(Particle(particle_type='C', particle_name='CA', mass=12))
-    particles.append(Particle(particle_type='N', particle_name='NA', mass=14))
-    particles.append(Particle(particle_type='C', particle_name='CB', mass=12))
-    particles.append(Particle(particle_type='H', particle_name='HN', mass=1))
-    particles.append(Particle(particle_type='C', particle_name='C', mass=12))
-    particles.append(Particle(particle_type='H', particle_name='HC1', mass=1))
-    particles.append(Particle(particle_type='H', particle_name='HC2', mass=1))
-    particles.append(Particle(particle_type='N', particle_name='N', mass=14))
-    particles.append(Particle(particle_type='C', particle_name='CD', mass=12))
+    particles.append(Particle(particle_name='C', particle_type='CA', mass=12))
+    particles.append(Particle(particle_name='N', particle_type='NA', mass=14))
+    particles.append(Particle(particle_name='C', particle_type='CB', mass=12))
+    particles.append(Particle(particle_name='H', particle_type='HN', mass=1))
+    particles.append(Particle(particle_name='C', particle_type='C', mass=12))
+    particles.append(Particle(particle_name='H', particle_type='HC1', mass=1))
+    particles.append(Particle(particle_name='H', particle_type='HC2', mass=1))
+    particles.append(Particle(particle_name='N', particle_type='N', mass=14))
+    particles.append(Particle(particle_name='C', particle_type='CD', mass=12))
     topology = Topology()
     topology.add_particles(particles)
     topology.join()
@@ -55,34 +55,23 @@ def test_check_selection_condition():
         condition = [{'nearby': [[0], 3]}]
         check_topological_selection_condition(condition)
 
-def test_select_particle_type():
-    topology = create_topology()
-    selected_particles = select_particle_type(topology, ['H'])
-    assert selected_particles[0] == 3
-    assert len(selected_particles) == 3
-
-    trajectory = create_trajectory()
-    selected_particles = select_particle_type(trajectory, ['H', 'C'])
-    assert selected_particles[0] == 0
-    assert len(selected_particles) == 7
-
 def test_parse_selection_condition():
     condition = [
         {
-            'particle type': [['C', 'CA']],
+            'particle name': [['C', 'CA']],
             'not molecule type': [['VAL']]
         },
         {'molecule id': [[3]]}
     ]
     res = parse_selection_condition(condition)
-    assert res == 'particle type: [\'C\', \'CA\'] and not molecule type: [\'VAL\'] or molecule id: [3]'
+    assert res == 'particle name: [\'C\', \'CA\'] and not molecule type: [\'VAL\'] or molecule id: [3]'
 
 def test_select():
     topology = PSFParser(os.path.join(data_dir, '6PO6.psf')).topology
     position = PDBParser(os.path.join(data_dir, '6PO6.pdb')).positions
     condition = [
         {
-            'particle type': [['C', 'CA']],
+            'particle name': [['C', 'CA']],
             'not molecule type': [['VAL']]
         },
         {'molecule id': [[3]]}
@@ -96,7 +85,7 @@ def test_select():
     trajectory.append(position)
     trajectory.append(position)
     condition = [
-        {'nearby': [[0], 3], 'particle type': [['C', 'CA']], 'molecule type': [['VAL']]},
+        {'nearby': [[0], 3], 'particle name': [['C', 'CA']], 'molecule type': [['VAL']]},
         {'particle id': [[10, 11]]}
     ]
     res = select(trajectory, condition)

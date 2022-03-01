@@ -26,23 +26,23 @@ data_dir = os.path.join(cur_dir, 'data')
 class TestCharmmAngleConstraint:
     def setup(self):
         p1 = Particle(
-            particle_id=0, particle_type='C', 
-            particle_name='CA', molecule_type='ASN',
+            particle_id=0, particle_name='C', 
+            particle_type='CA', molecule_type='ASN',
             mass=12, charge=0
         )
         p2 = Particle(
-            particle_id=1, particle_type='C', 
-            particle_name='CA', molecule_type='ASN',
+            particle_id=1, particle_name='C', 
+            particle_type='CA', molecule_type='ASN',
             mass=14, charge=0
         )
         p3 = Particle(
-            particle_id=2, particle_type='H', 
-            particle_name='HA1', molecule_type='ASN',
+            particle_id=2, particle_name='H', 
+            particle_type='HA1', molecule_type='ASN',
             mass=1, charge=0
         )
         p4 = Particle(
-            particle_id=3, particle_type='C', 
-            particle_name='CA', molecule_type='ASN',
+            particle_id=3, particle_name='C', 
+            particle_type='CA', molecule_type='ASN',
             mass=12, charge=0
         )
         t = Topology()
