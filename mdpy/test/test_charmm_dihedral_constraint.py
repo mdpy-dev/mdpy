@@ -26,23 +26,23 @@ data_dir = os.path.join(cur_dir, 'data')
 class TestCharmmDihedralConstraint:
     def setup(self):
         p1 = Particle(
-            particle_id=0, particle_type='C', 
-            particle_name='CA', molecule_type='ASN',
+            particle_id=0, particle_name='C', 
+            particle_type='CA', molecule_type='ASN',
             mass=12, charge=0
         )
         p2 = Particle(
-            particle_id=1, particle_type='N', 
-            particle_name='NY', molecule_type='ASN',
+            particle_id=1, particle_name='N', 
+            particle_type='NY', molecule_type='ASN',
             mass=14, charge=0
         )
         p3 = Particle(
-            particle_id=2, particle_type='CA', 
-            particle_name='CPT', molecule_type='ASN',
+            particle_id=2, particle_name='CA', 
+            particle_type='CPT', molecule_type='ASN',
             mass=1, charge=0
         )
         p4 = Particle(
-            particle_id=3, particle_type='C', 
-            particle_name='CA', molecule_type='ASN',
+            particle_id=3, particle_name='C', 
+            particle_type='CA', molecule_type='ASN',
             mass=12, charge=0
         )
         t = Topology()

@@ -14,7 +14,6 @@ from ..ensemble import Ensemble
 from ..core import Topology
 from ..io import CharmmTopparParser
 from ..utils import check_quantity_value
-from ..constraint import LONG_RANGE_SOLVER
 from ..constraint import *
 from ..unit import *
 from ..error import *
@@ -41,16 +40,16 @@ class CharmmForcefield(Forcefield):
         dihedral_keys = self._parameters['dihedral'].keys()
         improper_keys = self._parameters['improper'].keys()
         for particle in self._topology.particles:
-            particle_name = particle.particle_name
-            if not particle_name in particle_keys:
+            particle_type = particle.particle_type
+            if not particle_type in particle_keys:
                 raise ParameterPoorDefinedError(
                     'The nonbonded parameter for particle %d (%s) can not be found'
-                    %(particle_name)
+                    %(particle_type)
                 )
         for bond in self._topology.bonds:
             bond_name = (
-                self._topology.particles[bond[0]].particle_name + '-' + 
-                self._topology.particles[bond[1]].particle_name
+                self._topology.particles[bond[0]].particle_type + '-' + 
+                self._topology.particles[bond[1]].particle_type
             )
             if not bond_name in bond_keys:
                 raise ParameterPoorDefinedError(
@@ -59,9 +58,9 @@ class CharmmForcefield(Forcefield):
                 ) 
         for angle in self._topology.angles:
             angle_name = (
-                self._topology.particles[angle[0]].particle_name + '-' + 
-                self._topology.particles[angle[1]].particle_name + '-' +
-                self._topology.particles[angle[2]].particle_name
+                self._topology.particles[angle[0]].particle_type + '-' + 
+                self._topology.particles[angle[1]].particle_type + '-' +
+                self._topology.particles[angle[2]].particle_type
             )
             if not angle_name in angle_keys:
                 raise ParameterPoorDefinedError(
@@ -70,10 +69,10 @@ class CharmmForcefield(Forcefield):
                 ) 
         for dihedral in self._topology.dihedrals:
             dihedral_name = (
-                self._topology.particles[dihedral[0]].particle_name + '-' + 
-                self._topology.particles[dihedral[1]].particle_name + '-' +
-                self._topology.particles[dihedral[2]].particle_name + '-' +
-                self._topology.particles[dihedral[3]].particle_name
+                self._topology.particles[dihedral[0]].particle_type + '-' + 
+                self._topology.particles[dihedral[1]].particle_type + '-' +
+                self._topology.particles[dihedral[2]].particle_type + '-' +
+                self._topology.particles[dihedral[3]].particle_type
             )
             if not dihedral_name in dihedral_keys:
                 raise ParameterPoorDefinedError(
@@ -82,10 +81,10 @@ class CharmmForcefield(Forcefield):
                 ) 
         for improper in self._topology.impropers:
             improper_name = (
-                self._topology.particles[improper[0]].particle_name + '-' + 
-                self._topology.particles[improper[1]].particle_name + '-' +
-                self._topology.particles[improper[2]].particle_name + '-' +
-                self._topology.particles[improper[3]].particle_name
+                self._topology.particles[improper[0]].particle_type + '-' + 
+                self._topology.particles[improper[1]].particle_type + '-' +
+                self._topology.particles[improper[2]].particle_type + '-' +
+                self._topology.particles[improper[3]].particle_type
             )
             if not improper_name in improper_keys:
                 raise ParameterPoorDefinedError(

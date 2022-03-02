@@ -39,9 +39,9 @@ class CharmmAngleConstraint(Constraint):
         self._num_angles = 0
         for angle in self._parent_ensemble.topology.angles:
             angle_type = '%s-%s-%s' %(
-                self._parent_ensemble.topology.particles[angle[0]].particle_name,
-                self._parent_ensemble.topology.particles[angle[1]].particle_name,
-                self._parent_ensemble.topology.particles[angle[2]].particle_name
+                self._parent_ensemble.topology.particles[angle[0]].particle_type,
+                self._parent_ensemble.topology.particles[angle[1]].particle_type,
+                self._parent_ensemble.topology.particles[angle[2]].particle_type
             )
             self._int_parameters.append([
                 self._parent_ensemble.topology.particles[angle[0]].matrix_id,

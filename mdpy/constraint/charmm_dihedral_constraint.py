@@ -40,10 +40,10 @@ class CharmmDihedralConstraint(Constraint):
         self._num_dihedrals = 0
         for dihedral in self._parent_ensemble.topology.dihedrals:
             dihedral_type = '%s-%s-%s-%s' %(
-                self._parent_ensemble.topology.particles[dihedral[0]].particle_name,
-                self._parent_ensemble.topology.particles[dihedral[1]].particle_name,
-                self._parent_ensemble.topology.particles[dihedral[2]].particle_name,
-                self._parent_ensemble.topology.particles[dihedral[3]].particle_name
+                self._parent_ensemble.topology.particles[dihedral[0]].particle_type,
+                self._parent_ensemble.topology.particles[dihedral[1]].particle_type,
+                self._parent_ensemble.topology.particles[dihedral[2]].particle_type,
+                self._parent_ensemble.topology.particles[dihedral[3]].particle_type
             )
             for float_param in self._parameters[dihedral_type]:
                 self._int_parameters.append([
