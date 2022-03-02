@@ -48,48 +48,46 @@ class RMSDAnalyser:
                 %(self._num_reference_particles, num_particles)
             )
         # Analysis RMSD
-        parameters = np.array([0, 0, 0, 0, 0, 0])
+        parameters = np.array([0, 0, 0])
         rmsd = np.zeros([trajectory.num_frames])
         rotation = np.zeros([trajectory.num_frames, SPATIAL_DIM, SPATIAL_DIM])
         rotation_angle = np.zeros([trajectory.num_frames, SPATIAL_DIM])
-        translation = np.zeros([trajectory.num_frames, SPATIAL_DIM])
         for frame in range(trajectory.num_frames):
             res = optimize.minimize(self._rmsd, parameters, args=(
                 self._reference_positions, trajectory.positions[frame, selected_matrix_id, :]
             ))
             parameters = res.x
-            yaw, pitch, roll, x, y, z = parameters
+            yaw, pitch, roll = parameters
             rmsd[frame] = res.fun
             rotation[frame, :, :] = generate_rotation_matrix(yaw, pitch, roll)
             rotation_angle[frame, :] = np.array([yaw, pitch, roll])
-            translation[frame, :] = np.array([x, y, z])
         # Output
         if not is_dimensionless:
             rmsd = Quantity(rmsd, default_length_unit)
-            translation = Quantity(translation, default_length_unit)
         title = 'RMSD of %s' %(
             parse_selection_condition(self._selection_condition)
         )
         description = {
             'rmsd': 'The RMSD value verse reference of each frame, unit: default_length_unit',
             'rotation': 'The rotation matrix used to align the positions of each frame, unit: dimensionless',
-            'rotation_angles': 'The rotation angles of [roll, pitch, yaw] of each frame, unit: degree',
-            'translation': 'The translation vector used to align the positions of each frame, unit: default_length_unit',
+            'rotation_angles': 'The rotation angles of [roll, pitch, yaw] of each frame, unit: degree'
         }
         data = {
             'rmsd': rmsd, 
-            'rotation': rotation, 'rotation_angles': rotation_angle,
-            'translation': translation
+            'rotation': rotation, 'rotation_angles': rotation_angle
         }
         return AnalyserResult(title=title, description=description, data=data)
 
     @staticmethod
     def _rmsd(parameters, reference_positions, positions):
-        yaw, pitch, roll, x, y, z = parameters
+        yaw, pitch, roll = parameters
         rotation = generate_rotation_matrix(yaw, pitch, roll)
-        translation = np.array([x, y, z])
-        transformed_positions = positions.dot(rotation) + translation
-        return np.sqrt(((reference_positions - transformed_positions)**2).sum())
+        transformed_positions = positions - positions.mean(0)
+        transformed_positions = np.dot(transformed_positions, rotation)
+        return np.sqrt(((
+            reference_positions - reference_positions.mean(0) - 
+            transformed_positions
+        )**2).sum())
 
     @property
     def selection_condition(self):
