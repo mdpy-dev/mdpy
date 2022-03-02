@@ -173,6 +173,16 @@ class SelectionConditionPoorDefinedError(Exception):
     '''
     pass
 
+class AnalyserPoorDefinedError(Exception):
+    '''This error occurs when:
+    - Analyser's input data does not meet analyser's initial setting
+    
+    Used in:
+    - mdpy.analyser.analyser_result
+    - mdpy.analyser.rmsd_analyser
+    '''
+    pass
+
 class AtomLossError(Exception):
     '''This error occurs when:
     - The atom go beyond the range of two PBC images
