@@ -31,7 +31,11 @@ class TestAnalyserResult:
         pass
 
     def test_exceptions(self):
-        pass
+        title = 'a'
+        description = {'a': 'test'}
+        data = {'b': np.ones([10, 1])}
+        with pytest.raises(AnalyserPoorDefinedError):
+            AnalyserResult(title=title, description=description, data=data)
 
     def test_save(self):
         title = 'a'
