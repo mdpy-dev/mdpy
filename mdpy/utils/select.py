@@ -101,11 +101,59 @@ def select_water(target):
     topology = check_topology(target)
     return matrix_ids
 
+ION_NAME_LIST = []
+
 def select_ion():
     pass
 
-def select_protein():
-    pass
+# check https://pdb101.rcsb.org/learn/guide-to-understanding-pdb-data/primary-sequences-and-the-pdb-format
+PROTEIN_MOLECULE_TYPE_LIST = [
+    # Standard amino acid
+    'ALA', 'CYS', 'ASP', 'GLU', 
+    'PHE', 'GLY', 'HIS', 'ILE', 
+    'LYS', 'LEU', 'MET', 'ASN', 
+    'PRO', 'GLN', 'ARG', 'SER', 
+    'THR', 'VAL', 'TRP', 'TYR', 
+    'PYL', 'SEC',
+    # D-amino acid
+    'DAL', 'DSN', 'DCY', 'DPR', 
+    'DVA', 'DTH', 'DLE', 'DIL', 
+    'DSG', 'DAS', 'MED', 'DGN',
+    'DGL', 'DLY', 'DHI', 'DPN', 
+    'DAR', 'DTY', 'DTR',
+    # CHARMM specified
+    'HSD', 'HSE', 'HSP',
+    'NTER', 'GLYP', 'PROP', 'ACE',
+    'ACED', 'ACP', 'ACPD', 'NNEU',
+    'CTER', 'CNEU', 'CTP', 'CT1',
+    'CT2', 'CT3', 'ASPP', 'GLUP',
+    'LSN', 'LINK', 'DISU', 'HS2',
+    'LIG1', 'LIG2', 'LIG3'
+    # AMBER specified
+]
+
+def select_protein(target):
+    matrix_ids = []
+    topology = check_topology(target)
+    for particle in topology.particles:
+        if particle.molecule_type in PROTEIN_MOLECULE_TYPE_LIST:
+            matrix_ids.append(particle.matrix_id)
+    return matrix_ids
+
+PROTEIN_BACKBONE_PARTICLE_TYPE = [
+    'N', 'C', 'CA', 'O'
+]
+
+def select_backbone(target):
+    matrix_ids = []
+    topology = check_topology(target)
+    for particle in topology.particles:
+        if (
+            particle.molecule_type in PROTEIN_MOLECULE_TYPE_LIST and
+            particle.particle_type in PROTEIN_BACKBONE_PARTICLE_TYPE
+        ):
+            matrix_ids.append(particle.matrix_id)
+    return matrix_ids
 
 def select_nucleic_acid():
     pass
@@ -155,7 +203,7 @@ SELECTION_SUPPORTED_TOPOLOGICAL_KEYWORDS = [
     'all',
     'particle type', 'particle name', 'particle id', 
     'molecule type', 'molecule id', 'chain id',
-    'water', 'ion', 'protein', 'nucleic acid'
+    'water', 'ion', 'protein', 'backbone', 'nucleic acid'
 ]
 
 SELECTION_SUPPORTED_STERIC_KEYWORDS = [
@@ -176,6 +224,7 @@ METHOD_DICT = {
     'water': select_water,
     'ion': select_ion,
     'protein': select_protein,
+    'backbone': select_backbone,
     'nucleic acid': select_nucleic_acid,
 
     'nearby': select_nearby,
@@ -223,7 +272,7 @@ def parse_selection_condition(conditions: list[dict]):
         res.append(cur_string)
     return ' or '.join(res)
 
-def select(target, conditions: list[dict]):
+def select(target, conditions: list[dict]) -> list[int]:
     if isinstance(target, Topology): # Single frame
         num_particles = target.num_particles
         all_set = set(range(num_particles))
