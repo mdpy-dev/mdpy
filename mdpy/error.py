@@ -178,6 +178,7 @@ class AnalyserPoorDefinedError(Exception):
     - Analyser's input data does not meet analyser's initial setting
     
     Used in:
+    - mdpy.analyser.analyser_result
     - mdpy.analyser.rmsd_analyser
     '''
     pass
