@@ -16,6 +16,10 @@ from ..error import *
 class AnalyserResult:
     def __init__(self, title: str, description: dict, data: dict) -> None:
         self._title = title
+        if description.keys() != data.keys():
+            raise AnalyserPoorDefinedError(
+                'the description and data of AnalyserResult cannot be matched.'
+            )
         self._description = description
         self._data = data
 
