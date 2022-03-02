@@ -9,6 +9,7 @@ from .analyser_result import AnalyserResult, load_analyser_result
 # Dynamics properties
 from .diffusion_analyser import DiffusionAnalyser
 from .mobility_analyser import MobilityAnalyser
+from .rmsd_analyer import RMSDAnalyser
 
 # Thermodynamics properties
 from .rdf_analyser import RDFAnalyser
@@ -18,5 +19,6 @@ from .residence_time_analyser import ResidenceTimeAnalyser
 __all__ = [
     'load_analyser_result',
     'DiffusionAnalyser', 'MobilityAnalyser',
+    'RMSDAnalyser',
     'RDFAnalyser', 'CoordinationNumberAnalyser', 'ResidenceTimeAnalyser'
 ]
