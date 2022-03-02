@@ -12,7 +12,8 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 import numpy as np
 import numba as nb
 from numpy import arccos
-from .. import env
+from numpy import sin, cos
+from .. import env, SPATIAL_DIM
 from .pbc import *
 
 @nb.njit()
@@ -89,3 +90,15 @@ def get_pbc_dihedral(p1, p2, p3, p4, pbc_matrix, pbc_inv):
     y = np.dot(n1, n2)
 
     return np.arctan2(x, y)
+
+def generate_rotation_matrix(yaw, pitch, roll):
+    shape = [SPATIAL_DIM, SPATIAL_DIM]
+    Rx, Ry, Rz = np.zeros(shape), np.zeros(shape), np.zeros(shape)
+    Rx[0, 0], Rx[1, 1], Rx[2, 2] = 1, cos(roll), cos(roll)
+    Rx[1, 2], Rx[2, 1] = -sin(roll), sin(roll)
+    Ry[0, 0], Ry[1, 1], Ry[2, 2] = cos(pitch), 1, cos(pitch)
+    Ry[0, 2], Ry[2, 0] = sin(pitch), -sin(pitch)
+    Rz[0, 0], Rz[1, 1], Rz[2, 2] = cos(yaw), cos(yaw), 1
+    Rz[0, 1], Rz[1, 0] = -sin(yaw), sin(yaw)
+    rotation = Rz.dot(Ry).dot(Rx).T
+    return rotation
