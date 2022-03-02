@@ -27,8 +27,8 @@ class TestPSFParser:
         psf = PSFParser(self.file_path)
         assert psf.num_particles == 95567
         assert psf.particle_ids[1] == 1
-        assert psf.particle_types[3] == 'HT3'
-        assert psf.particle_names[15] == 'HB1'
+        assert psf.particle_names[3] == 'HT3'
+        assert psf.particle_types[15] == 'HB1'
         assert psf.molecule_ids[9] == 26
         assert psf.molecule_types[21] == 'LEU'
         assert psf.chain_ids[1616] == 'WT1'

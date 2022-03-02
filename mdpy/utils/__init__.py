@@ -9,6 +9,7 @@ from .geometry import get_unit_vec, get_norm_vec
 from .geometry import get_bond, get_pbc_bond
 from .geometry import get_angle, get_pbc_angle, get_included_angle 
 from .geometry import get_dihedral, get_pbc_dihedral
+from .geometry import generate_rotation_matrix
 from .pbc import check_pbc_matrix
 from .pbc import wrap_positions, unwrap_vec
 from .check_quantity import check_quantity, check_quantity_value
@@ -22,6 +23,7 @@ __all__ = [
     'get_bond', 'get_pbc_bond', 
     'get_angle', 'get_pbc_angle', 'get_included_angle', 
     'get_dihedral', 'get_pbc_dihedral',
+    'generate_rotation_matrix',
     'check_pbc_matrix',
     'wrap_positions', 'unwrap_vec',
     'check_quantity', 'check_quantity_value',

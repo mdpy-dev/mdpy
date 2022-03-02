@@ -52,7 +52,7 @@ class CharmmNonbondedConstraint(Constraint):
         self._force_id = ensemble.constraints.index(self)
         self._parameters_list = []
         for particle in self._parent_ensemble.topology.particles:
-            param = self._parameters[particle.particle_name]
+            param = self._parameters[particle.particle_type]
             if len(param) == 2:
                 epsilon, sigma = param
                 self._parameters_list.append([epsilon, sigma, epsilon, sigma])
