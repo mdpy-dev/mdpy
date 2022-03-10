@@ -19,6 +19,7 @@ test_order = [
      'charmm_toppar_parser',
      'psf_parser', 
      'pdb_parser', 'pdb_writer',
+     'dcd_parser',
      'hdf5_parser', 'hdf5_writer',
      'constraint', 
      'electrostatic_constraint'
