@@ -14,6 +14,7 @@ from .psf_parser import PSFParser
 # Position file
 from .pdb_parser import PDBParser
 from .pdb_writer import PDBWriter
+from .dcd_parser import DCDParser
 
 # Comprehensive file
 
@@ -76,6 +77,6 @@ from .hdf5_writer import HDF5Writer
 __all__ = [ 
     'CharmmTopparParser',
     'PSFParser',
-    'PDBParser','PDBWriter',
+    'PDBParser','PDBWriter', 'DCDParser'
     'HDF5Parser', 'HDF5Writer',
 ]
