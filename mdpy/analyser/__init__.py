@@ -16,9 +16,13 @@ from .rdf_analyser import RDFAnalyser
 from .coordination_number_analyser import CoordinationNumberAnalyser
 from .residence_time_analyser import ResidenceTimeAnalyser
 
+# Free energy
+from .wham_analyser import WHAMAnalyser
+
 __all__ = [
     'load_analyser_result',
     'DiffusionAnalyser', 'MobilityAnalyser',
     'RMSDAnalyser',
-    'RDFAnalyser', 'CoordinationNumberAnalyser', 'ResidenceTimeAnalyser'
+    'RDFAnalyser', 'CoordinationNumberAnalyser', 'ResidenceTimeAnalyser',
+    'WHAMAnalyser'
 ]
