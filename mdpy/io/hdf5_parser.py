@@ -135,6 +135,7 @@ class HDF5Parser:
         num_impropers = self._file['topology/num_impropers'][()]
         for improper in range(num_impropers):
             topology.add_improper(list(impropers[improper, :]))
+        topology.join()
         return topology
 
     def _parse_positions(self):
