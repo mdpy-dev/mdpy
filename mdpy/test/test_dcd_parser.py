@@ -35,3 +35,12 @@ class TestDCDParser:
     def test_exceptions(self):
         with pytest.raises(FileFormatError):
             DCDParser('te.dc')
+
+        with pytest.raises(ParserPoorDefinedError):
+            DCDParser(self.file_path, is_parse_all=False).positions
+
+        with pytest.raises(ArrayDimError):
+            DCDParser(self.file_path, is_parse_all=False).get_positions(100)
+
+        with pytest.raises(ArrayDimError):
+            DCDParser(self.file_path, is_parse_all=False).get_positions(100, 101)
