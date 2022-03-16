@@ -10,10 +10,9 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 '''
 
 import numpy as np
-
-from .core import Topology, State
-from .error import *
-from .unit import *
+from mdpy.core import Topology, State
+from mdpy.error import *
+from mdpy.unit import *
 
 class Ensemble:
     def __init__(self, topology: Topology) -> None:
@@ -39,9 +38,6 @@ class Ensemble:
         )
 
     __str__ = __repr__
-
-    def create_segment(self, keywords):
-        pass
 
     def add_constraints(self, *constraints):
         for constraint in constraints:
@@ -99,14 +95,6 @@ class Ensemble:
     @property
     def kinetic_energy(self):
         return self._kinetic_energy
-
-    @property
-    def segments(self):
-        return self._segments
-
-    @property
-    def num_segments(self):
-        return self._num_segments
 
     @property
     def constraints(self):
