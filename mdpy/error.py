@@ -43,6 +43,9 @@ class ArrayDimError(Exception):
     Used in:
     - mdpy.core.state
     - mdpy.core.trajectory
+    - mdpy.io.HDF5Parser
+    - mdpy.io.PDBParser
+    - mdpy.io.DCDParser
     - mdpy.utils.pbc
     - mdpy.analyser.mobility_analyser
     '''
@@ -101,6 +104,9 @@ class FileFormatError(Exception):
     - mdpy.io.PDBParser
     - mdpy.io.PDBWriter
     - mdpy.io.PSFParser
+    - mdpy.io.HDF5Parser
+    - mdpy.io.HDF5Writer
+    - mdpy.io.DCDParser
     - mdpy.analyser.analyser_result
     '''
     pass
@@ -148,6 +154,17 @@ class HDF5FilePoorDefinedError(Exception):
     
     Used in:
     - mdpy.io.hdf5_parser
+    '''
+    pass
+
+class ParserPoorDefinedError(Exception):
+    '''This error occurs when:
+    - A complementary property is required while parser init with keywords `is_parse_all=False`
+
+    Used in:
+    - mdpy.io.HDF5Parser
+    - mdpy.io.PDBParser
+    - mdpy.io.DCDParser
     '''
     pass
 
