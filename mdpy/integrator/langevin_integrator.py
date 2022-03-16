@@ -11,10 +11,10 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 
 import numpy as np
 from numpy.random import randn
-from . import Integrator
-from ..ensemble import Ensemble
-from ..unit import *
-from ..utils import *
+from mdpy.integrator import Integrator
+from mdpy.ensemble import Ensemble
+from mdpy.unit import *
+from mdpy.utils import *
 
 class LangevinIntegrator(Integrator):
     def __init__(self, time_step, temperature, friction_factor) -> None:
@@ -62,7 +62,6 @@ class LangevinIntegrator(Integrator):
                 self._b * self._sigma * self._time_step_3_over_2 / 2 * xi_over_sqrt_masses
             ), self._cur_positions
             # Update position
-            self._cur_positions = wrap_positions(self._cur_positions, *ensemble.state.pbc_info)
             ensemble.state.set_positions(self._cur_positions)
             ensemble.update()
             self._cur_acceleration = ensemble.forces / masses
