@@ -10,13 +10,12 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 '''
 
 import numpy as np
-# from cupy.cuda.nvtx import RangePush, RangePop
-from .cell_list import CellList
-from .topology import Topology
-from .. import SPATIAL_DIM, env
-from ..unit import *
-from ..error import *
-from ..utils import *
+from mdpy.core.cell_list import CellList
+from mdpy.core.topology import Topology
+from mdpy import SPATIAL_DIM, env
+from mdpy.unit import *
+from mdpy.error import *
+from mdpy.utils import *
 
 class State:
     def __init__(self, topology: Topology) -> None:
@@ -62,10 +61,10 @@ class State:
 
     def set_positions(self, positions: np.ndarray):
         self._check_matrix_shape(positions)
-        self._positions = positions.astype(env.NUMPY_FLOAT)
-        # RangePush('Cell list creation')
+        self._positions = wrap_positions(
+            positions.astype(env.NUMPY_FLOAT), self._pbc_matrix, self._pbc_inv
+        )
         self._cell_list.update(self._positions)
-        # RangePop()
     
     def set_velocities(self, velocities: np.ndarray):
         self._check_matrix_shape(velocities)
