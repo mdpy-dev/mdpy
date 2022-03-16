@@ -9,10 +9,10 @@ contact : zhenyuwei99@gmail.com
 copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 '''
 
-from . import Integrator
-from .. import env
-from ..ensemble import Ensemble
-from ..utils import *
+from mdpy import env
+from mdpy.ensemble import Ensemble
+from mdpy.integrator import Integrator
+from mdpy.utils import *
 
 class VerletIntegrator(Integrator):
     def __init__(self, time_step) -> None:
@@ -43,7 +43,6 @@ class VerletIntegrator(Integrator):
                 2 * self._cur_positions - self._pre_positions + 
                 accelration * self._time_step_square
             ), self._cur_positions
-            self._cur_positions = wrap_positions(self._cur_positions, *ensemble.state.pbc_info)
             ensemble.state.set_positions(self._cur_positions)
             # Update step
             cur_step += 1
