@@ -45,3 +45,15 @@ class TestHDF5Writer:
     def test_exceptions(self):
         with pytest.raises(FileFormatError):
             HDF5Parser('te.hd')
+
+        with pytest.raises(ParserPoorDefinedError):
+            HDF5Parser(file_path, is_parse_all=False).positions
+
+        with pytest.raises(ParserPoorDefinedError):
+            HDF5Parser(file_path, is_parse_all=False).trajectory
+
+        with pytest.raises(ArrayDimError):
+            HDF5Parser(file_path, is_parse_all=False).get_positions(100)
+        
+        with pytest.raises(ArrayDimError):
+            HDF5Parser(file_path, is_parse_all=False).get_positions(100, 101)
