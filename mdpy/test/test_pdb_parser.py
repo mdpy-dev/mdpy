@@ -11,7 +11,8 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 
 
 import pytest, os
-from ..io import PDBParser
+from mdpy.io import PDBParser
+from mdpy.error import *
 
 cur_dir = os.path.dirname(os.path.abspath(__file__))
 data_dir = os.path.join(cur_dir, 'data')
@@ -40,7 +41,17 @@ class TestPDBParser:
         assert pdb.pbc_matrix[2, 1] == 0
 
     def test_exceptions(self):
-        pass
+        with pytest.raises(FileFormatError):
+            PDBParser('test.pd')
+        
+        with pytest.raises(ParserPoorDefinedError):
+            PDBParser(self.file_path, is_parse_all=False).positions
+
+        with pytest.raises(ArrayDimError):
+            PDBParser(self.file_path, is_parse_all=False).get_positions(100)
+        
+        with pytest.raises(ArrayDimError):
+            PDBParser(self.file_path, is_parse_all=False).get_positions(100, 101)
 
     def test_get_particle_info(self):
         pdb = PDBParser(self.file_path)
