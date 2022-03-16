@@ -9,9 +9,9 @@ contact : zhenyuwei99@gmail.com
 copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 '''
 
-from ..ensemble import Ensemble
-from ..utils import *
-from ..unit import *
+from mdpy.ensemble import Ensemble
+from mdpy.utils import *
+from mdpy.unit import *
 
 class Integrator:
     def __init__(self, time_step) -> None:
@@ -27,10 +27,6 @@ class Integrator:
         raise NotImplementedError(
             'The subclass of mdpy.integrator.Integrator class should overload integrate method'
         )
-
-    def wrap_pbc(self, pbc_matrix, pbc_inv):
-        self._cur_positions = wrap_positions(self._cur_positions, pbc_matrix, pbc_inv)
-        self._pre_positions = wrap_positions(self._pre_positions, pbc_matrix, pbc_inv)
 
     @property
     def time_step(self):
