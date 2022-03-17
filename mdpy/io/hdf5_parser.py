@@ -44,7 +44,8 @@ class HDF5Parser:
         self._check_hdf5_file()
         self._topology = self._parse_topology()
         self._pbc_matrix = self._parse_pbc_matrix()
-        
+        self._num_frames = self._file['positions/num_frames'][()]
+        self._num_particles = self._topology.num_particles
         if self._is_parse_all:
             self._positions = self._parse_positions()
             self._trajectory = Trajectory(self._topology)
@@ -142,33 +143,30 @@ class HDF5Parser:
         return topology
 
     def _parse_positions(self):
-        num_frames = self._file['positions/num_frames'][()]
-        num_particles = self._file['topology/num_particles'][()]
-        if num_frames == 0:
+        if self._num_frames == 0:
             return None
-        postions = np.empty([num_frames, num_particles, SPATIAL_DIM])
-        for frame in range(num_frames):
+        postions = np.empty([self._num_frames, self._num_particles, SPATIAL_DIM])
+        for frame in range(self._num_frames):
             postions[frame, :, :] = self._file['positions/frame-%d' %frame][()].astype(env.NUMPY_FLOAT)
-        return postions if num_frames != 1 else postions[0, :, :]
+        return postions if self._num_frames != 1 else postions[0, :, :]
 
     def get_positions(self, *frames):
         self._file = h5py.File(self._file_path, 'r')
-        num_frames = self._file['positions/num_frames'][()]
         num_target_frames = len(frames)
         if num_target_frames == 1:
-            if frames[0] >= num_frames:
+            if frames[0] >= self._num_frames:
                 raise ArrayDimError(
                     '%d beyond the number of frames %d stored in hdf5 file'
-                    %(frames[0], num_frames)
+                    %(frames[0], self._num_frames)
                 )
             result = self._file['positions/frame-%d' %frames[0]][()].copy().astype(env.NUMPY_FLOAT)
         else:
-            result = np.zeros([num_target_frames, self._topology.num_particles, SPATIAL_DIM])
+            result = np.zeros([num_target_frames, self._num_particles, SPATIAL_DIM])
             for index, frame in enumerate(frames):
-                if frame >= num_frames:
+                if frame >= self._num_frames:
                     raise ArrayDimError(
                         '%d beyond the number of frames %d stored in hdf5 file'
-                        %(frame, num_frames)
+                        %(frame, self._num_frames)
                     )
                 result[index, :, :] = self._file['positions/frame-%d' %frame][()].astype(env.NUMPY_FLOAT)
         self._file.close()
@@ -176,6 +174,14 @@ class HDF5Parser:
 
     def _parse_pbc_matrix(self):
         return self._file['pbc_matrix'][()].astype(env.NUMPY_FLOAT)
+
+    @property
+    def num_frames(self):
+        return self._num_frames
+
+    @property
+    def num_particles(self):
+        return self._num_particles
 
     @property
     def topology(self) -> Topology:
