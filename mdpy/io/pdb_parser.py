@@ -40,8 +40,9 @@ class PDBParser:
             self._molecule_ids.append(molecule_ids[resid])
             self._molecule_types.append(molecule_types[resid])
         self._chain_ids = list(self._parser.chainIDs.values)
+        self._num_frames = self._reader.trajectory.n_frames
         if self._is_parse_all:
-            if self._reader.n_frames == 1:
+            if self._num_frames == 1:
                 self._positions = self._reader.ts.positions.astype(env.NUMPY_FLOAT)
             else:
                 self._positions = [ts.positions.astype(env.NUMPY_FLOAT) for ts in self._reader.trajectory]
@@ -65,29 +66,24 @@ class PDBParser:
         }
     
     def get_positions(self, *frames):
-        num_frames = self._reader.trajectory.n_frames
         num_target_frames = len(frames)
         if num_target_frames == 1:
-            if frames[0] >= num_frames:
+            if frames[0] >= self._num_frames:
                 raise ArrayDimError(
                     '%d beyond the number of frames %d stored in pdb file'
-                    %(frames[0], num_frames)
+                    %(frames[0], self._num_frames)
                 )
             result = self._reader.trajectory[frames[0]].positions.copy().astype(env.NUMPY_FLOAT)
         else:
             result = np.zeros([num_target_frames, self._num_particles, SPATIAL_DIM])
             for index, frame in enumerate(frames):
-                if frame >= num_frames:
+                if frame >= self._num_frames:
                     raise ArrayDimError(
                         '%d beyond the number of frames %d stored in pdb file'
-                        %(frame, num_frames)
+                        %(frame, self._num_frames)
                     )
                 result[index, :, :] = self._reader.trajectory[frame].positions.astype(env.NUMPY_FLOAT)
         return result
-
-    @property
-    def num_particles(self):
-        return self._num_particles
 
     @property
     def particle_ids(self):
@@ -112,6 +108,14 @@ class PDBParser:
     @property
     def chain_ids(self):
         return self._chain_ids
+
+    @property
+    def num_frames(self):
+        return self._num_frames
+    
+    @property
+    def num_particles(self):
+        return self._num_particles
     
     @property
     def positions(self) -> np.ndarray:

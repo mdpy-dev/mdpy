@@ -22,6 +22,8 @@ class DCDParser:
         self._file_path = file_path
         self._is_parse_all = is_parse_all
         self._reader = mda.coordinates.DCD.DCDReader(self._file_path)
+        self._num_frames = self._reader.trajectory.n_frames
+        self._num_particles = self._reader.trajectory.n_atoms
         if self._is_parse_all:
             if self._reader.n_frames == 1:
                 self._positions = self._reader.ts.positions.astype(env.NUMPY_FLOAT)
@@ -31,26 +33,32 @@ class DCDParser:
         self._pbc_matrix = self._reader.ts.triclinic_dimensions
 
     def get_positions(self, *frames):
-        num_frames = self._reader.trajectory.n_frames
-        num_particles = self._reader.trajectory.n_atoms
         num_target_frames = len(frames)
         if num_target_frames == 1:
-            if frames[0] >= num_frames:
+            if frames[0] >= self._num_frames:
                 raise ArrayDimError(
                     '%d beyond the number of frames %d stored in dcd file'
-                    %(frames[0], num_frames)
+                    %(frames[0], self._num_frames)
                 )
             result = self._reader.trajectory[frames[0]].positions.copy().astype(env.NUMPY_FLOAT)
         else:
-            result = np.zeros([num_target_frames, num_particles, SPATIAL_DIM])
+            result = np.zeros([num_target_frames, self._num_particles, SPATIAL_DIM])
             for index, frame in enumerate(frames):
-                if frame >= num_frames:
+                if frame >= self._num_frames:
                     raise ArrayDimError(
                         '%d beyond the number of frames %d stored in dcd file'
-                        %(frame, num_frames)
+                        %(frame, self._num_frames)
                     )
                 result[index, :, :] = self._reader.trajectory[frame].positions.astype(env.NUMPY_FLOAT)
         return result
+
+    @property
+    def num_frames(self):
+        return self._num_frames
+    
+    @property
+    def num_particles(self):
+        return self._num_particles
 
     @property
     def positions(self) -> np.ndarray:
