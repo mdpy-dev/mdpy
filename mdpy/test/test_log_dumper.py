@@ -37,6 +37,9 @@ class TestLogDumper:
         with pytest.raises(DumperPoorDefinedError):
             LogDumper(self.log_file, 100, rest_time=True)
 
+        with pytest.raises(FileFormatError):
+            LogDumper('test.lo', 10)
+
     def test_dump(self):
         prot_name = '6PO6'
         psf = PSFParser(os.path.join(data_dir, prot_name + '.psf'))
