@@ -11,14 +11,14 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 
 import pytest, os
 import numpy as np
-from .. import env
-from ..constraint import CharmmAngleConstraint
-from ..core import Particle, Topology
-from ..ensemble import Ensemble
-from ..io import CharmmTopparParser
-from ..utils import get_angle, get_unit_vec
-from ..error import *
-from ..unit import *
+from mdpy import env
+from mdpy.constraint import CharmmAngleConstraint
+from mdpy.core import Particle, Topology
+from mdpy.ensemble import Ensemble
+from mdpy.io import CharmmTopparParser
+from mdpy.utils import get_angle, get_unit_vec
+from mdpy.error import *
+from mdpy.unit import *
 
 cur_dir = os.path.dirname(os.path.abspath(__file__))
 data_dir = os.path.join(cur_dir, 'data')
@@ -26,22 +26,22 @@ data_dir = os.path.join(cur_dir, 'data')
 class TestCharmmAngleConstraint:
     def setup(self):
         p1 = Particle(
-            particle_id=0, particle_name='C', 
+            particle_id=0, particle_name='C',
             particle_type='CA', molecule_type='ASN',
             mass=12, charge=0
         )
         p2 = Particle(
-            particle_id=1, particle_name='C', 
+            particle_id=1, particle_name='C',
             particle_type='CA', molecule_type='ASN',
             mass=14, charge=0
         )
         p3 = Particle(
-            particle_id=2, particle_name='H', 
+            particle_id=2, particle_name='H',
             particle_type='HA1', molecule_type='ASN',
             mass=1, charge=0
         )
         p4 = Particle(
-            particle_id=3, particle_name='C', 
+            particle_id=3, particle_name='C',
             particle_type='CA', molecule_type='ASN',
             mass=12, charge=0
         )
@@ -54,8 +54,7 @@ class TestCharmmAngleConstraint:
         velocities = np.array([
             [0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]
         ])
-        self.ensemble = Ensemble(t)
-        self.ensemble.state.set_pbc_matrix(np.eye(3)*30)
+        self.ensemble = Ensemble(t, np.eye(3)*30)
         self.ensemble.state.cell_list.set_cutoff_radius(12)
         self.ensemble.state.set_positions(positions)
         self.ensemble.state.set_velocities(velocities)
@@ -126,4 +125,3 @@ class TestCharmmAngleConstraint:
         k, theta0, ku, u0 = self.parameters['angle']['CA-CA-CA']
         theta = get_angle([0, 0, 0], [1, 0, 0], [0, 0, 1])
         assert energy == pytest.approx(env.NUMPY_FLOAT(k * (theta - theta0)**2 + ku * (1 - u0)**2))
-        

@@ -11,13 +11,13 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 
 import pytest, os
 import numpy as np
-from ..io import PSFParser, PDBParser
-from ..forcefield import CharmmForcefield
-from ..integrator import VerletIntegrator
-from ..simulation import Simulation
-from ..dumper import LogDumper
-from ..error import *
-from ..unit import *
+from mdpy.io import PSFParser, PDBParser
+from mdpy.forcefield import CharmmForcefield
+from mdpy.integrator import VerletIntegrator
+from mdpy.simulation import Simulation
+from mdpy.dumper import LogDumper
+from mdpy.error import *
+from mdpy.unit import *
 
 cur_dir = os.path.dirname(os.path.abspath(__file__))
 data_dir = os.path.join(cur_dir, 'data')
@@ -44,14 +44,13 @@ class TestLogDumper:
 
         topology = psf.topology
 
-        forcefield = CharmmForcefield(topology)
+        forcefield = CharmmForcefield(topology, np.eye(3) * 100)
         forcefield.set_param_files(
             os.path.join(data_dir, 'par_all36_prot.prm'),
             os.path.join(data_dir, 'toppar_water_ions_namd.str')
         )
 
         ensemble = forcefield.create_ensemble()
-        ensemble.state.set_pbc_matrix(np.eye(3) * 100)
         ensemble.state.cell_list.set_cutoff_radius(12)
         ensemble.state.set_positions(pdb.positions)
         ensemble.state.set_velocities_to_temperature(Quantity(300, kelvin))
@@ -63,9 +62,9 @@ class TestLogDumper:
             self.log_file, dump_interval,
             step=True, sim_time=True,
             volume=True, density=True,
-            potential_energy=True, 
-            kinetic_energy=True, 
-            total_energy=True, 
+            potential_energy=True,
+            kinetic_energy=True,
+            total_energy=True,
             temperature=True
         )
         log_dumper.dump(simulation)
