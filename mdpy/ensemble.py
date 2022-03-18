@@ -15,12 +15,12 @@ from mdpy.error import *
 from mdpy.unit import *
 
 class Ensemble:
-    def __init__(self, topology: Topology) -> None:
+    def __init__(self, topology: Topology, pbc_matrix: np.ndarray) -> None:
         if not topology.is_joined:
             topology.join()
         # Read input
         self._topology = topology
-        self._state = State(self._topology)
+        self._state = State(self._topology, pbc_matrix)
         self._matrix_shape = self._state.matrix_shape
         self._forces = np.zeros(self._matrix_shape)
 
@@ -43,7 +43,7 @@ class Ensemble:
         for constraint in constraints:
             if constraint in self._constraints:
                 raise ConstraintConflictError(
-                    '%s has added twice to %s' 
+                    '%s has added twice to %s'
                     %(constraint, self)
                 )
             self._constraints.append(constraint)
@@ -61,7 +61,7 @@ class Ensemble:
             self._potential_energy += constraint.potential_energy
         self._update_kinetic_energy()
         self._total_energy = self._potential_energy + self._kinetic_energy
-    
+
     def _update_kinetic_energy(self):
         # Without reshape, the result of the first sum will be a 1d vector
         # , which will be a matrix after multiple with a 2d vector
@@ -71,7 +71,7 @@ class Ensemble:
         self._kinetic_energy = Quantity(
             self._kinetic_energy, default_velocity_unit**2 * default_mass_unit
         ).convert_to(default_energy_unit).value
-    
+
     @property
     def topology(self):
         return self._topology
@@ -79,19 +79,19 @@ class Ensemble:
     @property
     def state(self):
         return self._state
-    
+
     @property
     def forces(self):
         return self._forces
-    
+
     @property
     def total_energy(self):
         return self._total_energy
-    
+
     @property
     def potential_energy(self):
         return self._potential_energy
-    
+
     @property
     def kinetic_energy(self):
         return self._kinetic_energy
@@ -99,7 +99,7 @@ class Ensemble:
     @property
     def constraints(self):
         return self._constraints
-    
+
     @property
     def num_constraints(self):
         return self._num_constraints
