@@ -21,7 +21,7 @@ class EnvironmentVariableError(Exception):
 class UnitDimensionDismatchedError(Exception):
     '''This error occurs when:
     - The base dimension of two quantities is dismatched for a specific operation.
-    
+
     Used in:
     - mdpy.unit.base_dimension
     '''
@@ -30,7 +30,7 @@ class UnitDimensionDismatchedError(Exception):
 class GeomtryDimError(Exception):
     '''This error occurs when:
     - The dimension of geometry, like bond, angle, is mismatched
-    
+
     Used in:
     - mdpy.core.topology
     '''
@@ -55,10 +55,10 @@ class ParticleConflictError(Exception):
     '''This error occurs when:
     - Particle is twice bounded to a Particle instance
     - Particle is bounded to itself
-    - Particle is twice bounded to a Toplogy instance 
+    - Particle is twice bounded to a Toplogy instance
     - Particle appears twice in bond, angle, dihedral or improper
     - The number of particles is mismatched with the dimension of positions, velocities, forces matrix
-    
+
     Used in:
     - mdpy.core.particle
     - mdpy.core.topology
@@ -71,7 +71,7 @@ class ParticleConflictError(Exception):
 class ConstraintConflictError(Exception):
     '''This error occurs when:
     - Constraint is twice bounded to a Ensemble instance
-    
+
     Used in:
     - mdpy.ensemble
     '''
@@ -80,7 +80,7 @@ class ConstraintConflictError(Exception):
 class ModifyJoinedTopologyError(Exception):
     '''This error occurs when:
     - Adding particle or topology geometry to a joined Topology object
-    
+
     Used in:
     - mdpy.core.topology
     '''
@@ -88,8 +88,8 @@ class ModifyJoinedTopologyError(Exception):
 
 class NonBoundedError(Exception):
     '''This error occurs when:
-    - Parent object is not bounded 
-    
+    - Parent object is not bounded
+
     Used in:
     - mdpy.constraint.constraint
     '''
@@ -98,7 +98,7 @@ class NonBoundedError(Exception):
 class FileFormatError(Exception):
     '''This error occurs when:
     - file suffix or prefix appears in an unexpected way
-    
+
     Used in:
     - mdpy.io.charmm_toppar_parser
     - mdpy.io.PDBParser
@@ -114,7 +114,7 @@ class FileFormatError(Exception):
 class PBCPoorDefinedError(Exception):
     '''This error occurs when:
     - Two or more column vector in pbc_matrix is linear corellated
-    
+
     Used in:
     - mdpy.core.state
     '''
@@ -133,7 +133,7 @@ class CellListPoorDefinedError(Exception):
 class TrajectoryPoorDefinedError(Exception):
     '''This error occurs when:
     - Extrating information that have not been contained
-    
+
     Used in:
     -mdpy.core.trajectory
     '''
@@ -142,7 +142,7 @@ class TrajectoryPoorDefinedError(Exception):
 class ParameterPoorDefinedError(Exception):
     '''This error occurs when:
     - Topology connections' parameter is not defined in selected parameter file
-    
+
     Used in:
     - mdpy.forcefield.charmm_forcefield
     '''
@@ -151,7 +151,7 @@ class ParameterPoorDefinedError(Exception):
 class HDF5FilePoorDefinedError(Exception):
     '''This error occurs when:
     - Use hdf5 file that does not meet the requirement of mdpy
-    
+
     Used in:
     - mdpy.io.hdf5_parser
     '''
@@ -173,7 +173,7 @@ class DumperPoorDefinedError(Exception):
     - Dump frequency of dumper object is 0
     - Simulation integrates without adding dumper
     - LogDumper requires rest_time without providing total_step
-    
+
     Used in:
     - mdpy.dumper.dumper
     - mdpy.dumper.log_dumper
@@ -184,7 +184,7 @@ class DumperPoorDefinedError(Exception):
 class SelectionConditionPoorDefinedError(Exception):
     '''This error occurs when:
     - Unsupported selection condition has been used
-    
+
     Used in:
     - mdpy.utils.select_particle
     '''
@@ -193,7 +193,7 @@ class SelectionConditionPoorDefinedError(Exception):
 class AnalyserPoorDefinedError(Exception):
     '''This error occurs when:
     - Analyser's input data does not meet analyser's initial setting
-    
+
     Used in:
     - mdpy.analyser.analyser_result
     - mdpy.analyser.rmsd_analyser
@@ -203,7 +203,7 @@ class AnalyserPoorDefinedError(Exception):
 class AtomLossError(Exception):
     '''This error occurs when:
     - The atom go beyond the range of two PBC images
-    
+
     Used in:
     - mdpy.core.state
     '''
