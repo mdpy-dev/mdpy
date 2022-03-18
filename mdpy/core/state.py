@@ -18,7 +18,7 @@ from mdpy.error import *
 from mdpy.utils import *
 
 class State:
-    def __init__(self, topology: Topology) -> None:
+    def __init__(self, topology: Topology, pbc_matrix: np.ndarray) -> None:
         self._particles = topology.particles
         self._masses = topology.masses
         self._num_particles = len(self._particles)
@@ -26,10 +26,8 @@ class State:
         self._positions = np.zeros(self._matrix_shape, dtype=env.NUMPY_FLOAT)
         self._velocities = np.zeros(self._matrix_shape, dtype=env.NUMPY_FLOAT)
 
-        self._pbc_matrix = np.zeros([SPATIAL_DIM, SPATIAL_DIM], dtype=env.NUMPY_FLOAT, order='C')
-        self._pbc_inv = np.zeros([SPATIAL_DIM, SPATIAL_DIM], dtype=env.NUMPY_FLOAT, order='C')
-        self._is_pbc_specified = False
-        self._cell_list = CellList()
+        self.set_pbc_matrix(pbc_matrix)
+        self._cell_list = CellList(self._pbc_matrix.copy())
 
     def __repr__(self) -> str:
         return '<mdpy.core.State object with %d particles at %x>' %(
@@ -50,14 +48,12 @@ class State:
 
     def set_pbc_matrix(self, pbc_matrix):
         pbc_matrix = check_quantity_value(pbc_matrix, default_length_unit)
-        check_pbc_matrix(pbc_matrix)
+        pbc_matrix = check_pbc_matrix(pbc_matrix)
         # The origin define of pbc_matrix is the stack of 3 column vector
         # While in MDPy the position is in shape of n x 3
         # So the scaled position will be Position * PBC instead of PBC * Position as usual
-        self._pbc_matrix = np.ascontiguousarray(pbc_matrix.T, dtype=env.NUMPY_FLOAT)
+        self._pbc_matrix = np.ascontiguousarray(pbc_matrix, dtype=env.NUMPY_FLOAT)
         self._pbc_inv = np.ascontiguousarray(np.linalg.inv(self._pbc_matrix), dtype=env.NUMPY_FLOAT)
-        self._cell_list.set_pbc_matrix(self._pbc_matrix)
-        self._is_pbc_specified = True
 
     def set_positions(self, positions: np.ndarray):
         self._check_matrix_shape(positions)
@@ -65,7 +61,7 @@ class State:
             positions.astype(env.NUMPY_FLOAT), self._pbc_matrix, self._pbc_inv
         )
         self._cell_list.update(self._positions)
-    
+
     def set_velocities(self, velocities: np.ndarray):
         self._check_matrix_shape(velocities)
         self._velocities = velocities.astype(env.NUMPY_FLOAT)
@@ -99,14 +95,10 @@ class State:
 
     @property
     def pbc_matrix(self):
-        if not self._is_pbc_specified:
-            raise PBCPoorDefinedError('PBC has not been specified before calling.')
         return self._pbc_matrix
 
     @property
     def pbc_inv(self):
-        if not self._is_pbc_specified:
-            raise PBCPoorDefinedError('PBC has not been specified before calling.')
         return self._pbc_inv
 
     @property
