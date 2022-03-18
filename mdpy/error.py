@@ -43,9 +43,9 @@ class ArrayDimError(Exception):
     Used in:
     - mdpy.core.state
     - mdpy.core.trajectory
-    - mdpy.io.HDF5Parser
-    - mdpy.io.PDBParser
-    - mdpy.io.DCDParser
+    - mdpy.io.hdf5_parser
+    - mdpy.io.pdb_parser
+    - mdpy.io.dcd_parser
     - mdpy.utils.pbc
     - mdpy.analyser.mobility_analyser
     '''
@@ -101,13 +101,14 @@ class FileFormatError(Exception):
 
     Used in:
     - mdpy.io.charmm_toppar_parser
-    - mdpy.io.PDBParser
-    - mdpy.io.PDBWriter
-    - mdpy.io.PSFParser
-    - mdpy.io.HDF5Parser
-    - mdpy.io.HDF5Writer
-    - mdpy.io.DCDParser
+    - mdpy.io.pdb_parser
+    - mdpy.io.pdb_writer
+    - mdpy.io.psf_parser
+    - mdpy.io.hdf5_parser
+    - mdpy.io.hdf5_writer
+    - mdpy.io.dcd_parser
     - mdpy.analyser.analyser_result
+    - mdpy.dumper.dumper
     '''
     pass
 
@@ -116,7 +117,8 @@ class PBCPoorDefinedError(Exception):
     - Two or more column vector in pbc_matrix is linear corellated
 
     Used in:
-    - mdpy.core.state
+    - mdpy.utils.pbc
+    - mdpy.core.trajectory
     '''
     pass
 
@@ -162,9 +164,9 @@ class ParserPoorDefinedError(Exception):
     - A complementary property is required while parser init with keywords `is_parse_all=False`
 
     Used in:
-    - mdpy.io.HDF5Parser
-    - mdpy.io.PDBParser
-    - mdpy.io.DCDParser
+    - mdpy.io.hdf5_parser
+    - mdpy.io.pdb_parser
+    - mdpy.io.dcd_parser
     '''
     pass
 
