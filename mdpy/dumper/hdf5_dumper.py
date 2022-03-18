@@ -15,8 +15,8 @@ from ..simulation import Simulation
 
 class HDF5Dumper(Dumper):
     def __init__(self, file_path: str, dump_frequency: int) -> None:
-        super().__init__(file_path, dump_frequency)
         self._writer = HDF5Writer(file_path, 'w')
+        super().__init__(file_path, dump_frequency)
 
     def dump(self, simulation: Simulation):
         if self._num_dumpped_frames == 0:
