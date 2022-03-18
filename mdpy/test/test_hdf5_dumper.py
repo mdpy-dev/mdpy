@@ -12,22 +12,22 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 import pytest, os
 import numpy as np
 import h5py
-from .. import env
-from ..io import PDBParser, PSFParser
-from ..ensemble import Ensemble
-from ..integrator import Integrator
-from ..simulation import Simulation
-from ..dumper import HDF5Dumper
+from mdpy import env
+from mdpy.io import PDBParser, PSFParser
+from mdpy.ensemble import Ensemble
+from mdpy.integrator import Integrator
+from mdpy.simulation import Simulation
+from mdpy.dumper import HDF5Dumper
+from mdpy.error import *
 
 cur_dir = os.path.dirname(os.path.abspath(__file__))
 data_dir = os.path.join(cur_dir, 'data')
 out_dir = os.path.join(cur_dir, 'out')
 
-class TestPDBDumper:
+class TestHDF5Dumper:
     def setup(self):
         self.topology = PSFParser(os.path.join(data_dir, '6PO6.psf')).topology
-        self.ensemble = Ensemble(self.topology)
-        self.ensemble.state.set_pbc_matrix(np.diag(np.ones(3)*100))
+        self.ensemble = Ensemble(self.topology, np.diag(np.ones(3)*100))
         self.ensemble.state.cell_list.set_cutoff_radius(12)
         positions = PDBParser(os.path.join(data_dir, '6PO6.pdb')).positions
         self.ensemble.state.set_positions(np.ascontiguousarray(positions).astype(env.NUMPY_FLOAT))
@@ -45,7 +45,8 @@ class TestPDBDumper:
         pass
 
     def test_exceptions(self):
-        pass
+        with pytest.raises(FileFormatError):
+            HDF5Dumper('test.hd', 1)
 
     def test_dump(self):
         dumper = HDF5Dumper(self.file_path, 1)

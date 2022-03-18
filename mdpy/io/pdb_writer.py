@@ -11,11 +11,11 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 
 import datetime
 import numpy as np
-from .. import env
-from ..core import Topology
-from ..utils import check_quantity_value, get_included_angle, check_pbc_matrix
-from ..unit import *
-from ..error import *
+from mdpy import env
+from mdpy.core import Topology
+from mdpy.utils import check_quantity_value, get_included_angle, check_pbc_matrix
+from mdpy.unit import *
+from mdpy.error import *
 
 STD_RES_NAMES = [
     'ALA', 'ARG', 'ASN', 'ASP',
@@ -123,20 +123,20 @@ def HETATM(serial, particle_name, molecule_name, chain_id, molecule_id, x, y, z,
 # Serial resname chainid resid
 # TER = 'TER   ' + '%5d' + ' '*6 + '%-4s%1s%5d\n'
 def TER(serial, molecule_name, chain_id, molecule_id):
-    res = 'TER   ' 
+    res = 'TER   '
     len_serial = len('%5d' %serial)
     res += '%5s' %serial + ' ' * (11 - len_serial)
     res += '%-4s%1s' %(molecule_name[:4], chain_id[:1])
     len_molecule_id = len('%4d' %molecule_id)
     res += '%4d' %molecule_id + ' ' * (8 - len_molecule_id) + '\n'
-    return res 
+    return res
 
 END = 'END'
 
 class PDBWriter:
     def __init__(
-        self, file_path: str, mode: str = 'w', 
-        topology: Topology=Topology(), 
+        self, file_path: str, mode: str = 'w',
+        topology: Topology=Topology(),
         pbc_matrix = np.diag([0]*3).astype(env.NUMPY_FLOAT)
     ) -> None:
         if not file_path.endswith('.pdb'):
@@ -165,7 +165,7 @@ class PDBWriter:
             is_shape_error = True
         if is_shape_error:
             raise ArrayDimError(
-                'The topology contain %s particles while a positions array with shape %s is provided' 
+                'The topology contain %s particles while a positions array with shape %s is provided'
                 %(self._topology.num_particles, list(shape))
             )
         # HEADER
@@ -211,7 +211,7 @@ class PDBWriter:
                 # Serial resname chainid resid
                 pre_particle = self._topology.particles[index-1]
                 model += TER(
-                    serial, pre_particle.molecule_type, 
+                    serial, pre_particle.molecule_type,
                     pre_particle.chain_id, pre_particle.molecule_id
                 )
                 serial += 1
@@ -219,27 +219,27 @@ class PDBWriter:
             model += ATOM(
                 serial, particle.particle_name, particle.molecule_type,
                 particle.chain_id, particle.molecule_id,
-                positions[index, 0], positions[index, 1], positions[index, 2], 
+                positions[index, 0], positions[index, 1], positions[index, 2],
                 particle.particle_type
             )
             # if particle.molecule_type in STD_RES_NAMES:
             #     model += ATOM(
             #         serial, particle.particle_name, particle.molecule_type,
             #         particle.chain_id, particle.molecule_id,
-            #         positions[index, 0], positions[index, 1], positions[index, 2], 
+            #         positions[index, 0], positions[index, 1], positions[index, 2],
             #         particle.particle_type
             #     )
             # else:
             #     model += HETATM(
             #         serial, particle.particle_name, particle.molecule_type,
             #         particle.chain_id, particle.molecule_id,
-            #         positions[index, 0], positions[index, 1], positions[index, 2], 
+            #         positions[index, 0], positions[index, 1], positions[index, 2],
             #         particle.particle_type
             #     )
             serial += 1
         pre_particle = self._topology.particles[-1]
         model += TER(
-            serial, pre_particle.molecule_type, 
+            serial, pre_particle.molecule_type,
             pre_particle.chain_id, pre_particle.molecule_id
         )
         model += ENDMDL
@@ -255,7 +255,7 @@ class PDBWriter:
     @property
     def file_path(self):
         return self._file_path
-    
+
     @property
     def mode(self):
         return self._mode
@@ -278,5 +278,5 @@ class PDBWriter:
 
     @pbc_matrix.setter
     def pbc_matrix(self, pbc_matrix: np.ndarray):
-        check_pbc_matrix(pbc_matrix)
-        self._pbc_matrix = check_quantity_value(pbc_matrix, default_length_unit)
+        pbc_matrix = check_quantity_value(pbc_matrix, default_length_unit)
+        self._pbc_matrix = check_pbc_matrix(pbc_matrix)

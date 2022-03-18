@@ -11,9 +11,9 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 
 import pytest, os
 import numpy as np
-from ..io import PSFParser, CharmmTopparParser
-from ..forcefield import CharmmForcefield
-from ..error import *
+from mdpy.io import PSFParser, CharmmTopparParser
+from mdpy.forcefield import CharmmForcefield
+from mdpy.error import *
 
 cur_dir = os.path.dirname(os.path.abspath(__file__))
 data_dir = os.path.join(cur_dir, 'data')
@@ -29,7 +29,9 @@ class TestCharmmForcefield:
         pass
 
     def test_exceptions(self):
-        pass
+        with pytest.raises(PBCPoorDefinedError):
+            topology = PSFParser(self.psf_file_path).topology
+            CharmmForcefield(topology, np.diag([0, 30, 30]))
 
     def test_check_parameters(self):
         f1 = os.path.join(data_dir, 'toppar_water_ions_namd.str')
@@ -38,7 +40,7 @@ class TestCharmmForcefield:
         charmm_file = CharmmTopparParser(f1, f2, f3)
         parameters = charmm_file.parameters
         topology = PSFParser(self.psf_file_path).topology
-        forcefield = CharmmForcefield(topology)
+        forcefield = CharmmForcefield(topology, np.diag([30, 30, 30]))
         forcefield._parameters = parameters
         forcefield.check_parameters()
 
@@ -47,7 +49,7 @@ class TestCharmmForcefield:
         f2 = os.path.join(data_dir, 'par_all36_prot.prm')
         f3 = os.path.join(data_dir, 'top_all36_prot.rtf')
         topology = PSFParser(self.psf_file_path).topology
-        forcefield = CharmmForcefield(topology)
+        forcefield = CharmmForcefield(topology, np.diag([30, 30, 30]))
         forcefield.set_param_files(f1, f2, f3)
         ensemble = forcefield.create_ensemble()
         assert ensemble.num_constraints == 6

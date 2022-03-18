@@ -11,13 +11,13 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 
 import pytest, os
 import numpy as np
-from .. import env
-from ..constraint import ElectrostaticConstraint
-from ..core import Particle, Topology
-from ..ensemble import Ensemble
-from ..utils import get_unit_vec
-from ..error import *
-from ..unit import *
+from mdpy import env
+from mdpy.constraint import ElectrostaticConstraint
+from mdpy.core import Particle, Topology
+from mdpy.ensemble import Ensemble
+from mdpy.utils import get_unit_vec
+from mdpy.error import *
+from mdpy.unit import *
 
 cur_dir = os.path.dirname(os.path.abspath(__file__))
 data_dir = os.path.join(cur_dir, 'data')
@@ -25,22 +25,22 @@ data_dir = os.path.join(cur_dir, 'data')
 class TestElectrostaticConstraint:
     def setup(self):
         p1 = Particle(
-            particle_id=0, particle_type='C', 
+            particle_id=0, particle_type='C',
             particle_name='CA', molecule_type='ASN',
             mass=12, charge=1
         )
         p2 = Particle(
-            particle_id=1, particle_type='N', 
+            particle_id=1, particle_type='N',
             particle_name='NY', molecule_type='ASN',
             mass=14, charge=2
         )
         p3 = Particle(
-            particle_id=2, particle_type='CA', 
+            particle_id=2, particle_type='CA',
             particle_name='CPT', molecule_type='ASN',
             mass=1, charge=0
         )
         p4 = Particle(
-            particle_id=3, particle_type='C', 
+            particle_id=3, particle_type='C',
             particle_name='CA', molecule_type='ASN',
             mass=12, charge=0
         )
@@ -50,8 +50,7 @@ class TestElectrostaticConstraint:
         self.p = np.array([
             [0, 0, 0], [0, 10, 0], [0, 21, 0], [0, 11, 0]
         ])
-        self.ensemble = Ensemble(t)
-        self.ensemble.state.set_pbc_matrix(np.eye(3)*30)
+        self.ensemble = Ensemble(t, np.eye(3)*30)
         self.ensemble.state.cell_list.set_cutoff_radius(12)
         self.ensemble.state.set_positions(self.p)
         self.constraint = ElectrostaticConstraint()
@@ -75,7 +74,7 @@ class TestElectrostaticConstraint:
         self.ensemble.state.set_pbc_matrix(self.pbc)
         self.ensemble.add_constraints(self.constraint)
         self.constraint.update()
-        
+
         forces = self.constraint.forces
         assert forces[2, 0] == 0
         assert forces[3, 1] == 0
