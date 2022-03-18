@@ -11,9 +11,9 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 
 import pytest
 import numpy as np
-from ..utils import *
-from ..error import *
-from .. import env
+from mdpy import env
+from mdpy.utils import *
+from mdpy.error import *
 
 pbc_matrix = np.diag(np.ones(3)*10).astype(env.NUMPY_FLOAT)
 pbc_inv = np.linalg.inv(pbc_matrix).astype(env.NUMPY_FLOAT)
