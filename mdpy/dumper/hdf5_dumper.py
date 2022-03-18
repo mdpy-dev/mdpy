@@ -9,13 +9,13 @@ contact : zhenyuwei99@gmail.com
 copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 '''
 
-from . import Dumper
-from ..io import HDF5Writer
-from ..simulation import Simulation
+from mdpy import Simulation
+from mdpy.dumper import Dumper
+from mdpy.io import HDF5Writer
 
 class HDF5Dumper(Dumper):
     def __init__(self, file_path: str, dump_frequency: int) -> None:
-        super().__init__(file_path, dump_frequency)
+        super().__init__(file_path, dump_frequency, suffix='hdf5')
         self._writer = HDF5Writer(file_path, 'w')
 
     def dump(self, simulation: Simulation):

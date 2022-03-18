@@ -23,8 +23,9 @@ def check_pbc_matrix(pbc_matrix):
         )
     if np.linalg.det(pbc_matrix) == 0:
         raise PBCPoorDefinedError(
-            'PBC of %s is poor defined. Two or more column vectors are linear corellated'
+            'PBC is poor defined. Two or more column vectors are linear corellated'
         )
+    return pbc_matrix
 
 def wrap_positions(positions: np.ndarray, pbc_matrix: np.ndarray, pbc_inv: np.array):
     move_vec = - np.round(np.dot(positions, pbc_inv))

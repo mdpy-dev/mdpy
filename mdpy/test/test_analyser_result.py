@@ -12,9 +12,9 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 import pytest
 import os
 import numpy as np
-from ..analyser import AnalyserResult, load_analyser_result
-from ..error import *
-from ..unit import *
+from mdpy.analyser import AnalyserResult, load_analyser_result
+from mdpy.error import *
+from mdpy.unit import *
 
 cur_dir = os.path.dirname(os.path.abspath(__file__))
 data_dir = os.path.join(cur_dir, 'data')
