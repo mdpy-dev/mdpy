@@ -10,13 +10,14 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 '''
 
 import pytest
-from ..core import Topology
-from ..ensemble import Ensemble
-from ..minimizer import Minimizer
+import numpy as np
+from mdpy.core import Topology
+from mdpy.ensemble import Ensemble
+from mdpy.minimizer import Minimizer
 
 class TestMinimizer:
     def setup(self):
-        self.ensemble = Ensemble(Topology())
+        self.ensemble = Ensemble(Topology(), np.diag([30]*3))
         self.minimizer = Minimizer()
 
     def teardown(self):

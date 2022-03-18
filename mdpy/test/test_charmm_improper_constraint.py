@@ -11,14 +11,14 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 
 import pytest, os
 import numpy as np
-from .. import env
-from ..constraint import CharmmImproperConstraint
-from ..core import Particle, Topology
-from ..ensemble import Ensemble
-from ..io import CharmmTopparParser
-from ..utils import *
-from ..error import *
-from ..unit import *
+from mdpy import env
+from mdpy.constraint import CharmmImproperConstraint
+from mdpy.core import Particle, Topology
+from mdpy.ensemble import Ensemble
+from mdpy.io import CharmmTopparParser
+from mdpy.utils import *
+from mdpy.error import *
+from mdpy.unit import *
 
 cur_dir = os.path.dirname(os.path.abspath(__file__))
 data_dir = os.path.join(cur_dir, 'data')
@@ -26,22 +26,22 @@ data_dir = os.path.join(cur_dir, 'data')
 class TestCharmmImproperConstraint:
     def setup(self):
         p1 = Particle(
-            particle_id=0, particle_name='H', 
+            particle_id=0, particle_name='H',
             particle_type='HE2', molecule_type='ASN',
             mass=12, charge=0
         )
         p2 = Particle(
-            particle_id=1, particle_name='H', 
+            particle_id=1, particle_name='H',
             particle_type='HE2', molecule_type='ASN',
             mass=14, charge=0
         )
         p3 = Particle(
-            particle_id=2, particle_name='C', 
+            particle_id=2, particle_name='C',
             particle_type='CE2', molecule_type='ASN',
             mass=1, charge=0
         )
         p4 = Particle(
-            particle_id=3, particle_name='C', 
+            particle_id=3, particle_name='C',
             particle_type='CE2', molecule_type='ASN',
             mass=12, charge=0
         )
@@ -55,8 +55,7 @@ class TestCharmmImproperConstraint:
         velocities = np.array([
             [0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]
         ])
-        self.ensemble = Ensemble(t)
-        self.ensemble.state.set_pbc_matrix(np.eye(3)*30)
+        self.ensemble = Ensemble(t, np.eye(3)*30)
         self.ensemble.state.cell_list.set_cutoff_radius(12)
         self.ensemble.state.set_positions(positions)
         self.ensemble.state.set_velocities(velocities)
@@ -83,7 +82,7 @@ class TestCharmmImproperConstraint:
         assert self.constraint._parent_ensemble.num_constraints == 1
         assert self.constraint.num_impropers == 1
 
-        # HE2  HE2  CE2  CE2     3.0            0      0.00   
+        # HE2  HE2  CE2  CE2     3.0            0      0.00
         assert self.constraint._int_parameters[0][0] == 0
         assert self.constraint._int_parameters[0][1] == 1
         assert self.constraint._int_parameters[0][2] == 2
@@ -114,7 +113,7 @@ class TestCharmmImproperConstraint:
         res = (
             np.cross(vec_oa, forces[0, :]) +
             np.cross(vec_ob, forces[1, :]) +
-            np.cross(vec_oc, forces[2, :]) + 
+            np.cross(vec_oc, forces[2, :]) +
             np.cross(vec_od, forces[3, :])
         )
         assert res[0] == pytest.approx(0, abs=1e-8)
