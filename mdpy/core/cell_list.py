@@ -87,7 +87,7 @@ class CellList:
         # Set the position to positive value
         # Ensure the id calculated by matrix dot corresponds to the cell_list index
         positive_position = positions - positions.min(0)
-        self._particle_cell_index, self._cell_list = self.kernel(
+        self._particle_cell_index, self._cell_list = self._kernel(
             positive_position, self._cell_inv, self._num_cells_vec
         )
         self._num_particles_per_cell = self._cell_list.shape[3]
