@@ -13,7 +13,9 @@ from ..simulation import Simulation
 from ..error import *
 
 class Dumper:
-    def __init__(self, file_path: str, dump_frequency: int) -> None:
+    def __init__(self, file_path: str, dump_frequency: int, suffix: str) -> None:
+        if not file_path.endswith(suffix):
+            raise FileFormatError('The file should end with .%s suffix' %suffix)
         if dump_frequency <= 0:
             raise DumperPoorDefinedError(
                 'The dump_frequency of dumper should be a positive integer.'
