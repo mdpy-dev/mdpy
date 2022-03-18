@@ -10,13 +10,13 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 '''
 
 import numpy as np
-from . import Topology
-from .. import SPATIAL_DIM, env
-from ..utils import check_quantity_value
-from ..error import *
-from ..unit import *
-from ..utils import *
-from ..utils.select import *
+from mdpy import SPATIAL_DIM, env
+from mdpy.core import Topology
+from mdpy.utils import check_quantity_value
+from mdpy.error import *
+from mdpy.unit import *
+from mdpy.utils import *
+from mdpy.utils.select import *
 
 class Trajectory:
     def __init__(
@@ -57,7 +57,7 @@ class Trajectory:
         # The origin define of pbc_matrix is the stack of 3 column vector
         # While in MDPy the position is in shape of n x 3
         # So the scaled position will be Position * PBC instead of PBC * Position as usual
-        self._pbc_matrix = np.ascontiguousarray(pbc_matrix.T, dtype=env.NUMPY_FLOAT)
+        self._pbc_matrix = np.ascontiguousarray(pbc_matrix, dtype=env.NUMPY_FLOAT)
         self._pbc_inv = np.ascontiguousarray(np.linalg.inv(self._pbc_matrix), dtype=env.NUMPY_FLOAT)
         self._is_pbc_specified = True
 
@@ -107,7 +107,7 @@ class Trajectory:
         else:
             if not isinstance(velocities, type(None)):
                 raise TrajectoryPoorDefinedError('This mdpy.core.Trajectory instance does not contain velocities, keyword velocities should be `None`')
-        
+
         if self._contain_forces:
             if isinstance(forces, type(None)):
                 raise TrajectoryPoorDefinedError('This mdpy.core.Trajectory instance contains forces, keyword forces should be specified')
@@ -130,7 +130,7 @@ class Trajectory:
         # Append data
         if self._contain_positions:
             self._positions = np.vstack([self._positions, positions])
-        
+
         if self._contain_velocities:
             self._velocities = np.vstack([self._velocities, velocities])
 
@@ -173,7 +173,7 @@ class Trajectory:
         if not self._is_pbc_specified:
             raise PBCPoorDefinedError('PBC has not been specified before calling.')
         return self._pbc_matrix
-    
+
     @property
     def pbc_inv(self):
         if not self._is_pbc_specified:
