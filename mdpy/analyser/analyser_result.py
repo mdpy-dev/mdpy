@@ -10,8 +10,8 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 '''
 
 import numpy as np
-from ..unit import *
-from ..error import *
+from mdpy.unit import *
+from mdpy.error import *
 
 class AnalyserResult:
     def __init__(self, title: str, description: dict, data: dict) -> None:
@@ -47,11 +47,11 @@ class AnalyserResult:
     @property
     def title(self):
         return self._title
-    
+
     @property
     def description(self):
         return self._description
-    
+
     @property
     def data(self):
         return self._data

@@ -10,20 +10,20 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 '''
 
 import numpy as np
-from . import AnalyserResult
-from .. import env
-from ..core import Trajectory
-from ..utils import check_quantity_value, unwrap_vec
-from ..utils import select, check_topological_selection_condition, parse_selection_condition
-from ..unit import *
-from ..error import *
+from mdpy import env
+from mdpy.analyser import AnalyserResult
+from mdpy.core import Trajectory
+from mdpy.utils import check_quantity_value, unwrap_vec
+from mdpy.utils import select, check_topological_selection_condition, parse_selection_condition
+from mdpy.unit import *
+from mdpy.error import *
 
 class ResidenceTimeAnalyser:
     def __init__(
-        self, 
-        selection_condition_1: list[dict], 
+        self,
+        selection_condition_1: list[dict],
         selection_condition_2: list[dict],
-        cutoff_radius, num_bins: int, 
+        cutoff_radius, num_bins: int,
         max_coorelation_time,
     ) -> None:
         check_topological_selection_condition(selection_condition_1)
@@ -33,7 +33,7 @@ class ResidenceTimeAnalyser:
         self._cutoff_radius = check_quantity_value(cutoff_radius, default_length_unit)
         if not isinstance(num_bins, int):
             raise TypeError('num_bins should be integer, while %s is provided' %type(num_bins))
-        self._num_bins = num_bins 
+        self._num_bins = num_bins
         self._bin_edge = np.linspace(0, self._cutoff_radius, self._num_bins + 1)
         self._bin_width = self._bin_edge[1] - self._bin_edge[0]
         self._max_coorelation_time = check_quantity_value(max_coorelation_time, default_time_unit)
@@ -42,7 +42,7 @@ class ResidenceTimeAnalyser:
         # Extract positions
         # Topological selection for Trajectory will return a list with same list
         selected_matrix_ids_1 = select(trajectory, self._selection_condition_1)[0]
-        num_particles_1 = len(selected_matrix_ids_1) 
+        num_particles_1 = len(selected_matrix_ids_1)
         selected_matrix_ids_2 = select(trajectory, self._selection_condition_2)[0]
         num_particles_2 = len(selected_matrix_ids_2)
         # Analysis neighbor of first frame
@@ -50,7 +50,7 @@ class ResidenceTimeAnalyser:
         neighbor_affiliations = [[]] * num_particles_1
         for index, id1 in enumerate(selected_matrix_ids_1):
             vec = unwrap_vec(
-                trajectory.positions[0, id1, :] - 
+                trajectory.positions[0, id1, :] -
                 trajectory.positions[0, selected_matrix_ids_2, :],
                 trajectory.pbc_matrix, trajectory.pbc_inv
             )
@@ -61,7 +61,7 @@ class ResidenceTimeAnalyser:
             )
             neighbor_affiliations[index].extend(
                 list((dist[neighbor_index] // self._bin_width).astype(env.NUMPY_INT))
-            ) 
+            )
         # Analysis time coorelation function
         last_time_per_bin = [[[] for i in range(self._num_bins)] for j in range(num_particles_1)]
         for index1, id1 in enumerate(selected_matrix_ids_1):
@@ -69,7 +69,7 @@ class ResidenceTimeAnalyser:
                 affiliation = neighbor_affiliations[index1][index2]
                 for frame in range(1, trajectory.num_frames):
                     vec = unwrap_vec(
-                        trajectory.positions[frame, id1, :] - 
+                        trajectory.positions[frame, id1, :] -
                         trajectory.positions[frame, id2, :],
                         trajectory.pbc_matrix, trajectory.pbc_inv
                     )
