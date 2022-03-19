@@ -11,17 +11,17 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 
 import numpy as np
 from scipy.optimize import curve_fit
-from . import AnalyserResult
-from .. import SPATIAL_DIM
-from ..core import Trajectory
-from ..utils import select, check_topological_selection_condition, parse_selection_condition
-from ..unit import *
-from ..error import *
+from mdpy import SPATIAL_DIM
+from mdpy.analyser import AnalyserResult
+from mdpy.core import Trajectory
+from mdpy.utils import select, check_topological_selection_condition, parse_selection_condition
+from mdpy.unit import *
+from mdpy.error import *
 
 class DiffusionAnalyser:
     def __init__(
         self, selection_condition: list[dict],
-        max_msd_interval: int, 
+        max_msd_interval: int,
     ) -> None:
         check_topological_selection_condition(selection_condition)
         self._selection_condition = selection_condition
@@ -70,9 +70,9 @@ class DiffusionAnalyser:
             'msd_interval_series': 'The correspoding time interval for each msd result, unit: default_time_unit',
         }
         data = {
-            'mean_msd': mean_msd, 'std_msd': std_msd, 
+            'mean_msd': mean_msd, 'std_msd': std_msd,
             'mean_diffusion_coefficient': mean_diffusion_coefficient,
-            'std_diffusion_coefficient': std_diffusion_coefficient, 
+            'std_diffusion_coefficient': std_diffusion_coefficient,
             'msd_interval_series': msd_interval_series
         }
         return AnalyserResult(title=title, description=description, data=data)
