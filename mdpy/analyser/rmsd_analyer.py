@@ -22,7 +22,7 @@ from mdpy.error import *
 
 class RMSDAnalyser:
     def __init__(
-        self, reference_positions, 
+        self, reference_positions,
         selection_condition: list[dict]
     ) -> None:
         reference_positions = check_quantity_value(
@@ -73,7 +73,7 @@ class RMSDAnalyser:
             'rotation_angles': 'The rotation angles of [roll, pitch, yaw] of each frame, unit: degree'
         }
         data = {
-            'rmsd': rmsd, 
+            'rmsd': rmsd,
             'rotation': rotation, 'rotation_angles': rotation_angle
         }
         return AnalyserResult(title=title, description=description, data=data)
@@ -85,7 +85,7 @@ class RMSDAnalyser:
         transformed_positions = positions - positions.mean(0)
         transformed_positions = np.dot(transformed_positions, rotation)
         return np.sqrt(((
-            reference_positions - reference_positions.mean(0) - 
+            reference_positions - reference_positions.mean(0) -
             transformed_positions
         )**2).sum())
 
