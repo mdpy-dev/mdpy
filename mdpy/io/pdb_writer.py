@@ -44,7 +44,7 @@ HEADER = 'HEADER' + ' '*4 + '%-40s%-11s\n'
 # 48 - 54       Real(7.2)     gamma          gamma (degrees).
 # 56 - 66       LString       sGroup         Space  group.
 # 67 - 70       Integer       z              Z value.
-CRYST1 = 'CRYSY1' + '%9.3f%9.3f%9.3f%7.2f%7.2f%7.2f\n'
+CRYST1 = 'CRYST1' + '%9.3f%9.3f%9.3f%7.2f%7.2f%7.2f\n'
 # COLUMNS        DATA  TYPE    FIELD          DEFINITION
 # ---------------------------------------------------------------------------------------
 #  1 -  6        Record name   "MODEL "

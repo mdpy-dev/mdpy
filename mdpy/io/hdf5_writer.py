@@ -17,6 +17,8 @@ from mdpy.utils import check_pbc_matrix, check_quantity_value
 from mdpy.unit import *
 from mdpy.error import *
 
+NONE_LABEL = 10000
+
 class HDF5Writer:
     def __init__(
         self, file_path: str, mode: str = 'w',
@@ -120,7 +122,7 @@ class HDF5Writer:
 
     @staticmethod
     def _check_none(val, target_type):
-        return target_type(val) if not isinstance(val, type(None)) else target_type(-1)
+        return target_type(val) if not isinstance(val, type(None)) else target_type(NONE_LABEL)
 
     @property
     def file_path(self):

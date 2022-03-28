@@ -12,9 +12,10 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 import h5py
 import numpy as np
 from copy import copy
-from .. import env, SPATIAL_DIM
-from ..core import Particle, Topology, Trajectory
-from ..error import *
+from mdpy import env, SPATIAL_DIM
+from mdpy.core import Particle, Topology, Trajectory
+from mdpy.error import *
+from mdpy.io.hdf5_writer import NONE_LABEL
 
 ROOT_KEYS = [
     'topology', 'positions', 'pbc_matrix'
@@ -87,7 +88,7 @@ class HDF5Parser:
 
     @staticmethod
     def _check_topology_none(val):
-        if val == type(val)(-1):
+        if val == type(val)(NONE_LABEL):
             return None
         else:
             return val
@@ -100,7 +101,7 @@ class HDF5Parser:
         particle_name = self._file['topology/particles/particle_name'][()]
         matrix_id = self._file['topology/particles/matrix_id'][()].astype(env.NUMPY_INT)
         molecule_id = self._file['topology/particles/molecule_id'][()].astype(env.NUMPY_INT)
-        molecule_type = self._file['topology/particles/molecule_type'][()] 
+        molecule_type = self._file['topology/particles/molecule_type'][()]
         chain_id = self._file['topology/particles/chain_id'][()]
         mass = self._file['topology/particles/mass'][()].astype(env.NUMPY_FLOAT)
         charge = self._file['topology/particles/charge'][()].astype(env.NUMPY_FLOAT)
@@ -115,7 +116,7 @@ class HDF5Parser:
                 molecule_id=self._check_topology_none(molecule_id[index]),
                 molecule_type=self._check_topology_none(bytes.decode(molecule_type[index])),
                 chain_id=self._check_topology_none(bytes.decode(chain_id[index])),
-                mass=self._check_topology_none(mass[index]), 
+                mass=self._check_topology_none(mass[index]),
                 charge=self._check_topology_none(charge[index])
             ))
         topology.add_particles(particles)
