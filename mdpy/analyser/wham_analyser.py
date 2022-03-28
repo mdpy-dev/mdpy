@@ -17,8 +17,8 @@ from mdpy.unit import *
 
 class WHAMAnalyser:
     def __init__(
-        self, cv_analysis_fun, 
-        cv_range: list, num_bins: int, 
+        self, cv_analysis_fun,
+        cv_range: list, num_bins: int,
         temperature
     ) -> None:
         self._cv_analysis_fun = cv_analysis_fun
@@ -27,8 +27,8 @@ class WHAMAnalyser:
         self._temperature = check_quantity(temperature, default_temperature_unit)
 
     def analysis(
-        self, trajectory_list: list[Trajectory], 
-        kappa_list: list, cv_center_list: list, 
+        self, trajectory_list: list[Trajectory],
+        kappa_list: list, cv_center_list: list,
         max_iterations=50, is_dimensionless=True
     ) -> AnalyserResult:
         num_trajectories = len(trajectory_list)
