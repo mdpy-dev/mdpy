@@ -4,15 +4,13 @@
 file : test_dcd_parser.py
 created time : 2022/03/10
 author : Zhenyu Wei
-version : 1.0
-contact : zhenyuwei99@gmail.com
-copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
+copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
 import pytest, os
-from ..io import DCDParser
-from ..unit import *
-from ..error import *
+from mdpy.io import DCDParser
+from mdpy.unit import *
+from mdpy.error import *
 
 cur_dir = os.path.dirname(os.path.abspath(__file__))
 data_dir = os.path.join(cur_dir, 'data')
@@ -22,7 +20,7 @@ class TestDCDParser:
         self.file_path = os.path.join(data_dir, 'test_dcd_parser.dcd')
 
     def teardown(self):
-        pass 
+        pass
 
     def test_attributes(self):
         parser = DCDParser(self.file_path)

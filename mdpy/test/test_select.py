@@ -4,17 +4,15 @@
 file : test_select.py
 created time : 2022/02/20
 author : Zhenyu Wei
-version : 1.0
-contact : zhenyuwei99@gmail.com
-copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
+copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
 import os
 import pytest
-from ..core import Particle, Topology, Trajectory
-from ..io import PSFParser, PDBParser
-from ..utils.select import *
-from ..error import *
+from mdpy.core import Particle, Topology, Trajectory
+from mdpy.io import PSFParser, PDBParser
+from mdpy.utils.select import *
+from mdpy.error import *
 
 cur_dir = os.path.dirname(os.path.abspath(__file__))
 data_dir = os.path.join(cur_dir, 'data')

@@ -4,14 +4,12 @@
 file : pdb_dumper.py
 created time : 2021/10/19
 author : Zhenyu Wei
-version : 1.0
-contact : zhenyuwei99@gmail.com
-copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
+copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
-from . import Dumper
-from ..io import PDBWriter
-from ..simulation import Simulation
+from mdpy.dumper import Dumper
+from mdpy.io import PDBWriter
+from mdpy.simulation import Simulation
 
 class PDBDumper(Dumper):
     def __init__(self, file_path: str, dump_frequency: int) -> None:

@@ -4,17 +4,16 @@
 file : charmm_improper_constraint.py
 created time : 2021/10/12
 author : Zhenyu Wei
-version : 1.0
-contact : zhenyuwei99@gmail.com
-copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
+copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
 import numpy as np
 import numba as nb
-from . import Constraint
-from .. import env
-from ..ensemble import Ensemble
-from ..utils import *
+from mdpy import env
+from mdpy.constraint import Constraint
+from mdpy.ensemble import Ensemble
+from mdpy.utils import *
+
 class CharmmImproperConstraint(Constraint):
     def __init__(self, parameters, force_id: int = 0, force_group: int = 0) -> None:
         super().__init__(parameters, force_id=force_id, force_group=force_group)
@@ -61,7 +60,7 @@ class CharmmImproperConstraint(Constraint):
         num_parameters = int_parameters.shape[0]
         for improper in range(num_parameters):
             id1, id2, id3, id4 = int_parameters[improper, :]
-            k, psi0 = float_parameters[improper, :] 
+            k, psi0 = float_parameters[improper, :]
             psi = get_pbc_dihedral(
                 positions[id1, :], positions[id2, :],
                 positions[id3, :], positions[id4, :],
@@ -97,8 +96,8 @@ class CharmmImproperConstraint(Constraint):
         self._check_bound_state()
         # V(improper) = Kpsi(psi - psi0)**2
         self._forces, self._potential_energy = self._kernel(
-            self._int_parameters, self._float_parameters, 
-            self._parent_ensemble.state.positions, 
+            self._int_parameters, self._float_parameters,
+            self._parent_ensemble.state.positions,
             *self._parent_ensemble.state.pbc_info
         )
 

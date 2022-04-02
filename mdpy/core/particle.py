@@ -4,14 +4,12 @@
 file : particle.py
 created time : 2021/09/28
 author : Zhenyu Wei
-version : 1.0
-contact : zhenyuwei99@gmail.com
-copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
+copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
-from ..utils import check_quantity_value
-from ..unit import *
-from ..error import *
+from mdpy.utils import check_quantity_value
+from mdpy.unit import *
+from mdpy.error import *
 
 class Particle:
     def __init__(
@@ -41,13 +39,13 @@ class Particle:
         return '<mdpy.core.Particle object: %s-%d at %x>' %(self._particle_name, self._particle_id, id(self))
         # return '<Particle object: ID %d, Type %s at %x>' %(self._particle_id, self._particle_type, id(self))
 
-    __str__ = __repr__    
-    
+    __str__ = __repr__
+
     def __eq__(self, o) -> bool:
         if id(self) == id(o):
             return True
         return False
-    
+
     def change_matrix_id(self, matrix_id: int):
         # Only used by Topology
         self._matrix_id = matrix_id
@@ -64,7 +62,7 @@ class Particle:
             )
         self._bonded_particles.append(particle_matrix_id)
         self._num_bonded_particles += 1
-    
+
     def del_bonded_particle(self, particle_matrix_id):
         if particle_matrix_id in self._bonded_particles:
             self._bonded_particles.remove(particle_matrix_id)
@@ -75,7 +73,7 @@ class Particle:
         if particle_matrix_id == self._matrix_id:
             raise ParticleConflictError(
                 'Particle itself can not be added to the scaling_particle list.'
-            )   
+            )
         elif not particle_matrix_id in self._scaling_particles:
             self._scaling_particles.append(particle_matrix_id)
             self._scaling_factors.append(factor)
@@ -88,11 +86,11 @@ class Particle:
             )
             self._scaling_particles.remove(particle_matrix_id)
             self._num_scaling_particles -= 1
-            
+
     @property
     def particle_id(self):
         return self._particle_id
-    
+
     @property
     def particle_type(self):
         return self._particle_type
@@ -120,7 +118,7 @@ class Particle:
     @property
     def mass(self):
         return self._mass
-    
+
     @property
     def charge(self):
         return self._charge
