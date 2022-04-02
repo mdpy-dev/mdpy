@@ -207,6 +207,6 @@ class ParticleLossError(Exception):
     - The particle go beyond the range of two PBC images
 
     Used in:
-    - mdpy.core.state
+    - mdpy.utils.pbc
     '''
     pass
