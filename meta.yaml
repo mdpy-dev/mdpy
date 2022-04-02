@@ -6,7 +6,7 @@ build:
     skip: True [py<35]
 
 source:
-    path: ./  
+    path: ./
 
 requirements:
     build:
@@ -21,8 +21,8 @@ requirements:
         - pytest-xdist >=2.3.0
         - mdanalysis >=2.0.0
         - h5py >=3.6.0
-        
+
 about:
     home: https://mdpy.net/
-    license: GNU General Public License v3 (GPLv3)
+    license: BSD
     license_file: LICENSE
