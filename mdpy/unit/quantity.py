@@ -4,17 +4,15 @@
 file : quantity.py
 created time : 2021/09/28
 author : Zhenyu Wei
-version : 1.0
-contact : zhenyuwei99@gmail.com
-copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
+copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
 import numpy as np
 from copy import deepcopy
-from . import Unit, QUANTITY_PRECISION
-from .. import env
-from .unit_definition import *
-from ..error import *
+from mdpy import env
+from mdpy.unit import Unit, QUANTITY_PRECISION
+from mdpy.unit.unit_definition import *
+from mdpy.error import *
 
 class Quantity:
     def __init__(self, value, unit: Unit=no_unit) -> None:
@@ -25,15 +23,15 @@ class Quantity:
             the value of quantity
         unit : Unit
             the unit of quantity
-        '''     
-        if isinstance(value, Quantity): 
+        '''
+        if isinstance(value, Quantity):
             value = value.convert_to(unit)
             self._value = value.value
             self._unit = value.unit
         else:
             if isinstance(value, np.ndarray):
                 self._value = value.astype(env.NUMPY_FLOAT)
-            else:        
+            else:
                 self._value = np.array(value).astype(env.NUMPY_FLOAT)
                 if self._value.shape == ():
                     self._value = np.array([self._value.item()]).astype(env.NUMPY_FLOAT)
@@ -43,10 +41,10 @@ class Quantity:
                 self._unit = deepcopy(no_unit)
             else:
                 self._unit = deepcopy(unit)
-        
+
     def __repr__(self) -> str:
         return (
-            '<Quantity object: %s %s at 0x%x>' 
+            '<Quantity object: %s %s at 0x%x>'
             %(self._value*self._unit.relative_value, self._unit.base_dimension, id(self))
         )
 
@@ -64,7 +62,7 @@ class Quantity:
         bool
             - True, the quantity is dimensionless
             - False, the quantity isn't dimensionless
-        '''      
+        '''
         if self._unit.is_dimension_less():
             return True
         else:
@@ -88,7 +86,7 @@ class Quantity:
         ------
         ValueError
             If ``self._unit.base_dimension != target_unit.unit.base_dimension``. E.g ``(10*meter).convert_to(second)``
-        '''        
+        '''
         if self._unit.base_dimension != target_unit.base_dimension:
             raise UnitDimensionDismatchedError(
                 'Quantity in %s can not be converted to %s'
@@ -127,7 +125,7 @@ class Quantity:
             return np.isclose(self.value, other)
         else:
             return NotImplementedError(
-                '== between %s and mdpy.unit.Quantity is not implemented' 
+                '== between %s and mdpy.unit.Quantity is not implemented'
                 %(type(other))
             )
 
@@ -147,7 +145,7 @@ class Quantity:
                 )
         else:
             return NotImplementedError(
-                '< between %s and mdpy.unit.Quantity is not implemented' 
+                '< between %s and mdpy.unit.Quantity is not implemented'
                 %(type(other))
             )
 
@@ -164,10 +162,10 @@ class Quantity:
                 )
         else:
             return NotImplementedError(
-                '<= between %s and mdpy.unit.Quantity is not implemented' 
+                '<= between %s and mdpy.unit.Quantity is not implemented'
                 %(type(other))
             )
-    
+
     def __gt__(self, other) -> bool:
         if isinstance(other, Quantity):
             if self._unit == other.unit:
@@ -181,7 +179,7 @@ class Quantity:
                 )
         else:
             return NotImplementedError(
-                '> between %s and mdpy.unit.Quantity is not implemented' 
+                '> between %s and mdpy.unit.Quantity is not implemented'
                 %(type(other))
             )
 
@@ -198,7 +196,7 @@ class Quantity:
                 )
         else:
             return NotImplementedError(
-                '>= between %s and mdpy.unit.Quantity is not implemented' 
+                '>= between %s and mdpy.unit.Quantity is not implemented'
                 %(type(other))
             )
 
@@ -210,7 +208,7 @@ class Quantity:
             )
         else:
             return NotImplementedError(
-                '+ between %s and mdpy.unit.Quantity is not implemented' 
+                '+ between %s and mdpy.unit.Quantity is not implemented'
                 %(type(other))
             )
 
@@ -225,7 +223,7 @@ class Quantity:
             )
         else:
             return NotImplementedError(
-                '- between %s and mdpy.unit.Quantity is not implemented' 
+                '- between %s and mdpy.unit.Quantity is not implemented'
                 %(type(other))
             )
 
@@ -239,10 +237,10 @@ class Quantity:
             )
         else:
             return NotImplementedError(
-                '- between mdpy.unit.Quantity and %s is not implemented' 
+                '- between mdpy.unit.Quantity and %s is not implemented'
                 %(type(other))
             )
-            
+
     def __neg__(self):
         return Quantity(
             - self._value,
@@ -262,13 +260,13 @@ class Quantity:
             )
         else:
             return NotImplementedError(
-                '* between %s and mdpy.unit.Quantity is not implemented' 
+                '* between %s and mdpy.unit.Quantity is not implemented'
                 %(type(other))
             )
 
     __imul__ = __mul__
     __rmul__ = __mul__
-    
+
     def __truediv__(self, other):
         if isinstance(other, Quantity):
             return Quantity(
@@ -282,7 +280,7 @@ class Quantity:
             )
         else:
             return NotImplementedError(
-                '/ between %s and mdpy.unit.Quantity is not implemented' 
+                '/ between %s and mdpy.unit.Quantity is not implemented'
                 %(type(other))
             )
 
@@ -301,7 +299,7 @@ class Quantity:
             )
         else:
             return NotImplementedError(
-                '-/between mdpy.unit.Quantity and %s is not implemented' 
+                '-/between mdpy.unit.Quantity and %s is not implemented'
                 %(type(other))
             )
 
@@ -314,7 +312,7 @@ class Quantity:
                 self._unit**value
             )
         raise ValueError('The power term should be a single number')
-        
+
 
     def sqrt(self):
         '''
@@ -324,7 +322,7 @@ class Quantity:
         -------
         Unit
             square root of ``self``
-        '''   
+        '''
         return Quantity(
             np.sqrt(self._value),
             self._unit.sqrt()
