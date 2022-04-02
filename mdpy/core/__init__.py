@@ -1,14 +1,13 @@
 __author__ = "Zhenyu Wei"
 __maintainer__ = "Zhenyu Wei"
-__email__ = "zhenyuwei99@gmail.com"
-__copyright__ = "Copyright 2021-2021, Southeast University and Zhenyu Wei"
-__license__ = "GPLv3"
+__copyright__ = "(C)Copyright 2021-present, mdpy organization"
+__license__ = "BSD"
 
-from .particle import Particle
-from .topology import Topology
-from .cell_list import CellList
-from .state import State
-from .trajectory import Trajectory
+from mdpy.core.particle import Particle
+from mdpy.core.topology import Topology
+from mdpy.core.cell_list import CellList
+from mdpy.core.state import State
+from mdpy.core.trajectory import Trajectory
 
 __all__ = [
     'Particle', 'Topology', 'CellList', 'State', 'Trajectory'

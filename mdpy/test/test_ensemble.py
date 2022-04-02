@@ -4,21 +4,19 @@
 file : test_ensemble.py
 created time : 2021/10/09
 author : Zhenyu Wei
-version : 1.0
-contact : zhenyuwei99@gmail.com
-copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
+copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
 # *** Note: current test file only contain test for information without constrait
 
 import pytest, os
 import numpy as np
-from ..core import Particle, Topology
-from ..ensemble import Ensemble
-from ..io import CharmmTopparParser, PSFParser
-from ..constraint import *
-from ..error import *
-from ..unit import *
+from mdpy.core import Particle, Topology
+from mdpy.ensemble import Ensemble
+from mdpy.io import CharmmTopparParser, PSFParser
+from mdpy.constraint import *
+from mdpy.error import *
+from mdpy.unit import *
 
 cur_dir = os.path.dirname(os.path.abspath(__file__))
 data_dir = os.path.join(cur_dir, 'data')
@@ -26,22 +24,22 @@ data_dir = os.path.join(cur_dir, 'data')
 class TestEnsemble:
     def setup(self):
         p1 = Particle(
-            particle_id=0, particle_type='C', 
+            particle_id=0, particle_type='C',
             particle_name='CA', molecule_type='ASN',
             mass=12, charge=0
         )
         p2 = Particle(
-            particle_id=1, particle_type='N', 
+            particle_id=1, particle_type='N',
             particle_name='N', molecule_type='ASN',
             mass=14, charge=0
         )
         p3 = Particle(
-            particle_id=2, particle_type='H', 
+            particle_id=2, particle_type='H',
             particle_name='HA', molecule_type='ASN',
             mass=1, charge=0
         )
         p4 = Particle(
-            particle_id=3, particle_type='C', 
+            particle_id=3, particle_type='C',
             particle_name='CB', molecule_type='ASN',
             mass=12, charge=0
         )
@@ -58,8 +56,7 @@ class TestEnsemble:
         velocities = np.array([
             [0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]
         ])
-        self.ensemble = Ensemble(t)
-        self.ensemble.state.set_pbc_matrix(np.eye(3)*30)
+        self.ensemble = Ensemble(t, np.eye(3)*30)
         self.ensemble.state.cell_list.set_cutoff_radius(12)
         self.ensemble.state.set_positions(positions)
         self.ensemble.state.set_velocities(velocities)
@@ -80,12 +77,11 @@ class TestEnsemble:
         charmm_file = CharmmTopparParser(f2, f3)
         parameters = charmm_file.parameters
         topology = PSFParser(psf_file_path).topology
-        ensemble = Ensemble(topology)
-        ensemble.state.set_pbc_matrix(np.diag(np.ones(3)*30))
+        ensemble = Ensemble(topology, np.diag(np.ones(3)*30))
         constraint = CharmmNonbondedConstraint(parameters['nonbonded'])
         ensemble.add_constraints(constraint)
         assert ensemble.num_constraints == 1
-        
+
         with pytest.raises(ConstraintConflictError):
             ensemble.add_constraints(constraint)
 

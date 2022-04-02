@@ -1,8 +1,7 @@
 __author__ = "Zhenyu Wei"
 __maintainer__ = "Zhenyu Wei"
-__email__ = "zhenyuwei99@gmail.com"
-__copyright__ = "Copyright 2021-2021, Southeast University and Zhenyu Wei"
-__license__ = "GPLv3"
+__copyright__ = "(C)Copyright 2021-present, mdpy organization"
+__license__ = "BSD"
 
 
 # Parameter file
@@ -14,6 +13,7 @@ from .psf_parser import PSFParser
 # Position file
 from .pdb_parser import PDBParser
 from .pdb_writer import PDBWriter
+from .dcd_parser import DCDParser
 
 # Comprehensive file
 
@@ -76,6 +76,6 @@ from .hdf5_writer import HDF5Writer
 __all__ = [ 
     'CharmmTopparParser',
     'PSFParser',
-    'PDBParser','PDBWriter',
+    'PDBParser','PDBWriter', 'DCDParser'
     'HDF5Parser', 'HDF5Writer',
 ]

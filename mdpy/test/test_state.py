@@ -4,17 +4,15 @@
 file : test_state.py
 created time : 2021/10/17
 author : Zhenyu Wei
-version : 1.0
-contact : zhenyuwei99@gmail.com
-copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
+copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
 import pytest
 import numpy as np
-from .. import SPATIAL_DIM, env
-from ..core import Particle, Topology, State
-from ..error import *
-from ..unit import *
+from mdpy import SPATIAL_DIM, env
+from mdpy.core import Particle, Topology, State
+from mdpy.error import *
+from mdpy.unit import *
 
 class TestState:
     def setup(self):
@@ -33,7 +31,7 @@ class TestState:
         self.topology = Topology()
         self.topology.add_particles(self.particles)
         self.topology.join()
-        self.state = State(self.topology)
+        self.state = State(self.topology, np.diag([300, 300, 300]))
 
     def teardown(self):
         self.particles = None
@@ -54,10 +52,7 @@ class TestState:
             self.state.set_velocities(np.ones([self.num_particles, 4]))
 
         with pytest.raises(PBCPoorDefinedError):
-            self.state.pbc_matrix
-
-        with pytest.raises(PBCPoorDefinedError):
-            self.state.pbc_inv
+            self.state.set_pbc_matrix(np.diag([0, 0, 0]))
 
         with pytest.raises(TypeError):
             self.state.set_positions([1, 2, 3])
@@ -77,7 +72,7 @@ class TestState:
         kinetic_energy = Quantity(0, default_energy_unit)
         for particle in range(self.num_particles):
             kinetic_energy += Quantity(0.5) * (
-                Quantity(self.state._masses[particle], default_mass_unit) * 
+                Quantity(self.state._masses[particle], default_mass_unit) *
                 (Quantity(self.state.velocities[particle, :], default_velocity_unit)**2).sum()
             )
         temperature = kinetic_energy * Quantity(2 / 3 / self.num_particles) / KB

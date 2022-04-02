@@ -4,23 +4,21 @@
 file : mobility_analyser.py
 created time : 2022/02/20
 author : Zhenyu Wei
-version : 1.0
-contact : zhenyuwei99@gmail.com
-copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
+copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
 import numpy as np
-from . import AnalyserResult
-from .. import SPATIAL_DIM
-from ..core import Trajectory
-from ..utils import check_quantity_value
-from ..utils import select, check_topological_selection_condition, parse_selection_condition
-from ..unit import *
-from ..error import *
+from mdpy import SPATIAL_DIM
+from mdpy.analyser import AnalyserResult
+from mdpy.core import Trajectory
+from mdpy.utils import check_quantity_value
+from mdpy.utils import select, check_topological_selection_condition, parse_selection_condition
+from mdpy.unit import *
+from mdpy.error import *
 
 class MobilityAnalyser:
     def __init__(
-        self, selection_condition: list[dict], 
+        self, selection_condition: list[dict],
         electric_intensity, drift_velocity_interval
     ) -> None:
         check_topological_selection_condition(selection_condition)
@@ -37,11 +35,11 @@ class MobilityAnalyser:
         # Read input
         trajectory.unwrap_positions()
         selected_matrix_ids = select(trajectory, self._selection_condition)[0] # Topological selection for Trajectory will return a list with same list
-        # Extract position        
+        # Extract position
         positions = trajectory.unwrapped_position[:, selected_matrix_ids, :]
         # Analysis drift velocities
         drift_velocities = (
-            positions[self._drift_velocity_interval:, :, :] - 
+            positions[self._drift_velocity_interval:, :, :] -
             positions[:-self._drift_velocity_interval, :, :]
         ) / (trajectory.time_step * self._drift_velocity_interval) # (num_frame - interval) x num_selected_particle x 3
         drift_velocities = drift_velocities.mean(0) # num_selected_particle x 3
@@ -77,7 +75,7 @@ class MobilityAnalyser:
     @property
     def selection_condition(self):
         return self._selection_condition
-    
+
     @selection_condition.setter
     def selection_condition(self, selection_condition):
         check_topological_selection_condition(selection_condition)

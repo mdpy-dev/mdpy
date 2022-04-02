@@ -4,15 +4,13 @@
 file : pbc.py
 created time : 2021/10/22
 author : Zhenyu Wei
-version : 1.0
-contact : zhenyuwei99@gmail.com
-copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
+copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
 import numpy as np
 import numba as nb
-from .. import SPATIAL_DIM
-from ..error import *
+from mdpy import SPATIAL_DIM
+from mdpy.error import *
 
 def check_pbc_matrix(pbc_matrix):
     row, col = pbc_matrix.shape
@@ -23,15 +21,16 @@ def check_pbc_matrix(pbc_matrix):
         )
     if np.linalg.det(pbc_matrix) == 0:
         raise PBCPoorDefinedError(
-            'PBC of %s is poor defined. Two or more column vectors are linear corellated'
+            'PBC is poor defined. Two or more column vectors are linear corellated'
         )
+    return pbc_matrix
 
 def wrap_positions(positions: np.ndarray, pbc_matrix: np.ndarray, pbc_inv: np.array):
     move_vec = - np.round(np.dot(positions, pbc_inv))
     if np.max(np.abs(move_vec)) >= 2:
-        atom_id = np.unique([i[0] for i in np.argwhere(np.abs(move_vec) >= 2)])
-        raise AtomLossError(
-            'Atom(s) with matrix id: %s moved beyond 2 PBC image.' %atom_id
+        particle_id = np.unique([i[0] for i in np.argwhere(np.abs(move_vec) >= 2)])
+        raise ParticleLossError(
+            'Atom(s) with matrix id: %s moved beyond 2 PBC image.' %(particle_id)
         )
     move_vec = np.dot(move_vec, pbc_matrix)
     return positions + move_vec

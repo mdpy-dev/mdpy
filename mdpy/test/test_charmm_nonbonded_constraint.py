@@ -4,22 +4,20 @@
 file : test_charmm_nonbonded_constraint.py
 created time : 2021/10/12
 author : Zhenyu Wei
-version : 1.0
-contact : zhenyuwei99@gmail.com
-copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
+copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
 import pytest, os
 import numpy as np
-from .. import env
-from ..constraint import CharmmNonbondedConstraint
-from ..core import Particle, Topology
-from ..ensemble import Ensemble
-from ..io import CharmmTopparParser
-from ..io.charmm_toppar_parser import RMIN_TO_SIGMA_FACTOR
-from ..utils import get_unit_vec
-from ..error import *
-from ..unit import *
+from mdpy import env
+from mdpy.constraint import CharmmNonbondedConstraint
+from mdpy.core import Particle, Topology
+from mdpy.ensemble import Ensemble
+from mdpy.io import CharmmTopparParser
+from mdpy.io.charmm_toppar_parser import RMIN_TO_SIGMA_FACTOR
+from mdpy.utils import get_unit_vec
+from mdpy.error import *
+from mdpy.unit import *
 
 cur_dir = os.path.dirname(os.path.abspath(__file__))
 data_dir = os.path.join(cur_dir, 'data')
@@ -27,22 +25,22 @@ data_dir = os.path.join(cur_dir, 'data')
 class TestCharmmNonbondedConstraint:
     def setup(self):
         p1 = Particle(
-            particle_id=0, particle_name='C', 
+            particle_id=0, particle_name='C',
             particle_type='CA', molecule_type='ASN',
             mass=12, charge=0
         )
         p2 = Particle(
-            particle_id=1, particle_name='N', 
+            particle_id=1, particle_name='N',
             particle_type='NY', molecule_type='ASN',
             mass=14, charge=0
         )
         p3 = Particle(
-            particle_id=2, particle_name='CA', 
+            particle_id=2, particle_name='CA',
             particle_type='CPT', molecule_type='ASN',
             mass=1, charge=0
         )
         p4 = Particle(
-            particle_id=3, particle_name='C', 
+            particle_id=3, particle_name='C',
             particle_type='CA', molecule_type='ASN',
             mass=12, charge=0
         )
@@ -55,8 +53,7 @@ class TestCharmmNonbondedConstraint:
         velocities = np.array([
             [0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 1, 0]
         ]).astype(env.NUMPY_FLOAT)
-        self.ensemble = Ensemble(t)
-        self.ensemble.state.set_pbc_matrix(np.eye(3)*30)
+        self.ensemble = Ensemble(t, np.eye(3)*30)
         self.ensemble.state.cell_list.set_cutoff_radius(5)
         self.ensemble.state.set_positions(self.p)
         self.ensemble.state.set_velocities(velocities)
@@ -84,7 +81,7 @@ class TestCharmmNonbondedConstraint:
         assert self.constraint._parent_ensemble.num_constraints == 1
 
         # CA     0.000000  -0.070000     1.992400
-        # NY     0.000000  -0.200000     1.850000 
+        # NY     0.000000  -0.200000     1.850000
         # CPT    0.000000  -0.099000     1.860000
         self.ensemble.state.set_pbc_matrix(self.pbc)
         assert self.constraint._parameters_list[0, 0] == Quantity(0.07, kilocalorie_permol).convert_to(default_energy_unit).value
@@ -99,12 +96,12 @@ class TestCharmmNonbondedConstraint:
         self.ensemble.add_constraints(self.constraint)
         self.ensemble.state.cell_list.update(self.ensemble.state.positions)
         # CA     0.000000  -0.070000     1.992400
-        # NY     0.000000  -0.200000     1.850000 
+        # NY     0.000000  -0.200000     1.850000
         # CPT    0.000000  -0.099000     1.860000
         self.constraint.update()
         forces = self.constraint.forces
         assert forces.sum() == pytest.approx(0, abs=1e-8)
-        
+
         epsilon = np.sqrt(
             Quantity(0.07, kilocalorie_permol).convert_to(default_energy_unit).value *
             Quantity(0.099, kilocalorie_permol).convert_to(default_energy_unit).value
@@ -126,5 +123,5 @@ class TestCharmmNonbondedConstraint:
         )
         sigma = (1.9924 + 1.85) * RMIN_TO_SIGMA_FACTOR
         scaled_r = sigma / 1
-        energy_ref = 4 * epsilon * (scaled_r**12 - scaled_r**6) 
+        energy_ref = 4 * epsilon * (scaled_r**12 - scaled_r**6)
         assert energy == pytest.approx(env.NUMPY_FLOAT(energy_ref), abs=1e-3)

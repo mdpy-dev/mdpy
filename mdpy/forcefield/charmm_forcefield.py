@@ -4,27 +4,28 @@
 file : charmm_forcefield.py
 created time : 2021/10/05
 author : Zhenyu Wei
-version : 1.0
-contact : zhenyuwei99@gmail.com
-copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
+copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
-from . import Forcefield
-from ..ensemble import Ensemble
-from ..core import Topology
-from ..io import CharmmTopparParser
-from ..utils import check_quantity_value
-from ..constraint import *
-from ..unit import *
-from ..error import *
+import numpy as np
+from mdpy.forcefield import Forcefield
+from mdpy.ensemble import Ensemble
+from mdpy.core import Topology
+from mdpy.io import CharmmTopparParser
+from mdpy.utils import check_quantity_value, check_pbc_matrix
+from mdpy.constraint import *
+from mdpy.unit import *
+from mdpy.error import *
 
 class CharmmForcefield(Forcefield):
     def __init__(
-        self, topology: Topology, cutoff_radius=12,
-        long_range_solver='PPPM', ewald_error=1e-6,
+        self, topology: Topology, pbc_matrix: np.ndarray,
+        cutoff_radius=12, long_range_solver='PPPM', ewald_error=1e-6,
         is_SHAKE: bool=True
     ) -> None:
         super().__init__(topology)
+        pbc_matrix = check_quantity_value(pbc_matrix, default_length_unit)
+        self._pbc_matrix = check_pbc_matrix(pbc_matrix)
         self._cutoff_radius = check_quantity_value(cutoff_radius, default_length_unit)
         self._long_range_solver = long_range_solver
         self._ewald_error = ewald_error
@@ -48,53 +49,53 @@ class CharmmForcefield(Forcefield):
                 )
         for bond in self._topology.bonds:
             bond_name = (
-                self._topology.particles[bond[0]].particle_type + '-' + 
+                self._topology.particles[bond[0]].particle_type + '-' +
                 self._topology.particles[bond[1]].particle_type
             )
             if not bond_name in bond_keys:
                 raise ParameterPoorDefinedError(
-                    'The parameter for bond %d-%d (%s) can not be found' 
+                    'The parameter for bond %d-%d (%s) can not be found'
                     %(*bond, bond_name)
-                ) 
+                )
         for angle in self._topology.angles:
             angle_name = (
-                self._topology.particles[angle[0]].particle_type + '-' + 
+                self._topology.particles[angle[0]].particle_type + '-' +
                 self._topology.particles[angle[1]].particle_type + '-' +
                 self._topology.particles[angle[2]].particle_type
             )
             if not angle_name in angle_keys:
                 raise ParameterPoorDefinedError(
-                    'The parameter for angle %d-%d-%d (%s) can not be found' 
+                    'The parameter for angle %d-%d-%d (%s) can not be found'
                     %(*angle, angle_name)
-                ) 
+                )
         for dihedral in self._topology.dihedrals:
             dihedral_name = (
-                self._topology.particles[dihedral[0]].particle_type + '-' + 
+                self._topology.particles[dihedral[0]].particle_type + '-' +
                 self._topology.particles[dihedral[1]].particle_type + '-' +
                 self._topology.particles[dihedral[2]].particle_type + '-' +
                 self._topology.particles[dihedral[3]].particle_type
             )
             if not dihedral_name in dihedral_keys:
                 raise ParameterPoorDefinedError(
-                    'The parameter for dihedral %d-%d-%d-%d (%s) can not be found' 
+                    'The parameter for dihedral %d-%d-%d-%d (%s) can not be found'
                     %(*dihedral, dihedral_name)
-                ) 
+                )
         for improper in self._topology.impropers:
             improper_name = (
-                self._topology.particles[improper[0]].particle_type + '-' + 
+                self._topology.particles[improper[0]].particle_type + '-' +
                 self._topology.particles[improper[1]].particle_type + '-' +
                 self._topology.particles[improper[2]].particle_type + '-' +
                 self._topology.particles[improper[3]].particle_type
             )
             if not improper_name in improper_keys:
                 raise ParameterPoorDefinedError(
-                    'The parameter for improper %d-%d-%d-%d (%s) can not be found' 
+                    'The parameter for improper %d-%d-%d-%d (%s) can not be found'
                     %(*improper, improper_name)
-                ) 
-            
+                )
+
     def create_ensemble(self):
         self.check_parameters()
-        ensemble = Ensemble(self._topology)
+        ensemble = Ensemble(self._topology, self._pbc_matrix)
         constraints = []
         if self._topology.num_particles != 0:
             constraints.append(ElectrostaticConstraint())
