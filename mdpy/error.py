@@ -4,9 +4,7 @@
 file : error.py
 created time : 2021/09/28
 author : Zhenyu Wei
-version : 1.0
-contact : zhenyuwei99@gmail.com
-copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
+copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
 class EnvironmentVariableError(Exception):
@@ -202,11 +200,11 @@ class AnalyserPoorDefinedError(Exception):
     '''
     pass
 
-class AtomLossError(Exception):
+class ParticleLossError(Exception):
     '''This error occurs when:
-    - The atom go beyond the range of two PBC images
+    - The particle go beyond the range of two PBC images
 
     Used in:
-    - mdpy.core.state
+    - mdpy.utils.pbc
     '''
     pass

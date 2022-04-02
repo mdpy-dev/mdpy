@@ -4,18 +4,16 @@
 file : test_pdb_writer.py
 created time : 2022/02/24
 author : Zhenyu Wei
-version : 1.0
-contact : zhenyuwei99@gmail.com
-copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
+copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
 import os
 import pytest
 import numpy as np
-from .. import SPATIAL_DIM
-from ..io import PDBWriter, PDBParser, PSFParser
-from ..error import *
-from ..unit import *
+from mdpy import SPATIAL_DIM
+from mdpy.io import PDBWriter, PDBParser, PSFParser
+from mdpy.error import *
+from mdpy.unit import *
 
 cur_dir = os.path.dirname(os.path.abspath(__file__))
 data_dir = os.path.join(cur_dir, 'data')

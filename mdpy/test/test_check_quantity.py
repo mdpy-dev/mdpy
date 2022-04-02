@@ -4,16 +4,14 @@
 file : test_check_quantity.py
 created time : 2021/10/10
 author : Zhenyu Wei
-version : 1.0
-contact : zhenyuwei99@gmail.com
-copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
+copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
 import pytest
 import numpy as np
-from ..utils import check_quantity, check_quantity_value
-from ..unit import *
-from ..error import *
+from mdpy.utils import check_quantity, check_quantity_value
+from mdpy.unit import *
+from mdpy.error import *
 
 def test_check_quantity():
     assert check_quantity(1, default_length_unit) == Quantity(1, default_length_unit)
