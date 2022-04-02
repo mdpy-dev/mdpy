@@ -4,16 +4,14 @@
 file : test_unit.py
 created time : 2021/09/28
 author : Zhenyu Wei
-version : 1.0
-contact : zhenyuwei99@gmail.com
-copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
+copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
 import pytest
 import numpy as np
-from .. import env
-from ..unit import BaseDimension, Unit
-from ..error import UnitDimensionDismatchedError
+from mdpy import env
+from mdpy.unit import BaseDimension, Unit
+from mdpy.error import UnitDimensionDismatchedError
 
 class TestUnit:
     def setup(self):

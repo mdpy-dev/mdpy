@@ -4,16 +4,14 @@
 file: test_topology.py
 created time : 2021/09/29
 author : Zhenyu Wei 
-version : 1.0
-contact : zhenyuwei99@gmail.com
-copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
+copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
 import pytest
 import numpy as np
-from ..core import Particle, Topology
-from ..error import *
-from ..unit import *
+from mdpy.core import Particle, Topology
+from mdpy.error import *
+from mdpy.unit import *
 
 class TestTopology:
     def setup(self):
