@@ -17,14 +17,14 @@ from mdpy.unit import *
 from mdpy.utils import *
 
 class LangevinIntegrator(Integrator):
-    def __init__(self, time_step, temperature, friction_factor) -> None:
+    def __init__(self, time_step, temperature, friction_rate) -> None:
         super().__init__(time_step)
         self._temperature = check_quantity_value(temperature, default_temperature_unit)
-        self._gamma = check_quantity_value(friction_factor, 1/default_time_unit)
+        self._gamma = check_quantity_value(friction_rate, 1/default_time_unit)
         self._kbt = (Quantity(self._temperature, default_temperature_unit) * KB).convert_to(default_energy_unit).value
         self._sigma = np.sqrt(2*self._kbt*self._gamma)
         self._a = (
-            (1 - self._gamma * self._time_step / 2) / 
+            (1 - self._gamma * self._time_step / 2) /
             (1 + self._gamma * self._time_step / 2)
         )
         self._b = 1 / (1 + self._gamma * self._time_step / 2)
@@ -56,8 +56,8 @@ class LangevinIntegrator(Integrator):
             xi_over_sqrt_masses = randn(*self._matrix_shape) / sqrt_masses
             self._pre_acceleration = self._cur_acceleration
             self._cur_positions, self._pre_positions = (
-                self._pre_positions + 
-                self._b * self._time_step * self._pre_velocities - 
+                self._pre_positions +
+                self._b * self._time_step * self._pre_velocities -
                 self._b * self._time_step_square / 2 * self._pre_acceleration +
                 self._b * self._sigma * self._time_step_3_over_2 / 2 * xi_over_sqrt_masses
             ), self._cur_positions
