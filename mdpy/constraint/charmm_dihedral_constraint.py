@@ -4,18 +4,16 @@
 file : charmm_dihedral_constraint.py
 created time : 2021/10/11
 author : Zhenyu Wei
-version : 1.0
-contact : zhenyuwei99@gmail.com
-copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
+copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
 import numpy as np
 import numba as nb
-from . import Constraint
-from .. import env
-from ..ensemble import Ensemble
-from ..utils import *
-from ..unit import *
+from mdpy import env
+from mdpy.constraint import Constraint
+from mdpy.ensemble import Ensemble
+from mdpy.utils import *
+from mdpy.unit import *
         
 class CharmmDihedralConstraint(Constraint):
     def __init__(self, parameters, force_id: int = 0, force_group: int = 0) -> None:
