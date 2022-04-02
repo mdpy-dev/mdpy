@@ -4,17 +4,15 @@
 file : conjugate_gradient_minimizer.py
 created time : 2022/01/09
 author : Zhenyu Wei
-version : 1.0
-contact : zhenyuwei99@gmail.com
-copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
+copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
 import numpy as np
-from . import Minimizer
-from .. import SPATIAL_DIM
-from ..ensemble import Ensemble
-from ..unit import *
-from ..utils import *
+from mdpy import SPATIAL_DIM
+from mdpy.minimizer import Minimizer
+from mdpy.ensemble import Ensemble
+from mdpy.unit import *
+from mdpy.utils import *
 
 class ConjugateGradientMinimizer(Minimizer):
     def __init__(

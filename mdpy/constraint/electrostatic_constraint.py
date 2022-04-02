@@ -4,9 +4,7 @@
 file : electrostatic_constraint.py
 created time : 2021/10/13
 author : Zhenyu Wei
-version : 1.0
-contact : zhenyuwei99@gmail.com
-copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
+copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
 import math
@@ -14,14 +12,13 @@ import numpy as np
 import numba as nb
 from numba import cuda
 from operator import floordiv
-from . import Constraint, NUM_NEIGHBOR_CELLS, NEIGHBOR_CELL_TEMPLATE
-from .. import env
-from ..ensemble import Ensemble
-from ..utils import *
-from ..unit import *
+from mdpy import env
+from mdpy.constraint import Constraint, NUM_NEIGHBOR_CELLS, NEIGHBOR_CELL_TEMPLATE
+from mdpy.ensemble import Ensemble
+from mdpy.utils import *
+from mdpy.unit import *
 
 epsilon0 = EPSILON0.value
-
 
 class ElectrostaticConstraint(Constraint):
     def __init__(self, parameters=None, force_id: int = 0, force_group: int = 0) -> None:
@@ -30,12 +27,12 @@ class ElectrostaticConstraint(Constraint):
         self._float_parameters = []
         if env.platform == 'CPU':
             self._kernel = nb.njit((
-                env.NUMBA_FLOAT[:, ::1], env.NUMBA_FLOAT[:, ::1], env.NUMBA_INT[:, ::1], 
+                env.NUMBA_FLOAT[:, ::1], env.NUMBA_FLOAT[:, ::1], env.NUMBA_INT[:, ::1],
                 env.NUMBA_FLOAT[:, ::1], env.NUMBA_FLOAT[:, ::1]
             ))(self.cpu_kernel)
         elif env.platform == 'CUDA':
             self._kernel = cuda.jit(nb.void(
-                env.NUMBA_FLOAT[:, ::1], env.NUMBA_FLOAT[:, ::1], env.NUMBA_FLOAT[::1], env.NUMBA_INT[:, ::1], env.NUMBA_FLOAT[:, ::1], 
+                env.NUMBA_FLOAT[:, ::1], env.NUMBA_FLOAT[:, ::1], env.NUMBA_FLOAT[::1], env.NUMBA_INT[:, ::1], env.NUMBA_FLOAT[:, ::1],
                 env.NUMBA_INT[:, ::1], env.NUMBA_INT[:, :, :, ::1], env.NUMBA_INT[::1], env.NUMBA_INT[:, ::1],
                 env.NUMBA_FLOAT[:, ::1], env.NUMBA_FLOAT[::1]
             ))(self.cuda_kernel)
@@ -54,7 +51,7 @@ class ElectrostaticConstraint(Constraint):
 
     @staticmethod
     def cpu_kernel(
-        positions, charges, bonded_particles, 
+        positions, charges, bonded_particles,
         pbc_matrix, pbc_inv
     ):
         forces = np.zeros_like(positions)
@@ -83,7 +80,7 @@ class ElectrostaticConstraint(Constraint):
 
     @staticmethod
     def cuda_kernel(
-        positions, charges, k, bonded_particles, pbc_matrix, 
+        positions, charges, k, bonded_particles, pbc_matrix,
         particle_cell_index, cell_list, num_cell_vec, neighbor_cell_template,
         forces, potential_energy
     ):
@@ -108,7 +105,7 @@ class ElectrostaticConstraint(Constraint):
         if id1 == id2:
             return None
         if id2 == -1:
-            return None    
+            return None
         for i in bonded_particles[id1, :]:
             if i == -1:
                 break
@@ -143,7 +140,7 @@ class ElectrostaticConstraint(Constraint):
             self._forces, self._potential_energy = self._kernel(
                 self._parent_ensemble.state.positions,
                 self._parent_ensemble.topology.charges,
-                self._parent_ensemble.topology.bonded_particles, 
+                self._parent_ensemble.topology.bonded_particles,
                 *self._parent_ensemble.state.pbc_info
             )
         elif env.platform == 'CUDA':
@@ -169,7 +166,7 @@ class ElectrostaticConstraint(Constraint):
             self._kernel[block_per_grid, thread_per_block](
                 d_positions, self._device_charges, self._device_k,
                 d_bonded_particles, d_pbc_matrix,
-                d_particle_cell_index, d_cell_list, 
+                d_particle_cell_index, d_cell_list,
                 d_num_cell_vec, d_neighbor_cell_template,
                 d_forces, d_potential_energy
             )

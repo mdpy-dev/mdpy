@@ -4,18 +4,16 @@
 file : test_charmm_toppar_parser.py
 created time : 2021/10/08
 author : Zhenyu Wei
-version : 1.0
-contact : zhenyuwei99@gmail.com
-copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
+copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
 import pytest, os
 import numpy as np
-from .. import env
-from ..unit import *
-from ..error import *
-from ..io import CharmmTopparParser
-from ..io.charmm_toppar_parser import RMIN_TO_SIGMA_FACTOR
+from mdpy import env
+from mdpy.unit import *
+from mdpy.error import *
+from mdpy.io import CharmmTopparParser
+from mdpy.io.charmm_toppar_parser import RMIN_TO_SIGMA_FACTOR
 
 cur_dir = os.path.dirname(os.path.abspath(__file__))
 data_dir = os.path.join(cur_dir, 'data')
@@ -148,4 +146,3 @@ class TestCharmmTopparParser:
         assert charmm.parameters['nonbonded']['SM'][1] == pytest.approx(Quantity(1.975, angstrom).convert_to(default_length_unit).value * 2 * RMIN_TO_SIGMA_FACTOR)
         assert charmm.parameters['nonbonded']['CP1'][2] == Quantity(0.01, kilocalorie_permol).convert_to(default_energy_unit).value
         assert charmm.parameters['nonbonded']['CP2'][3] == pytest.approx(Quantity(1.9, angstrom).convert_to(default_length_unit).value * RMIN_TO_SIGMA_FACTOR * 2)
-        
