@@ -81,7 +81,6 @@ class CellList:
         self._num_cells = env.NUMPY_INT(np.prod(self._num_cells_vec))
         self._cell_matrix = np.diag((self._pbc_diag + self._cell_list_skin) / self._num_cells_vec).astype(env.NUMPY_FLOAT)
         self._cell_inv = np.linalg.inv(self._cell_matrix)
-        print(self._cell_matrix * self._num_cells_vec)
 
     def update(self, positions: np.ndarray):
         # Set the position to positive value

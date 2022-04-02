@@ -45,7 +45,7 @@ def test_wrap_positions():
     assert wrapped_positions[-2, 0] == 1
     assert wrapped_positions[-2, 2] == 3
 
-    with pytest.raises(AtomLossError):
+    with pytest.raises(ParticleLossError):
         wrap_positions(np.array([16, 0, 1]), pbc_matrix, pbc_inv)
 
 def test_unwrap_vec():

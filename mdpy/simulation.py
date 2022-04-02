@@ -48,6 +48,7 @@ class Simulation:
                 dumper.dump(self)
 
     def dump_initial_state(self):
+        self._ensemble.update()
         for dumper in self._dumpers:
             dumper.dump(self)
 
