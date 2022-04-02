@@ -34,7 +34,7 @@ class TestPDBWriter:
     def test_exceptions(self):
         with pytest.raises(FileFormatError):
             PDBWriter('a.pdd', 'a', self.topology)
-        
+
         writer = PDBWriter(
             os.path.join(out_dir, 'test_pdb_writer.pdb'), 'w',
             self.topology, Quantity(np.diag([1]*3), nanometer)

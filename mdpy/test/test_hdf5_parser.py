@@ -25,7 +25,7 @@ class TestHDF5Writer:
 
     def teardown(self):
         pass
-    
+
     def test_attributes(self):
         parser = HDF5Parser(file_path)
         # Topology
@@ -52,6 +52,6 @@ class TestHDF5Writer:
 
         with pytest.raises(ArrayDimError):
             HDF5Parser(file_path, is_parse_all=False).get_positions(100)
-        
+
         with pytest.raises(ArrayDimError):
             HDF5Parser(file_path, is_parse_all=False).get_positions(100, 101)

@@ -28,12 +28,12 @@ class TestUnit:
     def test_exceptions(self):
         with pytest.raises(AttributeError):
             self.unit.unit_name = 1
-        
+
         with pytest.raises(AttributeError):
             self.unit.base_dimension = 1
 
         with pytest.raises(AttributeError):
-            self.unit.relative_value = 1        
+            self.unit.relative_value = 1
 
     def test_is_dimension_less(self):
         assert not self.unit.is_dimension_less()
@@ -61,13 +61,13 @@ class TestUnit:
 
         with pytest.raises(NotImplementedError):
             1 + angstrom
-        
+
         with pytest.raises(NotImplementedError):
             angstrom + 1
 
         with pytest.raises(NotImplementedError):
             angstrom += 1
-            
+
     def test_sub(self):
         angstrom = Unit(BaseDimension(length_dimension=1), 1e-10)
         gram = Unit(BaseDimension(mass_dimension=1), 1e-3)
@@ -75,7 +75,7 @@ class TestUnit:
 
         with pytest.raises(NotImplementedError):
             1 - angstrom
-        
+
         with pytest.raises(NotImplementedError):
             angstrom - 1
 
@@ -89,7 +89,7 @@ class TestUnit:
 
         with pytest.raises(NotImplementedError):
             1 * angstrom
-        
+
         with pytest.raises(NotImplementedError):
             angstrom * 1
 
@@ -127,7 +127,7 @@ class TestUnit:
         assert angstrom_reciprocal == angstrom**-1
         assert angstrom_square**(1/2) == angstrom
         assert angstrom_reciprocal_square**(-1/2) == angstrom
-        
+
         with pytest.raises(ValueError):
             constant**[1, 2]
         with pytest.raises(ValueError):

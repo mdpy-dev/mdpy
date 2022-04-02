@@ -19,7 +19,7 @@ class TestPSFParser:
         self.file_path = os.path.join(data_dir, '1M9Z.psf')
 
     def teardown(self):
-        pass 
+        pass
 
     def test_attributes(self):
         psf = PSFParser(self.file_path)

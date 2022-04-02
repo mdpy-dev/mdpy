@@ -62,7 +62,7 @@ class PDBParser:
             'matrix_id': matrix_id,
             'position': self._positions[matrix_id, :]
         }
-    
+
     def get_positions(self, *frames):
         num_target_frames = len(frames)
         if num_target_frames == 1:
@@ -110,11 +110,11 @@ class PDBParser:
     @property
     def num_frames(self):
         return self._num_frames
-    
+
     @property
     def num_particles(self):
         return self._num_particles
-    
+
     @property
     def positions(self) -> np.ndarray:
         if not self._is_parse_all:

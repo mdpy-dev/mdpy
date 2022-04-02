@@ -77,7 +77,7 @@ def test_select():
     res = select(topology, condition)
     assert 20 in res
     assert 46 in res
-    
+
     trajectory = Trajectory(topology)
     trajectory.set_pbc_matrix(np.diag([10]*3))
     trajectory.append(position)

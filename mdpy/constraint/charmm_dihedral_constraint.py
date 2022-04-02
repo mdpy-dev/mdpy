@@ -14,7 +14,7 @@ from mdpy.constraint import Constraint
 from mdpy.ensemble import Ensemble
 from mdpy.utils import *
 from mdpy.unit import *
-        
+
 class CharmmDihedralConstraint(Constraint):
     def __init__(self, parameters, force_id: int = 0, force_group: int = 0) -> None:
         super().__init__(parameters, force_id=force_id, force_group=force_group)
@@ -54,7 +54,7 @@ class CharmmDihedralConstraint(Constraint):
             self._num_dihedrals += 1
         self._int_parameters = np.vstack(self._int_parameters).astype(env.NUMPY_INT)
         self._float_parameters = np.vstack(self._float_parameters).astype(env.NUMPY_FLOAT)
-    
+
     @staticmethod
     def kernel(int_parameters, float_parameters, positions, pbc_matrix, pbc_inv):
         forces = np.zeros_like(positions)
@@ -98,8 +98,8 @@ class CharmmDihedralConstraint(Constraint):
         self._check_bound_state()
         # V(dihedral) = Kchi(1 + cos(n(chi) - delta))
         self._forces, self._potential_energy = self._kernel(
-            self._int_parameters, self._float_parameters, 
-            self._parent_ensemble.state.positions, 
+            self._int_parameters, self._float_parameters,
+            self._parent_ensemble.state.positions,
             *self._parent_ensemble.state.pbc_info
         )
 

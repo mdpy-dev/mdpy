@@ -13,7 +13,7 @@ from mdpy.error import *
 
 class MDPYEnvironment:
     def __init__(self) -> None:
-        self._supported_precisions = ['SINGLE', 'DOUBLE'] 
+        self._supported_precisions = ['SINGLE', 'DOUBLE']
         self._default_precisions = 'SINGLE'
         self._supproted_platforms = ['CPU', 'CUDA']
         self._default_platforms = 'CPU'

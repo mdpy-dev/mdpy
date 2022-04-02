@@ -49,7 +49,7 @@ class PSFParser:
         self._num_dihedrals = len(self._dihedrals)
         self._impropers = [list(i) for i in self._parser.impropers.values]
         self._num_impropers = len(self._impropers)
-        
+
         self._topology = self._create_topology()
 
     def _create_topology(self):
@@ -58,12 +58,12 @@ class PSFParser:
         for i in range(self._num_particles):
             particles.append(
                 Particle(
-                    particle_id=self._particle_ids[i], 
+                    particle_id=self._particle_ids[i],
                     particle_type=self._particle_types[i],
-                    particle_name=self._particle_names[i], 
+                    particle_name=self._particle_names[i],
                     matrix_id=self._matrix_ids[i],
-                    molecule_id=self._molecule_ids[i], 
-                    molecule_type=self._molecule_types[i], 
+                    molecule_id=self._molecule_ids[i],
+                    molecule_type=self._molecule_types[i],
                     chain_id=self._chain_ids[i],
                     mass=self._masses[i], charge=self._charges[i]
                 )
@@ -131,7 +131,7 @@ class PSFParser:
     @property
     def molecule_types(self):
         return self._molecule_types
-    
+
     @property
     def chain_ids(self):
         return self._chain_ids

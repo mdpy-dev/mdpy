@@ -12,7 +12,7 @@ from mdpy.unit import *
 
 class Minimizer:
     def __init__(
-        self, output_unit=kilojoule_permol, 
+        self, output_unit=kilojoule_permol,
         output_unit_label='kj/mol',
         is_verbose=False, log_freq=5
     ) -> None:

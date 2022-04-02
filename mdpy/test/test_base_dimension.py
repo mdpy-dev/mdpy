@@ -34,16 +34,16 @@ class TestUnit:
 
         with pytest.raises(AttributeError):
             constant.time_dimension = 1
-        
+
         with pytest.raises(AttributeError):
             constant.mass_dimension = 1
-        
+
         with pytest.raises(AttributeError):
             constant.temperature_dimension = 1
-        
+
         with pytest.raises(AttributeError):
             constant.charge_dimension = 1
-        
+
         with pytest.raises(AttributeError):
             constant.mol_dimension = 1
 

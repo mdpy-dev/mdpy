@@ -85,7 +85,7 @@ def test_energy():
     assert Quantity(1) * joule / kilocalorie == 1/4.184e3
     assert Quantity(1) * joule / calorie_premol == 6.0221e23/4.184
     assert Quantity(1) * joule / kilocalorie_permol == 6.0221e23/4.184e3
-    
+
     assert Quantity(1) * joule / ev == 1/1.60217662e-19
     assert Quantity(1) * joule / hartree == 1/4.3597447222071e-18
 

@@ -60,7 +60,7 @@ class TestTrajectory:
 
         with pytest.raises(TrajectoryPoorDefinedError):
             self.trajectory.velocities
-        
+
         with pytest.raises(TrajectoryPoorDefinedError):
             self.trajectory.time_series
 
@@ -111,7 +111,7 @@ class TestTrajectory:
         assert self.trajectory.num_frames == 3
         self.trajectory.append(positions=np.ones([3, self.topology.num_particles, SPATIAL_DIM]))
         assert self.trajectory.num_frames == 6
-        assert self.trajectory.positions.shape[0] == 6 
+        assert self.trajectory.positions.shape[0] == 6
 
         self.trajectory = Trajectory(self.topology, contain_velocities=True)
         with pytest.raises(ArrayDimError):
@@ -119,7 +119,7 @@ class TestTrajectory:
                 positions=np.ones([3, self.topology.num_particles, SPATIAL_DIM]),
                 velocities=np.ones([4, self.topology.num_particles, SPATIAL_DIM])
             )
-        
+
         self.trajectory.append(
             positions=np.ones([4, self.topology.num_particles, SPATIAL_DIM]),
             velocities=np.ones([4, self.topology.num_particles, SPATIAL_DIM])
@@ -130,7 +130,7 @@ class TestTrajectory:
             velocities=np.ones([4, self.topology.num_particles, SPATIAL_DIM])
         )
         assert self.trajectory.num_frames == 8
-        assert self.trajectory.positions.shape[0] == 8 
+        assert self.trajectory.positions.shape[0] == 8
 
     def test_unwrap_positions(self):
         with pytest.raises(PBCPoorDefinedError):

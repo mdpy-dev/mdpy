@@ -30,10 +30,10 @@ class Topology:
         self._charges = []
         self._bonded_particles = []
         self._scaling_particles = []
-        
+
     def __repr__(self) -> str:
         return '<mdpy.core.Toplogy object: %d particles at %x>' %(self._num_particles, id(self))
-    
+
     def __str__(self) -> str:
         return(
             'Toplogy with %d particles, %d bonds, %d angles, %d dihedrals, %d impropers'
@@ -54,8 +54,8 @@ class Topology:
         if self._is_joined:
             raise  ModifyJoinedTopologyError(
                 '%s has been joined. No change can be made.' %self
-            )   
-    
+            )
+
     def join(self):
         self._masses = np.zeros([self._num_particles, 1], dtype=env.NUMPY_FLOAT)
         self._charges = np.zeros([self._num_particles, 1], dtype=env.NUMPY_FLOAT)
@@ -132,7 +132,7 @@ class Topology:
         self._particles[p1].add_bonded_particle(p2)
         self._particles[p2].add_bonded_particle(p1)
         self._num_bonds += 1
-        
+
     def del_bond(self, bond):
         self._check_joined()
         num_particles = len(bond)
@@ -165,7 +165,7 @@ class Topology:
         self._particles[p1].add_bonded_particle(p3)
         self._particles[p3].add_bonded_particle(p1)
         self._num_angles += 1
-        
+
     def del_angle(self, angle):
         self._check_joined()
         num_particles = len(angle)
@@ -184,7 +184,7 @@ class Topology:
             self._particles[p1].del_bonded_particle(p3)
             self._particles[p3].del_bonded_particle(p1)
             self._num_angles -= 1
-        
+
     def add_dihedral(self, dihedral, scaling_factor=1):
         self._check_joined()
         num_particles = len(dihedral)
@@ -198,7 +198,7 @@ class Topology:
         self._particles[p1].add_scaling_particle(p4, scaling_factor)
         self._particles[p4].add_scaling_particle(p1, scaling_factor)
         self._num_dihedrals += 1
-        
+
     def del_dihedral(self, dihedral):
         self._check_joined()
         num_particles = len(dihedral)
@@ -228,7 +228,7 @@ class Topology:
         # if not improper in self._impropers:
         self._impropers.append(improper)
         self._num_impropers += 1
-        
+
     def del_improper(self, improper):
         self._check_joined()
         num_particles = len(improper)
@@ -259,7 +259,7 @@ class Topology:
     @property
     def particles(self) -> list[Particle]:
         return self._particles
-    
+
     @property
     def num_particles(self):
         return self._num_particles
@@ -267,7 +267,7 @@ class Topology:
     @property
     def bonds(self):
         return self._bonds
-    
+
     @property
     def num_bonds(self):
         return self._num_bonds
@@ -275,7 +275,7 @@ class Topology:
     @property
     def angles(self):
         return self._angles
-    
+
     @property
     def num_angles(self):
         return self._num_angles
@@ -283,7 +283,7 @@ class Topology:
     @property
     def dihedrals(self):
         return self._dihedrals
-    
+
     @property
     def num_dihedrals(self):
         return self._num_dihedrals
@@ -291,7 +291,7 @@ class Topology:
     @property
     def impropers(self):
         return self._impropers
-    
+
     @property
     def num_impropers(self):
         return self._num_impropers

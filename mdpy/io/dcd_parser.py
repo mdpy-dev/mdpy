@@ -53,7 +53,7 @@ class DCDParser:
     @property
     def num_frames(self):
         return self._num_frames
-    
+
     @property
     def num_particles(self):
         return self._num_particles

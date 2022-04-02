@@ -3,7 +3,7 @@
 '''
 file: test_topology.py
 created time : 2021/09/29
-author : Zhenyu Wei 
+author : Zhenyu Wei
 copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
@@ -16,10 +16,10 @@ from mdpy.unit import *
 class TestTopology:
     def setup(self):
         self.topology = Topology()
-    
+
     def teardown(self):
         pass
-    
+
     def test_attributes(self):
         assert self.topology.particles == []
         assert self.topology.num_particles == 0
@@ -109,7 +109,7 @@ class TestTopology:
 
         with pytest.raises(ParticleConflictError):
             self.topology.add_bond([1, 1])
-        
+
         with pytest.raises(ParticleConflictError):
             self.topology.add_bond([1, 4])
 
@@ -189,7 +189,7 @@ class TestTopology:
 
         with pytest.raises(ParticleConflictError):
             self.topology.del_angle([1, 2, 1])
-        
+
         with pytest.raises(ParticleConflictError):
             self.topology.del_angle([1, 2, 9])
 
@@ -247,7 +247,7 @@ class TestTopology:
 
         with pytest.raises(ParticleConflictError):
             self.topology.del_dihedral([0, 0, 1, 2])
-        
+
         with pytest.raises(ParticleConflictError):
             self.topology.del_dihedral([0, 0, 1, 9])
 
@@ -296,4 +296,3 @@ class TestTopology:
 
         with pytest.raises(ParticleConflictError):
             self.topology.del_improper([1, 2, 9, 3])
-    

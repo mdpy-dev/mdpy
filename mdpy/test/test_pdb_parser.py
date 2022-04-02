@@ -20,7 +20,7 @@ class TestPDBParser:
         self.file_path = os.path.join(data_dir, '1M9Z.pdb')
 
     def teardown(self):
-        pass 
+        pass
 
     def test_attributes(self):
         pdb = PDBParser(self.file_path)
@@ -41,13 +41,13 @@ class TestPDBParser:
     def test_exceptions(self):
         with pytest.raises(FileFormatError):
             PDBParser('test.pd')
-        
+
         with pytest.raises(ParserPoorDefinedError):
             PDBParser(self.file_path, is_parse_all=False).positions
 
         with pytest.raises(ArrayDimError):
             PDBParser(self.file_path, is_parse_all=False).get_positions(100)
-        
+
         with pytest.raises(ArrayDimError):
             PDBParser(self.file_path, is_parse_all=False).get_positions(100, 101)
 

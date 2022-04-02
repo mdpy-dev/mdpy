@@ -29,6 +29,6 @@ class TestForcefield:
 
         with pytest.raises(NotImplementedError):
             forcefield.check_parameters()
-        
+
         with pytest.raises(NotImplementedError):
             forcefield.create_ensemble()
