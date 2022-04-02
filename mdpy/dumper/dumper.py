@@ -4,16 +4,16 @@
 file : dumper.py
 created time : 2021/09/28
 author : Zhenyu Wei
-version : 1.0
-contact : zhenyuwei99@gmail.com
-copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
+copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
-from ..simulation import Simulation
-from ..error import *
+from mdpy.simulation import Simulation
+from mdpy.error import *
 
 class Dumper:
-    def __init__(self, file_path: str, dump_frequency: int) -> None:
+    def __init__(self, file_path: str, dump_frequency: int, suffix: str) -> None:
+        if not file_path.endswith(suffix):
+            raise FileFormatError('The file should end with .%s suffix' %suffix)
         if dump_frequency <= 0:
             raise DumperPoorDefinedError(
                 'The dump_frequency of dumper should be a positive integer.'

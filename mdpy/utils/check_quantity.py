@@ -4,12 +4,10 @@
 file : check_quantity.py
 created time : 2021/10/10
 author : Zhenyu Wei
-version : 1.0
-contact : zhenyuwei99@gmail.com
-copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
+copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
-from ..unit import Unit, Quantity
+from mdpy.unit import Unit, Quantity
 
 def check_quantity(val, target_unit: Unit):
     if isinstance(val, Quantity):

@@ -4,19 +4,17 @@
 file : psf_file.py
 created time : 2021/10/05
 author : Zhenyu Wei
-version : 1.0
-contact : zhenyuwei99@gmail.com
-copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
+copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
 import warnings
 import numpy as np
 import MDAnalysis as mda
 from copy import copy
-from .. import env
-from ..core import Particle, Topology
-from ..unit import *
-from ..error import *
+from mdpy import env
+from mdpy.core import Particle, Topology
+from mdpy.unit import *
+from mdpy.error import *
 
 class PSFParser:
     def __init__(self, file_path: str) -> None:
@@ -75,6 +73,7 @@ class PSFParser:
         [topology.add_angle([i, j, k]) for i, j, k in self._angles]
         [topology.add_dihedral([i, j, k, l]) for i, j, k, l in self._dihedrals]
         [topology.add_improper([i, j, k, l]) for i, j, k, l in self._impropers]
+        topology.join()
         return topology
 
     def get_matrix_id(self, particle_id):

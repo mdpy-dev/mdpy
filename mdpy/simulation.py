@@ -4,18 +4,16 @@
 file : simulation.py
 created time : 2021/09/28
 author : Zhenyu Wei
-version : 1.0
-contact : zhenyuwei99@gmail.com
-copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
+copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
 import numpy as np
-from .ensemble import Ensemble
-from .integrator import Integrator
-from .minimizer import Minimizer
-from .minimizer import *
-from .error import *
-from .unit import *
+from mdpy.ensemble import Ensemble
+from mdpy.integrator import Integrator
+from mdpy.minimizer import Minimizer
+from mdpy.minimizer import *
+from mdpy.error import *
+from mdpy.unit import *
 
 default_minimizer = SteepestDescentMinimizer(0.01, kilojoule_permol, 'kj/mol', is_verbose=False)
 
@@ -46,8 +44,9 @@ class Simulation:
         for dumper in self._dumpers:
             if self._cur_step % dumper.dump_frequency == 0:
                 dumper.dump(self)
-    
+
     def dump_initial_state(self):
+        self._ensemble.update()
         for dumper in self._dumpers:
             dumper.dump(self)
 

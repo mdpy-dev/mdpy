@@ -4,17 +4,16 @@
 file : hdf5_parser.py
 created time : 2022/02/24
 author : Zhenyu Wei
-version : 1.0
-contact : zhenyuwei99@gmail.com
-copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
+copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
 import h5py
 import numpy as np
 from copy import copy
-from .. import env, SPATIAL_DIM
-from ..core import Particle, Topology, Trajectory
-from ..error import *
+from mdpy import env, SPATIAL_DIM
+from mdpy.core import Particle, Topology, Trajectory
+from mdpy.error import *
+from mdpy.io.hdf5_writer import NONE_LABEL
 
 ROOT_KEYS = [
     'topology', 'positions', 'pbc_matrix'
@@ -34,19 +33,23 @@ PARTICLES_KEYS = [
 ]
 
 class HDF5Parser:
-    def __init__(self, file_path: str) -> None:
+    def __init__(self, file_path: str, is_parse_all=True) -> None:
         # Initial reader and parser setting
         if not file_path.endswith('.hdf5'):
             raise FileFormatError('The file should end with .hdf5 suffix')
         self._file_path = file_path
+        self._is_parse_all = is_parse_all
         self._file = h5py.File(self._file_path, 'r')
         self._check_hdf5_file()
         self._topology = self._parse_topology()
-        self._positions = self._parse_positions()
         self._pbc_matrix = self._parse_pbc_matrix()
-        self._trajectory = Trajectory(self._topology)
-        self._trajectory.append(positions=self._positions)
-        self._trajectory.set_pbc_matrix(self._pbc_matrix)
+        self._num_frames = self._file['positions/num_frames'][()]
+        self._num_particles = self._topology.num_particles
+        if self._is_parse_all:
+            self._positions = self._parse_positions()
+            self._trajectory = Trajectory(self._topology)
+            self._trajectory.append(positions=self._positions)
+            self._trajectory.set_pbc_matrix(self._pbc_matrix)
         self._file.close()
 
     def _check_hdf5_file(self):
@@ -83,7 +86,7 @@ class HDF5Parser:
 
     @staticmethod
     def _check_topology_none(val):
-        if val == type(val)(-1):
+        if val == type(val)(NONE_LABEL):
             return None
         else:
             return val
@@ -96,7 +99,7 @@ class HDF5Parser:
         particle_name = self._file['topology/particles/particle_name'][()]
         matrix_id = self._file['topology/particles/matrix_id'][()].astype(env.NUMPY_INT)
         molecule_id = self._file['topology/particles/molecule_id'][()].astype(env.NUMPY_INT)
-        molecule_type = self._file['topology/particles/molecule_type'][()] 
+        molecule_type = self._file['topology/particles/molecule_type'][()]
         chain_id = self._file['topology/particles/chain_id'][()]
         mass = self._file['topology/particles/mass'][()].astype(env.NUMPY_FLOAT)
         charge = self._file['topology/particles/charge'][()].astype(env.NUMPY_FLOAT)
@@ -111,7 +114,7 @@ class HDF5Parser:
                 molecule_id=self._check_topology_none(molecule_id[index]),
                 molecule_type=self._check_topology_none(bytes.decode(molecule_type[index])),
                 chain_id=self._check_topology_none(bytes.decode(chain_id[index])),
-                mass=self._check_topology_none(mass[index]), 
+                mass=self._check_topology_none(mass[index]),
                 charge=self._check_topology_none(charge[index])
             ))
         topology.add_particles(particles)
@@ -135,20 +138,49 @@ class HDF5Parser:
         num_impropers = self._file['topology/num_impropers'][()]
         for improper in range(num_impropers):
             topology.add_improper(list(impropers[improper, :]))
+        topology.join()
         return topology
 
     def _parse_positions(self):
-        num_frames = self._file['positions/num_frames'][()]
-        num_particles = self._file['topology/num_particles'][()]
-        if num_frames == 0:
+        if self._num_frames == 0:
             return None
-        postions = np.empty([num_frames, num_particles, SPATIAL_DIM])
-        for frame in range(num_frames):
+        postions = np.empty([self._num_frames, self._num_particles, SPATIAL_DIM])
+        for frame in range(self._num_frames):
             postions[frame, :, :] = self._file['positions/frame-%d' %frame][()].astype(env.NUMPY_FLOAT)
-        return postions if num_frames != 1 else postions[0, :, :]
+        return postions if self._num_frames != 1 else postions[0, :, :]
+
+    def get_positions(self, *frames):
+        self._file = h5py.File(self._file_path, 'r')
+        num_target_frames = len(frames)
+        if num_target_frames == 1:
+            if frames[0] >= self._num_frames:
+                raise ArrayDimError(
+                    '%d beyond the number of frames %d stored in hdf5 file'
+                    %(frames[0], self._num_frames)
+                )
+            result = self._file['positions/frame-%d' %frames[0]][()].copy().astype(env.NUMPY_FLOAT)
+        else:
+            result = np.zeros([num_target_frames, self._num_particles, SPATIAL_DIM])
+            for index, frame in enumerate(frames):
+                if frame >= self._num_frames:
+                    raise ArrayDimError(
+                        '%d beyond the number of frames %d stored in hdf5 file'
+                        %(frame, self._num_frames)
+                    )
+                result[index, :, :] = self._file['positions/frame-%d' %frame][()].astype(env.NUMPY_FLOAT)
+        self._file.close()
+        return result
 
     def _parse_pbc_matrix(self):
         return self._file['pbc_matrix'][()].astype(env.NUMPY_FLOAT)
+
+    @property
+    def num_frames(self):
+        return self._num_frames
+
+    @property
+    def num_particles(self):
+        return self._num_particles
 
     @property
     def topology(self) -> Topology:
@@ -156,6 +188,10 @@ class HDF5Parser:
 
     @property
     def positions(self) -> np.ndarray:
+        if not self._is_parse_all:
+            raise ParserPoorDefinedError(
+                'positions property is not supported as `is_parse_all==False`, calling `get_position` method'
+            )
         return self._positions.copy()
 
     @property
@@ -164,4 +200,8 @@ class HDF5Parser:
 
     @property
     def trajectory(self) -> Trajectory:
+        if not self._is_parse_all:
+            raise ParserPoorDefinedError(
+                'trajectory property is not supported as `is_parse_all==False`'
+            )
         return copy(self._trajectory)

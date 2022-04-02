@@ -4,19 +4,16 @@
 file : log_dumper.py
 created time : 2021/10/21
 author : Zhenyu Wei
-version : 1.0
-contact : zhenyuwei99@gmail.com
-copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
+copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
 import numpy as np
 from datetime import datetime, timedelta
-from mdpy.error import DumperPoorDefinedError
-from .dumper import Dumper
-from ..simulation import Simulation
-from ..unit import *
-from ..dumper import *
-from mdpy import dumper
+from mdpy.dumper import Dumper
+from mdpy.simulation import Simulation
+from mdpy.unit import *
+from mdpy.dumper import *
+from mdpy.error import *
 
 class LogDumper(Dumper):
     def __init__(
@@ -27,16 +24,16 @@ class LogDumper(Dumper):
         potential_energy: bool=False,
         kinetic_energy: bool=False,
         total_energy: bool=False,
-        temperature: bool=False, 
+        temperature: bool=False,
         pressure: bool=False,
         volume: bool=False,
-        density: bool=False, 
+        density: bool=False,
         cpu_time: bool=False,
         rest_time: bool=False,
         total_step: int=0,
         seperator: str='\t'
     ) -> None:
-        super().__init__(file_path, dump_frequency)
+        super().__init__(file_path, dump_frequency, suffix='log')
         # Input
         self._step = step
         self._sim_time = sim_time

@@ -4,22 +4,22 @@
 file : hdf5_writer.py
 created time : 2022/02/24
 author : Zhenyu Wei
-version : 1.0
-contact : zhenyuwei99@gmail.com
-copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
+copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
-import h5py 
+import h5py
 import numpy as np
-from .. import env
-from ..core import Topology
-from ..utils import check_pbc_matrix, check_quantity_value
-from ..unit import *
-from ..error import *
+from mdpy import env
+from mdpy.core import Topology
+from mdpy.utils import check_pbc_matrix, check_quantity_value
+from mdpy.unit import *
+from mdpy.error import *
+
+NONE_LABEL = 10000
 
 class HDF5Writer:
     def __init__(
-        self, file_path: str, mode: str = 'w', 
+        self, file_path: str, mode: str = 'w',
         topology: Topology = Topology(),
         pbc_matrix = np.diag([1]*3).astype(env.NUMPY_FLOAT)
     ) -> None:
@@ -33,8 +33,7 @@ class HDF5Writer:
             )
         self._topology = topology
         pbc_matrix = check_quantity_value(pbc_matrix, default_length_unit)
-        check_pbc_matrix(pbc_matrix)
-        self._pbc_matrix = pbc_matrix
+        self._pbc_matrix = check_pbc_matrix(pbc_matrix)
 
         with h5py.File(self._file_path, self._mode) as f:
             f.create_group('topology')
@@ -56,7 +55,7 @@ class HDF5Writer:
             is_shape_error = True
         if is_shape_error:
             raise ArrayDimError(
-                'The topology contain %s particles while a positions array with shape %s is provided' 
+                'The topology contain %s particles while a positions array with shape %s is provided'
                 %(self._topology.num_particles, list(shape))
             )
         with h5py.File(self._file_path, 'a') as h5f:
@@ -74,7 +73,7 @@ class HDF5Writer:
         with h5py.File(self._file_path, 'a') as h5f:
             del h5f['pbc_matrix']
             h5f['pbc_matrix'] = self._pbc_matrix
-        
+
     def _write_topology(self):
         with h5py.File(self._file_path, 'a') as h5f:
             del h5f['topology']
@@ -118,15 +117,15 @@ class HDF5Writer:
             h5f['topology/num_dihedrals'] = env.NUMPY_INT(self._topology.num_dihedrals)
             h5f['topology/impropers'] = np.array(self._topology.impropers).astype(env.NUMPY_INT)
             h5f['topology/num_impropers'] = env.NUMPY_INT(self._topology.num_impropers)
-            
+
     @staticmethod
     def _check_none(val, target_type):
-        return target_type(val) if not isinstance(val, type(None)) else target_type(-1)
-    
+        return target_type(val) if not isinstance(val, type(None)) else target_type(NONE_LABEL)
+
     @property
     def file_path(self):
         return self._file_path
-    
+
     @property
     def mode(self):
         return self._mode
@@ -151,6 +150,5 @@ class HDF5Writer:
     @pbc_matrix.setter
     def pbc_matrix(self, pbc_matrix: np.ndarray):
         pbc_matrix = check_quantity_value(pbc_matrix, default_length_unit)
-        check_pbc_matrix(pbc_matrix)
-        self._pbc_matrix = check_quantity_value(pbc_matrix, default_length_unit)
+        self._pbc_matrix = check_pbc_matrix(pbc_matrix)
         self._write_pbc_matrix()

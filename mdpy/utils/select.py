@@ -4,19 +4,17 @@
 file : select_particle.py
 created time : 2022/02/20
 author : Zhenyu Wei
-version : 1.0
-contact : zhenyuwei99@gmail.com
-copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
+copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
 import numpy as np
-from .check_quantity import check_quantity_value
-from .pbc import unwrap_vec
-from .. import SPATIAL_DIM
-from ..core import Topology
-from ..core import Trajectory
-from ..unit import *
-from ..error import *
+from mdpy import SPATIAL_DIM
+from mdpy.core import Topology
+from mdpy.core import Trajectory
+from mdpy.unit import *
+from mdpy.error import *
+from mdpy.utils.check_quantity import check_quantity_value
+from mdpy.utils.pbc import unwrap_vec
 
 def check_topology(target) -> Topology:
     if isinstance(target, Topology):
@@ -109,17 +107,17 @@ def select_ion():
 # check https://pdb101.rcsb.org/learn/guide-to-understanding-pdb-data/primary-sequences-and-the-pdb-format
 PROTEIN_MOLECULE_TYPE_LIST = [
     # Standard amino acid
-    'ALA', 'CYS', 'ASP', 'GLU', 
-    'PHE', 'GLY', 'HIS', 'ILE', 
-    'LYS', 'LEU', 'MET', 'ASN', 
-    'PRO', 'GLN', 'ARG', 'SER', 
-    'THR', 'VAL', 'TRP', 'TYR', 
+    'ALA', 'CYS', 'ASP', 'GLU',
+    'PHE', 'GLY', 'HIS', 'ILE',
+    'LYS', 'LEU', 'MET', 'ASN',
+    'PRO', 'GLN', 'ARG', 'SER',
+    'THR', 'VAL', 'TRP', 'TYR',
     'PYL', 'SEC',
     # D-amino acid
-    'DAL', 'DSN', 'DCY', 'DPR', 
-    'DVA', 'DTH', 'DLE', 'DIL', 
+    'DAL', 'DSN', 'DCY', 'DPR',
+    'DVA', 'DTH', 'DLE', 'DIL',
     'DSG', 'DAS', 'MED', 'DGN',
-    'DGL', 'DLY', 'DHI', 'DPN', 
+    'DGL', 'DLY', 'DHI', 'DPN',
     'DAR', 'DTY', 'DTR',
     # CHARMM specified
     'HSD', 'HSE', 'HSP',
@@ -163,7 +161,7 @@ def select_nearby(target: Trajectory, frame, matrix_ids, radius):
     trajectory = check_trajectory(target)
     radius = check_quantity_value(radius, default_length_unit)
     selected_matrix_ids = []
-        
+
     for matrix_id in matrix_ids:
         vec = unwrap_vec(
             trajectory.positions[frame, matrix_id, :] - trajectory.positions[frame, :, :],
@@ -190,7 +188,7 @@ def select_in_sphere(target: Trajectory, frame, center, radius):
         list(np.where(np.sqrt((vec**2).sum(1)) < radius))
     )
     return selected_matrix_ids
-    
+
 
 def select_in_cubic():
     pass
@@ -201,7 +199,7 @@ def select_in_cylinder():
 # select main function
 SELECTION_SUPPORTED_TOPOLOGICAL_KEYWORDS = [
     'all',
-    'particle type', 'particle name', 'particle id', 
+    'particle type', 'particle name', 'particle id',
     'molecule type', 'molecule id', 'chain id',
     'water', 'ion', 'protein', 'backbone', 'nucleic acid'
 ]

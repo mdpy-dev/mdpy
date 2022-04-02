@@ -4,14 +4,12 @@
 file : test_forcefield.py
 created time : 2021/10/16
 author : Zhenyu Wei
-version : 1.0
-contact : zhenyuwei99@gmail.com
-copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
+copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
 import pytest
-from ..core import Topology
-from ..forcefield import Forcefield
+from mdpy.core import Topology
+from mdpy.forcefield import Forcefield
 
 class TestForcefield:
     def setup(self):
