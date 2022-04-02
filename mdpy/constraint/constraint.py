@@ -4,16 +4,14 @@
 file : constraint.py
 created time : 2021/10/09
 author : Zhenyu Wei
-version : 1.0
-contact : zhenyuwei99@gmail.com
-copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
+copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
-from .. import env
-from ..utils import check_quantity_value
-from ..error import *
-from ..unit import *
-from ..ensemble import Ensemble
+from mdpy import env
+from mdpy.utils import check_quantity_value
+from mdpy.error import *
+from mdpy.unit import *
+from mdpy.ensemble import Ensemble
 
 class Constraint:
     def __init__(self, parameters, force_id: int=0, force_group: int=0) -> None:
