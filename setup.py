@@ -17,7 +17,7 @@ setup(
         'Topic :: Scientific/Engineering :: Bio-Informatics',
         'Topic :: Scientific/Engineering :: Physics',
         'Topic :: Scientific/Engineering :: Chemistry',
-        'License :: OSI Approved :: GNU General Public License v3 (GPLv3)',
+        'License :: OSI Approved :: BSD',
         'Programming Language :: Python :: 3.9'
     ],
     url = 'https://mdpy.net/',
@@ -28,7 +28,7 @@ setup(
     packages = find_packages(),
     package_data = {
         "mdpy": [
-            "test/data/*", 
+            "test/data/*",
         ]
     },
     # setup_requires = ['pytest-runner'],
