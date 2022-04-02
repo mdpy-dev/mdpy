@@ -4,16 +4,14 @@
 file : charmm_param_parser.py
 created time : 2021/10/08
 author : Zhenyu Wei
-version : 1.0
-contact : zhenyuwei99@gmail.com
-copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
+copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
 import itertools
 import numpy as np
-from .. import env
-from ..error import *
-from ..unit import *
+from mdpy import env
+from mdpy.error import *
+from mdpy.unit import *
 
 RMIN_TO_SIGMA_FACTOR = env.NUMPY_FLOAT(2**(-1/6))
 USED_BLOCK_LABELS = ['ATOMS', 'BONDS', 'ANGLES', 'DIHEDRALS', 'IMPROPER', 'NONBONDED']
