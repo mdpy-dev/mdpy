@@ -4,13 +4,11 @@
 file : minimizer.py
 created time : 2022/01/09
 author : Zhenyu Wei
-version : 1.0
-contact : zhenyuwei99@gmail.com
-copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
+copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
-from ..ensemble import Ensemble
-from ..unit import *
+from mdpy.ensemble import Ensemble
+from mdpy.unit import *
 
 class Minimizer:
     def __init__(
