@@ -4,15 +4,13 @@
 file : pbc.py
 created time : 2021/10/22
 author : Zhenyu Wei
-version : 1.0
-contact : zhenyuwei99@gmail.com
-copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
+copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
 import numpy as np
 import numba as nb
-from .. import SPATIAL_DIM
-from ..error import *
+from mdpy import SPATIAL_DIM
+from mdpy.error import *
 
 def check_pbc_matrix(pbc_matrix):
     row, col = pbc_matrix.shape
