@@ -4,17 +4,15 @@
 file : test_langevin_integrator.py
 created time : 2021/10/31
 author : Zhenyu Wei
-version : 1.0
-contact : zhenyuwei99@gmail.com
-copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
+copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
 import pytest, os
-import numpy as np 
-from ..io import PDBParser, PSFParser 
-from ..forcefield import CharmmForcefield
-from ..integrator import LangevinIntegrator
-from ..unit import *
+import numpy as np
+from mdpy.io import PDBParser, PSFParser
+from mdpy.forcefield import CharmmForcefield
+from mdpy.integrator import LangevinIntegrator
+from mdpy.unit import *
 
 cur_dir = os.path.dirname(os.path.abspath(__file__))
 data_dir = os.path.join(cur_dir, 'data')
@@ -37,10 +35,9 @@ class TestVerletIntegrator:
         pdb = PDBParser(os.path.join(data_dir, '6PO6.pdb'))
         topology = PSFParser(os.path.join(data_dir, '6PO6.psf')).topology
 
-        forcefield = CharmmForcefield(topology)
+        forcefield = CharmmForcefield(topology, np.diag(np.ones(3)*100))
         forcefield.set_param_files(os.path.join(data_dir, 'par_all36_prot.prm'))
         ensemble = forcefield.create_ensemble()
-        ensemble.state.set_pbc_matrix(np.diag(np.ones(3)*100))
         ensemble.state.cell_list.set_cutoff_radius(12)
         ensemble.state.set_positions(pdb.positions)
         ensemble.state.set_velocities_to_temperature(300)

@@ -4,17 +4,16 @@
 file : run_test.py
 created time : 2021/09/28
 author : Zhenyu Wei
-version : 1.0
-contact : zhenyuwei99@gmail.com
-copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
+copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
 import pytest, os, argparse
+
 cur_dir = os.path.abspath(os.path.dirname(os.path.abspath(__file__)))
 out_dir = os.path.join(cur_dir, 'out')
 if not os.path.exists(out_dir):
     os.mkdir(out_dir)
-    
+
 os.environ['NUMBA_DISABLE_JIT'] = '1'
 
 parser = argparse.ArgumentParser(description='Input of test')

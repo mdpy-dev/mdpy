@@ -4,23 +4,21 @@
 file : coordination_number_analyser.py
 created time : 2022/02/22
 author : Zhenyu Wei
-version : 1.0
-contact : zhenyuwei99@gmail.com
-copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
+copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
 import numpy as np
-from . import AnalyserResult
-from ..core import Trajectory
-from ..utils import check_quantity_value, unwrap_vec
-from ..utils import select, check_topological_selection_condition, parse_selection_condition
-from ..unit import *
-from ..error import *
+from mdpy.analyser import AnalyserResult
+from mdpy.core import Trajectory
+from mdpy.utils import check_quantity_value, unwrap_vec
+from mdpy.utils import select, check_topological_selection_condition, parse_selection_condition
+from mdpy.unit import *
+from mdpy.error import *
 
 class CoordinationNumberAnalyser:
     def __init__(
-        self, 
-        selection_condition_1: list[dict], 
+        self,
+        selection_condition_1: list[dict],
         selection_condition_2: list[dict],
         cutoff_radius, num_bins: int,
     ) -> None:
@@ -36,7 +34,7 @@ class CoordinationNumberAnalyser:
     def analysis(self, trajectory: Trajectory, is_dimensionless=True) -> AnalyserResult:
         # Extract positions
         # Topological selection for Trajectory will return a list with same list
-        selected_matrix_ids_1 = select(trajectory, self._selection_condition_1)[0] 
+        selected_matrix_ids_1 = select(trajectory, self._selection_condition_1)[0]
         selected_matrix_ids_2 = select(trajectory, self._selection_condition_2)[0]
         # Analysis
         coordination_number, bin_edge = [], []
@@ -44,7 +42,7 @@ class CoordinationNumberAnalyser:
             cur_coordination_number = []
             for frame in range(trajectory.num_frames):
                 vec = unwrap_vec(
-                    trajectory.positions[frame, id1, :] - 
+                    trajectory.positions[frame, id1, :] -
                     trajectory.positions[frame, selected_matrix_ids_2, :],
                     trajectory.pbc_matrix, trajectory.pbc_inv
                 )

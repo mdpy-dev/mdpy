@@ -4,16 +4,14 @@
 file : test_pbc.py
 created time : 2021/10/22
 author : Zhenyu Wei
-version : 1.0
-contact : zhenyuwei99@gmail.com
-copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
+copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
 import pytest
 import numpy as np
-from ..utils import *
-from ..error import *
-from .. import env
+from mdpy import env
+from mdpy.utils import *
+from mdpy.error import *
 
 pbc_matrix = np.diag(np.ones(3)*10).astype(env.NUMPY_FLOAT)
 pbc_inv = np.linalg.inv(pbc_matrix).astype(env.NUMPY_FLOAT)
@@ -45,7 +43,7 @@ def test_wrap_positions():
     assert wrapped_positions[-2, 0] == 1
     assert wrapped_positions[-2, 2] == 3
 
-    with pytest.raises(AtomLossError):
+    with pytest.raises(ParticleLossError):
         wrap_positions(np.array([16, 0, 1]), pbc_matrix, pbc_inv)
 
 def test_unwrap_vec():

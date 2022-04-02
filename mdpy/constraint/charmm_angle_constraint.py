@@ -4,17 +4,15 @@
 file : charmm_angle_constraint.py
 created time : 2021/10/10
 author : Zhenyu Wei
-version : 1.0
-contact : zhenyuwei99@gmail.com
-copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
+copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
 import numpy as np
 import numba as nb
-from . import Constraint
-from .. import env
-from ..ensemble import Ensemble
-from ..utils import *
+from mdpy import env
+from mdpy.constraint import Constraint
+from mdpy.ensemble import Ensemble
+from mdpy.utils import *
 
 class CharmmAngleConstraint(Constraint):
     def __init__(self, parameters, force_id: int = 0, force_group: int = 0) -> None:
@@ -74,12 +72,12 @@ class CharmmAngleConstraint(Constraint):
             cos_theta = np.dot(r21, r23) / (l21 * l23)
             theta = np.arccos(cos_theta)
             # Force
-            force_val = - 2 * k * (theta - theta0) 
+            force_val = - 2 * k * (theta - theta0)
             vec_norm = np.cross(r21, r23)
             force_vec1 = get_unit_vec(np.cross(r21, vec_norm)) / l21
             force_vec3 = get_unit_vec(np.cross(-r23, vec_norm)) / l23
             forces[id1, :] += force_val * force_vec1
-            forces[id2, :] -= force_val * (force_vec1 + force_vec3) 
+            forces[id2, :] -= force_val * (force_vec1 + force_vec3)
             forces[id3, :] += force_val * force_vec3
             # Potential energy
             potential_energy += k * (theta - theta0)**2
@@ -90,7 +88,7 @@ class CharmmAngleConstraint(Constraint):
             )
             l13 = np.linalg.norm(r13)
             force_val = 2 * ku * (l13 - u0)
-            force_vec = r13 / l13 
+            force_vec = r13 / l13
             forces[id1, :] += force_val * force_vec
             forces[id3, :] -= force_val * force_vec
             potential_energy += ku * (l13 - u0)**2
@@ -100,8 +98,8 @@ class CharmmAngleConstraint(Constraint):
         self._check_bound_state()
         # V(angle) = Ktheta(Theta - Theta0)**2
         self._forces, self._potential_energy = self._kernel(
-            self._int_parameters, self._float_parameters, 
-            self._parent_ensemble.state.positions, 
+            self._int_parameters, self._float_parameters,
+            self._parent_ensemble.state.positions,
             *self._parent_ensemble.state.pbc_info
         )
 

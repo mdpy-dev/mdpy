@@ -4,17 +4,15 @@
 file : test_hdf5_writer.py
 created time : 2022/02/24
 author : Zhenyu Wei
-version : 1.0
-contact : zhenyuwei99@gmail.com
-copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
+copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
 import os
 import pytest
 import numpy as np
-from ..io import HDF5Writer, PSFParser, PDBParser
-from ..unit import *
-from ..error import *
+from mdpy.io import HDF5Writer, PSFParser, PDBParser
+from mdpy.unit import *
+from mdpy.error import *
 
 cur_dir = os.path.dirname(os.path.abspath(__file__))
 data_dir = os.path.join(cur_dir, 'data')
