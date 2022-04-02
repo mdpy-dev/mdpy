@@ -30,9 +30,9 @@ def check_pbc_matrix(pbc_matrix):
 def wrap_positions(positions: np.ndarray, pbc_matrix: np.ndarray, pbc_inv: np.array):
     move_vec = - np.round(np.dot(positions, pbc_inv))
     if np.max(np.abs(move_vec)) >= 2:
-        atom_id = np.unique([i[0] for i in np.argwhere(np.abs(move_vec) >= 2)])
+        particle_id = np.unique([i[0] for i in np.argwhere(np.abs(move_vec) >= 2)])
         raise AtomLossError(
-            'Atom(s) with matrix id: %s moved beyond 2 PBC image.' %atom_id
+            'Atom(s) with matrix id: %s moved beyond 2 PBC image.' %(particle_id)
         )
     move_vec = np.dot(move_vec, pbc_matrix)
     return positions + move_vec
