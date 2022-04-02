@@ -202,9 +202,9 @@ class AnalyserPoorDefinedError(Exception):
     '''
     pass
 
-class AtomLossError(Exception):
+class ParticleLossError(Exception):
     '''This error occurs when:
-    - The atom go beyond the range of two PBC images
+    - The particle go beyond the range of two PBC images
 
     Used in:
     - mdpy.core.state
