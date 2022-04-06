@@ -7,7 +7,7 @@ author : Zhenyu Wei
 copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
-from mdpy.ensemble import Ensemble
+from mdpy.core import Ensemble
 from mdpy.utils import *
 from mdpy.unit import *
 

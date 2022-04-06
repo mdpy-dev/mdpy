@@ -11,8 +11,7 @@ import pytest, os
 import numpy as np
 from mdpy import env
 from mdpy.constraint import ElectrostaticConstraint
-from mdpy.core import Particle, Topology
-from mdpy.ensemble import Ensemble
+from mdpy.core import Particle, Topology, Ensemble
 from mdpy.utils import get_unit_vec
 from mdpy.error import *
 from mdpy.unit import *

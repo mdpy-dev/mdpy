@@ -9,8 +9,8 @@ copyright : (C)Copyright 2021-present, mdpy organization
 
 import numpy as np
 from numpy.random import randn
+from mdpy.core import Ensemble
 from mdpy.integrator import Integrator
-from mdpy.ensemble import Ensemble
 from mdpy.unit import *
 from mdpy.utils import *
 

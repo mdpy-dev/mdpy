@@ -11,7 +11,7 @@ copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 
 import numpy as np
 from datetime import datetime, timedelta
-from mdpy.ensemble import Ensemble
+from mdpy.core import Ensemble
 from mdpy.unit import *
 from mdpy.utils import *
 from mdpy.error import *

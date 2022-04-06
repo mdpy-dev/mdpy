@@ -11,8 +11,7 @@ import pytest, os
 import numpy as np
 from mdpy import env
 from mdpy.constraint import CharmmDihedralConstraint
-from mdpy.core import Particle, Topology
-from mdpy.ensemble import Ensemble
+from mdpy.core import Particle, Topology, Ensemble
 from mdpy.io import CharmmTopparParser
 from mdpy.utils import get_dihedral
 from mdpy.error import *

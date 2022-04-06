@@ -10,8 +10,8 @@ copyright : (C)Copyright 2021-present, mdpy organization
 import numpy as np
 import numba as nb
 from mdpy import env
+from mdpy.core import Ensemble
 from mdpy.constraint import Constraint
-from mdpy.ensemble import Ensemble
 from mdpy.utils import *
 
 class CharmmAngleConstraint(Constraint):

@@ -7,16 +7,16 @@ author : Zhenyu Wei
 copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
+import math
 import numpy as np
 import numba as nb
-import math
 from numba import cuda
 from operator import floordiv
-from . import Constraint, NUM_NEIGHBOR_CELLS, NEIGHBOR_CELL_TEMPLATE
-from .. import env
-from ..ensemble import Ensemble
-from ..utils import *
-from ..unit import *
+from mdpy import env
+from mdpy.core import Ensemble
+from mdpy.constraint import Constraint, NUM_NEIGHBOR_CELLS, NEIGHBOR_CELL_TEMPLATE
+from mdpy.utils import *
+from mdpy.unit import *
 
 class CharmmNonbondedConstraint(Constraint):
     def __init__(self, parameters, cutoff_radius=12, force_id: int = 0, force_group: int = 0) -> None:
@@ -39,7 +39,7 @@ class CharmmNonbondedConstraint(Constraint):
                 env.NUMBA_INT[:, ::1], env.NUMBA_INT[:, :, :, ::1], env.NUMBA_INT[::1], env.NUMBA_INT[:, ::1],
                 env.NUMBA_FLOAT[:, ::1], env.NUMBA_FLOAT[::1]
             ))(self.cuda_kernel)
-        
+
     def __repr__(self) -> str:
         return '<mdpy.constraint.CharmmNonbondedConstraint object>'
 
@@ -64,7 +64,7 @@ class CharmmNonbondedConstraint(Constraint):
     @staticmethod
     def cpu_kernel(
         positions, parameters, pbc_matrix, pbc_inv, cutoff_radius,
-        bonded_particles, scaling_particles, 
+        bonded_particles, scaling_particles,
         particle_cell_index, cell_list, num_cell_vec, neighbor_cell_template,
     ):
         forces = np.zeros_like(positions)
@@ -110,7 +110,7 @@ class CharmmNonbondedConstraint(Constraint):
     @staticmethod
     def cuda_kernel(
         positions, parameters, pbc_matrix, cutoff_radius,
-        bonded_particles, scaling_particles, 
+        bonded_particles, scaling_particles,
         particle_cell_index, cell_list, num_cell_vec, neighbor_cell_template,
         forces, potential_energy
     ):
@@ -136,7 +136,7 @@ class CharmmNonbondedConstraint(Constraint):
         if id1 == id2:
             return None
         if id2 == -1:
-            return None 
+            return None
         for i in bonded_particles[id1, :]:
             if i == -1:
                 break
@@ -177,16 +177,16 @@ class CharmmNonbondedConstraint(Constraint):
             cuda.atomic.add(forces, (id2, 0), -force_x)
             cuda.atomic.add(forces, (id2, 1), -force_y)
             cuda.atomic.add(forces, (id2, 2), -force_z)
-            energy = 2 * epsilon * (scaled_r**12 - scaled_r**6) 
+            energy = 2 * epsilon * (scaled_r**12 - scaled_r**6)
             cuda.atomic.add(potential_energy, 0, energy)
 
     def update(self):
         self._check_bound_state()
         if env.platform == 'CPU':
                 self._forces, self._potential_energy = self._kernel(
-                self._parent_ensemble.state.positions, self._parameters_list, 
-                *self._parent_ensemble.state.pbc_info, self._cutoff_radius, 
-                self._parent_ensemble.topology.bonded_particles, 
+                self._parent_ensemble.state.positions, self._parameters_list,
+                *self._parent_ensemble.state.pbc_info, self._cutoff_radius,
+                self._parent_ensemble.topology.bonded_particles,
                 self._parent_ensemble.topology.scaling_particles,
                 self._parent_ensemble.state.cell_list.particle_cell_index,
                 self._parent_ensemble.state.cell_list.cell_list,
@@ -216,15 +216,15 @@ class CharmmNonbondedConstraint(Constraint):
             ))
             block_per_grid = (block_per_grid_x, block_per_grid_y)
             self._kernel[block_per_grid, thread_per_block](
-                d_positions, self._device_parameters_list, d_pbc_martix, d_cutoff_radius, 
-                d_bonded_particles, d_scaling_particles, 
+                d_positions, self._device_parameters_list, d_pbc_martix, d_cutoff_radius,
+                d_bonded_particles, d_scaling_particles,
                 d_particle_cell_index, d_cell_list, d_num_cell_vec,
                 d_neighbor_cell_template,
                 d_forces, d_potential_energy
             )
             self._forces = d_forces.copy_to_host()
             self._potential_energy = d_potential_energy.copy_to_host()[0]
-    
+
     @property
     def num_nonbonded_pairs(self):
         return self._num_nonbonded_pairs

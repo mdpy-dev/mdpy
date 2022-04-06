@@ -9,8 +9,7 @@ copyright : (C)Copyright 2021-present, mdpy organization
 
 import pytest
 import numpy as np
-from mdpy.core import Topology
-from mdpy.ensemble import Ensemble
+from mdpy.core import Topology , Ensemble
 from mdpy.minimizer import Minimizer
 
 class TestMinimizer:

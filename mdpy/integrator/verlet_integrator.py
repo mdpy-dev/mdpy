@@ -8,7 +8,7 @@ copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
 from mdpy import env
-from mdpy.ensemble import Ensemble
+from mdpy.core import Ensemble
 from mdpy.integrator import Integrator
 from mdpy.utils import *
 

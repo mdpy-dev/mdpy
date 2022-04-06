@@ -14,7 +14,6 @@ import mdpy.core as core
 import mdpy.io as io
 import mdpy.constraint as constraint
 import mdpy.forcefield as forcefield
-from mdpy.ensemble import Ensemble
 import mdpy.integrator as integrator
 import mdpy.minimizer as minimizer
 import mdpy.analyser as analyser
