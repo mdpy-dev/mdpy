@@ -8,7 +8,10 @@ from mdpy.core.topology import Topology
 from mdpy.core.cell_list import CellList
 from mdpy.core.state import State
 from mdpy.core.trajectory import Trajectory
+from mdpy.core.ensemble import Ensemble
 
 __all__ = [
-    'Particle', 'Topology', 'CellList', 'State', 'Trajectory'
+    'Particle', 'Topology',
+    'CellList', 'State',
+    'Trajectory', 'Ensemble'
 ]

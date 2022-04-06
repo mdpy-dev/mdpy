@@ -9,7 +9,7 @@ copyright : (C)Copyright 2021-present, mdpy organization
 
 import numpy as np
 from mdpy.forcefield import Forcefield
-from mdpy.ensemble import Ensemble
+from mdpy.core import Ensemble
 from mdpy.core import Topology
 from mdpy.io import CharmmTopparParser
 from mdpy.utils import check_quantity_value, check_pbc_matrix

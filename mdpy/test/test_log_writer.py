@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- encoding: utf-8 -*-
 '''
-file : test_log_dumper.py
+file : test_log_writer.py
 created time : 2021/10/29
 author : Zhenyu Wei
 copyright : (C)Copyright 2021-present, mdpy organization
@@ -11,9 +11,7 @@ import pytest, os
 import numpy as np
 from mdpy.io import PSFParser, PDBParser
 from mdpy.forcefield import CharmmForcefield
-from mdpy.integrator import VerletIntegrator
-from mdpy.simulation import Simulation
-from mdpy.dumper import LogDumper
+from mdpy.io import LogWriter
 from mdpy.error import *
 from mdpy.unit import *
 
@@ -33,10 +31,10 @@ class TestLogDumper:
 
     def test_exceptions(self):
         with pytest.raises(DumperPoorDefinedError):
-            LogDumper(self.log_file, 100, rest_time=True)
+            LogWriter(self.log_file, 100, rest_time=True)
 
         with pytest.raises(FileFormatError):
-            LogDumper('test.lo', 10)
+            LogWriter('test.lo', 10)
 
     def test_dump(self):
         prot_name = '6PO6'
@@ -55,12 +53,8 @@ class TestLogDumper:
         ensemble.state.cell_list.set_cutoff_radius(12)
         ensemble.state.set_positions(pdb.positions)
         ensemble.state.set_velocities_to_temperature(Quantity(300, kelvin))
-
-        integrator = VerletIntegrator(Quantity(0.01, femtosecond))
-        simulation = Simulation(ensemble, integrator)
-        dump_interval = 5
-        log_dumper = LogDumper(
-            self.log_file, dump_interval,
+        log_writer = LogWriter(
+            self.log_file, Quantity(0.01, femtosecond),
             step=True, sim_time=True,
             volume=True, density=True,
             potential_energy=True,
@@ -68,4 +62,5 @@ class TestLogDumper:
             total_energy=True,
             temperature=True
         )
-        log_dumper.dump(simulation)
+        for i in range(10):
+            log_writer.write(ensemble, i)

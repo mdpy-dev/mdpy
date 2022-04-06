@@ -8,10 +8,10 @@ copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
 from mdpy import env
+from mdpy.core import Ensemble
 from mdpy.utils import check_quantity_value
 from mdpy.error import *
 from mdpy.unit import *
-from mdpy.ensemble import Ensemble
 
 class Constraint:
     def __init__(self, parameters, force_id: int=0, force_group: int=0) -> None:

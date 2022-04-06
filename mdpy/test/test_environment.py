@@ -15,7 +15,7 @@ from mdpy.error import *
 
 def test_attributes():
     assert env.precision == 'SINGLE'
-    assert env.platform == 'CPU'
+    assert env.platform == 'CUDA'
 
 def test_exceptions():
     with pytest.raises(EnvironmentVariableError):

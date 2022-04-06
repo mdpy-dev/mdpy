@@ -9,8 +9,8 @@ copyright : (C)Copyright 2021-present, mdpy organization
 
 import numpy as np
 from mdpy import SPATIAL_DIM
+from mdpy.core import Ensemble
 from mdpy.minimizer import Minimizer
-from mdpy.ensemble import Ensemble
 from mdpy.unit import *
 from mdpy.utils import *
 

@@ -11,8 +11,7 @@ copyright : (C)Copyright 2021-present, mdpy organization
 
 import pytest, os
 import numpy as np
-from mdpy.core import Particle, Topology
-from mdpy.ensemble import Ensemble
+from mdpy.core import Particle, Topology, Ensemble
 from mdpy.io import CharmmTopparParser, PSFParser
 from mdpy.constraint import *
 from mdpy.error import *

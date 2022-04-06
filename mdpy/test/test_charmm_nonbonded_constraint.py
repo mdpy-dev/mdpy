@@ -11,8 +11,7 @@ import pytest, os
 import numpy as np
 from mdpy import env
 from mdpy.constraint import CharmmNonbondedConstraint
-from mdpy.core import Particle, Topology
-from mdpy.ensemble import Ensemble
+from mdpy.core import Particle, Topology, Ensemble
 from mdpy.io import CharmmTopparParser
 from mdpy.io.charmm_toppar_parser import RMIN_TO_SIGMA_FACTOR
 from mdpy.utils import get_unit_vec

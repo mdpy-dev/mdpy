@@ -16,7 +16,7 @@ class MDPYEnvironment:
         self._supported_precisions = ['SINGLE', 'DOUBLE']
         self._default_precisions = 'SINGLE'
         self._supproted_platforms = ['CPU', 'CUDA']
-        self._default_platforms = 'CPU'
+        self._default_platforms = 'CUDA'
         self.set_precision(self._default_precisions)
         self.set_platform(self._default_platforms)
 
