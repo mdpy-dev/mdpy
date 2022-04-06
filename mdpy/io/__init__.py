@@ -16,8 +16,7 @@ from .pdb_writer import PDBWriter
 from .dcd_parser import DCDParser
 
 # Comprehensive file
-
-# HDF5
+## HDF5
 HDF5_FILE_HIERARCHY = '''Hierarchy of HDF5 file created by mdpy
 +-- '/'
 |   +--	group "topology"
@@ -37,25 +36,25 @@ HDF5_FILE_HIERARCHY = '''Hierarchy of HDF5 file created by mdpy
 |   |   |   +-- dataset "chain_id" str
 |   |   |   |
 |   |   |   +-- dataset "mass" float
-|   |   |   | 
+|   |   |   |
 |   |   |   +-- dataset "charge" float
-|   |   |   
+|   |   |
 |   |   +-- dataset "num_particles" int
-|   |   | 
+|   |   |
 |   |   +-- dataset "bonds" int
-|   |   |   
+|   |   |
 |   |   +-- dataset "num_bonds" int
-|   |   | 
+|   |   |
 |   |   +-- dataset "angles" int
-|   |   |   
+|   |   |
 |   |   +-- dataset "num_angles" int
-|   |   | 
+|   |   |
 |   |   +-- dataset "dihedrals" int
-|   |   |   
+|   |   |
 |   |   +-- dataset "num_dihedrals" int
-|   |   | 
+|   |   |
 |   |   +-- dataset "impropers" int
-|   |   |   
+|   |   |
 |   |   +-- dataset "num_impropers" int
 |   |
 |   +-- group "positions"
@@ -66,16 +65,20 @@ HDF5_FILE_HIERARCHY = '''Hierarchy of HDF5 file created by mdpy
 |   |   .
 |   |   |
 |   |   +-- dataset "frame-x"
-|   |   
+|   |
 |   +-- dataset "pbc_matrix"
-|   
+|
 '''
 from .hdf5_parser import HDF5Parser
 from .hdf5_writer import HDF5Writer
 
-__all__ = [ 
+# Other file
+from .log_writer import LogWriter
+
+__all__ = [
     'CharmmTopparParser',
     'PSFParser',
-    'PDBParser','PDBWriter', 'DCDParser'
+    'PDBParser','PDBWriter', 'DCDParser',
     'HDF5Parser', 'HDF5Writer',
+    'LogWriter'
 ]
