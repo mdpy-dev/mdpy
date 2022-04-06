@@ -17,6 +17,4 @@ import mdpy.forcefield as forcefield
 from mdpy.ensemble import Ensemble
 import mdpy.integrator as integrator
 import mdpy.minimizer as minimizer
-from mdpy.simulation import Simulation
-import mdpy.dumper as dumper
 import mdpy.analyser as analyser
