@@ -4,14 +4,12 @@
 file : test_psf_parser.py
 created time : 2021/10/05
 author : Zhenyu Wei
-version : 1.0
-contact : zhenyuwei99@gmail.com
-copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
+copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
 import pytest, os
-from .. import env
-from ..io import PSFParser
+from mdpy import env
+from mdpy.io import PSFParser
 
 cur_dir = os.path.dirname(os.path.abspath(__file__))
 data_dir = os.path.join(cur_dir, 'data')
@@ -21,7 +19,7 @@ class TestPSFParser:
         self.file_path = os.path.join(data_dir, '1M9Z.psf')
 
     def teardown(self):
-        pass 
+        pass
 
     def test_attributes(self):
         psf = PSFParser(self.file_path)

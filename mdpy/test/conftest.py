@@ -4,9 +4,7 @@
 file : conftest.py
 created time : 2021/09/28
 author : Zhenyu Wei
-version : 1.0
-contact : zhenyuwei99@gmail.com
-copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
+copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
 import pytest
@@ -17,22 +15,22 @@ test_order = [
      'check_quantity', 'geometry', 'pbc', 'select'
      'particle', 'topology', 'state', 'cell_list', 'trajectory',
      'charmm_toppar_parser',
-     'psf_parser', 
+     'psf_parser',
      'pdb_parser', 'pdb_writer',
      'dcd_parser',
      'hdf5_parser', 'hdf5_writer',
-     'constraint', 
+     'constraint',
      'electrostatic_constraint'
      'charmm_nonbonded_constraint', 'charmm_bond_constraint', 'charmm_angle_constraint',
      'charmm_dihedral_constraint', 'charmm_improper_constraint',
-     'forcefield', 
+     'forcefield',
      'charmm_forcefield',
      'ensemble',
-     'minimizer', 
+     'minimizer',
      'steepest_descent_minimizer', 'conjugate_gradient_minimizer',
      'integrator', 'verlet_integrator', 'langevin_integrator'
      'simulation',
-     'dumper', 
+     'dumper',
      'pdb_dumper', 'log_dumper', 'hdf5_dumper',
      'analyser_result'
 ]
@@ -43,7 +41,7 @@ def pytest_collection_modifyitems(items):
           indexes = []
           for id, item in enumerate(items):
                if 'test_'+test+'.py' in item.nodeid:
-                    indexes.append(id)  
+                    indexes.append(id)
           for id, index in enumerate(indexes):
                items[current_index+id], items[index] = items[index], items[current_index+id]
           current_index += len(indexes)

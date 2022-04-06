@@ -3,17 +3,15 @@
 '''
 file: test_quantity.py
 created time : 2021/09/28
-author : Zhenyu Wei 
-version : 1.0
-contact : zhenyuwei99@gmail.com
-copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
+author : Zhenyu Wei
+copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
 import pytest
 import numpy as np
-from .. import env
-from ..unit import *
-from ..error import UnitDimensionDismatchedError
+from mdpy import env
+from mdpy.unit import *
+from mdpy.error import UnitDimensionDismatchedError
 
 class TestQuantity:
     def setup(self):
@@ -74,7 +72,7 @@ class TestQuantity:
     def test_is_dimension_less(self):
         quantity = Quantity(1, angstrom)
         assert not quantity.is_dimension_less()
-        
+
         quantity = Quantity(1)
         assert quantity.is_dimension_less()
 
@@ -185,7 +183,7 @@ class TestQuantity:
         assert quantity[-1] == Quantity(16) * angstrom**2
 
         quantity = Quantity([1, 2, 3, 4]) * angstrom
-        quantity = quantity * Quantity([1, 2, 3, 4]) 
+        quantity = quantity * Quantity([1, 2, 3, 4])
         assert quantity[0] == Quantity(1) * angstrom
         assert quantity[-1] == Quantity(16) * angstrom
 
@@ -197,9 +195,9 @@ class TestQuantity:
     def test_div(self):
         quantity = Quantity([1, 2, 3, 4]) * angstrom
         quantity = quantity / Quantity(1, angstrom)
-        assert quantity[0] == Quantity(1) 
+        assert quantity[0] == Quantity(1)
         assert quantity[0] == 1
-        assert quantity[-1] == Quantity(4) 
+        assert quantity[-1] == Quantity(4)
 
         quantity = Quantity([1, 2, 3, 4]) * angstrom
         quantity = Quantity(1, angstrom) / quantity
@@ -208,11 +206,11 @@ class TestQuantity:
 
         quantity = Quantity([1, 2, 3, 4]) * angstrom
         quantity = quantity / quantity
-        assert quantity[0] == Quantity(1) 
-        assert quantity[-1] == Quantity(1) 
+        assert quantity[0] == Quantity(1)
+        assert quantity[-1] == Quantity(1)
 
         quantity = Quantity([1, 2, 3, 4]) * angstrom
-        quantity = quantity / Quantity([1, 2, 3, 4]) 
+        quantity = quantity / Quantity([1, 2, 3, 4])
         assert quantity[0] == Quantity(1) * angstrom
         assert quantity[-1] == Quantity(1) * angstrom
 

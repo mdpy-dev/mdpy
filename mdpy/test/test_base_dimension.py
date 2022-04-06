@@ -4,14 +4,12 @@
 file : test_base_dimension.py
 created time : 2021/09/28
 author : Zhenyu Wei
-version : 1.0
-contact : zhenyuwei99@gmail.com
-copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
+copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
 import pytest
 import numpy as np
-from ..unit import BaseDimension
+from mdpy.unit import BaseDimension
 
 class TestUnit:
     def setup(self):
@@ -36,16 +34,16 @@ class TestUnit:
 
         with pytest.raises(AttributeError):
             constant.time_dimension = 1
-        
+
         with pytest.raises(AttributeError):
             constant.mass_dimension = 1
-        
+
         with pytest.raises(AttributeError):
             constant.temperature_dimension = 1
-        
+
         with pytest.raises(AttributeError):
             constant.charge_dimension = 1
-        
+
         with pytest.raises(AttributeError):
             constant.mol_dimension = 1
 

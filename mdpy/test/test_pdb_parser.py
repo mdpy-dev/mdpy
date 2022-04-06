@@ -4,9 +4,7 @@
 file : test_pdb_parser.py
 created time : 2021/10/05
 author : Zhenyu Wei
-version : 1.0
-contact : zhenyuwei99@gmail.com
-copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
+copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
 
@@ -22,7 +20,7 @@ class TestPDBParser:
         self.file_path = os.path.join(data_dir, '1M9Z.pdb')
 
     def teardown(self):
-        pass 
+        pass
 
     def test_attributes(self):
         pdb = PDBParser(self.file_path)
@@ -43,13 +41,13 @@ class TestPDBParser:
     def test_exceptions(self):
         with pytest.raises(FileFormatError):
             PDBParser('test.pd')
-        
+
         with pytest.raises(ParserPoorDefinedError):
             PDBParser(self.file_path, is_parse_all=False).positions
 
         with pytest.raises(ArrayDimError):
             PDBParser(self.file_path, is_parse_all=False).get_positions(100)
-        
+
         with pytest.raises(ArrayDimError):
             PDBParser(self.file_path, is_parse_all=False).get_positions(100, 101)
 

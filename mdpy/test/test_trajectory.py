@@ -4,17 +4,15 @@
 file : test_trajectory.py
 created time : 2022/02/19
 author : Zhenyu Wei
-version : 1.0
-contact : zhenyuwei99@gmail.com
-copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
+copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
 import pytest
 import numpy as np
-from .. import SPATIAL_DIM, env
-from ..core import Particle, Topology, Trajectory
-from ..error import *
-from ..unit import *
+from mdpy import SPATIAL_DIM, env
+from mdpy.core import Particle, Topology, Trajectory
+from mdpy.error import *
+from mdpy.unit import *
 
 class TestTrajectory:
     def setup(self):
@@ -62,7 +60,7 @@ class TestTrajectory:
 
         with pytest.raises(TrajectoryPoorDefinedError):
             self.trajectory.velocities
-        
+
         with pytest.raises(TrajectoryPoorDefinedError):
             self.trajectory.time_series
 
@@ -113,7 +111,7 @@ class TestTrajectory:
         assert self.trajectory.num_frames == 3
         self.trajectory.append(positions=np.ones([3, self.topology.num_particles, SPATIAL_DIM]))
         assert self.trajectory.num_frames == 6
-        assert self.trajectory.positions.shape[0] == 6 
+        assert self.trajectory.positions.shape[0] == 6
 
         self.trajectory = Trajectory(self.topology, contain_velocities=True)
         with pytest.raises(ArrayDimError):
@@ -121,7 +119,7 @@ class TestTrajectory:
                 positions=np.ones([3, self.topology.num_particles, SPATIAL_DIM]),
                 velocities=np.ones([4, self.topology.num_particles, SPATIAL_DIM])
             )
-        
+
         self.trajectory.append(
             positions=np.ones([4, self.topology.num_particles, SPATIAL_DIM]),
             velocities=np.ones([4, self.topology.num_particles, SPATIAL_DIM])
@@ -132,7 +130,7 @@ class TestTrajectory:
             velocities=np.ones([4, self.topology.num_particles, SPATIAL_DIM])
         )
         assert self.trajectory.num_frames == 8
-        assert self.trajectory.positions.shape[0] == 8 
+        assert self.trajectory.positions.shape[0] == 8
 
     def test_unwrap_positions(self):
         with pytest.raises(PBCPoorDefinedError):

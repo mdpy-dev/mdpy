@@ -4,9 +4,7 @@
 file : pdb_parser.py
 created time : 2021/10/03
 author : Zhenyu Wei
-version : 1.0
-contact : zhenyuwei99@gmail.com
-copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
+copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
 import warnings
@@ -64,7 +62,7 @@ class PDBParser:
             'matrix_id': matrix_id,
             'position': self._positions[matrix_id, :]
         }
-    
+
     def get_positions(self, *frames):
         num_target_frames = len(frames)
         if num_target_frames == 1:
@@ -112,11 +110,11 @@ class PDBParser:
     @property
     def num_frames(self):
         return self._num_frames
-    
+
     @property
     def num_particles(self):
         return self._num_particles
-    
+
     @property
     def positions(self) -> np.ndarray:
         if not self._is_parse_all:

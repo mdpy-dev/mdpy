@@ -4,17 +4,15 @@
 file : test_hdf5_parser.py
 created time : 2022/02/24
 author : Zhenyu Wei
-version : 1.0
-contact : zhenyuwei99@gmail.com
-copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
+copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
 import os
 import pytest
 import numpy as np
-from ..io import HDF5Parser
-from ..unit import *
-from ..error import *
+from mdpy.io import HDF5Parser
+from mdpy.unit import *
+from mdpy.error import *
 
 cur_dir = os.path.dirname(os.path.abspath(__file__))
 data_dir = os.path.join(cur_dir, 'data')
@@ -27,7 +25,7 @@ class TestHDF5Writer:
 
     def teardown(self):
         pass
-    
+
     def test_attributes(self):
         parser = HDF5Parser(file_path)
         # Topology
@@ -54,6 +52,6 @@ class TestHDF5Writer:
 
         with pytest.raises(ArrayDimError):
             HDF5Parser(file_path, is_parse_all=False).get_positions(100)
-        
+
         with pytest.raises(ArrayDimError):
             HDF5Parser(file_path, is_parse_all=False).get_positions(100, 101)

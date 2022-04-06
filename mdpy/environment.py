@@ -4,9 +4,7 @@
 file : environment.py
 created time : 2021/11/05
 author : Zhenyu Wei
-version : 1.0
-contact : zhenyuwei99@gmail.com
-copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
+copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
 import numpy as np
@@ -15,7 +13,7 @@ from mdpy.error import *
 
 class MDPYEnvironment:
     def __init__(self) -> None:
-        self._supported_precisions = ['SINGLE', 'DOUBLE'] 
+        self._supported_precisions = ['SINGLE', 'DOUBLE']
         self._default_precisions = 'SINGLE'
         self._supproted_platforms = ['CPU', 'CUDA']
         self._default_platforms = 'CPU'

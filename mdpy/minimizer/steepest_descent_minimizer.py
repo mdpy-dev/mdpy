@@ -4,27 +4,25 @@
 file : steepest_descent_minimizer.py
 created time : 2022/01/09
 author : Zhenyu Wei
-version : 1.0
-contact : zhenyuwei99@gmail.com
-copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
+copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
 import numpy as np
-from . import Minimizer
-from ..ensemble import Ensemble
-from ..unit import *
-from ..utils import *
+from mdpy.minimizer import Minimizer
+from mdpy.ensemble import Ensemble
+from mdpy.unit import *
+from mdpy.utils import *
 
 class SteepestDescentMinimizer(Minimizer):
     def __init__(
         self, alpha=0.01,
-        output_unit=kilojoule_permol, 
+        output_unit=kilojoule_permol,
         output_unit_label='kj/mol', is_verbose=False, log_freq=5
     ) -> None:
         super().__init__(
-            output_unit=output_unit, 
-            output_unit_label=output_unit_label, 
-            is_verbose=is_verbose, 
+            output_unit=output_unit,
+            output_unit_label=output_unit_label,
+            is_verbose=is_verbose,
             log_freq=log_freq
         )
         self._alpha = alpha

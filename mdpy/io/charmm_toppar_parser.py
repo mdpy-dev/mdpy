@@ -4,16 +4,14 @@
 file : charmm_param_parser.py
 created time : 2021/10/08
 author : Zhenyu Wei
-version : 1.0
-contact : zhenyuwei99@gmail.com
-copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
+copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
 import itertools
 import numpy as np
-from .. import env
-from ..error import *
-from ..unit import *
+from mdpy import env
+from mdpy.error import *
+from mdpy.unit import *
 
 RMIN_TO_SIGMA_FACTOR = env.NUMPY_FLOAT(2**(-1/6))
 USED_BLOCK_LABELS = ['ATOMS', 'BONDS', 'ANGLES', 'DIHEDRALS', 'IMPROPER', 'NONBONDED']
@@ -50,13 +48,13 @@ class CharmmTopparParser:
 
     def parse_par_file(self, file_path):
         ''' Data info:
-        - BONDS: V(bond) = Kb(b - b0)**2; 
+        - BONDS: V(bond) = Kb(b - b0)**2;
             - Kb: kcal/mole/A**2
             - b0: A
         - ANGLES: V(angle) = Ktheta(Theta - Theta0)**2;
             - Ktheta: kcal/mole/rad**2
             - Theta0: degrees
-        DIHEDRALS: V(dihedral) = Kchi(1 + cos(n(chi) - delta)) 
+        DIHEDRALS: V(dihedral) = Kchi(1 + cos(n(chi) - delta))
             - Kchi: kcal/mole
             - n: multiplicity
             - delta: degrees
@@ -120,7 +118,7 @@ class CharmmTopparParser:
     def _parse_par_bond_block(self, infos):
         for info in infos:
             res = [
-                Quantity(float(info[2]), kilocalorie_permol / angstrom**2).convert_to(default_energy_unit / default_length_unit**2).value, 
+                Quantity(float(info[2]), kilocalorie_permol / angstrom**2).convert_to(default_energy_unit / default_length_unit**2).value,
                 Quantity(float(info[3]), angstrom).convert_to(default_length_unit).value
             ]
             target_keys = self._embed_x_element('%s-%s' %(info[0], info[1]))
@@ -133,9 +131,9 @@ class CharmmTopparParser:
         for info in infos:
             if len(info) == 5:
                 res = [
-                    Quantity(float(info[3]), kilocalorie_permol).convert_to(default_energy_unit).value, 
+                    Quantity(float(info[3]), kilocalorie_permol).convert_to(default_energy_unit).value,
                     np.deg2rad(Quantity(float(info[4])).value),
-                    Quantity(0, kilocalorie_permol).convert_to(default_energy_unit).value, 
+                    Quantity(0, kilocalorie_permol).convert_to(default_energy_unit).value,
                     Quantity(0, angstrom).convert_to(default_length_unit).value
                 ]
                 target_keys = self._embed_x_element('%s-%s-%s' %(info[0], info[1], info[2]))
@@ -145,9 +143,9 @@ class CharmmTopparParser:
                         self._parameters['angle'][key] = res
             elif len(info) == 7:
                 res = [
-                    Quantity(float(info[3]), kilocalorie_permol).convert_to(default_energy_unit).value, 
+                    Quantity(float(info[3]), kilocalorie_permol).convert_to(default_energy_unit).value,
                     np.deg2rad(Quantity(float(info[4])).value),
-                    Quantity(float(info[5]), kilocalorie_permol).convert_to(default_energy_unit).value, 
+                    Quantity(float(info[5]), kilocalorie_permol).convert_to(default_energy_unit).value,
                     Quantity(float(info[6]), angstrom).convert_to(default_length_unit).value
                 ]
                 target_keys = self._embed_x_element('%s-%s-%s' %(info[0], info[1], info[2]))
@@ -163,7 +161,7 @@ class CharmmTopparParser:
                 x_include_pairs.append(info)
             else:
                 res = [
-                    Quantity(float(info[4]), kilocalorie_permol).convert_to(default_energy_unit).value, 
+                    Quantity(float(info[4]), kilocalorie_permol).convert_to(default_energy_unit).value,
                     Quantity(float(info[5])).value,
                     np.deg2rad(Quantity(float(info[6])).value)
                 ]
@@ -179,7 +177,7 @@ class CharmmTopparParser:
                         self._parameters['dihedral'][key].append(res)
         for info in x_include_pairs:
             res = [
-                Quantity(float(info[4]), kilocalorie_permol).convert_to(default_energy_unit).value, 
+                Quantity(float(info[4]), kilocalorie_permol).convert_to(default_energy_unit).value,
                 Quantity(float(info[5])).value,
                 np.deg2rad(Quantity(float(info[6])).value)
             ]
@@ -196,7 +194,7 @@ class CharmmTopparParser:
     def _parse_par_improper_block(self, infos):
         for info in infos:
             res = [
-                Quantity(float(info[4]), kilocalorie_permol).convert_to(default_energy_unit).value, 
+                Quantity(float(info[4]), kilocalorie_permol).convert_to(default_energy_unit).value,
                 np.deg2rad(Quantity(float(info[6])).value)
             ]
             target_keys = []
@@ -221,7 +219,7 @@ class CharmmTopparParser:
                     Quantity(float(info[3]), angstrom).convert_to(default_length_unit).value * 2 * RMIN_TO_SIGMA_FACTOR,
                     - Quantity(float(info[5]), kilocalorie_permol).convert_to(default_energy_unit).value,
                     Quantity(float(info[6]), angstrom).convert_to(default_length_unit).value * 2 * RMIN_TO_SIGMA_FACTOR
-                ]     
+                ]
 
     def parse_top_file(self, file_path):
         with open(file_path, 'r') as f:

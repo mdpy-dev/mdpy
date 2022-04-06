@@ -4,9 +4,7 @@
 file : dcd_parser.py
 created time : 2022/03/10
 author : Zhenyu Wei
-version : 1.0
-contact : zhenyuwei99@gmail.com
-copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
+copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
 import numpy as np
@@ -55,7 +53,7 @@ class DCDParser:
     @property
     def num_frames(self):
         return self._num_frames
-    
+
     @property
     def num_particles(self):
         return self._num_particles

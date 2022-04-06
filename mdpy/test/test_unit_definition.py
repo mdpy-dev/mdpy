@@ -4,15 +4,13 @@
 file : test_unit_definition.py
 created time : 2021/09/28
 author : Zhenyu Wei
-version : 1.0
-contact : zhenyuwei99@gmail.com
-copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
+copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
 import pytest
 import numpy as np
-from ..unit import energy, force
-from ..unit import *
+from mdpy.unit import energy, force
+from mdpy.unit import *
 
 def test_constants():
     # Avogadro Constant
@@ -87,7 +85,7 @@ def test_energy():
     assert Quantity(1) * joule / kilocalorie == 1/4.184e3
     assert Quantity(1) * joule / calorie_premol == 6.0221e23/4.184
     assert Quantity(1) * joule / kilocalorie_permol == 6.0221e23/4.184e3
-    
+
     assert Quantity(1) * joule / ev == 1/1.60217662e-19
     assert Quantity(1) * joule / hartree == 1/4.3597447222071e-18
 

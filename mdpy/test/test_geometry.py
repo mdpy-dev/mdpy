@@ -4,15 +4,13 @@
 file : test_geometry.py
 created time : 2021/10/09
 author : Zhenyu Wei
-version : 1.0
-contact : zhenyuwei99@gmail.com
-copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
+copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
 import pytest
 import numpy as np
-from .. import env
-from ..utils import *
+from mdpy import env
+from mdpy.utils import *
 
 def test_get_unit_vec():
     vec = np.array([1, 1], dtype=env.NUMPY_FLOAT)
@@ -59,7 +57,7 @@ def test_get_angle():
     p3 = np.array([0, 1])
     angle = get_angle(p1, p2, p3)
     assert angle == pytest.approx(np.pi / 4)
-    
+
     angle = get_angle(p1, p2, p3, is_angular=False)
     assert angle == pytest.approx(45)
 
@@ -92,7 +90,7 @@ def test_get_included_angle():
     v2 = p3 - p2
     angle = get_included_angle(v1, v2)
     assert angle == pytest.approx(np.pi / 4)
-    
+
     angle = get_included_angle(v1, v2, is_angular=False)
     assert angle == pytest.approx(45)
 
@@ -101,7 +99,7 @@ def test_get_dihedral():
     p2 = np.array([0, 0, 0])
     p3 = np.array([1, 0, 0])
     p4 = np.array([1, 1, 0])
-    
+
     dihedral = get_dihedral(p1, p2, p3, p4)
     assert dihedral == pytest.approx(- np.pi / 4)
     dihedral = get_dihedral(p1, p2, p3, p4, is_angular=False)
@@ -111,7 +109,7 @@ def test_get_dihedral():
     p2 = np.array([0, 0, 0])
     p3 = np.array([1, 0, 0])
     p4 = np.array([1, 0, -1])
-    
+
     dihedral = get_dihedral(p1, p2, p3, p4)
     assert dihedral == pytest.approx(- np.pi * 3/ 4)
     dihedral = get_dihedral(p1, p2, p3, p4, is_angular=False)
@@ -121,7 +119,7 @@ def test_get_dihedral():
     p2 = np.array([0, 0, 0])
     p3 = np.array([1, 0, 0])
     p4 = np.array([1, 0, 1])
-    
+
     dihedral = get_dihedral(p1, p2, p3, p4)
     assert dihedral == pytest.approx(np.pi / 4)
     dihedral = get_dihedral(p1, p2, p3, p4, is_angular=False)
@@ -131,7 +129,7 @@ def test_get_dihedral():
     p2 = np.array([0, 0, 0])
     p3 = np.array([1, 0, 0])
     p4 = np.array([1, -1, 0])
-    
+
     dihedral = get_dihedral(p1, p2, p3, p4)
     assert dihedral == pytest.approx(np.pi * 3/ 4)
     dihedral = get_dihedral(p1, p2, p3, p4, is_angular=False)
@@ -142,7 +140,7 @@ def test_get_dihedral():
     p2 = np.array([1, 0, 0])
     p3 = np.array([0, 1, 0])
     p4 = np.array([0.5, 0.5, 1])
-    
+
     improper = get_dihedral(p1, p2, p3, p4)
     assert improper == pytest.approx(np.pi / 2)
 
@@ -153,7 +151,7 @@ def test_get_dihedral():
     p2 = np.array([1, 0, 0])
     p3 = np.array([0, 1, 0])
     p4 = np.array([0.5, 0.5, -1])
-    
+
     improper = get_dihedral(p1, p2, p3, p4)
     assert improper == pytest.approx(- np.pi / 2)
 
@@ -168,7 +166,7 @@ def test_get_pbc_dihedral():
     p2 = np.array([0, 0, 0]).astype(env.NUMPY_FLOAT)
     p3 = np.array([1, 0, 0]).astype(env.NUMPY_FLOAT)
     p4 = np.array([1, 1, 0]).astype(env.NUMPY_FLOAT)
-    
+
     dihedral = get_pbc_dihedral(p1, p2, p3, p4, pbc_matrix, pbc_inv)
     assert dihedral == pytest.approx(- np.pi / 4)
 
@@ -176,14 +174,14 @@ def test_get_pbc_dihedral():
     p2 = np.array([1, 0, 0]).astype(env.NUMPY_FLOAT)
     p3 = np.array([0, 1, 0]).astype(env.NUMPY_FLOAT) - 10
     p4 = np.array([0.5, 0.5, -1]).astype(env.NUMPY_FLOAT)
-    
+
     improper = get_pbc_dihedral(p1, p2, p3, p4, pbc_matrix, pbc_inv)
     assert improper == pytest.approx(- np.pi / 2)
 
     p1 = np.array([0, 1, 1]).astype(env.NUMPY_FLOAT)
-    p2 = np.array([0, 0, 0]).astype(env.NUMPY_FLOAT) 
+    p2 = np.array([0, 0, 0]).astype(env.NUMPY_FLOAT)
     p3 = np.array([1, 0, 0]).astype(env.NUMPY_FLOAT)
     p4 = np.array([1, 0, -1]).astype(env.NUMPY_FLOAT) - 10
-    
+
     dihedral = get_pbc_dihedral(p1, p2, p3, p4, pbc_matrix, pbc_inv)
     assert dihedral == pytest.approx(- np.pi * 3/ 4)

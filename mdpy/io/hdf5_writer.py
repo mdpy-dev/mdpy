@@ -4,9 +4,7 @@
 file : hdf5_writer.py
 created time : 2022/02/24
 author : Zhenyu Wei
-version : 1.0
-contact : zhenyuwei99@gmail.com
-copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
+copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
 import h5py
@@ -16,6 +14,8 @@ from mdpy.core import Topology
 from mdpy.utils import check_pbc_matrix, check_quantity_value
 from mdpy.unit import *
 from mdpy.error import *
+
+NONE_LABEL = 10000
 
 class HDF5Writer:
     def __init__(
@@ -120,7 +120,7 @@ class HDF5Writer:
 
     @staticmethod
     def _check_none(val, target_type):
-        return target_type(val) if not isinstance(val, type(None)) else target_type(-1)
+        return target_type(val) if not isinstance(val, type(None)) else target_type(NONE_LABEL)
 
     @property
     def file_path(self):

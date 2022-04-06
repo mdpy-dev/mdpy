@@ -4,9 +4,7 @@
 file : verlet_integrator.py
 created time : 2021/10/18
 author : Zhenyu Wei
-version : 1.0
-contact : zhenyuwei99@gmail.com
-copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
+copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
 from mdpy import env
@@ -31,7 +29,7 @@ class VerletIntegrator(Integrator):
             velocities = ensemble.state.velocities
             self._cur_positions = ensemble.state.positions
             self._pre_positions = (
-                self._cur_positions - velocities * self._time_step + 
+                self._cur_positions - velocities * self._time_step +
                 accelration * self._time_step_square
             )
         while cur_step < num_steps:
@@ -40,13 +38,13 @@ class VerletIntegrator(Integrator):
                 accelration = ensemble.forces / masses
             # Update positions and velocities
             self._cur_positions, self._pre_positions = (
-                2 * self._cur_positions - self._pre_positions + 
+                2 * self._cur_positions - self._pre_positions +
                 accelration * self._time_step_square
             ), self._cur_positions
             ensemble.state.set_positions(self._cur_positions)
             # Update step
             cur_step += 1
         ensemble.state.set_velocities(unwrap_vec(
-            (self._cur_positions - self._pre_positions).astype(env.NUMPY_FLOAT), 
+            (self._cur_positions - self._pre_positions).astype(env.NUMPY_FLOAT),
             *ensemble.state.pbc_info
         ) / 2 / self._time_step)
