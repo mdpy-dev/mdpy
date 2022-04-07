@@ -98,7 +98,7 @@ class CharmmForcefield(Forcefield):
         ensemble = Ensemble(self._topology, self._pbc_matrix)
         constraints = []
         if self._topology.num_particles != 0:
-            constraints.append(ElectrostaticConstraint())
+            constraints.append(ElectrostaticCutoffConstraint())
             constraints.append(CharmmNonbondedConstraint(self._parameters['nonbonded'], self._cutoff_radius))
         if self._topology.num_bonds != 0:
             constraints.append(CharmmBondConstraint(self._parameters['bond']))
