@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- encoding: utf-8 -*-
 '''
-file : electrostatic_constraint.py
+file : electrostatic_cutoff_constraint.py
 created time : 2021/10/13
 author : Zhenyu Wei
 copyright : (C)Copyright 2021-present, mdpy organization
@@ -20,7 +20,7 @@ from mdpy.unit import *
 
 epsilon0 = EPSILON0.value
 
-class ElectrostaticConstraint(Constraint):
+class ElectrostaticCutoffConstraint(Constraint):
     def __init__(self, parameters=None, force_id: int = 0, force_group: int = 0) -> None:
         super().__init__(parameters, force_id=force_id, force_group=force_group)
         self._int_parameters = []
@@ -38,7 +38,7 @@ class ElectrostaticConstraint(Constraint):
             ))(self.cuda_kernel)
 
     def __repr__(self) -> str:
-        return '<mdpy.constraint.ElectrostaticConstraint object>'
+        return '<mdpy.constraint.ElectrostaticCutoffConstraint object>'
 
     __str__ = __repr__
 
