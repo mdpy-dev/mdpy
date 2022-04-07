@@ -20,7 +20,7 @@ for i in range(-1, 2):
 
 # Electrostatic
 LONG_RANGE_SOLVER = ['PME', 'PPPM']
-from .electrostatic_constraint import ElectrostaticConstraint
+from .electrostatic_cutoff_constraint import ElectrostaticCutoffConstraint
 
 # Charmm
 from .charmm_bond_constraint import CharmmBondConstraint
@@ -30,7 +30,7 @@ from .charmm_improper_constraint import CharmmImproperConstraint
 from .charmm_nonbonded_constraint import CharmmNonbondedConstraint
 
 __all__ = [
-    'ElectrostaticConstraint',
+    'ElectrostaticCutoffConstraint',
     'CharmmBondConstraint', 'CharmmAngleConstraint',
     'CharmmDihedralConstraint', 'CharmmImproperConstraint',
     'CharmmNonbondedConstraint'
