@@ -40,7 +40,8 @@ class ElectrostaticCutoffConstraint(Constraint):
     def __repr__(self) -> str:
         return '<mdpy.constraint.ElectrostaticCutoffConstraint object>'
 
-    __str__ = __repr__
+    def __str__(self) -> str:
+        return 'Cutoff electrostatic constraint'
 
     def bind_ensemble(self, ensemble: Ensemble):
         self._parent_ensemble = ensemble
