@@ -27,7 +27,8 @@ class CharmmImproperConstraint(Constraint):
     def __repr__(self) -> str:
         return '<mdpy.constraint.CharmmImproperConstraint object>'
 
-    __str__ = __repr__
+    def __str__(self) -> str:
+        return 'Improper constraint'
 
     def bind_ensemble(self, ensemble: Ensemble):
         self._parent_ensemble = ensemble
