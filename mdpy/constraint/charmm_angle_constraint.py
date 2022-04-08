@@ -29,7 +29,7 @@ class CharmmAngleConstraint(Constraint):
 
     def __str__(self) -> str:
         return 'Angle constraint'
-    
+
     def bind_ensemble(self, ensemble: Ensemble):
         self._parent_ensemble = ensemble
         self._force_id = ensemble.constraints.index(self)
