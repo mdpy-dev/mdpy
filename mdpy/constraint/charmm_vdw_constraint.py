@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- encoding: utf-8 -*-
 '''
-file : charmm_nonbonded_constraint.py
+file : charmm_vdw_constraint.py
 created time : 2021/10/12
 author : Zhenyu Wei
 copyright : (C)Copyright 2021-present, mdpy organization
@@ -13,12 +13,12 @@ import numba as nb
 from numba import cuda
 from operator import floordiv
 from mdpy import env
-from mdpy.core import Ensemble
-from mdpy.constraint import Constraint, NUM_NEIGHBOR_CELLS, NEIGHBOR_CELL_TEMPLATE
+from mdpy.core import Ensemble, NUM_NEIGHBOR_CELLS, NEIGHBOR_CELL_TEMPLATE
+from mdpy.constraint import Constraint
 from mdpy.utils import *
 from mdpy.unit import *
 
-class CharmmNonbondedConstraint(Constraint):
+class CharmmVDWConstraint(Constraint):
     def __init__(self, parameters, cutoff_radius=12, force_id: int = 0, force_group: int = 0) -> None:
         super().__init__(parameters, force_id=force_id, force_group=force_group)
         # Attributes
@@ -34,10 +34,10 @@ class CharmmNonbondedConstraint(Constraint):
         ))(self._update_kernel)
 
     def __repr__(self) -> str:
-        return '<mdpy.constraint.CharmmNonbondedConstraint object>'
+        return '<mdpy.constraint.CharmmVDWConstraint object>'
 
     def __str__(self) -> str:
-        return 'Nonbonded constraint'
+        return 'VDW constraint'
 
     def bind_ensemble(self, ensemble: Ensemble):
         self._parent_ensemble = ensemble

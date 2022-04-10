@@ -24,7 +24,7 @@ from .charmm_bond_constraint import CharmmBondConstraint
 from .charmm_angle_constraint import CharmmAngleConstraint
 from .charmm_dihedral_constraint import CharmmDihedralConstraint
 from .charmm_improper_constraint import CharmmImproperConstraint
-from .charmm_nonbonded_constraint import CharmmNonbondedConstraint
+from .charmm_vdw_constraint import CharmmVDWConstraint
 
 __all__ = [
     'check_long_range_solver',
@@ -34,5 +34,5 @@ __all__ = [
     'CharmmAngleConstraint',
     'CharmmDihedralConstraint',
     'CharmmImproperConstraint',
-    'CharmmNonbondedConstraint'
+    'CharmmVDWConstraint'
 ]
