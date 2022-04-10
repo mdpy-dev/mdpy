@@ -168,16 +168,14 @@ class ParserPoorDefinedError(Exception):
     '''
     pass
 
-class DumperPoorDefinedError(Exception):
+class EnsemblePoorDefinedError(Exception):
     '''This error occurs when:
-    - Dump frequency of dumper object is 0
-    - Simulation integrates without adding dumper
-    - LogDumper requires rest_time without providing total_step
+    - A PME constraint is bound to a non-neutralized ensemble
+    - A unsupported long range solver is specified in forcefield object
 
     Used in:
-    - mdpy.dumper.dumper
-    - mdpy.dumper.log_dumper
-    - mdpy.simulation
+    - mdpy.constraint.electrostatic_pme_constraint
+    - mdpy.forcefield.charmm_forcefield
     '''
     pass
 
