@@ -7,7 +7,8 @@ from .constraint import Constraint
 
 # Constants
 import numpy as np
-from .. import SPATIAL_DIM, env
+from mdpy import SPATIAL_DIM, env
+from mdpy.error import *
 
 NUM_NEIGHBOR_CELLS = 27
 NEIGHBOR_CELL_TEMPLATE = np.zeros([NUM_NEIGHBOR_CELLS, SPATIAL_DIM], dtype=env.NUMPY_INT)
@@ -19,8 +20,17 @@ for i in range(-1, 2):
             index += 1
 
 # Electrostatic
-LONG_RANGE_SOLVER = ['PME', 'PPPM']
+LONG_RANGE_SOLVER = ['PME', 'CUTOFF']
+def check_long_range_solver(solver: str):
+    if not solver.upper():
+        raise EnsemblePoorDefinedError(
+            '%s solver is not supported. ' +
+            'Check supported platform with `mdpy.constraint.LONG_RANGE_SOLVER`'
+        )
+    return solver.upper()
+
 from .electrostatic_cutoff_constraint import ElectrostaticCutoffConstraint
+from .electrostatic_pme_constraint import ElectrostaticPMEConstraint
 
 # Charmm
 from .charmm_bond_constraint import CharmmBondConstraint
@@ -30,8 +40,12 @@ from .charmm_improper_constraint import CharmmImproperConstraint
 from .charmm_nonbonded_constraint import CharmmNonbondedConstraint
 
 __all__ = [
+    'check_long_range_solver',
     'ElectrostaticCutoffConstraint',
-    'CharmmBondConstraint', 'CharmmAngleConstraint',
-    'CharmmDihedralConstraint', 'CharmmImproperConstraint',
+    'ElectrostaticPMEConstraint',
+    'CharmmBondConstraint',
+    'CharmmAngleConstraint',
+    'CharmmDihedralConstraint',
+    'CharmmImproperConstraint',
     'CharmmNonbondedConstraint'
 ]
