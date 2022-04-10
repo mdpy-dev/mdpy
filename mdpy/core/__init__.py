@@ -3,6 +3,18 @@ __maintainer__ = "Zhenyu Wei"
 __copyright__ = "(C)Copyright 2021-present, mdpy organization"
 __license__ = "BSD"
 
+import numpy as np
+from mdpy import SPATIAL_DIM, env
+
+NUM_NEIGHBOR_CELLS = SPATIAL_DIM**SPATIAL_DIM
+NEIGHBOR_CELL_TEMPLATE = np.zeros([NUM_NEIGHBOR_CELLS, SPATIAL_DIM], dtype=env.NUMPY_INT)
+index = 0
+for i in range(-1, 2):
+    for j in range(-1, 2):
+        for k in range(-1, 2):
+            NEIGHBOR_CELL_TEMPLATE[index, :] = [i, j, k]
+            index += 1
+
 from mdpy.core.particle import Particle
 from mdpy.core.topology import Topology
 from mdpy.core.cell_list import CellList
@@ -12,6 +24,6 @@ from mdpy.core.ensemble import Ensemble
 
 __all__ = [
     'Particle', 'Topology',
-    'CellList', 'State',
-    'Trajectory', 'Ensemble'
+    'CellList', 'Grid',
+    'State', 'Trajectory', 'Ensemble'
 ]
