@@ -24,7 +24,6 @@ from mdpy.unit import *
 from mdpy.error import *
 
 PME_ORDER = 4
-COULOMB_CONSTANT = 332.0636 # 332.0636 kcal.A/(mol.e^2)
 
 def bspline(x, order):
     if order == 2:
@@ -83,7 +82,7 @@ class ElectrostaticPMEConstraint(Constraint):
             env.NUMBA_FLOAT[:, :, ::1], env.NUMBA_INT[:, :, ::1], # spline_coefficient, grid_map
             env.NUMBA_FLOAT[::1], env.NUMBA_FLOAT[:, :, ::1] # charges, charge_map
         ))(self._update_charge_map_kernel)
-        self._update_reciprocal_energy = self._update_reciprocal_energy_kernel
+        self._update_energy_map = self._update_energy_map_kernel
         self._update_reciprocal_force = cuda.jit(nb.void(
             env.NUMBA_INT[::1], # num_particles
             env.NUMBA_FLOAT[:, :, ::1], # spline_coefficient
@@ -290,11 +289,11 @@ class ElectrostaticPMEConstraint(Constraint):
                 erf = math.erf(ewald_coefficient*r)
                 force_val = e1 * e2 * (
                     2*ewald_coefficient*math.exp(-(ewald_coefficient*r)**2) /
-                    math.sqrt(math.pi) - erf
-                ) / k / r**2
-                force_x = scaled_x * force_val / 2
-                force_y = scaled_y * force_val / 2
-                force_z = scaled_z * force_val / 2
+                    math.sqrt(math.pi) - erf / r
+                ) / k / r / 2
+                force_x = scaled_x * force_val
+                force_y = scaled_y * force_val
+                force_z = scaled_z * force_val
                 cuda.atomic.add(forces, (id1, 0), -force_x)
                 cuda.atomic.add(forces, (id1, 1), -force_y)
                 cuda.atomic.add(forces, (id1, 2), -force_z)
@@ -302,7 +301,7 @@ class ElectrostaticPMEConstraint(Constraint):
                 cuda.atomic.add(forces, (id2, 1), force_y)
                 cuda.atomic.add(forces, (id2, 2), force_z)
                 energy = e1 * e2 * erf / k / r / 2
-                cuda.atomic.add(potential_energy, 0, - energy)
+                cuda.atomic.add(potential_energy, 0, -energy)
                 return None
 
         x = (positions[id2, 0] - positions[id1, 0]) / pbc_matrix[0, 0]
@@ -319,11 +318,11 @@ class ElectrostaticPMEConstraint(Constraint):
             erfc = math.erfc(ewald_coefficient*r)
             force_val = - e1 * e2 * (
                 2*ewald_coefficient*math.exp(-(ewald_coefficient*r)**2) /
-                math.sqrt(math.pi) + erfc
-            ) / k / r**2
-            force_x = scaled_x * force_val / 2
-            force_y = scaled_y * force_val / 2
-            force_z = scaled_z * force_val / 2
+                math.sqrt(math.pi) + erfc / r
+            ) / k / r / 2
+            force_x = scaled_x * force_val
+            force_y = scaled_y * force_val
+            force_z = scaled_z * force_val
             cuda.atomic.add(forces, (id1, 0), force_x)
             cuda.atomic.add(forces, (id1, 1), force_y)
             cuda.atomic.add(forces, (id1, 2), force_z)
@@ -412,11 +411,11 @@ class ElectrostaticPMEConstraint(Constraint):
                     cuda.atomic.add(charge_map, (grid_x, grid_y, grid_z), grid_charge)
 
     @staticmethod
-    def _update_reciprocal_energy_kernel(
-        charge_map, b_grid, c_grid,
+    def _update_energy_map_kernel(
+        k, charge_map, b_grid, c_grid,
     ):
         # Convolution
-        fft_charge = fft.fftn(charge_map * COULOMB_CONSTANT)
+        fft_charge = fft.fftn(charge_map / k)
         fft_charge[0, 0, 0] = 0
         energy_map = fft.ifftn(fft_charge*b_grid*c_grid).real
         return energy_map
@@ -518,15 +517,14 @@ class ElectrostaticPMEConstraint(Constraint):
         device_num_particles = cuda.to_device(np.array(
             [self._parent_ensemble.topology.num_particles], dtype=env.NUMPY_INT
         ))
-        device_charges = cuda.to_device(self._parent_ensemble.topology.charges[:, 0])
         device_charge_map = cuda.to_device(np.zeros(self._grid_size, dtype=env.NUMPY_FLOAT))
         self._update_charge_map[thread_per_block, block_per_grid](
             device_num_particles, device_spline_coefficient, device_grid_map,
-            device_charges, device_charge_map
+            self._device_charges, device_charge_map
         )
         # Reciprocal convolution
-        energy_map = self._update_reciprocal_energy(
-            device_charge_map.copy_to_host(), self._b_grid, self._c_grid
+        energy_map = self._update_energy_map(
+            self._k, device_charge_map.copy_to_host(), self._b_grid, self._c_grid
         )
         # Reciprocal force
         device_spline_derivative_coefficient = cuda.to_device(spline_derivative_coefficient)
@@ -539,20 +537,14 @@ class ElectrostaticPMEConstraint(Constraint):
             device_spline_derivative_coefficient,
             device_grid_map,
             device_energy_map,
-            device_charges,
+            self._device_charges,
             device_forces,
             device_potential_energy
         )
         forces_reciprocal = device_forces.copy_to_host()
         forces_reciprocal = forces_reciprocal * self._grid_size / np.diagonal(self._parent_ensemble.state.pbc_matrix)
-        forces_reciprocal = Quantity(
-            forces_reciprocal, kilocalorie_permol_over_angstrom
-        ).convert_to(default_force_unit).value
         forces_reciprocal -= forces_reciprocal.mean(0)
         potential_energy_resciprocal = device_potential_energy.copy_to_host()[0]
-        potential_energy_resciprocal = Quantity(
-            potential_energy_resciprocal, kilocalorie_permol
-        ).convert_to(default_energy_unit).value
         # Summary
         self._potential_energy = potential_energy_direct + potential_energy_resciprocal - self._potential_energy_self
         self._forces = forces_direct + forces_reciprocal
