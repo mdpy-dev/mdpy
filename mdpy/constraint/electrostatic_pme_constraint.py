@@ -556,27 +556,3 @@ class ElectrostaticPMEConstraint(Constraint):
     @property
     def ewald_coefficient(self):
         return self._ewald_coefficient
-
-import mdpy as md
-import scipy as sp
-import cupy as cp
-import scipy.fft as fft
-import cupy.fft as cfft
-import matplotlib.pyplot as plt
-if __name__ == '__main__':
-    constraint = ElectrostaticPMEConstraint(Quantity(9, angstrom), direct_sum_energy_tolerance=1e-6)
-    data = sp.io.loadmat('/home/zhenyuwei/Downloads/PME/Tests/cubeions.mat')
-    coordinate, charge = data['crdq'][:, :3], data['crdq'][:, 3]
-    # print(constraint._ewald_coefficient)
-    topology = md.core.Topology()
-    topology.add_particles(
-        [md.core.Particle(charge=i) for i in charge]
-    )
-    ensemble = md.core.Ensemble(topology, np.diag([64]*3))
-    ensemble.add_constraints(constraint)
-    ensemble.state.set_positions(coordinate)
-
-    s = time.time()
-    constraint.update()
-    e = time.time()
-    print('Run xxx for %s s' %(e-s))
