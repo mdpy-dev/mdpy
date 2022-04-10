@@ -104,7 +104,7 @@ class CharmmForcefield(Forcefield):
                 constraints.append(ElectrostaticPMEConstraint(
                     self._cutoff_radius, self._ewald_direct_sum_error
                 ))
-            constraints.append(CharmmNonbondedConstraint(self._parameters['nonbonded'], self._cutoff_radius))
+            constraints.append(CharmmVDWConstraint(self._parameters['nonbonded'], self._cutoff_radius))
         if self._topology.num_bonds != 0:
             constraints.append(CharmmBondConstraint(self._parameters['bond']))
         if self._topology.num_angles != 0:
