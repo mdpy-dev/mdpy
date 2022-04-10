@@ -13,8 +13,8 @@ import numba as nb
 from numba import cuda
 from operator import floordiv
 from mdpy import env
-from mdpy.core import Ensemble
-from mdpy.constraint import Constraint, NUM_NEIGHBOR_CELLS, NEIGHBOR_CELL_TEMPLATE
+from mdpy.core import Ensemble, NUM_NEIGHBOR_CELLS, NEIGHBOR_CELL_TEMPLATE
+from mdpy.constraint import Constraint
 from mdpy.utils import *
 from mdpy.unit import *
 
