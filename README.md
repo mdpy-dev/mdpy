@@ -1,7 +1,7 @@
 # mdpy
 MDPy is a python framework for conducting highly extensible and flexible molecular dynamics simulation
 
-[![License: BSD](https://img.shields.io/badge/License-BSD-green.svg)](./LICENCE)
+[![License: BSD](https://img.shields.io/github/license/mdpy-dev/mdpy.svg)](./LICENCE)
 [![conda](https://anaconda.org/zhenyuwei/mdpy/badges/version.svg)](https://anaconda.org/zhenyuwei/mdpy/)
 [![Download](https://anaconda.org/zhenyuwei/mdpy/badges/downloads.svg)](https://anaconda.org/zhenyuwei/mdpy/)
 # Quick start
