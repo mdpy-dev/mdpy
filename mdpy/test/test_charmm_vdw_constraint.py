@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- encoding: utf-8 -*-
 '''
-file : test_charmm_nonbonded_constraint.py
+file : test_charmm_vdw_constraint.py
 created time : 2021/10/12
 author : Zhenyu Wei
 copyright : (C)Copyright 2021-present, mdpy organization
@@ -10,7 +10,7 @@ copyright : (C)Copyright 2021-present, mdpy organization
 import pytest, os
 import numpy as np
 from mdpy import env
-from mdpy.constraint import CharmmNonbondedConstraint
+from mdpy.constraint import CharmmVDWConstraint
 from mdpy.core import Particle, Topology, Ensemble
 from mdpy.io import CharmmTopparParser
 from mdpy.io.charmm_toppar_parser import RMIN_TO_SIGMA_FACTOR
@@ -21,7 +21,7 @@ from mdpy.unit import *
 cur_dir = os.path.dirname(os.path.abspath(__file__))
 data_dir = os.path.join(cur_dir, 'data')
 
-class TestCharmmNonbondedConstraint:
+class TestCharmmVDWConstraint:
     def setup(self):
         p1 = Particle(
             particle_id=0, particle_name='C',
@@ -62,7 +62,7 @@ class TestCharmmNonbondedConstraint:
         f3 = os.path.join(data_dir, 'top_all36_na.rtf')
         charmm = CharmmTopparParser(f1, f2, f3)
         self.parameters = charmm.parameters
-        self.constraint = CharmmNonbondedConstraint(self.parameters['nonbonded'])
+        self.constraint = CharmmVDWConstraint(self.parameters['nonbonded'])
 
     def teardown(self):
         self.ensemble, self.parameters, self.constraint = None, None, None
@@ -111,9 +111,10 @@ class TestCharmmNonbondedConstraint:
         force_val = - 24 * epsilon / r * (2 * scaled_r**12 - scaled_r**6)
         force_vec = - get_unit_vec(self.p[2, :] - self.p[0, :]) # Manually PBC Wrap
         force = force_val * force_vec
-        assert forces[0, 0] == pytest.approx(force[0], abs=1e-8)
-        assert forces[0, 1] == pytest.approx(force[1], abs=1e-8)
-        assert forces[0, 2] == pytest.approx(force[2], abs=1e-8)
+        abs_val = Quantity(1e-3, kilocalorie_permol_over_angstrom).convert_to(default_force_unit).value
+        assert forces[0, 0] == pytest.approx(force[0], abs=abs_val)
+        assert forces[0, 1] == pytest.approx(force[1], abs=abs_val)
+        assert forces[0, 2] == pytest.approx(force[2], abs=abs_val)
 
         energy = self.constraint.potential_energy
         epsilon = np.sqrt(

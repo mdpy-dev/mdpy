@@ -27,7 +27,8 @@ class CharmmAngleConstraint(Constraint):
     def __repr__(self) -> str:
         return '<mdpy.constraint.CharmmAngleConstraint object>'
 
-    __str__ = __repr__
+    def __str__(self) -> str:
+        return 'Angle constraint'
 
     def bind_ensemble(self, ensemble: Ensemble):
         self._parent_ensemble = ensemble

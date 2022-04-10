@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- encoding: utf-8 -*-
 '''
-file : test_electrostatic_constraint.py
+file : test_electrostatic_cutoff_constraint.py
 created time : 2021/10/21
 author : Zhenyu Wei
 copyright : (C)Copyright 2021-present, mdpy organization
@@ -10,7 +10,7 @@ copyright : (C)Copyright 2021-present, mdpy organization
 import pytest, os
 import numpy as np
 from mdpy import env
-from mdpy.constraint import ElectrostaticConstraint
+from mdpy.constraint import ElectrostaticCutoffConstraint
 from mdpy.core import Particle, Topology, Ensemble
 from mdpy.utils import get_unit_vec
 from mdpy.error import *
@@ -19,7 +19,7 @@ from mdpy.unit import *
 cur_dir = os.path.dirname(os.path.abspath(__file__))
 data_dir = os.path.join(cur_dir, 'data')
 
-class TestElectrostaticConstraint:
+class TestElectrostaticCutoffConstraint:
     def setup(self):
         p1 = Particle(
             particle_id=0, particle_type='C',
@@ -50,7 +50,7 @@ class TestElectrostaticConstraint:
         self.ensemble = Ensemble(t, np.eye(3)*30)
         self.ensemble.state.cell_list.set_cutoff_radius(12)
         self.ensemble.state.set_positions(self.p)
-        self.constraint = ElectrostaticConstraint()
+        self.constraint = ElectrostaticCutoffConstraint()
 
     def teardown(self):
         self.ensemble, self.parameters, self.constraint = None, None, None

@@ -19,7 +19,7 @@ cur_dir = os.path.dirname(os.path.abspath(__file__))
 data_dir = os.path.join(cur_dir, 'data')
 out_dir = os.path.join(cur_dir, 'out')
 
-class TestLogDumper:
+class TestLogWriter:
     def setup(self):
         self.log_file = os.path.join(out_dir, 'test_log_dumper.log')
 
@@ -30,9 +30,6 @@ class TestLogDumper:
         pass
 
     def test_exceptions(self):
-        with pytest.raises(DumperPoorDefinedError):
-            LogWriter(self.log_file, 100, rest_time=True)
-
         with pytest.raises(FileFormatError):
             LogWriter('test.lo', 10)
 
@@ -43,7 +40,7 @@ class TestLogDumper:
 
         topology = psf.topology
 
-        forcefield = CharmmForcefield(topology, np.eye(3) * 100)
+        forcefield = CharmmForcefield(topology, np.eye(3) * 100, long_range_solver='CUTOFF')
         forcefield.set_param_files(
             os.path.join(data_dir, 'par_all36_prot.prm'),
             os.path.join(data_dir, 'toppar_water_ions_namd.str')
