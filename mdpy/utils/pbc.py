@@ -30,7 +30,7 @@ def wrap_positions(positions: np.ndarray, pbc_matrix: np.ndarray, pbc_inv: np.ar
     if np.max(np.abs(move_vec)) >= 2:
         particle_id = np.unique([i[0] for i in np.argwhere(np.abs(move_vec) >= 2)])
         raise ParticleLossError(
-            'Atom(s) with matrix id: %s moved beyond 2 PBC image.' %(particle_id)
+            'Particle(s) with matrix id: %s moved beyond 2 PBC image.' %(particle_id)
         )
     move_vec = np.dot(move_vec, pbc_matrix)
     return positions + move_vec
