@@ -40,7 +40,7 @@ class TestLogWriter:
 
         topology = psf.topology
 
-        forcefield = CharmmForcefield(topology, np.eye(3) * 100)
+        forcefield = CharmmForcefield(topology, np.eye(3) * 100, long_range_solver='CUTOFF')
         forcefield.set_param_files(
             os.path.join(data_dir, 'par_all36_prot.prm'),
             os.path.join(data_dir, 'toppar_water_ions_namd.str')
