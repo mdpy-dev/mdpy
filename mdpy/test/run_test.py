@@ -14,8 +14,6 @@ out_dir = os.path.join(cur_dir, 'out')
 if not os.path.exists(out_dir):
     os.mkdir(out_dir)
 
-os.environ['NUMBA_DISABLE_JIT'] = '1'
-
 parser = argparse.ArgumentParser(description='Input of test')
 parser.add_argument('-n', type=int, default = 1)
 args = parser.parse_args()

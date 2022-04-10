@@ -77,7 +77,7 @@ class TestEnsemble:
         parameters = charmm_file.parameters
         topology = PSFParser(psf_file_path).topology
         ensemble = Ensemble(topology, np.diag(np.ones(3)*30))
-        constraint = CharmmNonbondedConstraint(parameters['nonbonded'])
+        constraint = CharmmVDWConstraint(parameters['nonbonded'])
         ensemble.add_constraints(constraint)
         assert ensemble.num_constraints == 1
 
