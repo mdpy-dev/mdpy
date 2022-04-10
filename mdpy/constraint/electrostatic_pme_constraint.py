@@ -125,13 +125,12 @@ class ElectrostaticPMEConstraint(Constraint):
 
     def _get_grid_size(self):
         '''
-        Set the grid size with spacing around 0.75 angstrom and power to 2 for better fft performance
+        Set the grid size with spacing around 0.5 angstrom and power to 2 for better fft performance
         '''
         pbc_diag = np.diag(Quantity(
             self._parent_ensemble.state.pbc_matrix, default_length_unit
         ).convert_to(angstrom).value)
-        grid_size = np.array([96, 96, 96])
-        # grid_size = np.ceil(pbc_diag/1/2) * 2
+        grid_size = np.ceil(pbc_diag/32) * 32
         return grid_size.astype(env.NUMPY_INT)
 
     def _get_b_grid(self):
@@ -221,8 +220,8 @@ class ElectrostaticPMEConstraint(Constraint):
         self._parent_ensemble = ensemble
         self._force_id = ensemble.constraints.index(self)
         self._charges = self._parent_ensemble.topology.charges[:, 0]
-        # if self._charges.sum() != 0:
-            # raise EnsemblePoorDefinedError('mdpy.constraint.ElectrostaticPMEConstraint is bound to a non-neutralized ensemble')
+        if self._charges.sum() != 0:
+            raise EnsemblePoorDefinedError('mdpy.constraint.ElectrostaticPMEConstraint is bound to a non-neutralized ensemble')
         # Grid size
         self._grid_size = self._get_grid_size()
         self._num_grids_total = np.prod(self._grid_size)
