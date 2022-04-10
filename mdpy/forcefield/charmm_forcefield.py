@@ -20,15 +20,15 @@ from mdpy.error import *
 class CharmmForcefield(Forcefield):
     def __init__(
         self, topology: Topology, pbc_matrix: np.ndarray,
-        cutoff_radius=12, long_range_solver='PPPM', ewald_error=1e-6,
+        cutoff_radius=12, long_range_solver='PME', ewald_direct_sum_error=1e-6,
         is_SHAKE: bool=True
     ) -> None:
         super().__init__(topology)
         pbc_matrix = check_quantity_value(pbc_matrix, default_length_unit)
         self._pbc_matrix = check_pbc_matrix(pbc_matrix)
         self._cutoff_radius = check_quantity_value(cutoff_radius, default_length_unit)
-        self._long_range_solver = long_range_solver
-        self._ewald_error = ewald_error
+        self._long_range_solver = check_long_range_solver(long_range_solver)
+        self._ewald_direct_sum_error = ewald_direct_sum_error
         self._is_SHAKE = is_SHAKE
 
     def set_param_files(self, *file_pathes) -> None:
@@ -98,7 +98,12 @@ class CharmmForcefield(Forcefield):
         ensemble = Ensemble(self._topology, self._pbc_matrix)
         constraints = []
         if self._topology.num_particles != 0:
-            constraints.append(ElectrostaticCutoffConstraint())
+            if self._long_range_solver == 'CUTOFF':
+                constraints.append(ElectrostaticCutoffConstraint())
+            elif self._long_range_solver == 'PME':
+                constraints.append(ElectrostaticPMEConstraint(
+                    self._cutoff_radius, self._ewald_direct_sum_error
+                ))
             constraints.append(CharmmNonbondedConstraint(self._parameters['nonbonded'], self._cutoff_radius))
         if self._topology.num_bonds != 0:
             constraints.append(CharmmBondConstraint(self._parameters['bond']))
