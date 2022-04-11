@@ -99,7 +99,7 @@ class CharmmForcefield(Forcefield):
         constraints = []
         if self._topology.num_particles != 0:
             if self._long_range_solver == 'CUTOFF':
-                constraints.append(ElectrostaticCutoffConstraint())
+                constraints.append(ElectrostaticCutoffConstraint(self._cutoff_radius))
             elif self._long_range_solver == 'PME':
                 constraints.append(ElectrostaticPMEConstraint(
                     self._cutoff_radius, self._ewald_direct_sum_error
