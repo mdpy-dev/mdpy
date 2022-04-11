@@ -15,14 +15,19 @@ from mdpy.constraint import Constraint
 from mdpy.utils import *
 
 class CharmmImproperConstraint(Constraint):
-    def __init__(self, parameters, force_id: int = 0, force_group: int = 0) -> None:
-        super().__init__(parameters, force_id=force_id, force_group=force_group)
+    def __init__(self, parameter_dict: dict) -> None:
+        super().__init__()
+        self._parameter_dict = parameter_dict
         self._int_parameters = []
         self._float_parameters = []
         self._num_impropers = 0
-        self._kernel = nb.njit(
-            (env.NUMBA_INT[:, :], env.NUMBA_FLOAT[:, :], env.NUMBA_FLOAT[:, ::1], env.NUMBA_FLOAT[:, ::1], env.NUMBA_FLOAT[:, ::1])
-        )(self.kernel)
+        self._kernel = nb.njit((
+            env.NUMBA_INT[:, :], # int_parameters
+            env.NUMBA_FLOAT[:, :], # float_parameters
+            env.NUMBA_FLOAT[:, ::1], # positions
+            env.NUMBA_FLOAT[:, ::1], # pbc_matrix
+            env.NUMBA_FLOAT[:, ::1] # pbc_inv
+        ))(self.kernel)
 
     def __repr__(self) -> str:
         return '<mdpy.constraint.CharmmImproperConstraint object>'
@@ -49,7 +54,7 @@ class CharmmImproperConstraint(Constraint):
                 self._parent_ensemble.topology.particles[improper[2]].matrix_id,
                 self._parent_ensemble.topology.particles[improper[3]].matrix_id
             ])
-            self._float_parameters.append(self._parameters[improper_type])
+            self._float_parameters.append(self._parameter_dict[improper_type])
             self._num_impropers += 1
         self._int_parameters = np.vstack(self._int_parameters).astype(env.NUMPY_INT)
         self._float_parameters = np.vstack(self._float_parameters).astype(env.NUMPY_FLOAT)

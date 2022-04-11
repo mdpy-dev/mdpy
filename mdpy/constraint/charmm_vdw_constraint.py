@@ -19,18 +19,27 @@ from mdpy.utils import *
 from mdpy.unit import *
 
 class CharmmVDWConstraint(Constraint):
-    def __init__(self, parameters, cutoff_radius=12, force_id: int = 0, force_group: int = 0) -> None:
-        super().__init__(parameters, force_id=force_id, force_group=force_group)
+    def __init__(self, parameter_dict: dict, cutoff_radius=Quantity(12, angstrom)) -> None:
+        super().__init__()
         # Attributes
+        self._parameter_dict = parameter_dict
         self._cutoff_radius = check_quantity_value(cutoff_radius, default_length_unit)
         self._device_cutoff_radius = cuda.to_device(np.array([self._cutoff_radius]))
         self._parameters_list = []
         # Kernel
         self._update = cuda.jit(nb.void(
-            env.NUMBA_FLOAT[:, ::1], env.NUMBA_FLOAT[:, ::1], env.NUMBA_FLOAT[:, ::1],
-            env.NUMBA_FLOAT[::1], env.NUMBA_INT[:, ::1], env.NUMBA_INT[:, ::1],
-            env.NUMBA_INT[:, ::1], env.NUMBA_INT[:, :, :, ::1], env.NUMBA_INT[::1], env.NUMBA_INT[:, ::1],
-            env.NUMBA_FLOAT[:, ::1], env.NUMBA_FLOAT[::1]
+            env.NUMBA_FLOAT[:, ::1], # positions
+            env.NUMBA_FLOAT[:, ::1], # parameters
+            env.NUMBA_FLOAT[:, ::1], # pbc_matrix
+            env.NUMBA_FLOAT[::1], # cutoff_radius
+            env.NUMBA_INT[:, ::1], # bonded_particle
+            env.NUMBA_INT[:, ::1], # scaling_particles
+            env.NUMBA_INT[:, ::1], # particle_cell_index
+            env.NUMBA_INT[:, :, :, ::1], # cell_list
+            env.NUMBA_INT[::1], # num_cell_vec
+            env.NUMBA_INT[:, ::1], # neighbor_cell_template
+            env.NUMBA_FLOAT[:, ::1], # forces
+            env.NUMBA_FLOAT[::1] # potential_energy
         ))(self._update_kernel)
 
     def __repr__(self) -> str:
@@ -44,7 +53,7 @@ class CharmmVDWConstraint(Constraint):
         self._force_id = ensemble.constraints.index(self)
         self._parameters_list = []
         for particle in self._parent_ensemble.topology.particles:
-            param = self._parameters[particle.particle_type]
+            param = self._parameter_dict[particle.particle_type]
             if len(param) == 2:
                 epsilon, sigma = param
                 self._parameters_list.append([epsilon, sigma, epsilon, sigma])

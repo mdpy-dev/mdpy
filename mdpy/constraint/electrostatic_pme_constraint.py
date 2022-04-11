@@ -9,7 +9,6 @@ contact : zhenyuwei99@gmail.com
 copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
 '''
 
-import time
 import math
 import numpy as np
 import numba as nb
@@ -43,11 +42,8 @@ def gamma_sum(m, num_grids, order):
     return res
 
 class ElectrostaticPMEConstraint(Constraint):
-    def __init__(
-        self, cutoff_radius=8, direct_sum_energy_tolerance=1e-5,
-        force_id: int = 0, force_group: int = 0
-    ) -> None:
-        super().__init__(None, force_id, force_group)
+    def __init__(self, cutoff_radius=Quantity(8, angstrom), direct_sum_energy_tolerance=1e-5) -> None:
+        super().__init__()
         self._cutoff_radius = check_quantity_value(cutoff_radius, default_length_unit)
         self._device_cutoff_radius = cuda.to_device(np.array([self._cutoff_radius]))
         self._direct_sum_energy_tolerance = direct_sum_energy_tolerance
@@ -64,32 +60,38 @@ class ElectrostaticPMEConstraint(Constraint):
         self._c_grid = None
         # Kernel
         self._update_direct_part = cuda.jit(nb.void(
-            env.NUMBA_FLOAT[:, ::1], env.NUMBA_FLOAT[::1], # position, charges
-            env.NUMBA_FLOAT[::1], env.NUMBA_FLOAT[::1], # k, ewald_coefficient
-            env.NUMBA_FLOAT[::1], env.NUMBA_FLOAT[:, ::1], # cutoff_radius, pbc_matrix
+            env.NUMBA_FLOAT[:, ::1], # position
+            env.NUMBA_FLOAT[::1], # charges
+            env.NUMBA_FLOAT[::1], # k
+            env.NUMBA_FLOAT[::1], # ewald_coefficient
+            env.NUMBA_FLOAT[::1], # cutoff_radius
+            env.NUMBA_FLOAT[:, ::1], # pbc_matrix
             env.NUMBA_INT[:, ::1], # bonded_particles
-            env.NUMBA_INT[:, ::1], env.NUMBA_INT[:, :, :, ::1], # particle_cell_index, cell_list
-            env.NUMBA_INT[::1], env.NUMBA_INT[:, ::1], # num_cell_vec, neighbor_cell_template
-            env.NUMBA_FLOAT[:, ::1], env.NUMBA_FLOAT[::1] # force, potential_energy
+            env.NUMBA_INT[:, ::1], # particle_cell_index
+            env.NUMBA_INT[:, :, :, ::1], # cell_list
+            env.NUMBA_INT[::1], # num_cell_vec
+            env.NUMBA_INT[:, ::1], # neighbor_cell_template
+            env.NUMBA_FLOAT[:, ::1], # force
+            env.NUMBA_FLOAT[::1] # potential_energy
         ))(self._update_direct_part_kernel)
-        # self._bspline = nb.njit((
-        #     env.NUMBA_INT, env.NUMBA_FLOAT[:, ::1], # num_particles, positions
-        #     env.NUMBA_INT[::1], env.NUMBA_FLOAT[:, ::1] # grid_size, pbc_inv
-        # ))(self._bspline_kernel)
         self._update_bspline = self._update_bspline_kernel
         self._update_charge_map = cuda.jit(nb.void(
             env.NUMBA_INT[::1], # num_particles
-            env.NUMBA_FLOAT[:, :, ::1], env.NUMBA_INT[:, :, ::1], # spline_coefficient, grid_map
-            env.NUMBA_FLOAT[::1], env.NUMBA_FLOAT[:, :, ::1] # charges, charge_map
+            env.NUMBA_FLOAT[:, :, ::1], # spline_coefficient
+            env.NUMBA_INT[:, :, ::1], # grid_map
+            env.NUMBA_FLOAT[::1], # charges
+            env.NUMBA_FLOAT[:, :, ::1] # charge_map
         ))(self._update_charge_map_kernel)
         self._update_energy_map = self._update_energy_map_kernel
         self._update_reciprocal_force = cuda.jit(nb.void(
             env.NUMBA_INT[::1], # num_particles
             env.NUMBA_FLOAT[:, :, ::1], # spline_coefficient
             env.NUMBA_FLOAT[:, :, ::1], # spline_derivative_coefficient
-            env.NUMBA_INT[:, :, ::1], env.NUMBA_FLOAT[:, :, ::1], # grid_map, energy_map
+            env.NUMBA_INT[:, :, ::1], # grid_map
+            env.NUMBA_FLOAT[:, :, ::1], # energy_map
             env.NUMBA_FLOAT[::1], # charges
-            env.NUMBA_FLOAT[:, ::1], env.NUMBA_FLOAT[::1] # force, potential_energy
+            env.NUMBA_FLOAT[:, ::1], # force
+            env.NUMBA_FLOAT[::1] # potential_energy
         ))(self._update_reciprocal_force_kernel)
 
     def __repr__(self) -> str:
@@ -102,7 +104,13 @@ class ElectrostaticPMEConstraint(Constraint):
         '''
         Using Newton interation solve ewald coefficient
 
-        Essentially, the Ewald coefficient is mathematical shorthand for 1/2s, where s is the width of the Gaussian used to smooth out charges on the grid.  That width is chosen such that, at the direct space interaction `cutoff_radius`, the interaction of two Gaussian-smoothed charges and the interaction of two point charges are identical to a precision of `direct_sum_energy_tolerance`, which mean the interaction between these 4 charge site are small enough, proving truncation yielding no big error
+        Essentially, the Ewald coefficient is mathematical shorthand for 1/2s, 
+        where s is the width of the Gaussian used to smooth out charges on the grid.  
+        That width is chosen such that, at the direct space interaction `cutoff_radius`, 
+        the interaction of two Gaussian-smoothed charges and the interaction of 
+        two point charges are identical to a precision of `direct_sum_energy_tolerance`, 
+        which mean the interaction between these 4 charge site are small enough, 
+        proving truncation yielding no big error
 
         f(alpha) = erfc(alpha*cutoff_radius) / cutoff_radius - direct_sum_energy_tolerance
         f'(alpha) = - 2/sqrt(pi) * exp[-(alpha*cutoff_radius)^2]
