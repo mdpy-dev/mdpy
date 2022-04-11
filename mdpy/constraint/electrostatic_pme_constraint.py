@@ -104,12 +104,12 @@ class ElectrostaticPMEConstraint(Constraint):
         '''
         Using Newton interation solve ewald coefficient
 
-        Essentially, the Ewald coefficient is mathematical shorthand for 1/2s, 
-        where s is the width of the Gaussian used to smooth out charges on the grid.  
-        That width is chosen such that, at the direct space interaction `cutoff_radius`, 
-        the interaction of two Gaussian-smoothed charges and the interaction of 
-        two point charges are identical to a precision of `direct_sum_energy_tolerance`, 
-        which mean the interaction between these 4 charge site are small enough, 
+        Essentially, the Ewald coefficient is mathematical shorthand for 1/2s,
+        where s is the width of the Gaussian used to smooth out charges on the grid.
+        That width is chosen such that, at the direct space interaction `cutoff_radius`,
+        the interaction of two Gaussian-smoothed charges and the interaction of
+        two point charges are identical to a precision of `direct_sum_energy_tolerance`,
+        which mean the interaction between these 4 charge site are small enough,
         proving truncation yielding no big error
 
         f(alpha) = erfc(alpha*cutoff_radius) / cutoff_radius - direct_sum_energy_tolerance
