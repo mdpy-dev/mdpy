@@ -50,7 +50,7 @@ class TestElectrostaticCutoffConstraint:
         self.ensemble = Ensemble(t, np.eye(3)*30)
         self.ensemble.state.cell_list.set_cutoff_radius(12)
         self.ensemble.state.set_positions(self.p)
-        self.constraint = ElectrostaticCutoffConstraint()
+        self.constraint = ElectrostaticCutoffConstraint(12)
 
     def teardown(self):
         self.ensemble, self.parameters, self.constraint = None, None, None

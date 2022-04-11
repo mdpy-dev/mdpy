@@ -14,10 +14,8 @@ from mdpy.error import *
 from mdpy.unit import *
 
 class Constraint:
-    def __init__(self, parameters, force_id: int=0, force_group: int=0) -> None:
-        self._parameters = parameters
-        self._force_id = force_id
-        self._force_group = force_group
+    def __init__(self) -> None:
+        self._force_id = 0
         self._parent_ensemble = None
         self._forces = None
         self._potential_energy = None
@@ -48,10 +46,6 @@ class Constraint:
     @property
     def force_id(self):
         return self._force_id
-
-    @property
-    def force_group(self):
-        return self._force_group
 
     @property
     def parent_ensemble(self):

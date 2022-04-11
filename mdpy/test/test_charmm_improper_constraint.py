@@ -62,7 +62,7 @@ class TestCharmmImproperConstraint:
         f3 = os.path.join(data_dir, 'top_all36_na.rtf')
         charmm = CharmmTopparParser(f1, f2, f3)
         self.parameters = charmm.parameters
-        self.constraint = CharmmImproperConstraint(self.parameters['improper'], 0, 0)
+        self.constraint = CharmmImproperConstraint(self.parameters['improper'])
 
     def teardown(self):
         self.ensemble, self.parameters, self.constraint = None, None, None
