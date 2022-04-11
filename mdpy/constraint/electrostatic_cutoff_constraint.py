@@ -19,7 +19,7 @@ from mdpy.utils import *
 from mdpy.unit import *
 
 class ElectrostaticCutoffConstraint(Constraint):
-    def __init__(self, cutoff_radius=12) -> None:
+    def __init__(self, cutoff_radius=Quantity(12, angstrom)) -> None:
         super().__init__()
         # Attributes
         self._cutoff_radius = check_quantity_value(cutoff_radius, default_length_unit)
