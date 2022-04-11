@@ -18,6 +18,7 @@ def check_long_range_solver(solver: str):
 
 from .electrostatic_cutoff_constraint import ElectrostaticCutoffConstraint
 from .electrostatic_pme_constraint import ElectrostaticPMEConstraint
+from .electrostatic_fdpe_constraint import ElectrostaticFDPEConstraint
 
 # Charmm
 from .charmm_bond_constraint import CharmmBondConstraint
@@ -30,6 +31,7 @@ __all__ = [
     'check_long_range_solver',
     'ElectrostaticCutoffConstraint',
     'ElectrostaticPMEConstraint',
+    'ElectrostaticFDPEConstraint',
     'CharmmBondConstraint',
     'CharmmAngleConstraint',
     'CharmmDihedralConstraint',
