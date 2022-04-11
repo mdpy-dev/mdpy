@@ -189,7 +189,7 @@ class HDF5Parser:
     @property
     def positions(self) -> np.ndarray:
         if not self._is_parse_all:
-            raise ParserPoorDefinedError(
+            raise IOPoorDefinedError(
                 'positions property is not supported as `is_parse_all==False`, calling `get_position` method'
             )
         return self._positions.copy()
@@ -201,7 +201,7 @@ class HDF5Parser:
     @property
     def trajectory(self) -> Trajectory:
         if not self._is_parse_all:
-            raise ParserPoorDefinedError(
+            raise IOPoorDefinedError(
                 'trajectory property is not supported as `is_parse_all==False`'
             )
         return copy(self._trajectory)
