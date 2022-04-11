@@ -42,7 +42,7 @@ class TestPDBParser:
         with pytest.raises(FileFormatError):
             PDBParser('test.pd')
 
-        with pytest.raises(ParserPoorDefinedError):
+        with pytest.raises(IOPoorDefinedError):
             PDBParser(self.file_path, is_parse_all=False).positions
 
         with pytest.raises(ArrayDimError):
