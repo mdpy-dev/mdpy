@@ -61,7 +61,7 @@ class TestCharmmAngleConstraint:
         f3 = os.path.join(data_dir, 'top_all36_na.rtf')
         charmm = CharmmTopparParser(f1, f2, f3)
         self.parameters = charmm.parameters
-        self.constraint = CharmmAngleConstraint(self.parameters['angle'], 0, 0)
+        self.constraint = CharmmAngleConstraint(self.parameters['angle'])
 
     def teardown(self):
         self.ensemble, self.parameters, self.constraint = None, None, None

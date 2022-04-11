@@ -12,14 +12,13 @@ from mdpy.constraint import Constraint
 
 class TestConstraint:
     def setup(self):
-        self.constraint = Constraint(0, 0)
+        self.constraint = Constraint()
 
     def teardown(self):
         self.constraint = None
 
     def test_attributes(self):
         assert isinstance(self.constraint._force_id, int)
-        assert isinstance(self.constraint._force_group, int)
 
     def test_exceptions(self):
         with pytest.raises(NotImplementedError):

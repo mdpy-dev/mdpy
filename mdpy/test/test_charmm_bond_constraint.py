@@ -61,7 +61,7 @@ class TestCharmmBondConstraint:
         f3 = os.path.join(data_dir, 'top_all36_na.rtf')
         charmm = CharmmTopparParser(f1, f2, f3)
         self.parameters = charmm.parameters
-        self.constraint = CharmmBondConstraint(self.parameters['bond'], 0, 0)
+        self.constraint = CharmmBondConstraint(self.parameters['bond'])
 
     def teardown(self):
         self.ensemble, self.parameters, self.constraint = None, None, None
