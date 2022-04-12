@@ -338,9 +338,10 @@ class ElectrostaticPMEConstraint(Constraint):
             cuda.atomic.add(potential_energy, 0, energy)
 
     @staticmethod
-    def _update_bspline_kernel(positions, grid_size, pbc_inv):
+    def _update_bspline_kernel(positions, grid_size, pbc_matrix, pbc_inv):
         num_particles = positions.shape[0]
-        positions = positions - positions.min(0)
+        # Change positions from [-0.5, 0.5] pbc_matrix to [0, 1.0]
+        positions = positions + np.diagonal(pbc_matrix) / 2
         # spline_coefficient: [num_particles, SPATIAL_DIM, PME_ORDER] The spline coefficient of particles
         spline_coefficient = np.zeros((num_particles, SPATIAL_DIM, PME_ORDER))
         # spline_derivative_coefficient: [num_particles, SPATIAL_DIM, PME_ORDER] The derivative spline coefficient of particles
@@ -509,8 +510,8 @@ class ElectrostaticPMEConstraint(Constraint):
         potential_energy_direct = device_potential_energy.copy_to_host()[0]
         # Bspline
         spline_coefficient, spline_derivative_coefficient, grid_map = self._update_bspline(
-            self._parent_ensemble.state.positions,
-            self._grid_size, self._parent_ensemble.state.pbc_inv
+            self._parent_ensemble.state.positions, self._grid_size,
+            self._parent_ensemble.state.pbc_matrix, self._parent_ensemble.state.pbc_inv
         )
         device_spline_coefficient = cuda.to_device(spline_coefficient)
         device_grid_map = cuda.to_device(grid_map)
