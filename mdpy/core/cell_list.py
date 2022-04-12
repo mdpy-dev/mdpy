@@ -14,13 +14,13 @@ from mdpy.utils import *
 from mdpy.unit import *
 from mdpy.error import *
 
-CELL_LIST_SKIN = Quantity(2, angstrom)
+CELL_LIST_SKIN = Quantity(1, angstrom)
 
 class CellList:
-    def __init__(self, pbc_matrix: np.ndarray, cutoff_radius=12) -> None:
+    def __init__(self, pbc_matrix: np.ndarray) -> None:
         # Read input
         self.set_pbc_matrix(pbc_matrix, is_update=False)
-        self.set_cutoff_radius(cutoff_radius, is_update=False)
+        self.set_cutoff_radius(Quantity(1, angstrom), is_update=False)
         # Skin for particles on boundary to be included in cell_list
         self._cell_list_skin = check_quantity_value(CELL_LIST_SKIN, default_length_unit)
         # Cell list attributes
@@ -83,7 +83,7 @@ class CellList:
     def update(self, positions: np.ndarray):
         # Set the position to positive value
         # Ensure the id calculated by matrix dot corresponds to the cell_list index
-        positive_position = positions - positions.min(0)
+        positive_position = positions + self._pbc_diag / 2
         self._particle_cell_index, self._cell_list = self._kernel(
             positive_position, self._cell_inv, self._num_cells_vec
         )
