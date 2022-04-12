@@ -80,13 +80,13 @@ class ElectrostaticPMEConstraint(Constraint):
             env.NUMBA_FLOAT[::1], # charges
             env.NUMBA_FLOAT[:, :, ::1] # charge_map
         ))(self._update_charge_map_kernel)
-        self._update_energy_map = self._update_energy_map_kernel
+        self._update_electric_potential_map = self._update_electric_potential_map_kernel
         self._update_reciprocal_force = cuda.jit(nb.void(
             env.NUMBA_INT[::1], # num_particles
             env.NUMBA_FLOAT[:, :, ::1], # spline_coefficient
             env.NUMBA_FLOAT[:, :, ::1], # spline_derivative_coefficient
             env.NUMBA_INT[:, :, ::1], # grid_map
-            env.NUMBA_FLOAT[:, :, ::1], # energy_map
+            env.NUMBA_FLOAT[:, :, ::1], # electric_potential_map
             env.NUMBA_FLOAT[::1], # charges
             env.NUMBA_FLOAT[:, ::1], # force
             env.NUMBA_FLOAT[::1] # potential_energy
@@ -417,25 +417,25 @@ class ElectrostaticPMEConstraint(Constraint):
                     cuda.atomic.add(charge_map, (grid_x, grid_y, grid_z), grid_charge)
 
     @staticmethod
-    def _update_energy_map_kernel(
+    def _update_electric_potential_map_kernel(
         k, charge_map, b_grid, c_grid,
     ):
         # Convolution
         fft_charge = fft.fftn(charge_map / k)
         fft_charge[0, 0, 0] = 0
-        energy_map = fft.ifftn(fft_charge*b_grid*c_grid).real
-        return energy_map
+        electric_potential_map = fft.ifftn(fft_charge*b_grid*c_grid).real
+        return electric_potential_map
 
     @staticmethod
     def _update_reciprocal_force_kernel(
         num_particles, spline_coefficient, spline_derivative_coefficient,
-        grid_map, energy_map, charges, forces, potential_energy
+        grid_map, electric_potential_map, charges, forces, potential_energy
     ):
         '''
         spline_coefficient: [num_particles, SPATIAL_DIM, PME_ORDER] The spline coefficient of particles
         spline_derivative_coefficient: [num_particles, SPATIAL_DIM, PME_ORDER] The spline derivative coefficient of particles
         grid_map: [num_particles, SPATIL_DIM, PME_ORDER]: The indice of grid to add charge of each particles
-        energy_map: [grid_size_x, grid_size_y, grid_size_z]: Electric potential on each grid point
+        electric_potential_map: [grid_size_x, grid_size_y, grid_size_z]: Electric potential on each grid point
         forces: [num_particles, SPATIAL_DIM]
         '''
         particle_id = cuda.grid(1)
@@ -453,19 +453,19 @@ class ElectrostaticPMEConstraint(Constraint):
                         spline_derivative_coefficient[particle_id, 0, i] *
                         spline_coefficient[particle_id, 1, j] *
                         spline_coefficient[particle_id, 2, k] *
-                        energy_map[grid_x, grid_y, grid_z] * charge
+                        electric_potential_map[grid_x, grid_y, grid_z] * charge
                     )
                     force_y = -(
                         spline_coefficient[particle_id, 0, i] *
                         spline_derivative_coefficient[particle_id, 1, j] *
                         spline_coefficient[particle_id, 2, k] *
-                        energy_map[grid_x, grid_y, grid_z] * charge
+                        electric_potential_map[grid_x, grid_y, grid_z] * charge
                     )
                     force_z = -(
                         spline_coefficient[particle_id, 0, i] *
                         spline_coefficient[particle_id, 1, j] *
                         spline_derivative_coefficient[particle_id, 2, k] *
-                        energy_map[grid_x, grid_y, grid_z] * charge
+                        electric_potential_map[grid_x, grid_y, grid_z] * charge
                     )
                     cuda.atomic.add(forces, (particle_id, 0), force_x)
                     cuda.atomic.add(forces, (particle_id, 1), force_y)
@@ -474,7 +474,7 @@ class ElectrostaticPMEConstraint(Constraint):
                         spline_coefficient[particle_id, 0, i] *
                         spline_coefficient[particle_id, 1, j] *
                         spline_coefficient[particle_id, 2, k] *
-                        energy_map[grid_x, grid_y, grid_z] * charge
+                        electric_potential_map[grid_x, grid_y, grid_z] * charge
                     )
                     cuda.atomic.add(potential_energy, 0, energy)
 
@@ -529,12 +529,12 @@ class ElectrostaticPMEConstraint(Constraint):
             self._device_charges, device_charge_map
         )
         # Reciprocal convolution
-        energy_map = self._update_energy_map(
+        electric_potential_map = self._update_electric_potential_map(
             self._k, device_charge_map.copy_to_host(), self._b_grid, self._c_grid
         )
         # Reciprocal force
         device_spline_derivative_coefficient = cuda.to_device(spline_derivative_coefficient)
-        device_energy_map = cuda.to_device(energy_map.astype(env.NUMPY_FLOAT))
+        device_electric_potential_map = cuda.to_device(electric_potential_map.astype(env.NUMPY_FLOAT))
         device_forces = cuda.to_device(np.zeros_like(forces_direct, dtype=env.NUMPY_FLOAT))
         device_potential_energy = cuda.to_device(np.zeros([1], dtype=env.NUMPY_FLOAT))
         self._update_reciprocal_force[thread_per_block, block_per_grid](
@@ -542,7 +542,7 @@ class ElectrostaticPMEConstraint(Constraint):
             device_spline_coefficient,
             device_spline_derivative_coefficient,
             device_grid_map,
-            device_energy_map,
+            device_electric_potential_map,
             self._device_charges,
             device_forces,
             device_potential_energy
