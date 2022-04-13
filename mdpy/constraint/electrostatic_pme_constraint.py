@@ -238,6 +238,9 @@ class ElectrostaticPMEConstraint(Constraint):
         # calculate self energy correction
         self._potential_energy_self = self._get_self_energy()
         # device attributes
+        self._device_num_particles = cuda.to_device(np.array(
+            [self._parent_ensemble.topology.num_particles], dtype=env.NUMPY_INT
+        ))
         self._device_charges = cuda.to_device(self._charges)
         self._device_pbc_matrix = cuda.to_device(self._parent_ensemble.state.pbc_matrix)
         self._device_cutoff_radius = cuda.to_device(np.array([self._cutoff_radius]))
@@ -520,12 +523,9 @@ class ElectrostaticPMEConstraint(Constraint):
         block_per_grid = int(np.ceil(
             self._parent_ensemble.topology.num_particles / thread_per_block
         ))
-        device_num_particles = cuda.to_device(np.array(
-            [self._parent_ensemble.topology.num_particles], dtype=env.NUMPY_INT
-        ))
         device_charge_map = cuda.to_device(np.zeros(self._grid_size, dtype=env.NUMPY_FLOAT))
         self._update_charge_map[thread_per_block, block_per_grid](
-            device_num_particles, device_spline_coefficient, device_grid_map,
+            self._device_num_particles, device_spline_coefficient, device_grid_map,
             self._device_charges, device_charge_map
         )
         # Reciprocal convolution
@@ -538,7 +538,7 @@ class ElectrostaticPMEConstraint(Constraint):
         device_forces = cuda.to_device(np.zeros_like(forces_direct, dtype=env.NUMPY_FLOAT))
         device_potential_energy = cuda.to_device(np.zeros([1], dtype=env.NUMPY_FLOAT))
         self._update_reciprocal_force[thread_per_block, block_per_grid](
-            device_num_particles,
+            self._device_num_particles,
             device_spline_coefficient,
             device_spline_derivative_coefficient,
             device_grid_map,
