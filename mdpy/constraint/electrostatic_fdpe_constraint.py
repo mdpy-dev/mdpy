@@ -7,7 +7,6 @@ author : Zhenyu Wei
 copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
-from cmath import pi
 import time
 import math
 import numpy as np
@@ -19,6 +18,13 @@ from mdpy.constraint import Constraint
 from mdpy.utils import *
 from mdpy.unit import *
 from mdpy.error import *
+
+THREAD_PER_BLOCK = (8, 8)
+TILE_WIDTH = 32
+NUM_GRIDS_Z_PER_THREAD = TILE_WIDTH - 2
+SHARED_ARRAY_SHAPE = (
+    THREAD_PER_BLOCK[0]+2, THREAD_PER_BLOCK[1]+2, TILE_WIDTH
+)
 
 class ElectrostaticFDPEConstraint(Constraint):
     def __init__(self, grid_width=Quantity(0.5, angstrom), cavity_relative_permittivity=2) -> None:
@@ -79,10 +85,6 @@ class ElectrostaticFDPEConstraint(Constraint):
         self._total_grid_size = np.ceil(self._pbc_diag / self._grid_width).astype(env.NUMPY_INT) + 1
         self._inner_grid_size = self._total_grid_size - 2
         self._charges = self._parent_ensemble.topology.charges[:, 0]
-        # if self._charges.sum() != 0:
-        #     raise EnsemblePoorDefinedError(
-        #         'mdpy.constraint.ElectrostaticFDPEConstraint is bound to a non-neutralized ensemble'
-        #     )
         # device attributes
         self._device_num_particles = cuda.to_device(np.array(
             [self._parent_ensemble.topology.num_particles], dtype=env.NUMPY_INT
@@ -145,139 +147,310 @@ class ElectrostaticFDPEConstraint(Constraint):
         coulombic_electric_potential_map,
         reaction_field_electric_potential_map
     ):
-        grid_x, grid_y = cuda.grid(2)
-        if grid_x >= inner_grid_size[0]:
+        grid_x, grid_y, grid_z_start = cuda.grid(3)
+        grid_z_start *= NUM_GRIDS_Z_PER_THREAD
+        thread_x = cuda.threadIdx.x
+        thread_y = cuda.threadIdx.y
+        inner_grid_size_x = inner_grid_size[0]
+        inner_grid_size_y = inner_grid_size[1]
+        inner_grid_size_z = inner_grid_size[2]
+        # Shared memrory
+        shared_relative_permittivity_map = cuda.shared.array(
+            shape=(SHARED_ARRAY_SHAPE[0], SHARED_ARRAY_SHAPE[1], SHARED_ARRAY_SHAPE[2]),
+            dtype=nb.float32
+        )
+        shared_coulombic_electric_potential_map = cuda.shared.array(
+            shape=(SHARED_ARRAY_SHAPE[0], SHARED_ARRAY_SHAPE[1], SHARED_ARRAY_SHAPE[2]),
+            dtype=nb.float32
+        )
+        shared_reaction_field_electric_potential_map = cuda.shared.array(
+            shape=(SHARED_ARRAY_SHAPE[0], SHARED_ARRAY_SHAPE[1], SHARED_ARRAY_SHAPE[2]),
+            dtype=nb.float32
+        )
+        if grid_x >= inner_grid_size_x:
             return None
-        if grid_y >= inner_grid_size[1]:
+        if grid_y >= inner_grid_size_y:
             return None
+        # Inner point of all thread
+        for i in range(NUM_GRIDS_Z_PER_THREAD):
+            grid_z = grid_z_start + i
+            if grid_z >= inner_grid_size_z:
+                shared_relative_permittivity_map[thread_x+1, thread_y+1, i+1] = 0
+                shared_coulombic_electric_potential_map[thread_x+1, thread_y+1, i+1] = 0
+                shared_reaction_field_electric_potential_map[thread_x+1, thread_y+1, i+1] = 0
+            if thread_x == 0: # Left boundary
+                if grid_x != 0: # Not grid boundary
+                    shared_relative_permittivity_map[0, thread_y+1, i+1] = relative_permittivity_map[grid_x-1, grid_y, grid_z]
+                    shared_coulombic_electric_potential_map[0, thread_y+1, i+1] = coulombic_electric_potential_map[grid_x-1, grid_y, grid_z]
+                    shared_reaction_field_electric_potential_map[0, thread_y+1, i+1] = reaction_field_electric_potential_map[grid_x-1, grid_y, grid_z]
+                else: # Grid left boundary
+                    shared_relative_permittivity_map[0, thread_y+1, i+1] = relative_permittivity_map[grid_x, grid_y, grid_z]
+                    shared_coulombic_electric_potential_map[0, thread_y+1, i+1] = 0
+                    shared_reaction_field_electric_potential_map[0, thread_y+1, i+1] = 0
+            if thread_x == THREAD_PER_BLOCK[0] - 1: # Right boundary
+                if grid_x != inner_grid_size_x - 1: # Not grid boundary
+                    shared_relative_permittivity_map[thread_x+2, thread_y+1, i+1] = relative_permittivity_map[grid_x+1, grid_y, grid_z]
+                    shared_coulombic_electric_potential_map[thread_x+2, thread_y+1, i+1] = coulombic_electric_potential_map[grid_x+1, grid_y, grid_z]
+                    shared_reaction_field_electric_potential_map[thread_x+2, thread_y+1, i+1] = reaction_field_electric_potential_map[grid_x+1, grid_y, grid_z]
+                else: # Grid right boundary
+                    shared_relative_permittivity_map[thread_x+2, thread_y+1, i+1] = relative_permittivity_map[grid_x, grid_y, grid_z]
+                    shared_coulombic_electric_potential_map[thread_x+2, thread_y+1, i+1] = 0
+                    shared_reaction_field_electric_potential_map[thread_x+2, thread_y+1, i+1] = 0
+            if thread_y == 0: # Back boundary
+                if grid_y != 0: # Not grid boundary
+                    shared_relative_permittivity_map[thread_x+1, 0, i+1] = relative_permittivity_map[grid_x, grid_y-1, grid_z]
+                    shared_coulombic_electric_potential_map[thread_x+1, 0, i+1] = coulombic_electric_potential_map[grid_x, grid_y-1, grid_z]
+                    shared_reaction_field_electric_potential_map[thread_x+1, 0, i+1] = reaction_field_electric_potential_map[grid_x, grid_y-1, grid_z]
+                else: # Grid back boundary
+                    shared_relative_permittivity_map[thread_x+1, 0, i+1] = relative_permittivity_map[grid_x, grid_y, grid_z]
+                    shared_coulombic_electric_potential_map[thread_x+1, 0, i+1] = 0
+                    shared_reaction_field_electric_potential_map[thread_x+1, 0, i+1] = 0
+            if thread_y == THREAD_PER_BLOCK[1] - 1: # Front boundary
+                if grid_y != inner_grid_size_y - 1: # Not grid boundary
+                    shared_relative_permittivity_map[thread_x+1, THREAD_PER_BLOCK[1]+1, i+1] = relative_permittivity_map[grid_x, grid_y+1, grid_z]
+                    shared_coulombic_electric_potential_map[thread_x+1, THREAD_PER_BLOCK[1]+1, i+1] = coulombic_electric_potential_map[grid_x, grid_y+1, grid_z]
+                    shared_reaction_field_electric_potential_map[thread_x+1, THREAD_PER_BLOCK[1]+1, i+1] = reaction_field_electric_potential_map[grid_x, grid_y+1, grid_z]
+                else: # Grid right boundary
+                    shared_relative_permittivity_map[thread_x+1, THREAD_PER_BLOCK[1]+1, i+1] = relative_permittivity_map[grid_x, grid_y, grid_z]
+                    shared_coulombic_electric_potential_map[thread_x+1, THREAD_PER_BLOCK[1]+1, i+1] = 0
+                    shared_reaction_field_electric_potential_map[thread_x+1, THREAD_PER_BLOCK[1]+1, i+1] = 0
+            if i == 0: # Bottom boundary
+                if grid_z != 0:
+                    shared_relative_permittivity_map[thread_x+1, thread_y+1, 0] = relative_permittivity_map[grid_x, grid_y, grid_z-1]
+                    shared_coulombic_electric_potential_map[thread_x+1, thread_y+1, 0] = coulombic_electric_potential_map[grid_x, grid_y, grid_z-1]
+                    shared_reaction_field_electric_potential_map[thread_x+1, thread_y+1, 0] = reaction_field_electric_potential_map[grid_x, grid_y, grid_z-1]
+                else: # Grid bottom boundary
+                    shared_relative_permittivity_map[thread_x+1, thread_y+1, 0] = relative_permittivity_map[grid_x, grid_y, grid_z]
+                    shared_coulombic_electric_potential_map[thread_x+1, thread_y+1, 0] = 0
+                    shared_reaction_field_electric_potential_map[thread_x+1, thread_y+1, 0] = 0
+            if i == NUM_GRIDS_Z_PER_THREAD - 1: # Top boundary
+                if grid_z != inner_grid_size_z - 1:
+                    shared_relative_permittivity_map[thread_x+1, thread_y+1, TILE_WIDTH] = relative_permittivity_map[grid_x, grid_y, grid_z+1]
+                    shared_coulombic_electric_potential_map[thread_x+1, thread_y+1, TILE_WIDTH] = coulombic_electric_potential_map[grid_x, grid_y, grid_z+1]
+                    shared_reaction_field_electric_potential_map[thread_x+1, thread_y+1, TILE_WIDTH] = reaction_field_electric_potential_map[grid_x, grid_y, grid_z+1]
+                else:
+                    shared_relative_permittivity_map[thread_x+1, thread_y+1, TILE_WIDTH] = relative_permittivity_map[grid_x, grid_y, grid_z]
+                    shared_coulombic_electric_potential_map[thread_x+1, thread_y+1, TILE_WIDTH] = 0
+                    shared_reaction_field_electric_potential_map[thread_x+1, thread_y+1, TILE_WIDTH] = 0
+            shared_relative_permittivity_map[thread_x+1, thread_y+1, i+1] = relative_permittivity_map[grid_x, grid_y, grid_z]
+            shared_coulombic_electric_potential_map[thread_x+1, thread_y+1, i+1] = coulombic_electric_potential_map[grid_x, grid_y, grid_z]
+            shared_reaction_field_electric_potential_map[thread_x+1, thread_y+1, i+1] = reaction_field_electric_potential_map[grid_x, grid_y, grid_z]
+        cuda.syncthreads()
         cavity_relative_permittivity = cavity_relative_permittivity[0]
-        grid_size_x = inner_grid_size[0]
-        grid_size_y = inner_grid_size[1]
-        grid_size_z = inner_grid_size[2]
-        for grid_z in range(grid_size_z):
-            new_val = 0.
-            denominator = 0.
-            self_relative_permittivity = relative_permittivity_map[grid_x, grid_y, grid_z]
+        for i in range(NUM_GRIDS_Z_PER_THREAD):
+            grid_z = grid_z_start + i
+            if grid_z >= inner_grid_size_z:
+                return None
+            new_val = 0
+            denominator = 0
             # Left
-            if grid_x == 0:
-                new_val += 0
-                denominator += self_relative_permittivity
-            else:
-                relative_permittivity = 0.5 * (
-                    relative_permittivity_map[grid_x-1, grid_y, grid_z] +
-                    self_relative_permittivity
-                )
-                new_val += (
-                    relative_permittivity *
-                    reaction_field_electric_potential_map[grid_x-1, grid_y, grid_z]
-                )
-                new_val += (
-                    (relative_permittivity - cavity_relative_permittivity) *
-                    coulombic_electric_potential_map[grid_x-1, grid_y, grid_z]
-                )
-                denominator += relative_permittivity
+            relative_permittivity = 0.5 * (
+                shared_relative_permittivity_map[thread_x, thread_y+1, i+1] +
+                shared_relative_permittivity_map[thread_x+1, thread_y+1, i+1]
+            )
+            new_val += (
+                relative_permittivity *
+                shared_reaction_field_electric_potential_map[thread_x, thread_y+1, i+1]
+            )
+            new_val += (
+                (shared_relative_permittivity_map[thread_x, thread_y+1, i+1] - cavity_relative_permittivity) *
+                shared_coulombic_electric_potential_map[thread_x, thread_y+1, i+1]
+            )
+            denominator += relative_permittivity
             # Right
-            if grid_x == grid_size_x - 1:
-                new_val += 0
-                denominator += self_relative_permittivity
-            else:
-                relative_permittivity = 0.5 * (
-                    relative_permittivity_map[grid_x+1, grid_y, grid_z] +
-                    self_relative_permittivity
-                )
-                new_val += (
-                    relative_permittivity *
-                    reaction_field_electric_potential_map[grid_x+1, grid_y, grid_z]
-                )
-                new_val += (
-                    (relative_permittivity - cavity_relative_permittivity) *
-                    coulombic_electric_potential_map[grid_x+1, grid_y, grid_z]
-                )
-                denominator += relative_permittivity
+            relative_permittivity = 0.5 * (
+                shared_relative_permittivity_map[thread_x+2, thread_y+1, i+1] +
+                shared_relative_permittivity_map[thread_x+1, thread_y+1, i+1]
+            )
+            new_val += (
+                relative_permittivity *
+                shared_reaction_field_electric_potential_map[thread_x+2, thread_y+1, i+1]
+            )
+            new_val += (
+                (shared_relative_permittivity_map[thread_x+2, thread_y+1, i+1] - cavity_relative_permittivity) *
+                shared_coulombic_electric_potential_map[thread_x+2, thread_y+1, i+1]
+            )
+            denominator += relative_permittivity
             # Back
-            if grid_y == 0:
-                new_val += 0
-                denominator += self_relative_permittivity
-            else:
-                relative_permittivity = 0.5 * (
-                    relative_permittivity_map[grid_x, grid_y-1, grid_z] +
-                    self_relative_permittivity
-                )
-                new_val += (
-                    relative_permittivity *
-                    reaction_field_electric_potential_map[grid_x, grid_y-1, grid_z]
-                )
-                new_val += (
-                    (relative_permittivity - cavity_relative_permittivity) *
-                    coulombic_electric_potential_map[grid_x, grid_y-1, grid_z]
-                )
-                denominator += relative_permittivity
+            relative_permittivity = 0.5 * (
+                shared_relative_permittivity_map[thread_x+1, thread_y, i+1] +
+                shared_relative_permittivity_map[thread_x+1, thread_y+1, i+1]
+            )
+            new_val += (
+                relative_permittivity *
+                shared_coulombic_electric_potential_map[thread_x+1, thread_y, i+1]
+            )
+            denominator += relative_permittivity
             # Front
-            if grid_y == grid_size_y - 1:
-                new_val += 0
-                denominator += self_relative_permittivity
-            else:
-                relative_permittivity = 0.5 * (
-                    relative_permittivity_map[grid_x, grid_y+1, grid_z] +
-                    self_relative_permittivity
-                )
-                new_val += (
-                    relative_permittivity *
-                    reaction_field_electric_potential_map[grid_x, grid_y+1, grid_z]
-                )
-                new_val += (
-                    (relative_permittivity - cavity_relative_permittivity) *
-                    coulombic_electric_potential_map[grid_x, grid_y+1, grid_z]
-                )
-                denominator += relative_permittivity
+            relative_permittivity = 0.5 * (
+                shared_relative_permittivity_map[thread_x+1, thread_y+2, i+1] +
+                shared_relative_permittivity_map[thread_x+1, thread_y+1, i+1]
+            )
+            new_val += (
+                relative_permittivity *
+                shared_coulombic_electric_potential_map[thread_x+1, thread_y+2, i+1]
+            )
+            denominator += relative_permittivity
             # Bottom
-            if grid_z == 0:
-                new_val += 0
-                denominator += self_relative_permittivity
-            else:
-                relative_permittivity = 0.5 * (
-                    relative_permittivity_map[grid_x, grid_y, grid_z-1] +
-                    self_relative_permittivity
-                )
-                new_val += (
-                    relative_permittivity *
-                    reaction_field_electric_potential_map[grid_x, grid_y, grid_z-1]
-                )
-                new_val += (
-                    (relative_permittivity - cavity_relative_permittivity) *
-                    coulombic_electric_potential_map[grid_x, grid_y, grid_z-1]
-                )
-                denominator += relative_permittivity
+            relative_permittivity = 0.5 * (
+                shared_relative_permittivity_map[thread_x+1, thread_y+1, i] +
+                shared_relative_permittivity_map[thread_x+1, thread_y+1, i+1]
+            )
+            new_val += (
+                relative_permittivity *
+                shared_coulombic_electric_potential_map[thread_x+1, thread_y+1, i]
+            )
+            denominator += relative_permittivity
             # Top
-            if grid_z == grid_size_z - 1:
-                new_val += 0
-                denominator += self_relative_permittivity
-            else:
-                relative_permittivity = 0.5 * (
-                    relative_permittivity_map[grid_x, grid_y, grid_z+1] +
-                    self_relative_permittivity
-                )
-                new_val += (
-                    relative_permittivity *
-                    reaction_field_electric_potential_map[grid_x, grid_y, grid_z+1]
-                )
-                new_val += (
-                    (relative_permittivity - cavity_relative_permittivity) *
-                    coulombic_electric_potential_map[grid_x, grid_y, grid_z+1]
-                )
-                denominator += relative_permittivity
-            # Other term
+            relative_permittivity = 0.5 * (
+                shared_relative_permittivity_map[thread_x+1, thread_y+1, i+2] +
+                shared_relative_permittivity_map[thread_x+1, thread_y+1, i+1]
+            )
+            new_val += (
+                relative_permittivity *
+                shared_coulombic_electric_potential_map[thread_x+1, thread_y+1, i+2]
+            )
+            denominator += relative_permittivity
+            # Other terms
             new_val += 6 * (
                 cavity_relative_permittivity *
-                coulombic_electric_potential_map[grid_x, grid_y, grid_z]
+                shared_coulombic_electric_potential_map[thread_x+1, thread_y+1, i+1]
             )
             new_val /= denominator
-            new_val -= coulombic_electric_potential_map[grid_x, grid_y, grid_z]
+            new_val -= shared_coulombic_electric_potential_map[thread_x+1, thread_y+1, i+1]
             old_val = reaction_field_electric_potential_map[grid_x, grid_y, grid_z]
             cuda.atomic.add(
                 reaction_field_electric_potential_map,
                 (grid_x, grid_y, grid_z), 0.9*new_val - 0.9*old_val
             )
+        # cavity_relative_permittivity = cavity_relative_permittivity[0]
+        # grid_size_x = inner_grid_size[0]
+        # grid_size_y = inner_grid_size[1]
+        # grid_size_z = inner_grid_size[2]
+        # for grid_z in range(grid_size_z):
+        #     new_val = 0.
+        #     denominator = 0.
+        #     self_relative_permittivity = relative_permittivity_map[grid_x, grid_y, grid_z]
+        #     # Left
+        #     if grid_x == 0:
+        #         new_val += 0
+        #         denominator += self_relative_permittivity
+        #     else:
+        #         relative_permittivity = 0.5 * (
+        #             relative_permittivity_map[grid_x-1, grid_y, grid_z] +
+        #             self_relative_permittivity
+        #         )
+        #         new_val += (
+        #             relative_permittivity *
+        #             reaction_field_electric_potential_map[grid_x-1, grid_y, grid_z]
+        #         )
+        #         new_val += (
+        #             (relative_permittivity - cavity_relative_permittivity) *
+        #             coulombic_electric_potential_map[grid_x-1, grid_y, grid_z]
+        #         )
+        #         denominator += relative_permittivity
+        #     # Right
+        #     if grid_x == grid_size_x - 1:
+        #         new_val += 0
+        #         denominator += self_relative_permittivity
+        #     else:
+        #         relative_permittivity = 0.5 * (
+        #             relative_permittivity_map[grid_x+1, grid_y, grid_z] +
+        #             self_relative_permittivity
+        #         )
+        #         new_val += (
+        #             relative_permittivity *
+        #             reaction_field_electric_potential_map[grid_x+1, grid_y, grid_z]
+        #         )
+        #         new_val += (
+        #             (relative_permittivity - cavity_relative_permittivity) *
+        #             coulombic_electric_potential_map[grid_x+1, grid_y, grid_z]
+        #         )
+        #         denominator += relative_permittivity
+        #     # Back
+        #     if grid_y == 0:
+        #         new_val += 0
+        #         denominator += self_relative_permittivity
+        #     else:
+        #         relative_permittivity = 0.5 * (
+        #             relative_permittivity_map[grid_x, grid_y-1, grid_z] +
+        #             self_relative_permittivity
+        #         )
+        #         new_val += (
+        #             relative_permittivity *
+        #             reaction_field_electric_potential_map[grid_x, grid_y-1, grid_z]
+        #         )
+        #         new_val += (
+        #             (relative_permittivity - cavity_relative_permittivity) *
+        #             coulombic_electric_potential_map[grid_x, grid_y-1, grid_z]
+        #         )
+        #         denominator += relative_permittivity
+        #     # Front
+        #     if grid_y == grid_size_y - 1:
+        #         new_val += 0
+        #         denominator += self_relative_permittivity
+        #     else:
+        #         relative_permittivity = 0.5 * (
+        #             relative_permittivity_map[grid_x, grid_y+1, grid_z] +
+        #             self_relative_permittivity
+        #         )
+        #         new_val += (
+        #             relative_permittivity *
+        #             reaction_field_electric_potential_map[grid_x, grid_y+1, grid_z]
+        #         )
+        #         new_val += (
+        #             (relative_permittivity - cavity_relative_permittivity) *
+        #             coulombic_electric_potential_map[grid_x, grid_y+1, grid_z]
+        #         )
+        #         denominator += relative_permittivity
+        #     # Bottom
+        #     if grid_z == 0:
+        #         new_val += 0
+        #         denominator += self_relative_permittivity
+        #     else:
+        #         relative_permittivity = 0.5 * (
+        #             relative_permittivity_map[grid_x, grid_y, grid_z-1] +
+        #             self_relative_permittivity
+        #         )
+        #         new_val += (
+        #             relative_permittivity *
+        #             reaction_field_electric_potential_map[grid_x, grid_y, grid_z-1]
+        #         )
+        #         new_val += (
+        #             (relative_permittivity - cavity_relative_permittivity) *
+        #             coulombic_electric_potential_map[grid_x, grid_y, grid_z-1]
+        #         )
+        #         denominator += relative_permittivity
+        #     # Top
+        #     if grid_z == grid_size_z - 1:
+        #         new_val += 0
+        #         denominator += self_relative_permittivity
+        #     else:
+        #         relative_permittivity = 0.5 * (
+        #             relative_permittivity_map[grid_x, grid_y, grid_z+1] +
+        #             self_relative_permittivity
+        #         )
+        #         new_val += (
+        #             relative_permittivity *
+        #             reaction_field_electric_potential_map[grid_x, grid_y, grid_z+1]
+        #         )
+        #         new_val += (
+        #             (relative_permittivity - cavity_relative_permittivity) *
+        #             coulombic_electric_potential_map[grid_x, grid_y, grid_z+1]
+        #         )
+        #         denominator += relative_permittivity
+        #     # Other term
+        #     new_val += 6 * (
+        #         cavity_relative_permittivity *
+        #         coulombic_electric_potential_map[grid_x, grid_y, grid_z]
+        #     )
+        #     new_val /= denominator
+        #     new_val -= coulombic_electric_potential_map[grid_x, grid_y, grid_z]
+        #     old_val = reaction_field_electric_potential_map[grid_x, grid_y, grid_z]
+        #     cuda.atomic.add(
+        #         reaction_field_electric_potential_map,
+        #         (grid_x, grid_y, grid_z), 0.9*new_val - 0.9*old_val
+        #     )
 
     def update(self):
         positive_positions = self._parent_ensemble.state.positions + self._pbc_diag / 2
@@ -337,15 +510,15 @@ if __name__ == '__main__':
     topology = md.core.Topology()
     topology.add_particles([
         md.core.Particle(charge=-1),
-        md.core.Particle(charge=10),
+        md.core.Particle(charge=1),
         md.core.Particle(charge=-1),
         md.core.Particle(charge=1),
     ])
     positions = np.array([
-        [0., 0, 0],
-        [-2, -2, 0],
-        [1, -3, 0],
-        [2, 2, 0],
+        [0., 2, 0],
+        [0, -2, 0],
+        [0, -4, 0],
+        [0, 4, 0],
     ])
     positions = positions
     ensemble = md.core.Ensemble(topology, np.eye(3) * 50)
@@ -353,9 +526,9 @@ if __name__ == '__main__':
     # constraint
     constraint = ElectrostaticFDPEConstraint(0.5)
     ensemble.add_constraints(constraint)
-    relative_permittivity_map = np.ones(constraint._inner_grid_size) * 2
-    relative_permittivity_map[:35, :, :] = 80
-    relative_permittivity_map[-33:, :, :] = 80
+    relative_permittivity_map = np.ones(constraint._inner_grid_size) * 80
+    relative_permittivity_map[:45, :, :] = 2
+    relative_permittivity_map[-43:, :, :] = 2
     constraint.set_relative_permittivity_map(relative_permittivity_map)
     # Visualization
     fig = plt.figure(figsize=[12, 18])
@@ -373,7 +546,7 @@ if __name__ == '__main__':
     # update
     positive_positions = constraint._parent_ensemble.state.positions + constraint._pbc_diag / 2
     device_positions = cuda.to_device(positive_positions)
-    thread_per_block = (16, 16)
+    thread_per_block = THREAD_PER_BLOCK
     block_per_grid = (
         int(np.ceil(constraint._inner_grid_size[0] / thread_per_block[0])),
         int(np.ceil(constraint._inner_grid_size[1] / thread_per_block[1]))
@@ -381,7 +554,7 @@ if __name__ == '__main__':
 
     s = time.time()
     device_coulombic_electric_potential_map = cuda.to_device(np.zeros(constraint._inner_grid_size, dtype=env.NUMPY_FLOAT))
-    constraint._update_coulombic_electric_potential_map[thread_per_block, block_per_grid](
+    constraint._update_coulombic_electric_potential_map[block_per_grid, thread_per_block](
         device_positions, constraint._device_charges, constraint._device_num_particles,
         constraint._device_k0, constraint._device_grid_width, constraint._device_inner_grid_size,
         constraint._device_cavity_relative_permittivity,
@@ -391,10 +564,16 @@ if __name__ == '__main__':
     e = time.time()
     print('Run coulombic electric potential for %s s' %(e-s))
 
+    thread_per_block = (THREAD_PER_BLOCK[0], THREAD_PER_BLOCK[1], 1)
+    block_per_grid = (
+        int(np.ceil(constraint._inner_grid_size[0] / thread_per_block[0])),
+        int(np.ceil(constraint._inner_grid_size[1] / thread_per_block[1])),
+        int(np.ceil(constraint._inner_grid_size[2] / NUM_GRIDS_Z_PER_THREAD))
+    )
     device_reaction_filed_electric_potential_map = cuda.to_device(np.zeros(constraint._inner_grid_size, dtype=env.NUMPY_FLOAT))
     s = time.time()
-    for i in range(300):
-        constraint._update_reaction_field_electric_potential_map[thread_per_block, block_per_grid](
+    for i in range(500):
+        constraint._update_reaction_field_electric_potential_map[block_per_grid, thread_per_block](
             constraint._device_relative_permittivity_map,
             constraint._device_cavity_relative_permittivity,
             constraint._device_inner_grid_size,
@@ -412,5 +591,6 @@ if __name__ == '__main__':
 
     ax2 = fig.add_subplot(212)
     c = ax2.contourf(X, Y, reaction_filed_electric_potential_map[:, :, constraint.total_grid_size[1]//2].T, 100, cmap='RdBu')
+    fig.tight_layout()
     plt.colorbar(c)
     plt.show()
