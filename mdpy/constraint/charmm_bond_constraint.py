@@ -94,21 +94,19 @@ class CharmmBondConstraint(Constraint):
         forces, potential_energy
     ):
         bond_id = cuda.grid(1)
-        shared_num_bonds = cuda.shared.array(shape=(1), dtype=nb.int32)
+        num_bonds = int_parameters.shape[0]
+        if bond_id >= num_bonds:
+            return None
         shared_pbc = cuda.shared.array(shape=(SPATIAL_DIM), dtype=nb.float32)
         shared_half_pbc = cuda.shared.array(shape=(SPATIAL_DIM), dtype=nb.float32)
         if cuda.threadIdx.x == 0:
-            shared_num_bonds[0] = int_parameters.shape[0]
-        if cuda.threadIdx.x == 1:
-            shared_half_pbc[0] = pbc_matrix[0, 0]
-            shared_half_pbc[1] = pbc_matrix[1, 1]
-            shared_half_pbc[2] = pbc_matrix[2, 2]
-            shared_half_pbc[0] = shared_half_pbc[0] / 2
-            shared_half_pbc[1] = shared_half_pbc[1] / 2
-            shared_half_pbc[2] = shared_half_pbc[2] / 2
+            shared_pbc[0] = pbc_matrix[0, 0]
+            shared_pbc[1] = pbc_matrix[1, 1]
+            shared_pbc[2] = pbc_matrix[2, 2]
+            shared_half_pbc[0] = shared_pbc[0] / 2
+            shared_half_pbc[1] = shared_pbc[1] / 2
+            shared_half_pbc[2] = shared_pbc[2] / 2
         cuda.syncthreads()
-        if bond_id >= shared_num_bonds[0]:
-            return None
         id1, id2, = int_parameters[bond_id, :]
         k, r0 = float_parameters[bond_id, :]
         # Positions
