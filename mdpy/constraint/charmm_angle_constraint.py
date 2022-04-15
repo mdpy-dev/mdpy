@@ -8,6 +8,7 @@ copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
 import math
+from turtle import shape
 import numpy as np
 import numba as nb
 import numba.cuda as cuda
@@ -116,8 +117,11 @@ class CharmmAngleConstraint(Constraint):
         forces, potential_energy
     ):
         angle_id = cuda.grid(1)
-        num_angles = int_parameters.shape[0]
-        if angle_id >= num_angles:
+        shared_num_angles = cuda.shared.array(shape=(1), dtype=nb.int32)
+        if cuda.threadIdx.x == 0:
+            shared_num_angles[0] = int_parameters.shape[0]
+        cuda.syncthreads()
+        if angle_id >= shared_num_angles[0]:
             return
         id1, id2, id3 = int_parameters[angle_id, :]
         k, theta0, ku, u0 = float_parameters[angle_id, :]
