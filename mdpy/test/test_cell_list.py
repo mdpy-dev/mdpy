@@ -19,7 +19,8 @@ data_dir = os.path.join(cur_dir, 'data')
 
 class TestCellList:
     def setup(self):
-        self.cell_list = CellList(np.diag([30, 30, 30]), Quantity(9, angstrom))
+        self.cell_list = CellList(np.diag([30, 30, 30]))
+        self.cell_list.set_cutoff_radius(Quantity(9, angstrom))
 
     def teardown(self):
         self.cell_list = None
@@ -42,18 +43,19 @@ class TestCellList:
         pdb = PDBParser(os.path.join(data_dir, '6PO6.pdb'))
         self.cell_list.update(pdb.positions)
         cell_id = np.floor(np.dot(pdb.positions - pdb.positions.min(0), self.cell_list.cell_inv))
-        # cell_id -= cell_id.min(0)
-        num_atoms = pdb.positions.shape[0]
-        atoms = []
-        for atom in range(num_atoms):
-            if (cell_id[atom, :] == 0).all():
-                atoms.append(atom)
-        assert len(atoms) != 0
-        for index, atom in enumerate(atoms):
-            assert atom == self.cell_list.cell_list[0, 0, 0, index]
+        num_particles = pdb.positions.shape[0]
+        particles = []
+        for particle in range(num_particles):
+            if (cell_id[particle, :] == 0).all():
+                particles.append(particle)
+        assert len(particles) != 0
 
+        # -15,-4.7 -5, 5, 5, 15
         # ATOM     24  HB1 PHE A   2      -2.752  -0.222   1.686  1.00  0.00      A
-        assert 23 in self.cell_list[-1, -1, 0]
-        # ATOM     39  N   ALA A   3      -0.248  -0.263  -1.755  1.00  0.00      A    N
-        assert 38 in self.cell_list[-1, -1, -1]
+        assert 23 in self.cell_list.cell_list[1, 1, 1, :]
+        # ATOM     32  HZ  PHE A   2      -5.353  -0.632  -3.449  1.00  0.00      A
+        assert 31 in self.cell_list.cell_list[0, 1, 1, :]
 
+test = TestCellList()
+test.setup()
+test.test_update()
