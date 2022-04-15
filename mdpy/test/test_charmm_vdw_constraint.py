@@ -47,7 +47,7 @@ class TestCharmmVDWConstraint:
         t = Topology()
         t.add_particles([p1, p2, p3, p4])
         self.p = np.array([
-            [0, 0, 0], [0, 10, 0], [0, 21, 0], [0, 11, 0]
+            [0, 0, 0], [0, 10, 0], [0, 27, 0], [0, 11, 0]
         ]).astype(env.NUMPY_FLOAT)
         velocities = np.array([
             [0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 1, 0]
@@ -106,15 +106,18 @@ class TestCharmmVDWConstraint:
             Quantity(0.099, kilocalorie_permol).convert_to(default_energy_unit).value
         )
         sigma = (1.9924 + 1.86) * RMIN_TO_SIGMA_FACTOR
-        r = 9
+        r = 3
         scaled_r = sigma / r
         force_val = - 24 * epsilon / r * (2 * scaled_r**12 - scaled_r**6)
         force_vec = - get_unit_vec(self.p[2, :] - self.p[0, :]) # Manually PBC Wrap
         force = force_val * force_vec
-        abs_val = Quantity(1e-3, kilocalorie_permol_over_angstrom).convert_to(default_force_unit).value
+        abs_val = Quantity(1e-2, kilocalorie_permol_over_angstrom).convert_to(default_force_unit).value
         assert forces[0, 0] == pytest.approx(force[0], abs=abs_val)
         assert forces[0, 1] == pytest.approx(force[1], abs=abs_val)
         assert forces[0, 2] == pytest.approx(force[2], abs=abs_val)
+        assert forces[2, 0] == pytest.approx(-force[0], abs=abs_val)
+        assert forces[2, 1] == pytest.approx(-force[1], abs=abs_val)
+        assert forces[2, 2] == pytest.approx(-force[2], abs=abs_val)
 
         energy = self.constraint.potential_energy
         epsilon = np.sqrt(
