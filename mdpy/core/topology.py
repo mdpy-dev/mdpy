@@ -9,6 +9,7 @@ copyright : (C)Copyright 2021-present, mdpy organization
 
 import numpy as np
 from mdpy import env
+from mdpy.core import MAX_NUM_BONDED_PARTICLES, MAX_NUM_SCALING_PARTICLES
 from mdpy.core import Particle
 from mdpy.error import *
 from mdpy.unit import *
@@ -59,20 +60,14 @@ class Topology:
     def join(self):
         self._masses = np.zeros([self._num_particles, 1], dtype=env.NUMPY_FLOAT)
         self._charges = np.zeros([self._num_particles, 1], dtype=env.NUMPY_FLOAT)
-        max_num_bonded_particles = 0
-        max_num_scaling_particles = 0
         for index, particle in enumerate(self._particles):
-            if particle.num_bonded_particles > max_num_bonded_particles:
-                max_num_bonded_particles = particle.num_bonded_particles
-            if particle.num_scaling_particles > max_num_scaling_particles:
-                max_num_scaling_particles = particle.num_scaling_particles
             self._masses[index, 0] = particle.mass
             self._charges[index, 0] = particle.charge
         self._bonded_particles = np.ones([
-            self._num_particles, max_num_bonded_particles
+            self._num_particles, MAX_NUM_BONDED_PARTICLES
         ], dtype=env.NUMPY_INT) * -1
         self._scaling_particles = np.ones([
-            self._num_particles, max_num_bonded_particles
+            self._num_particles, MAX_NUM_SCALING_PARTICLES
         ], dtype=env.NUMPY_INT) * -1
         for index, particle in enumerate(self._particles):
             self._bonded_particles[index, :particle.num_bonded_particles] = particle.bonded_particles
