@@ -7,12 +7,16 @@ author : Zhenyu Wei
 copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
+import math
 import numpy as np
 import numba as nb
+import numba.cuda as cuda
 from mdpy import env
 from mdpy.core import Ensemble
 from mdpy.constraint import Constraint
 from mdpy.utils import *
+
+THREAD_PER_BLOCK = (32)
 
 class CharmmAngleConstraint(Constraint):
     def __init__(self, parameter_dict: dict) -> None:
@@ -21,13 +25,14 @@ class CharmmAngleConstraint(Constraint):
         self._int_parameters = []
         self._float_parameters = []
         self._num_angles = 0
-        self._kernel = nb.njit((
+        self._update = cuda.jit(nb.void(
             env.NUMBA_INT[:, :], # int_parameters
             env.NUMBA_FLOAT[:, :], # float_parameters
             env.NUMBA_FLOAT[:, ::1], # positions
             env.NUMBA_FLOAT[:, ::1], # pbc_matrix
-            env.NUMBA_FLOAT[:, ::1] # pbc_inv
-        ))(self.kernel)
+            env.NUMBA_FLOAT[:, ::1], # forces
+            env.NUMBA_FLOAT[::1] # potential_energy
+        ))(self._update_kernel)
 
     def __repr__(self) -> str:
         return '<mdpy.constraint.CharmmAngleConstraint object>'
@@ -58,9 +63,11 @@ class CharmmAngleConstraint(Constraint):
             self._num_angles += 1
         self._int_parameters = np.vstack(self._int_parameters).astype(env.NUMPY_INT)
         self._float_parameters = np.vstack(self._float_parameters).astype(env.NUMPY_FLOAT)
+        self._device_int_parameters = cuda.to_device(self._int_parameters)
+        self._device_float_parameters =cuda.to_device(self._float_parameters)
 
     @staticmethod
-    def kernel(int_parameters, float_parameters, positions, pbc_matrix, pbc_inv):
+    def _cpu_kernel(int_parameters, float_parameters, positions, pbc_matrix, pbc_inv):
         forces = np.zeros_like(positions)
         potential_energy = forces[0, 0]
         num_angles = int_parameters.shape[0]
@@ -102,14 +109,198 @@ class CharmmAngleConstraint(Constraint):
             potential_energy += ku * (l13 - u0)**2
         return forces, potential_energy
 
+    @staticmethod
+    def _update_kernel(
+        int_parameters, float_parameters,
+        positions, pbc_matrix,
+        forces, potential_energy
+    ):
+        angle_id = cuda.grid(1)
+        num_angles = int_parameters.shape[0]
+        if angle_id >= num_angles:
+            return
+        id1, id2, id3 = int_parameters[angle_id, :]
+        k, theta0, ku, u0 = float_parameters[angle_id, :]
+        # Initialization
+        force_1_x = 0
+        force_1_y = 0
+        force_1_z = 0
+        force_2_x = 0
+        force_2_y = 0
+        force_2_z = 0
+        force_3_x = 0
+        force_3_y = 0
+        force_3_z = 0
+        energy = 0
+        # pbc
+        pbc_x = pbc_matrix[0, 0]
+        pbc_y = pbc_matrix[1, 1]
+        pbc_z = pbc_matrix[2, 2]
+        half_pbc_x = pbc_x / 2
+        half_pbc_y = pbc_y / 2
+        half_pbc_z = pbc_z / 2
+        # Positions
+        position_1_x = positions[id1, 0]
+        position_1_y = positions[id1, 1]
+        position_1_z = positions[id1, 2]
+        position_2_x = positions[id2, 0]
+        position_2_y = positions[id2, 1]
+        position_2_z = positions[id2, 2]
+        position_3_x = positions[id3, 0]
+        position_3_y = positions[id3, 1]
+        position_3_z = positions[id3, 2]
+        # vec
+        # r21
+        x21 = position_1_x - position_2_x
+        if x21 >= half_pbc_x:
+            x21 -= pbc_x
+        elif x21 <= -half_pbc_x:
+            x21 += pbc_x
+        y21 = position_1_y - position_2_y
+        if y21 >= half_pbc_y:
+            y21 -= pbc_y
+        elif y21 <= -half_pbc_y:
+            y21 += pbc_y
+        z21 = position_1_z - position_2_z
+        if z21 >= half_pbc_z:
+            z21 -= pbc_z
+        elif z21 <= -half_pbc_z:
+            z21 += pbc_z
+        l21 = math.sqrt(x21**2 + y21**2 + z21**2)
+        scaled_x21 = x21 / l21
+        scaled_y21 = y21 / l21
+        scaled_z21 = z21 / l21
+        # r23
+        x23 = position_3_x - position_2_x
+        if x23 >= half_pbc_x:
+            x23 -= pbc_x
+        elif x23 <= -half_pbc_x:
+            x23 += pbc_x
+        y23 = position_3_y - position_2_y
+        if y23 >= half_pbc_y:
+            y23 -= pbc_y
+        elif y23 <= -half_pbc_y:
+            y23 += pbc_y
+        z23 = position_3_z - position_2_z
+        if z23 >= half_pbc_z:
+            z23 -= pbc_z
+        elif z23 <= -half_pbc_z:
+            z23 += pbc_z
+        l23 = math.sqrt(x23**2 + y23**2 + z23**2)
+        scaled_x23 = x23 / l23
+        scaled_y23 = y23 / l23
+        scaled_z23 = z23 / l23
+        # r13
+        x13 = position_3_x - position_1_x
+        if x13 >= half_pbc_x:
+            x13 -= pbc_x
+        elif x13 <= -half_pbc_x:
+            x13 += pbc_x
+        y13 = position_3_y - position_1_y
+        if y13 >= half_pbc_y:
+            y13 -= pbc_y
+        elif y13 <= -half_pbc_y:
+            y13 += pbc_y
+        z13 = position_3_z - position_1_z
+        if z13 >= half_pbc_z:
+            z13 -= pbc_z
+        elif z13 <= -half_pbc_z:
+            z13 += pbc_z
+        l13 = math.sqrt(x13**2 + y13**2 + z13**2)
+        scaled_x13 = x13 / l13
+        scaled_y13 = y13 / l13
+        scaled_z13 = z13 / l13
+        # Harmonic angle
+        # theta dot(r21, r23) / (l21 * l23)
+        theta = math.acos(
+            scaled_x21*scaled_x23 +
+            scaled_y21*scaled_y23 +
+            scaled_z21*scaled_z23
+        )
+        delta_theta = theta - theta0
+        energy += k * delta_theta**2
+        # vec_norm cross(r21, r23)
+        vec_norm_x = scaled_y21*scaled_z23 - scaled_y23*scaled_z21
+        vec_norm_y = - scaled_x21*scaled_z23 + scaled_x23*scaled_z21
+        vec_norm_z = scaled_x21*scaled_y23 - scaled_x23*scaled_y21
+        # force_vec1 cross(r21, vec_norm)
+        force_vec1_x = scaled_y21*vec_norm_z - vec_norm_y*scaled_z21
+        force_vec1_y = - scaled_x21*vec_norm_z + vec_norm_x*scaled_z21
+        force_vec1_z = scaled_x21*vec_norm_y - vec_norm_x*scaled_y21
+        force_vec1_norm = math.sqrt(
+            force_vec1_x**2 + force_vec1_y**2 + force_vec1_z**2
+        )
+        # force_vec3 cross(-r23, vec_norm)
+        force_vec3_x = - scaled_y23*vec_norm_z + vec_norm_y*scaled_z23
+        force_vec3_y = scaled_x23*vec_norm_z - vec_norm_x*scaled_z23
+        force_vec3_z = - scaled_x23*vec_norm_y + vec_norm_x*scaled_y23
+        force_vec3_norm = math.sqrt(
+            force_vec3_x**2 + force_vec3_y**2 + force_vec3_z**2
+        )
+
+        force_val = - 2 * k * delta_theta
+        # particle1
+        force_val1 = force_val / l21 / force_vec1_norm
+        force_1_x += force_val1 * force_vec1_x
+        force_1_y += force_val1 * force_vec1_y
+        force_1_z += force_val1 * force_vec1_z
+        # particle3
+        force_val3 = force_val / l23 / force_vec3_norm
+        force_3_x += force_val3 * force_vec3_x
+        force_3_y += force_val3 * force_vec3_y
+        force_3_z += force_val3 * force_vec3_z
+        # particle2
+        force_2_x -= force_1_x + force_3_x
+        force_2_y -= force_1_y + force_3_y
+        force_2_z -= force_1_z + force_3_z
+
+        # Urey-Bradley
+        delta_u = l13 - u0
+        energy += ku * delta_u**2
+        force_val = 2 * ku * delta_u
+        force_val_x = force_val * scaled_x13
+        force_val_y = force_val * scaled_y13
+        force_val_z = force_val * scaled_z13
+        # particle1
+        force_1_x += force_val_x
+        force_1_y += force_val_y
+        force_1_z += force_val_z
+        # particle1
+        force_3_x -= force_val_x
+        force_3_y -= force_val_y
+        force_3_z -= force_val_z
+
+        # Summary
+        cuda.atomic.add(forces, (id1, 0), force_1_x)
+        cuda.atomic.add(forces, (id1, 1), force_1_y)
+        cuda.atomic.add(forces, (id1, 2), force_1_z)
+        cuda.atomic.add(forces, (id2, 0), force_2_x)
+        cuda.atomic.add(forces, (id2, 1), force_2_y)
+        cuda.atomic.add(forces, (id2, 2), force_2_z)
+        cuda.atomic.add(forces, (id3, 0), force_3_x)
+        cuda.atomic.add(forces, (id3, 1), force_3_y)
+        cuda.atomic.add(forces, (id3, 2), force_3_z)
+        cuda.atomic.add(potential_energy, 0, energy)
+
     def update(self):
         self._check_bound_state()
-        # V(angle) = Ktheta(Theta - Theta0)**2
-        self._forces, self._potential_energy = self._kernel(
-            self._int_parameters, self._float_parameters,
-            self._parent_ensemble.state.positions,
-            *self._parent_ensemble.state.pbc_info
+        self._forces = np.zeros_like(self._parent_ensemble.state.positions)
+        self._potential_energy = np.zeros([1], dtype=env.NUMPY_FLOAT)
+        # Device
+        device_forces = cuda.to_device(self._forces)
+        device_potential_energy = cuda.to_device(self._potential_energy)
+        block_per_grid = (int(np.ceil(
+            self._parent_ensemble.topology.num_angles / THREAD_PER_BLOCK
+        )))
+        self._update[block_per_grid, THREAD_PER_BLOCK](
+            self._device_int_parameters,
+            self._device_float_parameters,
+            self._parent_ensemble.state.device_positions,
+            self._parent_ensemble.state.device_pbc_matrix,
+            device_forces, device_potential_energy
         )
+        self._forces = device_forces.copy_to_host()
+        self._potential_energy = device_potential_energy.copy_to_host()[0]
 
     @property
     def num_angles(self):
