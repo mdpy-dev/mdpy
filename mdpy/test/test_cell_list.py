@@ -55,7 +55,3 @@ class TestCellList:
         assert 23 in self.cell_list.cell_list[1, 1, 1, :]
         # ATOM     32  HZ  PHE A   2      -5.353  -0.632  -3.449  1.00  0.00      A
         assert 31 in self.cell_list.cell_list[0, 1, 1, :]
-
-test = TestCellList()
-test.setup()
-test.test_update()
