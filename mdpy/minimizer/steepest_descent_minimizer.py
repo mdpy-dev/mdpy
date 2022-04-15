@@ -35,9 +35,8 @@ class SteepestDescentMinimizer(Minimizer):
         print('Start energy minimization with steepest decent method')
         print('Initial potential energy: %s' %self._energy2str(cur_energy))
         while cur_iteration < max_iterations:
-            ensemble.state.set_positions(wrap_positions(
-                ensemble.state.positions + self._alpha * ensemble.forces / np.linalg.norm(ensemble.forces, axis=1).reshape([-1, 1]),
-                *ensemble.state.pbc_info
+            ensemble.state.set_positions((
+                ensemble.state.positions + self._alpha * ensemble.forces / np.linalg.norm(ensemble.forces, axis=1).reshape([-1, 1])
             ))
             ensemble.update()
             cur_energy = ensemble.potential_energy
