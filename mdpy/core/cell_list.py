@@ -116,7 +116,7 @@ class CellList:
         # Assign particles
         particle_cell_index = np.floor(np.dot(positions, cell_inv)).astype(int_type) # The cell index of each particle
         for particle in range(num_particles):
-            x, y, z = particle_cell_index[particle]
+            x, y, z = particle_cell_index[particle, :]
             num_cell_particles[x, y, z] += 1
         # Build cell list
         max_num_cell_particles = num_cell_particles.max() # The number of particles of cell that contain the most particles
