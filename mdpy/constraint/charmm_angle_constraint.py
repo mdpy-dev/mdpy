@@ -12,7 +12,7 @@ from turtle import shape
 import numpy as np
 import numba as nb
 import numba.cuda as cuda
-from mdpy import env
+from mdpy import SPATIAL_DIM, env
 from mdpy.core import Ensemble
 from mdpy.constraint import Constraint
 from mdpy.utils import *
@@ -27,8 +27,8 @@ class CharmmAngleConstraint(Constraint):
         self._float_parameters = []
         self._num_angles = 0
         self._update = cuda.jit(nb.void(
-            env.NUMBA_INT[:, :], # int_parameters
-            env.NUMBA_FLOAT[:, :], # float_parameters
+            env.NUMBA_INT[:, ::1], # int_parameters
+            env.NUMBA_FLOAT[:, ::1], # float_parameters
             env.NUMBA_FLOAT[:, ::1], # positions
             env.NUMBA_FLOAT[:, ::1], # pbc_matrix
             env.NUMBA_FLOAT[:, ::1], # forces
@@ -118,8 +118,17 @@ class CharmmAngleConstraint(Constraint):
     ):
         angle_id = cuda.grid(1)
         shared_num_angles = cuda.shared.array(shape=(1), dtype=nb.int32)
+        shared_pbc = cuda.shared.array(shape=(SPATIAL_DIM), dtype=nb.float32)
+        shared_half_pbc = cuda.shared.array(shape=(SPATIAL_DIM), dtype=nb.float32)
         if cuda.threadIdx.x == 0:
             shared_num_angles[0] = int_parameters.shape[0]
+        if cuda.threadIdx.x == 1:
+            shared_half_pbc[0] = pbc_matrix[0, 0]
+            shared_half_pbc[1] = pbc_matrix[1, 1]
+            shared_half_pbc[2] = pbc_matrix[2, 2]
+            shared_half_pbc[0] = shared_half_pbc[0] / 2
+            shared_half_pbc[1] = shared_half_pbc[1] / 2
+            shared_half_pbc[2] = shared_half_pbc[2] / 2
         cuda.syncthreads()
         if angle_id >= shared_num_angles[0]:
             return
@@ -136,13 +145,6 @@ class CharmmAngleConstraint(Constraint):
         force_3_y = 0
         force_3_z = 0
         energy = 0
-        # pbc
-        pbc_x = pbc_matrix[0, 0]
-        pbc_y = pbc_matrix[1, 1]
-        pbc_z = pbc_matrix[2, 2]
-        half_pbc_x = pbc_x / 2
-        half_pbc_y = pbc_y / 2
-        half_pbc_z = pbc_z / 2
         # Positions
         position_1_x = positions[id1, 0]
         position_1_y = positions[id1, 1]
@@ -156,60 +158,60 @@ class CharmmAngleConstraint(Constraint):
         # vec
         # r21
         x21 = position_1_x - position_2_x
-        if x21 >= half_pbc_x:
-            x21 -= pbc_x
-        elif x21 <= -half_pbc_x:
-            x21 += pbc_x
+        if x21 >= shared_half_pbc[0]:
+            x21 -= shared_pbc[0]
+        elif x21 <= -shared_half_pbc[0]:
+            x21 += shared_pbc[0]
         y21 = position_1_y - position_2_y
-        if y21 >= half_pbc_y:
-            y21 -= pbc_y
-        elif y21 <= -half_pbc_y:
-            y21 += pbc_y
+        if y21 >= shared_half_pbc[1]:
+            y21 -= shared_pbc[1]
+        elif y21 <= -shared_half_pbc[1]:
+            y21 += shared_pbc[1]
         z21 = position_1_z - position_2_z
-        if z21 >= half_pbc_z:
-            z21 -= pbc_z
-        elif z21 <= -half_pbc_z:
-            z21 += pbc_z
+        if z21 >= shared_half_pbc[2]:
+            z21 -= shared_pbc[2]
+        elif z21 <= -shared_half_pbc[2]:
+            z21 += shared_pbc[2]
         l21 = math.sqrt(x21**2 + y21**2 + z21**2)
         scaled_x21 = x21 / l21
         scaled_y21 = y21 / l21
         scaled_z21 = z21 / l21
         # r23
         x23 = position_3_x - position_2_x
-        if x23 >= half_pbc_x:
-            x23 -= pbc_x
-        elif x23 <= -half_pbc_x:
-            x23 += pbc_x
+        if x23 >= shared_half_pbc[0]:
+            x23 -= shared_pbc[0]
+        elif x23 <= -shared_half_pbc[0]:
+            x23 += shared_pbc[0]
         y23 = position_3_y - position_2_y
-        if y23 >= half_pbc_y:
-            y23 -= pbc_y
-        elif y23 <= -half_pbc_y:
-            y23 += pbc_y
+        if y23 >= shared_half_pbc[1]:
+            y23 -= shared_pbc[1]
+        elif y23 <= -shared_half_pbc[1]:
+            y23 += shared_pbc[1]
         z23 = position_3_z - position_2_z
-        if z23 >= half_pbc_z:
-            z23 -= pbc_z
-        elif z23 <= -half_pbc_z:
-            z23 += pbc_z
+        if z23 >= shared_half_pbc[2]:
+            z23 -= shared_pbc[2]
+        elif z23 <= -shared_half_pbc[2]:
+            z23 += shared_pbc[2]
         l23 = math.sqrt(x23**2 + y23**2 + z23**2)
         scaled_x23 = x23 / l23
         scaled_y23 = y23 / l23
         scaled_z23 = z23 / l23
         # r13
         x13 = position_3_x - position_1_x
-        if x13 >= half_pbc_x:
-            x13 -= pbc_x
-        elif x13 <= -half_pbc_x:
-            x13 += pbc_x
+        if x13 >= shared_half_pbc[0]:
+            x13 -= shared_pbc[0]
+        elif x13 <= -shared_half_pbc[0]:
+            x13 += shared_pbc[0]
         y13 = position_3_y - position_1_y
-        if y13 >= half_pbc_y:
-            y13 -= pbc_y
-        elif y13 <= -half_pbc_y:
-            y13 += pbc_y
+        if y13 >= shared_half_pbc[1]:
+            y13 -= shared_pbc[1]
+        elif y13 <= -shared_half_pbc[1]:
+            y13 += shared_pbc[1]
         z13 = position_3_z - position_1_z
-        if z13 >= half_pbc_z:
-            z13 -= pbc_z
-        elif z13 <= -half_pbc_z:
-            z13 += pbc_z
+        if z13 >= shared_half_pbc[2]:
+            z13 -= shared_pbc[2]
+        elif z13 <= -shared_half_pbc[2]:
+            z13 += shared_pbc[2]
         l13 = math.sqrt(x13**2 + y13**2 + z13**2)
         scaled_x13 = x13 / l13
         scaled_y13 = y13 / l13
