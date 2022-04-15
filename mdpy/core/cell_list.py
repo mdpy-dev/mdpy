@@ -9,6 +9,7 @@ copyright : (C)Copyright 2021-present, mdpy organization
 
 import numpy as np
 import numba as nb
+import numba.cuda as cuda
 from mdpy import SPATIAL_DIM, env
 from mdpy.utils import *
 from mdpy.unit import *
@@ -29,10 +30,17 @@ class CellList:
         self._cell_list = None # n x n x n x Nb
         self._num_particles_per_cell = 0
         self._update_attributes()
+        # Device arrays
+        self._device_particle_cell_index = None
+        self._device_cell_list = None
+        self._device_num_particles_per_cell = None
+        self._device_num_cell_vec = None
         # Cell list construction kernel
-        self._kernel = nb.njit(
-            (env.NUMBA_FLOAT[:, ::1], env.NUMBA_FLOAT[:, ::1], env.NUMBA_INT[::1])
-        )(self.kernel)
+        self._kernel = nb.njit((
+            env.NUMBA_FLOAT[:, ::1], # positions
+            env.NUMBA_FLOAT[:, ::1], # cell_inv
+            env.NUMBA_INT[::1] # num_cell_vec
+        ))(self.kernel)
 
     def __repr__(self) -> str:
         x, y, z, _ = self._cell_list.shape
@@ -79,6 +87,8 @@ class CellList:
         self._num_cells = env.NUMPY_INT(np.prod(self._num_cells_vec))
         self._cell_matrix = np.diag((self._pbc_diag + self._cell_list_skin) / self._num_cells_vec).astype(env.NUMPY_FLOAT)
         self._cell_inv = np.linalg.inv(self._cell_matrix)
+        # Device array
+        self._device_num_cell_vec = cuda.to_device(self._num_cells_vec)
 
     def update(self, positions: np.ndarray):
         # Set the position to positive value
@@ -88,6 +98,12 @@ class CellList:
             positive_position, self._cell_inv, self._num_cells_vec
         )
         self._num_particles_per_cell = self._cell_list.shape[3]
+        # Device array
+        self._device_particle_cell_index = cuda.to_device(self._particle_cell_index.astype(env.NUMPY_INT))
+        self._device_cell_list = cuda.to_device(self._cell_list.astype(env.NUMPY_INT))
+        self._device_num_particles_per_cell = cuda.to_device(np.array(
+            [self._num_particles_per_cell], dtype=env.NUMPY_INT
+        ))
 
     @staticmethod
     def kernel(positions: np.ndarray, cell_inv: np.ndarray, num_cell_vec: np.ndarray):
@@ -136,13 +152,29 @@ class CellList:
         return self._particle_cell_index
 
     @property
+    def device_particle_cell_index(self):
+        return self._device_particle_cell_index
+
+    @property
     def cell_list(self):
         return self._cell_list
+
+    @property
+    def device_cell_list(self):
+        return self._device_cell_list
 
     @property
     def num_cell_vec(self):
         return self._num_cells_vec
 
     @property
+    def device_num_cell_vec(self):
+        return self._device_num_cell_vec
+
+    @property
     def num_particles_per_cell(self):
         return self._num_particles_per_cell
+
+    @property
+    def device_num_particles_per_cell(self):
+        return self._device_num_particles_per_cell
