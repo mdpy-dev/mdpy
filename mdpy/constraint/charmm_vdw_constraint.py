@@ -161,6 +161,7 @@ class CharmmVDWConstraint(Constraint):
                     break
                 elif id2 == i: # self-bonded particle term
                     is_continue = True
+                    break
             if is_continue:
                 continue
             x = (positions[id2, 0] - positions_id1_x)
@@ -205,6 +206,7 @@ class CharmmVDWConstraint(Constraint):
                 force_x += scaled_x * force_val
                 force_y += scaled_y * force_val
                 force_z += scaled_z * force_val
+                # Energy still need divided by 2
                 energy += 2 * epsilon * (scaled_r12 - scaled_r6)
         cuda.atomic.add(forces, (id1, 0), force_x)
         cuda.atomic.add(forces, (id1, 1), force_y)
