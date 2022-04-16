@@ -7,7 +7,6 @@ author : Zhenyu Wei
 copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
-from signal import pthread_kill
 import time
 import math
 import numpy as np
