@@ -52,7 +52,7 @@ class CharmmVDWConstraint(Constraint):
 
     def bind_ensemble(self, ensemble: Ensemble):
         self._parent_ensemble = ensemble
-        self._force_id = ensemble.constraints.index(self)
+        self._constraint_id = ensemble.constraints.index(self)
         self._parameters_list = []
         for particle in self._parent_ensemble.topology.particles:
             param = self._parameter_dict[particle.particle_type]

@@ -51,7 +51,7 @@ class ElectrostaticCutoffConstraint(Constraint):
 
     def bind_ensemble(self, ensemble: Ensemble):
         self._parent_ensemble = ensemble
-        self._force_id = ensemble.constraints.index(self)
+        self._constraint_id = ensemble.constraints.index(self)
         self._device_charges = cuda.to_device(self._parent_ensemble.topology.charges)
         self._device_pbc_matrix = cuda.to_device(self._parent_ensemble.state.pbc_matrix)
         self._device_cutoff_radius = cuda.to_device(np.array([self._cutoff_radius], dtype=env.NUMPY_FLOAT))

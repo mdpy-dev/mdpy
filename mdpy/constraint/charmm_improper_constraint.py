@@ -37,7 +37,7 @@ class CharmmImproperConstraint(Constraint):
 
     def bind_ensemble(self, ensemble: Ensemble):
         self._parent_ensemble = ensemble
-        self._force_id = ensemble.constraints.index(self)
+        self._constraint_id = ensemble.constraints.index(self)
         self._int_parameters = []
         self._float_parameters = []
         self._num_impropers = 0

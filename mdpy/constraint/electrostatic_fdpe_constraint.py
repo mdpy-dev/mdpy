@@ -90,7 +90,7 @@ class ElectrostaticFDPEConstraint(Constraint):
 
     def bind_ensemble(self, ensemble: Ensemble):
         self._parent_ensemble = ensemble
-        self._force_id = ensemble.constraints.index(self)
+        self._constraint_id = ensemble.constraints.index(self)
         self._pbc_diag = np.diagonal(self._parent_ensemble.state.pbc_matrix)
         self._total_grid_size = np.ceil(self._pbc_diag / self._grid_width).astype(env.NUMPY_INT) + 1
         self._inner_grid_size = self._total_grid_size - 2

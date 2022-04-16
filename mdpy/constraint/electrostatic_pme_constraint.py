@@ -227,7 +227,7 @@ class ElectrostaticPMEConstraint(Constraint):
 
     def bind_ensemble(self, ensemble: Ensemble):
         self._parent_ensemble = ensemble
-        self._force_id = ensemble.constraints.index(self)
+        self._constraint_id = ensemble.constraints.index(self)
         self._charges = self._parent_ensemble.topology.charges[:, 0]
         if self._charges.sum() != 0:
             raise EnsemblePoorDefinedError('mdpy.constraint.ElectrostaticPMEConstraint is bound to a non-neutralized ensemble')
