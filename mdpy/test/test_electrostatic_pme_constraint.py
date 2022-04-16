@@ -4,9 +4,7 @@
 file : test_electrostatic_pme_constraint.py
 created time : 2022/04/10
 author : Zhenyu Wei
-version : 1.0
-contact : zhenyuwei99@gmail.com
-copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
+copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
 import pytest, os
@@ -14,7 +12,6 @@ import numpy as np
 from mdpy import env
 from mdpy.constraint import ElectrostaticPMEConstraint
 from mdpy.core import Particle, Topology, Ensemble
-from mdpy.utils import get_unit_vec
 from mdpy.error import *
 from mdpy.unit import *
 

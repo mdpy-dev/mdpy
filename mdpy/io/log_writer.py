@@ -4,9 +4,7 @@
 file : log_writer.py
 created time : 2022/04/06
 author : Zhenyu Wei
-version : 1.0
-contact : zhenyuwei99@gmail.com
-copyright : (C)Copyright 2021-2021, Zhenyu Wei and Southeast University
+copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
 import numpy as np
@@ -55,7 +53,7 @@ class LogWriter:
         self._total_step = total_step
         self._seperator = seperator
         if self._total_step == 0 and self._rest_time == True:
-            raise DumperPoorDefinedError(
+            raise IOPoorDefinedError(
                 'mdpy.core.LogDumper cannot provide rest_time without specifying total_step'
             )
         # Refresh file

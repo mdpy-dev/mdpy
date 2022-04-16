@@ -157,14 +157,16 @@ class HDF5FilePoorDefinedError(Exception):
     '''
     pass
 
-class ParserPoorDefinedError(Exception):
+class IOPoorDefinedError(Exception):
     '''This error occurs when:
     - A complementary property is required while parser init with keywords `is_parse_all=False`
+    - Rest time is required when create md.io.LogWriter while `total_step` is not specified
 
     Used in:
     - mdpy.io.hdf5_parser
     - mdpy.io.pdb_parser
     - mdpy.io.dcd_parser
+    - mdpy.io.log_writer
     '''
     pass
 

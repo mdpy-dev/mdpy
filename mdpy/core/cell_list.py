@@ -9,18 +9,19 @@ copyright : (C)Copyright 2021-present, mdpy organization
 
 import numpy as np
 import numba as nb
+import numba.cuda as cuda
 from mdpy import SPATIAL_DIM, env
 from mdpy.utils import *
 from mdpy.unit import *
 from mdpy.error import *
 
-CELL_LIST_SKIN = Quantity(2, angstrom)
+CELL_LIST_SKIN = Quantity(1, angstrom)
 
 class CellList:
-    def __init__(self, pbc_matrix: np.ndarray, cutoff_radius=12) -> None:
+    def __init__(self, pbc_matrix: np.ndarray) -> None:
         # Read input
         self.set_pbc_matrix(pbc_matrix, is_update=False)
-        self.set_cutoff_radius(cutoff_radius, is_update=False)
+        self.set_cutoff_radius(Quantity(1, angstrom), is_update=False)
         # Skin for particles on boundary to be included in cell_list
         self._cell_list_skin = check_quantity_value(CELL_LIST_SKIN, default_length_unit)
         # Cell list attributes
@@ -29,10 +30,17 @@ class CellList:
         self._cell_list = None # n x n x n x Nb
         self._num_particles_per_cell = 0
         self._update_attributes()
+        # Device arrays
+        self._device_particle_cell_index = None
+        self._device_cell_list = None
+        self._device_num_particles_per_cell = None
+        self._device_num_cell_vec = None
         # Cell list construction kernel
-        self._kernel = nb.njit(
-            (env.NUMBA_FLOAT[:, ::1], env.NUMBA_FLOAT[:, ::1], env.NUMBA_INT[::1])
-        )(self.kernel)
+        self._kernel = nb.njit((
+            env.NUMBA_FLOAT[:, ::1], # positions
+            env.NUMBA_FLOAT[:, ::1], # cell_inv
+            env.NUMBA_INT[::1] # num_cell_vec
+        ))(self.kernel)
 
     def __repr__(self) -> str:
         x, y, z, _ = self._cell_list.shape
@@ -79,15 +87,23 @@ class CellList:
         self._num_cells = env.NUMPY_INT(np.prod(self._num_cells_vec))
         self._cell_matrix = np.diag((self._pbc_diag + self._cell_list_skin) / self._num_cells_vec).astype(env.NUMPY_FLOAT)
         self._cell_inv = np.linalg.inv(self._cell_matrix)
+        # Device array
+        self._device_num_cell_vec = cuda.to_device(self._num_cells_vec)
 
     def update(self, positions: np.ndarray):
         # Set the position to positive value
         # Ensure the id calculated by matrix dot corresponds to the cell_list index
-        positive_position = positions - positions.min(0)
+        positive_position = positions + self._pbc_diag / 2
         self._particle_cell_index, self._cell_list = self._kernel(
             positive_position, self._cell_inv, self._num_cells_vec
         )
         self._num_particles_per_cell = self._cell_list.shape[3]
+        # Device array
+        self._device_particle_cell_index = cuda.to_device(self._particle_cell_index.astype(env.NUMPY_INT))
+        self._device_cell_list = cuda.to_device(self._cell_list.astype(env.NUMPY_INT))
+        self._device_num_particles_per_cell = cuda.to_device(np.array(
+            [self._num_particles_per_cell], dtype=env.NUMPY_INT
+        ))
 
     @staticmethod
     def kernel(positions: np.ndarray, cell_inv: np.ndarray, num_cell_vec: np.ndarray):
@@ -100,7 +116,7 @@ class CellList:
         # Assign particles
         particle_cell_index = np.floor(np.dot(positions, cell_inv)).astype(int_type) # The cell index of each particle
         for particle in range(num_particles):
-            x, y, z = particle_cell_index[particle]
+            x, y, z = particle_cell_index[particle, :]
             num_cell_particles[x, y, z] += 1
         # Build cell list
         max_num_cell_particles = num_cell_particles.max() # The number of particles of cell that contain the most particles
@@ -136,13 +152,29 @@ class CellList:
         return self._particle_cell_index
 
     @property
+    def device_particle_cell_index(self):
+        return self._device_particle_cell_index
+
+    @property
     def cell_list(self):
         return self._cell_list
+
+    @property
+    def device_cell_list(self):
+        return self._device_cell_list
 
     @property
     def num_cell_vec(self):
         return self._num_cells_vec
 
     @property
+    def device_num_cell_vec(self):
+        return self._device_num_cell_vec
+
+    @property
     def num_particles_per_cell(self):
         return self._num_particles_per_cell
+
+    @property
+    def device_num_particles_per_cell(self):
+        return self._device_num_particles_per_cell

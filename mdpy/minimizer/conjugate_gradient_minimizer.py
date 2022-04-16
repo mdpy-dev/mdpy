@@ -60,10 +60,7 @@ class ConjugateGradientMinimizer(Minimizer):
                 beta = np.matmul(cur_f.T, cur_f) / (np.matmul(pre_f.T, pre_f))
                 t = cur_f + beta * t
                 cur_sub_iteration += 1
-            ensemble.state.set_positions(wrap_positions(
-                cur_positions + d.reshape([-1, 3]),
-                *ensemble.state.pbc_info
-            ))
+            ensemble.state.set_positions(cur_positions + d.reshape([-1, 3]))
             ensemble.update()
             cur_energy = ensemble.potential_energy
             energy_error = np.abs((cur_energy - pre_energy) / pre_energy)

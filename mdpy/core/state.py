@@ -8,6 +8,7 @@ copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
 import numpy as np
+import numba.cuda as cuda
 from mdpy.core.cell_list import CellList
 from mdpy.core.topology import Topology
 from mdpy import SPATIAL_DIM, env
@@ -23,9 +24,10 @@ class State:
         self._matrix_shape = [self._num_particles, SPATIAL_DIM]
         self._positions = np.zeros(self._matrix_shape, dtype=env.NUMPY_FLOAT)
         self._velocities = np.zeros(self._matrix_shape, dtype=env.NUMPY_FLOAT)
-
         self.set_pbc_matrix(pbc_matrix)
         self._cell_list = CellList(self._pbc_matrix.copy())
+        # Device array
+        self._device_postitions = None
 
     def __repr__(self) -> str:
         return '<mdpy.core.State object with %d particles at %x>' %(
@@ -52,6 +54,8 @@ class State:
         # So the scaled position will be Position * PBC instead of PBC * Position as usual
         self._pbc_matrix = np.ascontiguousarray(pbc_matrix, dtype=env.NUMPY_FLOAT)
         self._pbc_inv = np.ascontiguousarray(np.linalg.inv(self._pbc_matrix), dtype=env.NUMPY_FLOAT)
+        self._device_pbc_matrix = cuda.to_device(self._pbc_matrix)
+        self._device_pbc_inv = cuda.to_device(self._pbc_inv)
 
     def set_positions(self, positions: np.ndarray):
         self._check_matrix_shape(positions)
@@ -59,6 +63,7 @@ class State:
             positions.astype(env.NUMPY_FLOAT), self._pbc_matrix, self._pbc_inv
         )
         self._cell_list.update(self._positions)
+        self._device_postitions = cuda.to_device(self._positions)
 
     def set_velocities(self, velocities: np.ndarray):
         self._check_matrix_shape(velocities)
@@ -84,6 +89,10 @@ class State:
         return self._positions
 
     @property
+    def device_positions(self):
+        return self._device_postitions
+
+    @property
     def velocities(self):
         return self._velocities
 
@@ -96,8 +105,16 @@ class State:
         return self._pbc_matrix
 
     @property
+    def device_pbc_matrix(self):
+        return self._device_pbc_matrix
+
+    @property
     def pbc_inv(self):
         return self._pbc_inv
+
+    @property
+    def device_pbc_inv(self):
+        return self._device_pbc_inv
 
     @property
     def pbc_info(self):

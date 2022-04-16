@@ -61,7 +61,7 @@ class DCDParser:
     @property
     def positions(self) -> np.ndarray:
         if not self._is_parse_all:
-            raise ParserPoorDefinedError(
+            raise IOPoorDefinedError(
                 'positions property is not supported as `is_parse_all==False`, calling `get_position` method'
             )
         return self._positions.copy()
