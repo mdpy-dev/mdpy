@@ -11,9 +11,10 @@ import math
 import numpy as np
 import numba as nb
 from numba import cuda
-from mdpy import SPATIAL_DIM, env
+from mdpy import SPATIAL_DIM
+from mdpy.environment import *
 from mdpy.core import Ensemble
-from mdpy.core import NUM_NEIGHBOR_CELLS, NEIGHBOR_CELL_TEMPLATE
+from mdpy.core import NUM_NEIGHBOR_CELLS, DEVICE_NEIGHBOR_CELL_TEMPLATE
 from mdpy.core import MAX_NUM_BONDED_PARTICLES, MAX_NUM_SCALING_PARTICLES
 from mdpy.constraint import Constraint
 from mdpy.utils import *
@@ -30,18 +31,18 @@ class CharmmVDWConstraint(Constraint):
         self._parameters_list = []
         # Kernel
         self._update = cuda.jit(nb.void(
-            env.NUMBA_FLOAT[:, ::1], # positions
-            env.NUMBA_FLOAT[:, ::1], # parameters
-            env.NUMBA_FLOAT[:, ::1], # pbc_matrix
-            env.NUMBA_FLOAT[::1], # cutoff_radius
-            env.NUMBA_INT[:, ::1], # bonded_particle
-            env.NUMBA_INT[:, ::1], # scaling_particles
-            env.NUMBA_INT[:, ::1], # particle_cell_index
-            env.NUMBA_INT[:, :, :, ::1], # cell_list
-            env.NUMBA_INT[::1], # num_cell_vec
-            env.NUMBA_INT[:, ::1], # neighbor_cell_template
-            env.NUMBA_FLOAT[:, ::1], # forces
-            env.NUMBA_FLOAT[::1] # potential_energy
+            NUMBA_FLOAT[:, ::1], # positions
+            NUMBA_FLOAT[:, ::1], # parameters
+            NUMBA_FLOAT[:, ::1], # pbc_matrix
+            NUMBA_FLOAT[::1], # cutoff_radius
+            NUMBA_INT[:, ::1], # bonded_particle
+            NUMBA_INT[:, ::1], # scaling_particles
+            NUMBA_INT[:, ::1], # particle_cell_index
+            NUMBA_INT[:, :, :, ::1], # cell_list
+            NUMBA_INT[::1], # num_cell_vec
+            NUMBA_INT[:, ::1], # neighbor_cell_template
+            NUMBA_FLOAT[:, ::1], # forces
+            NUMBA_FLOAT[::1] # potential_energy
         ))(self._update_kernel)
 
     def __repr__(self) -> str:
@@ -52,7 +53,7 @@ class CharmmVDWConstraint(Constraint):
 
     def bind_ensemble(self, ensemble: Ensemble):
         self._parent_ensemble = ensemble
-        self._force_id = ensemble.constraints.index(self)
+        self._constraint_id = ensemble.constraints.index(self)
         self._parameters_list = []
         for particle in self._parent_ensemble.topology.particles:
             param = self._parameter_dict[particle.particle_type]
@@ -62,10 +63,17 @@ class CharmmVDWConstraint(Constraint):
             elif len(param) == 4:
                 epsilon, sigma, epsilon14, sigma14 = param
                 self._parameters_list.append([epsilon, sigma, epsilon14, sigma14])
-        self._parameters_list = np.vstack(self._parameters_list).astype(env.NUMPY_FLOAT)
+        self._parameters_list = np.vstack(self._parameters_list).astype(NUMPY_FLOAT)
         self._device_parameters_list = cuda.to_device(self._parameters_list)
         self._device_bonded_particles = cuda.to_device(self._parent_ensemble.topology.bonded_particles)
         self._device_scaling_particles = cuda.to_device(self._parent_ensemble.topology.scaling_particles)
+        block_per_grid_x = int(np.ceil(
+            self._parent_ensemble.topology.num_particles / THREAD_PER_BLOCK[0]
+        ))
+        block_per_grid_y = int(np.ceil(
+            NUM_NEIGHBOR_CELLS / THREAD_PER_BLOCK[1]
+        ))
+        self._block_per_grid = (block_per_grid_x, block_per_grid_y)
 
     @staticmethod
     def _update_kernel(
@@ -89,12 +97,8 @@ class CharmmVDWConstraint(Constraint):
         thread_x = cuda.threadIdx.x
         thread_y = cuda.threadIdx.y
         # PBC matrix
-        shared_pbc_matrix = cuda.shared.array(
-            shape=(SPATIAL_DIM), dtype=nb.float32
-        )
-        shared_half_pbc_matrix = cuda.shared.array(
-            shape=(SPATIAL_DIM), dtype=nb.float32
-        )
+        shared_pbc_matrix = cuda.shared.array(shape=(SPATIAL_DIM), dtype=nb.float32)
+        shared_half_pbc_matrix = cuda.shared.array(shape=(SPATIAL_DIM), dtype=nb.float32)
         # Bonded particle
         shared_bonded_particles = cuda.shared.array(
             shape=(THREAD_PER_BLOCK[0], MAX_NUM_BONDED_PARTICLES), dtype=nb.int32
@@ -104,13 +108,9 @@ class CharmmVDWConstraint(Constraint):
             shape=(THREAD_PER_BLOCK[0], MAX_NUM_SCALING_PARTICLES), dtype=nb.int32
         )
         # Parameters
-        shared_parameters = cuda.shared.array(
-            shape=(THREAD_PER_BLOCK[0], 4), dtype=nb.float32
-        )
+        shared_parameters = cuda.shared.array(shape=(THREAD_PER_BLOCK[0], 4), dtype=nb.float32)
         # num_cell_vec
-        shared_num_cell_vec = cuda.shared.array(
-            shape=(3), dtype=nb.int32
-        )
+        shared_num_cell_vec = cuda.shared.array(shape=(3), dtype=nb.int32)
         if thread_y == 0:
             if thread_x == 0:
                 shared_pbc_matrix[0] = pbc_matrix[0, 0]
@@ -215,20 +215,10 @@ class CharmmVDWConstraint(Constraint):
 
     def update(self):
         self._check_bound_state()
-        self._forces = np.zeros_like(self._parent_ensemble.state.positions)
-        self._potential_energy = np.zeros([1], dtype=env.NUMPY_FLOAT)
+        self._forces = cp.zeros_like(self._parent_ensemble.state.positions, CUPY_FLOAT)
+        self._potential_energy = cp.zeros([1], CUPY_FLOAT)
         # Device
-        device_neighbor_cell_template = cuda.to_device(NEIGHBOR_CELL_TEMPLATE.astype(env.NUMPY_INT))
-        device_forces = cuda.to_device(self._forces)
-        device_potential_energy = cuda.to_device(self._potential_energy)
-        block_per_grid_x = int(np.ceil(
-            self._parent_ensemble.topology.num_particles / THREAD_PER_BLOCK[0]
-        ))
-        block_per_grid_y = int(np.ceil(
-            NUM_NEIGHBOR_CELLS / THREAD_PER_BLOCK[1]
-        ))
-        block_per_grid = (block_per_grid_x, block_per_grid_y)
-        self._update[block_per_grid, THREAD_PER_BLOCK](
+        self._update[self._block_per_grid, THREAD_PER_BLOCK](
             self._parent_ensemble.state.device_positions,
             self._device_parameters_list,
             self._parent_ensemble.state.device_pbc_matrix,
@@ -238,8 +228,6 @@ class CharmmVDWConstraint(Constraint):
             self._parent_ensemble.state.cell_list.device_particle_cell_index,
             self._parent_ensemble.state.cell_list.device_cell_list,
             self._parent_ensemble.state.cell_list.device_num_cell_vec,
-            device_neighbor_cell_template,
-            device_forces, device_potential_energy
+            DEVICE_NEIGHBOR_CELL_TEMPLATE,
+            self._forces, self._potential_energy
         )
-        self._forces = device_forces.copy_to_host()
-        self._potential_energy = device_potential_energy.copy_to_host()[0]

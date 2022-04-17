@@ -18,7 +18,7 @@ class TestConstraint:
         self.constraint = None
 
     def test_attributes(self):
-        assert isinstance(self.constraint._force_id, int)
+        assert isinstance(self.constraint._constraint_id, int)
 
     def test_exceptions(self):
         with pytest.raises(NotImplementedError):

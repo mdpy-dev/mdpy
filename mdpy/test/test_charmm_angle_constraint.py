@@ -91,7 +91,7 @@ class TestCharmmAngleConstraint:
         self.ensemble.add_constraints(self.constraint)
         self.constraint.update()
 
-        forces = self.constraint.forces
+        forces = self.constraint.forces.get()
         k, theta0, ku, u0 = self.parameters['angle']['CA-CA-CA']
         theta = get_angle([0, 0, 0], [1, 0, 0], [0, 0, 1])
         force_val = 2 * k * (np.deg2rad(45) - theta0) / np.abs(np.sin(theta))
@@ -118,7 +118,7 @@ class TestCharmmAngleConstraint:
         assert torque[1] == pytest.approx(0, abs=1e-8)
         assert torque[2] == pytest.approx(0, abs=1e-8)
 
-        energy = self.constraint.potential_energy
+        energy = self.constraint.potential_energy.get()
         k, theta0, ku, u0 = self.parameters['angle']['CA-CA-CA']
         theta = get_angle([0, 0, 0], [1, 0, 0], [0, 0, 1])
         assert energy == pytest.approx(env.NUMPY_FLOAT(k * (theta - theta0)**2 + ku * (1 - u0)**2))

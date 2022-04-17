@@ -90,7 +90,7 @@ class TestCharmmBondConstraint:
     def test_update(self):
         self.ensemble.add_constraints(self.constraint)
         self.constraint.update()
-        forces = self.constraint.forces
+        forces = self.constraint.forces.get()
         assert forces[1, 0] == 0
         assert forces[2, 1] == 0
 
@@ -105,7 +105,7 @@ class TestCharmmBondConstraint:
         assert forces[3, 2] == force_val
         assert forces.sum() == 0
 
-        energy = self.constraint.potential_energy
+        energy = self.constraint.potential_energy.get()
         bond_length = get_bond([0, 0, 0], [0, 0, 1])
         k, r0 = self.parameters['bond']['CA-CA']
         assert energy == pytest.approx(env.NUMPY_FLOAT(k * (bond_length - r0)**2))

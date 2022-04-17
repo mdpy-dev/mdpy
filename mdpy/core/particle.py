@@ -14,8 +14,8 @@ from mdpy.error import *
 class Particle:
     def __init__(
         self, particle_id=None, particle_type=None, particle_name=None,
-        matrix_id=None, molecule_id=None, molecule_type=None, chain_id=None,
-        mass=None, charge=None
+        matrix_id=None, molecule_id=None, molecule_type=None,
+        chain_id=None, mass=None, charge=None
     ) -> None:
         # Compulsory attributes
         self._particle_id = particle_id
@@ -36,10 +36,14 @@ class Particle:
         self._num_scaling_particles = 0
 
     def __repr__(self) -> str:
-        return '<mdpy.core.Particle object: %s-%d at %x>' %(self._particle_name, self._particle_id, id(self))
-        # return '<Particle object: ID %d, Type %s at %x>' %(self._particle_id, self._particle_type, id(self))
+        return '<mdpy.core.Particle object: %s-%s-%d at %x>' %(
+            self._molecule_type, self._particle_type, self._particle_id, id(self)
+        )
 
-    __str__ = __repr__
+    def __str__(self) -> str:
+        return '%s-%s-%d' %(
+            self._molecule_type, self._particle_type, self._particle_id
+        )
 
     def __eq__(self, o) -> bool:
         if id(self) == id(o):

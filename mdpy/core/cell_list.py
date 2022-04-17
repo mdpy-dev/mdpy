@@ -9,8 +9,9 @@ copyright : (C)Copyright 2021-present, mdpy organization
 
 import numpy as np
 import numba as nb
-import numba.cuda as cuda
-from mdpy import SPATIAL_DIM, env
+import cupy as cp
+from mdpy import SPATIAL_DIM
+from mdpy.environment import *
 from mdpy.utils import *
 from mdpy.unit import *
 from mdpy.error import *
@@ -37,9 +38,9 @@ class CellList:
         self._device_num_cell_vec = None
         # Cell list construction kernel
         self._kernel = nb.njit((
-            env.NUMBA_FLOAT[:, ::1], # positions
-            env.NUMBA_FLOAT[:, ::1], # cell_inv
-            env.NUMBA_INT[::1] # num_cell_vec
+            NUMBA_FLOAT[:, ::1], # positions
+            NUMBA_FLOAT[:, ::1], # cell_inv
+            NUMBA_INT[::1] # num_cell_vec
         ))(self.kernel)
 
     def __repr__(self) -> str:
@@ -69,7 +70,7 @@ class CellList:
                 %(cutoff_radius)
             )
         cell_matrix = np.ones(SPATIAL_DIM) * cutoff_radius
-        num_cells_vec = np.floor(self._pbc_diag / cell_matrix).astype(env.NUMPY_INT)
+        num_cells_vec = np.floor(self._pbc_diag / cell_matrix).astype(NUMPY_INT)
         for i in num_cells_vec:
             if i < 2:
                 raise CellListPoorDefinedError(
@@ -81,14 +82,14 @@ class CellList:
 
     def _update_attributes(self):
         self._cell_matrix = np.ones(SPATIAL_DIM) * self._cutoff_radius
-        self._num_cells_vec = np.floor((self._pbc_diag + self._cell_list_skin) / self._cell_matrix).astype(env.NUMPY_INT)
+        self._num_cells_vec = np.floor((self._pbc_diag + self._cell_list_skin) / self._cell_matrix).astype(NUMPY_INT)
         # Construct at least 27 cells
         self._num_cells_vec[self._num_cells_vec < 3] = 3
-        self._num_cells = env.NUMPY_INT(np.prod(self._num_cells_vec))
-        self._cell_matrix = np.diag((self._pbc_diag + self._cell_list_skin) / self._num_cells_vec).astype(env.NUMPY_FLOAT)
+        self._num_cells = NUMPY_INT(np.prod(self._num_cells_vec))
+        self._cell_matrix = np.diag((self._pbc_diag + self._cell_list_skin) / self._num_cells_vec).astype(NUMPY_FLOAT)
         self._cell_inv = np.linalg.inv(self._cell_matrix)
         # Device array
-        self._device_num_cell_vec = cuda.to_device(self._num_cells_vec)
+        self._device_num_cell_vec = cp.array(self._num_cells_vec, CUPY_INT)
 
     def update(self, positions: np.ndarray):
         # Set the position to positive value
@@ -99,10 +100,10 @@ class CellList:
         )
         self._num_particles_per_cell = self._cell_list.shape[3]
         # Device array
-        self._device_particle_cell_index = cuda.to_device(self._particle_cell_index.astype(env.NUMPY_INT))
-        self._device_cell_list = cuda.to_device(self._cell_list.astype(env.NUMPY_INT))
-        self._device_num_particles_per_cell = cuda.to_device(np.array(
-            [self._num_particles_per_cell], dtype=env.NUMPY_INT
+        self._device_particle_cell_index = cp.array(self._particle_cell_index, CUPY_INT)
+        self._device_cell_list = cp.array(self._cell_list, CUPY_INT)
+        self._device_num_particles_per_cell = cp.array(np.array(
+            [self._num_particles_per_cell], CUPY_INT
         ))
 
     @staticmethod

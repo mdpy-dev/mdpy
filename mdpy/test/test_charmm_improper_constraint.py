@@ -94,7 +94,7 @@ class TestCharmmImproperConstraint:
         self.ensemble.add_constraints(self.constraint)
         self.constraint.update()
 
-        forces = self.constraint.forces
+        forces = self.constraint.forces.get()
         k, psi0 = self.parameters['improper']['HE2-HE2-CE2-CE2']
         psi = get_dihedral([0, 0, 0], [1, 0, 0], [0, 1, 0], [0.5, 0.5, 1])
         assert forces.sum() == pytest.approx(0, abs=1e-8)
@@ -127,7 +127,7 @@ class TestCharmmImproperConstraint:
         assert forces[0, 1] == env.NUMPY_FLOAT(force_a[1])
         assert forces[0, 2] == env.NUMPY_FLOAT(force_a[2])
 
-        energy = self.constraint.potential_energy
+        energy = self.constraint.potential_energy.get()
         k, psi0 = self.parameters['improper']['HE2-HE2-CE2-CE2']
         psi = get_dihedral([0, 0, 0], [1, 0, 0], [0, 1, 0], [0.5, 0.5, 1])
         assert energy == pytest.approx(env.NUMPY_FLOAT(k * (np.deg2rad(90) - psi0)**2))

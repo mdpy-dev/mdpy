@@ -98,7 +98,7 @@ class TestCharmmVDWConstraint:
         # NY     0.000000  -0.200000     1.850000
         # CPT    0.000000  -0.099000     1.860000
         self.constraint.update()
-        forces = self.constraint.forces
+        forces = self.constraint.forces.get()
         assert forces.sum() == pytest.approx(0, abs=1e-8)
 
         epsilon = np.sqrt(
@@ -119,7 +119,7 @@ class TestCharmmVDWConstraint:
         assert forces[2, 1] == pytest.approx(-force[1], abs=abs_val)
         assert forces[2, 2] == pytest.approx(-force[2], abs=abs_val)
 
-        energy = self.constraint.potential_energy
+        energy = self.constraint.potential_energy.get()
         epsilon = np.sqrt(
             Quantity(0.07, kilocalorie_permol).convert_to(default_energy_unit).value *
             Quantity(0.2, kilocalorie_permol).convert_to(default_energy_unit).value

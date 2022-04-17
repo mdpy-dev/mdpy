@@ -9,8 +9,8 @@ copyright : (C)Copyright 2021-present, mdpy organization
 
 import numpy as np
 import numba as nb
-from mdpy import env
 from mdpy.core import Ensemble
+from mdpy.environment import *
 from mdpy.constraint import Constraint
 from mdpy.utils import *
 from mdpy.unit import *
@@ -23,11 +23,11 @@ class CharmmDihedralConstraint(Constraint):
         self._float_parameters = []
         self._num_dihedrals = 0
         self._kernel = nb.njit((
-            env.NUMBA_INT[:, :], # int_parameters
-            env.NUMBA_FLOAT[:, :], # float_parameters
-            env.NUMBA_FLOAT[:, ::1], # positions
-            env.NUMBA_FLOAT[:, ::1], # pbc_matrix
-            env.NUMBA_FLOAT[:, ::1] # pbc_inv
+            NUMBA_INT[:, :], # int_parameters
+            NUMBA_FLOAT[:, :], # float_parameters
+            NUMBA_FLOAT[:, ::1], # positions
+            NUMBA_FLOAT[:, ::1], # pbc_matrix
+            NUMBA_FLOAT[:, ::1] # pbc_inv
         ))(self.kernel)
 
     def __repr__(self) -> str:
@@ -38,7 +38,7 @@ class CharmmDihedralConstraint(Constraint):
 
     def bind_ensemble(self, ensemble: Ensemble):
         self._parent_ensemble = ensemble
-        self._force_id = ensemble.constraints.index(self)
+        self._constraint_id = ensemble.constraints.index(self)
         self._int_parameters = []
         self._float_parameters = []
         self._num_dihedrals = 0
@@ -60,8 +60,8 @@ class CharmmDihedralConstraint(Constraint):
                 # dihedral coefficient
                 self._float_parameters.append(float_param)
             self._num_dihedrals += 1
-        self._int_parameters = np.vstack(self._int_parameters).astype(env.NUMPY_INT)
-        self._float_parameters = np.vstack(self._float_parameters).astype(env.NUMPY_FLOAT)
+        self._int_parameters = np.vstack(self._int_parameters).astype(NUMPY_INT)
+        self._float_parameters = np.vstack(self._float_parameters).astype(NUMPY_FLOAT)
 
     @staticmethod
     def kernel(int_parameters, float_parameters, positions, pbc_matrix, pbc_inv):
@@ -110,6 +110,8 @@ class CharmmDihedralConstraint(Constraint):
             self._parent_ensemble.state.positions,
             *self._parent_ensemble.state.pbc_info
         )
+        self._forces = cp.array(self._forces, CUPY_FLOAT)
+        self._potential_energy = cp.array(self._potential_energy, CUPY_FLOAT)
 
     @property
     def num_dihedrals(self):

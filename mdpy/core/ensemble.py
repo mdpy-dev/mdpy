@@ -8,6 +8,8 @@ copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
 import numpy as np
+import cupy as cp
+from mdpy.environment import *
 from mdpy.core import Topology, State
 from mdpy.error import *
 from mdpy.unit import *
@@ -51,12 +53,16 @@ class Ensemble:
             self._num_constraints += 1
 
     def update(self):
-        self._forces = np.zeros(self._matrix_shape)
-        self._total_energy, self._kinetic_energy, self._potential_energy = 0, 0, 0
+        self._forces = cp.zeros(self._matrix_shape, CUPY_FLOAT)
+        self._potential_energy = cp.zeros([1], CUPY_FLOAT)
+        self._total_energy, self._kinetic_energy = 0, 0
         for constraint in self._constraints:
             constraint.update()
+        for constraint in self._constraints:
             self._forces += constraint.forces
             self._potential_energy += constraint.potential_energy
+        self._forces = self._forces.get()
+        self._potential_energy = self._potential_energy.get()
         self._update_kinetic_energy()
         self._total_energy = self._potential_energy + self._kinetic_energy
 
@@ -66,9 +72,6 @@ class Ensemble:
         self._kinetic_energy = ((
             (self._state.velocities**2).sum(1).reshape(self._topology.num_particles, 1) * self._topology.masses
         ).sum() / 2)
-        self._kinetic_energy = Quantity(
-            self._kinetic_energy, default_velocity_unit**2 * default_mass_unit
-        ).convert_to(default_energy_unit).value
 
     @property
     def topology(self):

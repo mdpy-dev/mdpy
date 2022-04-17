@@ -72,7 +72,7 @@ class TestElectrostaticCutoffConstraint:
         self.ensemble.add_constraints(self.constraint)
         self.constraint.update()
 
-        forces = self.constraint.forces
+        forces = self.constraint.forces.get()
         assert forces[2, 0] == 0
         assert forces[3, 1] == 0
         k = Quantity(4 * np.pi) * EPSILON0
@@ -86,7 +86,7 @@ class TestElectrostaticCutoffConstraint:
         assert forces[1, 1] == pytest.approx(-force1[1])
         assert forces[1, 2] == pytest.approx(-force1[2])
 
-        potential_energy = self.constraint.potential_energy
+        potential_energy = self.constraint.potential_energy.get()
         k = Quantity(4 * np.pi) * EPSILON0
         energy = Quantity(1, e) * Quantity(2, e) / k / Quantity(10, angstrom)
         assert potential_energy == pytest.approx(

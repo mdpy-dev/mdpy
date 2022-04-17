@@ -8,10 +8,11 @@ copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
 import numpy as np
-import numba.cuda as cuda
+import cupy as cp
 from mdpy.core.cell_list import CellList
 from mdpy.core.topology import Topology
-from mdpy import SPATIAL_DIM, env
+from mdpy import SPATIAL_DIM
+from mdpy.environment import *
 from mdpy.unit import *
 from mdpy.error import *
 from mdpy.utils import *
@@ -22,8 +23,8 @@ class State:
         self._masses = topology.masses
         self._num_particles = len(self._particles)
         self._matrix_shape = [self._num_particles, SPATIAL_DIM]
-        self._positions = np.zeros(self._matrix_shape, dtype=env.NUMPY_FLOAT)
-        self._velocities = np.zeros(self._matrix_shape, dtype=env.NUMPY_FLOAT)
+        self._positions = np.zeros(self._matrix_shape, dtype=NUMPY_FLOAT)
+        self._velocities = np.zeros(self._matrix_shape, dtype=NUMPY_FLOAT)
         self.set_pbc_matrix(pbc_matrix)
         self._cell_list = CellList(self._pbc_matrix.copy())
         # Device array
@@ -52,22 +53,22 @@ class State:
         # The origin define of pbc_matrix is the stack of 3 column vector
         # While in MDPy the position is in shape of n x 3
         # So the scaled position will be Position * PBC instead of PBC * Position as usual
-        self._pbc_matrix = np.ascontiguousarray(pbc_matrix, dtype=env.NUMPY_FLOAT)
-        self._pbc_inv = np.ascontiguousarray(np.linalg.inv(self._pbc_matrix), dtype=env.NUMPY_FLOAT)
-        self._device_pbc_matrix = cuda.to_device(self._pbc_matrix)
-        self._device_pbc_inv = cuda.to_device(self._pbc_inv)
+        self._pbc_matrix = np.ascontiguousarray(pbc_matrix, dtype=NUMPY_FLOAT)
+        self._pbc_inv = np.ascontiguousarray(np.linalg.inv(self._pbc_matrix), dtype=NUMPY_FLOAT)
+        self._device_pbc_matrix = cp.array(self._pbc_matrix, CUPY_FLOAT)
+        self._device_pbc_inv = cp.array(self._pbc_inv, CUPY_FLOAT)
 
     def set_positions(self, positions: np.ndarray):
         self._check_matrix_shape(positions)
         self._positions = wrap_positions(
-            positions.astype(env.NUMPY_FLOAT), self._pbc_matrix, self._pbc_inv
+            positions.astype(NUMPY_FLOAT), self._pbc_matrix, self._pbc_inv
         )
         self._cell_list.update(self._positions)
-        self._device_postitions = cuda.to_device(self._positions)
+        self._device_postitions = cp.array(self._positions, CUPY_FLOAT)
 
     def set_velocities(self, velocities: np.ndarray):
         self._check_matrix_shape(velocities)
-        self._velocities = velocities.astype(env.NUMPY_FLOAT)
+        self._velocities = velocities.astype(NUMPY_FLOAT)
 
     def set_velocities_to_temperature(self, temperature):
         temperature = check_quantity(temperature, default_temperature_unit)

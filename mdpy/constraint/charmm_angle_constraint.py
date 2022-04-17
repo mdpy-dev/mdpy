@@ -8,11 +8,12 @@ copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
 import math
-from turtle import shape
 import numpy as np
 import numba as nb
+import cupy as cp
 import numba.cuda as cuda
-from mdpy import SPATIAL_DIM, env
+from mdpy import SPATIAL_DIM
+from mdpy.environment import *
 from mdpy.core import Ensemble
 from mdpy.constraint import Constraint
 from mdpy.utils import *
@@ -27,12 +28,12 @@ class CharmmAngleConstraint(Constraint):
         self._float_parameters = []
         self._num_angles = 0
         self._update = cuda.jit(nb.void(
-            env.NUMBA_INT[:, ::1], # int_parameters
-            env.NUMBA_FLOAT[:, ::1], # float_parameters
-            env.NUMBA_FLOAT[:, ::1], # positions
-            env.NUMBA_FLOAT[:, ::1], # pbc_matrix
-            env.NUMBA_FLOAT[:, ::1], # forces
-            env.NUMBA_FLOAT[::1] # potential_energy
+            NUMBA_INT[:, ::1], # int_parameters
+            NUMBA_FLOAT[:, ::1], # float_parameters
+            NUMBA_FLOAT[:, ::1], # positions
+            NUMBA_FLOAT[:, ::1], # pbc_matrix
+            NUMBA_FLOAT[:, ::1], # forces
+            NUMBA_FLOAT[::1] # potential_energy
         ))(self._update_kernel)
 
     def __repr__(self) -> str:
@@ -43,7 +44,7 @@ class CharmmAngleConstraint(Constraint):
 
     def bind_ensemble(self, ensemble: Ensemble):
         self._parent_ensemble = ensemble
-        self._force_id = ensemble.constraints.index(self)
+        self._constraint_id = ensemble.constraints.index(self)
         self._int_parameters = []
         self._float_parameters = []
         self._num_angles = 0
@@ -62,8 +63,8 @@ class CharmmAngleConstraint(Constraint):
             # Angle parameters
             self._float_parameters.append(self._parameter_dict[angle_type])
             self._num_angles += 1
-        self._int_parameters = np.vstack(self._int_parameters).astype(env.NUMPY_INT)
-        self._float_parameters = np.vstack(self._float_parameters).astype(env.NUMPY_FLOAT)
+        self._int_parameters = np.vstack(self._int_parameters).astype(NUMPY_INT)
+        self._float_parameters = np.vstack(self._float_parameters).astype(NUMPY_FLOAT)
         self._device_int_parameters = cuda.to_device(self._int_parameters)
         self._device_float_parameters =cuda.to_device(self._float_parameters)
 
@@ -290,11 +291,9 @@ class CharmmAngleConstraint(Constraint):
 
     def update(self):
         self._check_bound_state()
-        self._forces = np.zeros_like(self._parent_ensemble.state.positions)
-        self._potential_energy = np.zeros([1], dtype=env.NUMPY_FLOAT)
+        self._forces = cp.zeros_like(self._parent_ensemble.state.positions, CUPY_FLOAT)
+        self._potential_energy = cp.zeros([1], CUPY_FLOAT)
         # Device
-        device_forces = cuda.to_device(self._forces)
-        device_potential_energy = cuda.to_device(self._potential_energy)
         block_per_grid = (int(np.ceil(
             self._parent_ensemble.topology.num_angles / THREAD_PER_BLOCK
         )))
@@ -303,10 +302,8 @@ class CharmmAngleConstraint(Constraint):
             self._device_float_parameters,
             self._parent_ensemble.state.device_positions,
             self._parent_ensemble.state.device_pbc_matrix,
-            device_forces, device_potential_energy
+            self._forces, self._potential_energy
         )
-        self._forces = device_forces.copy_to_host()
-        self._potential_energy = device_potential_energy.copy_to_host()[0]
 
     @property
     def num_angles(self):

@@ -15,7 +15,7 @@ from mdpy.unit import *
 
 class Constraint:
     def __init__(self) -> None:
-        self._force_id = 0
+        self._constraint_id = 0
         self._parent_ensemble = None
         self._forces = None
         self._potential_energy = None
@@ -44,8 +44,8 @@ class Constraint:
         raise NotImplementedError('The subclass of mdpy.constraint.Constarint class should overload update method')
 
     @property
-    def force_id(self):
-        return self._force_id
+    def constraint_id(self):
+        return self._constraint_id
 
     @property
     def parent_ensemble(self):

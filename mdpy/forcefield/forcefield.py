@@ -31,4 +31,4 @@ class Forcefield:
 
     @property
     def parameters(self):
-        pass
+        return self._parameters

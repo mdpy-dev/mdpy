@@ -95,7 +95,7 @@ class TestCharmmDihedralConstraint:
         self.ensemble.add_constraints(self.constraint)
         self.constraint.update()
 
-        forces = self.constraint.forces
+        forces = self.constraint.forces.get()
         k, n, delta = self.parameters['dihedral']['CA-NY-CPT-CA'][0]
         theta = get_dihedral([0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1], is_angular=False)
         assert forces.sum() == pytest.approx(0, abs=1e-8)
@@ -118,7 +118,7 @@ class TestCharmmDihedralConstraint:
         assert res[1] == pytest.approx(0, abs=1e-8)
         assert res[2] == pytest.approx(0, abs=1e-8)
 
-        energy = self.constraint.potential_energy
+        energy = self.constraint.potential_energy.get()
         k, n, delta = self.parameters['dihedral']['CA-NY-CPT-CA'][0]
         theta = get_dihedral([0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1])
         assert energy == pytest.approx(env.NUMPY_FLOAT(k * (1 + np.cos(n*theta - delta))))
