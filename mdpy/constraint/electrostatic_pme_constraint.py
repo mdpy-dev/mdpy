@@ -288,21 +288,21 @@ class ElectrostaticPMEConstraint(Constraint):
         thread_y = cuda.threadIdx.y
         # PBC matrix
         shared_pbc_matrix = cuda.shared.array(
-            shape=(SPATIAL_DIM), dtype=nb.float32
+            shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT
         )
         shared_half_pbc_matrix = cuda.shared.array(
-            shape=(SPATIAL_DIM), dtype=nb.float32
+            shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT
         )
         # Bonded particle
         shared_bonded_particles = cuda.shared.array(
-            shape=(THREAD_PER_BLOCK[0], MAX_NUM_BONDED_PARTICLES), dtype=nb.int32
+            shape=(THREAD_PER_BLOCK[0], MAX_NUM_BONDED_PARTICLES), dtype=NUMBA_INT
         )
         # num_cell_vec
-        shared_num_cell_vec = cuda.shared.array(shape=(3), dtype=nb.int32)
-        shared_k = cuda.shared.array(shape=(1), dtype=nb.float32)
-        shared_ewald_coefficient = cuda.shared.array(shape=(1), dtype=nb.float32)
-        shared_cutoff_radius = cuda.shared.array(shape=(1), dtype=nb.float32)
-        shared_sqrt_pi = cuda.shared.array(shape=(1), dtype=nb.float32)
+        shared_num_cell_vec = cuda.shared.array(shape=(3), dtype=NUMBA_INT)
+        shared_k = cuda.shared.array(shape=(1), dtype=NUMBA_FLOAT)
+        shared_ewald_coefficient = cuda.shared.array(shape=(1), dtype=NUMBA_FLOAT)
+        shared_cutoff_radius = cuda.shared.array(shape=(1), dtype=NUMBA_FLOAT)
+        shared_sqrt_pi = cuda.shared.array(shape=(1), dtype=NUMBA_FLOAT)
         if thread_y == 0:
             if thread_x == 0:
                 shared_pbc_matrix[0] = pbc_matrix[0, 0]

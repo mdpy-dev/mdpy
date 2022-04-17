@@ -99,8 +99,8 @@ class CharmmBondConstraint(Constraint):
         num_bonds = int_parameters.shape[0]
         if bond_id >= num_bonds:
             return None
-        shared_pbc = cuda.shared.array(shape=(SPATIAL_DIM), dtype=nb.float32)
-        shared_half_pbc = cuda.shared.array(shape=(SPATIAL_DIM), dtype=nb.float32)
+        shared_pbc = cuda.shared.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
+        shared_half_pbc = cuda.shared.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
         if cuda.threadIdx.x == 0:
             shared_pbc[0] = pbc_matrix[0, 0]
             shared_pbc[1] = pbc_matrix[1, 1]

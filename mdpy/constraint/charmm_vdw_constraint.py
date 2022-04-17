@@ -97,20 +97,20 @@ class CharmmVDWConstraint(Constraint):
         thread_x = cuda.threadIdx.x
         thread_y = cuda.threadIdx.y
         # PBC matrix
-        shared_pbc_matrix = cuda.shared.array(shape=(SPATIAL_DIM), dtype=nb.float32)
-        shared_half_pbc_matrix = cuda.shared.array(shape=(SPATIAL_DIM), dtype=nb.float32)
+        shared_pbc_matrix = cuda.shared.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
+        shared_half_pbc_matrix = cuda.shared.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
         # Bonded particle
         shared_bonded_particles = cuda.shared.array(
-            shape=(THREAD_PER_BLOCK[0], MAX_NUM_BONDED_PARTICLES), dtype=nb.int32
+            shape=(THREAD_PER_BLOCK[0], MAX_NUM_BONDED_PARTICLES), dtype=NUMBA_INT
         )
         # Scaling particles
         shared_scaling_particles = cuda.shared.array(
-            shape=(THREAD_PER_BLOCK[0], MAX_NUM_SCALING_PARTICLES), dtype=nb.int32
+            shape=(THREAD_PER_BLOCK[0], MAX_NUM_SCALING_PARTICLES), dtype=NUMBA_INT
         )
         # Parameters
-        shared_parameters = cuda.shared.array(shape=(THREAD_PER_BLOCK[0], 4), dtype=nb.float32)
+        shared_parameters = cuda.shared.array(shape=(THREAD_PER_BLOCK[0], 4), dtype=NUMBA_FLOAT)
         # num_cell_vec
-        shared_num_cell_vec = cuda.shared.array(shape=(3), dtype=nb.int32)
+        shared_num_cell_vec = cuda.shared.array(shape=(3), dtype=NUMBA_INT)
         if thread_y == 0:
             if thread_x == 0:
                 shared_pbc_matrix[0] = pbc_matrix[0, 0]
