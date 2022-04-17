@@ -7,9 +7,27 @@ author : Zhenyu Wei
 copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
+import cupy as cp
 import numpy as np
 import numba as nb
 from mdpy.error import *
+
+precision = 'single'
+
+if precision == 'single':
+    CUPY_FLOAT = cp.float32
+    NUMBA_FLOAT = nb.float32
+    NUMPY_FLOAT = np.float32
+    CUPY_INT = cp.int32
+    NUMBA_INT = nb.int32
+    NUMPY_INT = np.int32
+elif precision == 'double':
+    CUPY_FLOAT = cp.float64
+    NUMBA_FLOAT = nb.float64
+    NUMPY_FLOAT = np.float64
+    CUPY_INT = cp.int64
+    NUMBA_INT = nb.int64
+    NUMPY_INT = np.int64
 
 class MDPYEnvironment:
     def __init__(self) -> None:
