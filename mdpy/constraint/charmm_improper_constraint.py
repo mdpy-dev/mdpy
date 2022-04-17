@@ -9,7 +9,8 @@ copyright : (C)Copyright 2021-present, mdpy organization
 
 import numpy as np
 import numba as nb
-from mdpy import env
+import cupy as cp
+from mdpy.environment import *
 from mdpy.core import Ensemble
 from mdpy.constraint import Constraint
 from mdpy.utils import *
@@ -22,11 +23,11 @@ class CharmmImproperConstraint(Constraint):
         self._float_parameters = []
         self._num_impropers = 0
         self._kernel = nb.njit((
-            env.NUMBA_INT[:, :], # int_parameters
-            env.NUMBA_FLOAT[:, :], # float_parameters
-            env.NUMBA_FLOAT[:, ::1], # positions
-            env.NUMBA_FLOAT[:, ::1], # pbc_matrix
-            env.NUMBA_FLOAT[:, ::1] # pbc_inv
+            NUMBA_INT[:, :], # int_parameters
+            NUMBA_FLOAT[:, :], # float_parameters
+            NUMBA_FLOAT[:, ::1], # positions
+            NUMBA_FLOAT[:, ::1], # pbc_matrix
+            NUMBA_FLOAT[:, ::1] # pbc_inv
         ))(self.kernel)
 
     def __repr__(self) -> str:
@@ -56,8 +57,8 @@ class CharmmImproperConstraint(Constraint):
             ])
             self._float_parameters.append(self._parameter_dict[improper_type])
             self._num_impropers += 1
-        self._int_parameters = np.vstack(self._int_parameters).astype(env.NUMPY_INT)
-        self._float_parameters = np.vstack(self._float_parameters).astype(env.NUMPY_FLOAT)
+        self._int_parameters = np.vstack(self._int_parameters).astype(NUMPY_INT)
+        self._float_parameters = np.vstack(self._float_parameters).astype(NUMPY_FLOAT)
 
     @staticmethod
     def kernel(int_parameters, float_parameters, positions, pbc_matrix, pbc_inv):
@@ -106,6 +107,8 @@ class CharmmImproperConstraint(Constraint):
             self._parent_ensemble.state.positions,
             *self._parent_ensemble.state.pbc_info
         )
+        self._forces = cp.array(self._forces, CUPY_FLOAT)
+        self._potential_energy = cp.array(self._potential_energy, CUPY_FLOAT)
 
     @property
     def num_impropers(self):
