@@ -10,11 +10,13 @@ copyright : (C)Copyright 2021-present, mdpy organization
 import math
 import numpy as np
 import numba as nb
+import cupy as cp
 import scipy.fft as fft
 from numba import cuda
-from mdpy import env, SPATIAL_DIM
+from mdpy import SPATIAL_DIM
+from mdpy.environment import *
 from mdpy.core import Ensemble
-from mdpy.core import NUM_NEIGHBOR_CELLS, NEIGHBOR_CELL_TEMPLATE
+from mdpy.core import NUM_NEIGHBOR_CELLS, DEVICE_NEIGHBOR_CELL_TEMPLATE
 from mdpy.core import MAX_NUM_BONDED_PARTICLES
 from mdpy.constraint import Constraint
 from mdpy.utils import *
@@ -45,15 +47,12 @@ class ElectrostaticPMEConstraint(Constraint):
     def __init__(self, cutoff_radius=Quantity(8, angstrom), direct_sum_energy_tolerance=1e-5) -> None:
         super().__init__()
         self._cutoff_radius = check_quantity_value(cutoff_radius, default_length_unit)
-        self._device_cutoff_radius = cuda.to_device(np.array([self._cutoff_radius]))
+        self._device_cutoff_radius = cp.array([self._cutoff_radius], CUPY_FLOAT)
         self._direct_sum_energy_tolerance = direct_sum_energy_tolerance
         self._ewald_coefficient = self._get_ewald_coefficient()
-        self._device_ewald_coefficient = cuda.to_device(
-            np.array([self._ewald_coefficient], dtype=env.NUMPY_FLOAT)
-        )
+        self._device_ewald_coefficient = cp.array([self._ewald_coefficient], CUPY_FLOAT)
         self._k = 4 * np.pi * EPSILON0.value
-        self._device_k = cuda.to_device(np.array([4 * np.pi * EPSILON0.value], dtype=env.NUMPY_FLOAT))
-        self._device_neighbor_cell_template = cuda.to_device(NEIGHBOR_CELL_TEMPLATE.astype(env.NUMPY_INT))
+        self._device_k = cp.array([4 * np.pi * EPSILON0.value], CUPY_FLOAT)
         # Attribute
         self._charges = None
         self._grid_size = None
@@ -61,38 +60,45 @@ class ElectrostaticPMEConstraint(Constraint):
         self._c_grid = None
         # Kernel
         self._update_direct_part = cuda.jit(nb.void(
-            env.NUMBA_FLOAT[:, ::1], # position
-            env.NUMBA_FLOAT[::1], # charges
-            env.NUMBA_FLOAT[::1], # k
-            env.NUMBA_FLOAT[::1], # ewald_coefficient
-            env.NUMBA_FLOAT[::1], # cutoff_radius
-            env.NUMBA_FLOAT[:, ::1], # pbc_matrix
-            env.NUMBA_INT[:, ::1], # bonded_particles
-            env.NUMBA_INT[:, ::1], # particle_cell_index
-            env.NUMBA_INT[:, :, :, ::1], # cell_list
-            env.NUMBA_INT[::1], # num_cell_vec
-            env.NUMBA_INT[:, ::1], # neighbor_cell_template
-            env.NUMBA_FLOAT[:, ::1], # force
-            env.NUMBA_FLOAT[::1] # potential_energy
+            NUMBA_FLOAT[:, ::1], # position
+            NUMBA_FLOAT[::1], # charges
+            NUMBA_FLOAT[::1], # k
+            NUMBA_FLOAT[::1], # ewald_coefficient
+            NUMBA_FLOAT[::1], # cutoff_radius
+            NUMBA_FLOAT[:, ::1], # pbc_matrix
+            NUMBA_INT[:, ::1], # bonded_particles
+            NUMBA_INT[:, ::1], # particle_cell_index
+            NUMBA_INT[:, :, :, ::1], # cell_list
+            NUMBA_INT[::1], # num_cell_vec
+            NUMBA_INT[:, ::1], # neighbor_cell_template
+            NUMBA_FLOAT[:, ::1], # force
+            NUMBA_FLOAT[::1] # potential_energy
         ))(self._update_direct_part_kernel)
-        self._update_bspline = self._update_bspline_kernel
+        self._update_bspline = cuda.jit(nb.void(
+            NUMBA_FLOAT[:, ::1], # position
+            NUMBA_INT[::1], # grid_size,
+            NUMBA_FLOAT[:, ::1], # pbc_matrix
+            NUMBA_FLOAT[:, :, ::1], # spline_coefficient
+            NUMBA_FLOAT[:, :, ::1], # spline_derivative_coefficient
+            NUMBA_INT[:, :, ::1] # grid_map
+        ))(self._update_bspline_kernel)
         self._update_charge_map = cuda.jit(nb.void(
-            env.NUMBA_INT[::1], # num_particles
-            env.NUMBA_FLOAT[:, :, ::1], # spline_coefficient
-            env.NUMBA_INT[:, :, ::1], # grid_map
-            env.NUMBA_FLOAT[::1], # charges
-            env.NUMBA_FLOAT[:, :, ::1] # charge_map
+            NUMBA_INT[::1], # num_particles
+            NUMBA_FLOAT[:, :, ::1], # spline_coefficient
+            NUMBA_INT[:, :, ::1], # grid_map
+            NUMBA_FLOAT[::1], # charges
+            NUMBA_FLOAT[:, :, ::1] # charge_map
         ))(self._update_charge_map_kernel)
         self._update_electric_potential_map = self._update_electric_potential_map_kernel
         self._update_reciprocal_force = cuda.jit(nb.void(
-            env.NUMBA_INT[::1], # num_particles
-            env.NUMBA_FLOAT[:, :, ::1], # spline_coefficient
-            env.NUMBA_FLOAT[:, :, ::1], # spline_derivative_coefficient
-            env.NUMBA_INT[:, :, ::1], # grid_map
-            env.NUMBA_FLOAT[:, :, ::1], # electric_potential_map
-            env.NUMBA_FLOAT[::1], # charges
-            env.NUMBA_FLOAT[:, ::1], # force
-            env.NUMBA_FLOAT[::1] # potential_energy
+            NUMBA_INT[::1], # num_particles
+            NUMBA_FLOAT[:, :, ::1], # spline_coefficient
+            NUMBA_FLOAT[:, :, ::1], # spline_derivative_coefficient
+            NUMBA_INT[:, :, ::1], # grid_map
+            NUMBA_FLOAT[:, :, ::1], # electric_potential_map
+            NUMBA_FLOAT[::1], # charges
+            NUMBA_FLOAT[:, ::1], # forces
+            NUMBA_FLOAT[::1] # potential_energy
         ))(self._update_reciprocal_force_kernel)
 
     def __repr__(self) -> str:
@@ -140,7 +146,7 @@ class ElectrostaticPMEConstraint(Constraint):
             self._parent_ensemble.state.pbc_matrix, default_length_unit
         ).convert_to(angstrom).value)
         grid_size = np.ceil(pbc_diag/32) * 32
-        return grid_size.astype(env.NUMPY_INT)
+        return grid_size.astype(NUMPY_INT)
 
     def _get_b_grid(self):
         b_grid = np.zeros(self._grid_size)
@@ -221,7 +227,7 @@ class ElectrostaticPMEConstraint(Constraint):
         )
         return c_grid
 
-    def _get_self_energy(self):
+    def _get_self_potential_energy(self):
         potential_energy = (self._charges**2).sum() * self._ewald_coefficient / self._k / np.sqrt(np.pi)
         return potential_energy
 
@@ -238,17 +244,26 @@ class ElectrostaticPMEConstraint(Constraint):
         self._b_grid = self._get_b_grid()
         # create c grid
         self._c_grid = self._get_c_grid()
+        # b_grid * c_grid
+        self._bc_grid = self._b_grid * self._c_grid
         # calculate self energy correction
-        self._potential_energy_self = self._get_self_energy()
+        self._self_potential_energy = self._get_self_potential_energy()
         # device attributes
-        self._device_num_particles = cuda.to_device(np.array(
-            [self._parent_ensemble.topology.num_particles], dtype=env.NUMPY_INT
-        ))
-        self._device_charges = cuda.to_device(self._charges)
-        self._device_cutoff_radius = cuda.to_device(np.array([self._cutoff_radius]))
-        self._device_bonded_particles = cuda.to_device(self._parent_ensemble.topology.bonded_particles)
-        self._device_b_grid = cuda.to_device(self._b_grid)
-        self._device_c_grid = cuda.to_device(self._c_grid)
+        self._device_grid_size = cp.array(self._grid_size, CUPY_INT)
+        self._device_num_particles = cp.array(
+            [self._parent_ensemble.topology.num_particles], CUPY_INT
+        )
+        self._device_self_potential_energy = cp.array(self._self_potential_energy, CUPY_FLOAT)
+        self._device_charges = cp.array(self._charges, CUPY_FLOAT)
+        self._device_cutoff_radius = cp.array([self._cutoff_radius], CUPY_FLOAT)
+        self._device_bonded_particles = cp.array(self._parent_ensemble.topology.bonded_particles, CUPY_INT)
+        self._device_b_grid = cp.array(self._b_grid, CUPY_FLOAT)
+        self._device_c_grid = cp.array(self._c_grid, CUPY_FLOAT)
+        self._device_bc_grid = cp.array(self._bc_grid, CUPY_FLOAT)
+        self._device_reciprocal_factor = cp.array(
+            self._grid_size / np.diagonal(self._parent_ensemble.state.pbc_matrix), CUPY_FLOAT
+        )
+        print(self._device_reciprocal_factor)
 
     @staticmethod
     def _update_direct_part_kernel(
@@ -399,55 +414,92 @@ class ElectrostaticPMEConstraint(Constraint):
         cuda.atomic.add(potential_energy, 0, energy)
 
     @staticmethod
-    def _update_bspline_kernel(positions, grid_size, pbc_matrix, pbc_inv):
-        num_particles = positions.shape[0]
-        # Change positions from [-0.5, 0.5] pbc_matrix to [0, 1.0]
-        positions = positions + np.diagonal(pbc_matrix) / 2
-        # spline_coefficient: [num_particles, SPATIAL_DIM, PME_ORDER] The spline coefficient of particles
-        spline_coefficient = np.zeros((num_particles, SPATIAL_DIM, PME_ORDER))
-        # spline_derivative_coefficient: [num_particles, SPATIAL_DIM, PME_ORDER] The derivative spline coefficient of particles
-        spline_derivative_coefficient = np.zeros((num_particles, SPATIAL_DIM, PME_ORDER))
-        scaled_positions = np.dot(positions, pbc_inv)
-        # grid_indice: [num_particles, SPATIAL_DIM] The index of grid where particle assigned to
-        grid_indice = scaled_positions * grid_size
-        # grid_friction: [num_particles, SPATIAL_DIM] The fraction part of particles position relative to gird
-        grid_fraction = grid_indice - np.floor(grid_indice)
-        grid_indice -= grid_fraction
+    def _update_bspline_kernel(
+        positions, grid_size, pbc_matrix,
+        spline_coefficient,
+        spline_derivative_coefficient,
+        grid_map
+    ):
+        particle_id = cuda.grid(1)
+        thread_x = cuda.threadIdx.x
+        if particle_id >= positions.shape[0]:
+            return None
+        # Shared array
+        # PBC matrix
+        shared_pbc_matrix = cuda.shared.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
+        shared_half_pbc_matrix = cuda.shared.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
+        # num_cell_vec
+        shared_grid_size = cuda.shared.array(shape=(3), dtype=NUMBA_INT)
+        if thread_x == 0:
+            shared_pbc_matrix[0] = pbc_matrix[0, 0]
+            shared_pbc_matrix[1] = pbc_matrix[1, 1]
+            shared_pbc_matrix[2] = pbc_matrix[2, 2]
+            shared_half_pbc_matrix[0] = shared_pbc_matrix[0] / 2
+            shared_half_pbc_matrix[1] = shared_pbc_matrix[1] / 2
+            shared_half_pbc_matrix[2] = shared_pbc_matrix[2] / 2
+        elif thread_x == 1:
+            shared_grid_size[0] = grid_size[0]
+            shared_grid_size[1] = grid_size[1]
+            shared_grid_size[2] = grid_size[2]
+        cuda.syncthreads()
+        position_x = positions[particle_id, 0] + shared_half_pbc_matrix[0]
+        position_y = positions[particle_id, 1] + shared_half_pbc_matrix[1]
+        position_z = positions[particle_id, 2] + shared_half_pbc_matrix[2]
+        grid_index_x = position_x / shared_pbc_matrix[0] * shared_grid_size[0]
+        grid_index_y = position_y / shared_pbc_matrix[1] * shared_grid_size[1]
+        grid_index_z = position_z / shared_pbc_matrix[2] * shared_grid_size[2]
+        grid_index = cuda.local.array((3), NUMBA_INT)
+        grid_index[0] = math.floor(grid_index_x)
+        grid_index[1] = math.floor(grid_index_y)
+        grid_index[2] = math.floor(grid_index_z)
+        grid_fraction = cuda.local.array((3), NUMBA_FLOAT)
+        grid_fraction[0] = grid_index_x - grid_index[0]
+        grid_fraction[1] = grid_index_y - grid_index[1]
+        grid_fraction[2] = grid_index_z - grid_index[2]
 
+        local_spline_coefficient = cuda.local.array((SPATIAL_DIM, PME_ORDER), NUMBA_FLOAT)
+        local_spline_derivative_coefficient = cuda.local.array((SPATIAL_DIM, PME_ORDER), NUMBA_FLOAT)
         # 3 order B-spline
-        spline_coefficient[:, :, 2] = 0.5 * grid_fraction**2
-        spline_coefficient[:, :, 0] = 0.5 * (1 - grid_fraction)**2
-        spline_coefficient[:, :, 1] = 1 - spline_coefficient[:, :, 2] - spline_coefficient[:, :, 0]
-
-        # PME_ORDER order derivative coefficient
-        spline_derivative_coefficient[:, :, 0] = - spline_coefficient[:, :, 0]
-        spline_derivative_coefficient[:, :, 1] = spline_coefficient[:, :, 0] - spline_coefficient[:, :, 1]
-        spline_derivative_coefficient[:, :, 2] = spline_coefficient[:, :, 1] - spline_coefficient[:, :, 2]
-        spline_derivative_coefficient[:, :, 3] = spline_coefficient[:, :, 2]
-        # PME_ORDER order spline coefficient
-        spline_coefficient[:, :, 3] = grid_fraction * spline_coefficient[:, :, 2] / 3
-        spline_coefficient[:, :, 2] = (
-            (1 + grid_fraction) * spline_coefficient[:, :, 1] +
-            (3 - grid_fraction) * spline_coefficient[:, :, 2]
-        ) / 3
-        spline_coefficient[:, :, 0] = (1 - grid_fraction) * spline_coefficient[:, :, 0] / 3
-        spline_coefficient[:, :, 1] = (
-            1 - spline_coefficient[:, :, 0] -
-            spline_coefficient[:, :, 2] -
-            spline_coefficient[:, :, 3]
-        )
-        # grid_map: [num_particles, SPATIL_DIM, PME_ORDER]: The indice of grid to add charge of each particles
-        grid_map = np.stack([grid_indice+i for i in [-1, 0, 1, 2]]).transpose(1, 2, 0)
         for i in range(SPATIAL_DIM):
-            cur_axis_map = grid_map[:, i, :]
-            cur_axis_map[cur_axis_map<0] += grid_size[i]
-            cur_axis_map[cur_axis_map>=grid_size[i]] -= grid_size[i]
-            grid_map[:, i, :] = cur_axis_map
-        return (
-            (spline_coefficient).astype(env.NUMPY_FLOAT),
-            (spline_derivative_coefficient).astype(env.NUMPY_FLOAT),
-            np.ascontiguousarray(grid_map.astype(env.NUMPY_INT))
-        )
+            local_spline_coefficient[i, 2] = 0.5 * grid_fraction[i]**2
+            local_spline_coefficient[i, 0] = 0.5 * (1 - grid_fraction[i])**2
+            local_spline_coefficient[i, 1] = 1 - local_spline_coefficient[i, 0] - local_spline_coefficient[i, 2]
+        # 4 order derivative coefficient
+        for i in range(SPATIAL_DIM):
+            local_spline_derivative_coefficient[i, 0] = - local_spline_coefficient[i, 0]
+            local_spline_derivative_coefficient[i, 1] = local_spline_coefficient[i, 0] - local_spline_coefficient[i, 1]
+            local_spline_derivative_coefficient[i, 2] = local_spline_coefficient[i, 1] - local_spline_coefficient[i, 2]
+            local_spline_derivative_coefficient[i, 3] = local_spline_coefficient[i, 2]
+        # 4 order spline coefficient
+        for i in range(SPATIAL_DIM):
+            local_spline_coefficient[i, 3] = grid_fraction[i] * local_spline_coefficient[i, 2] / 3
+            local_spline_coefficient[i, 2] = (
+                (1 + grid_fraction[i]) * local_spline_coefficient[i, 1] +
+                (3 - grid_fraction[i]) * local_spline_coefficient[i, 2]
+            ) / 3
+            local_spline_coefficient[i, 0] = (1 - grid_fraction[i]) * local_spline_coefficient[i, 0] / 3
+            local_spline_coefficient[i, 1] = 1 - (
+                local_spline_coefficient[i, 0] + local_spline_coefficient[i, 2] + local_spline_coefficient[i, 3]
+            )
+        # Set value
+        for i in range(SPATIAL_DIM):
+            for j in range(PME_ORDER):
+                cuda.atomic.add(
+                    spline_coefficient,
+                    (particle_id, i, j),
+                    local_spline_coefficient[i, j]
+                )
+                cuda.atomic.add(
+                    spline_derivative_coefficient,
+                    (particle_id, i, j),
+                    local_spline_derivative_coefficient[i, j]
+                )
+                index = grid_index[i] + j - 1
+                if index >= shared_grid_size[i]:
+                    index -= shared_grid_size[i]
+                elif index < 0:
+                    index += shared_grid_size[i]
+                cuda.atomic.add(grid_map, (particle_id, i, j), index)
 
     @staticmethod
     def _update_charge_map_kernel(num_particles, spline_coefficient, grid_map, charges, charge_map):
@@ -464,28 +516,22 @@ class ElectrostaticPMEConstraint(Constraint):
         charge = charges[particle_id]
         for i in range(PME_ORDER):
             grid_x = grid_map[particle_id, 0, i]
-            spline_coefficient_x = spline_coefficient[particle_id, 0, i]
+            charge_x = charge * spline_coefficient[particle_id, 0, i]
             for j in range(PME_ORDER):
                 grid_y = grid_map[particle_id, 1, j]
-                spline_coefficient_y = spline_coefficient[particle_id, 1, j]
+                charge_xy = charge_x * spline_coefficient[particle_id, 1, j]
                 for k in range(PME_ORDER):
                     grid_z = grid_map[particle_id, 2, k]
-                    spline_coefficient_z = spline_coefficient[particle_id, 2, k]
-                    grid_charge = (
-                        charge * spline_coefficient_x *
-                        spline_coefficient_y * spline_coefficient_z
-                    )
-                    cuda.atomic.add(charge_map, (grid_x, grid_y, grid_z), grid_charge)
+                    charge_xyz = charge_xy * spline_coefficient[particle_id, 2, k]
+                    cuda.atomic.add(charge_map, (grid_x, grid_y, grid_z), charge_xyz)
 
     @staticmethod
-    def _update_electric_potential_map_kernel(
-        k, charge_map, b_grid, c_grid,
-    ):
+    def _update_electric_potential_map_kernel(k, charge_map, bc_grid):
         # Convolution
-        fft_charge = fft.fftn(charge_map / k)
+        fft_charge = cp.fft.fftn(charge_map / k)
         fft_charge[0, 0, 0] = 0
-        electric_potential_map = fft.ifftn(fft_charge*b_grid*c_grid).real
-        return electric_potential_map
+        electric_potential_map = cp.real(cp.fft.ifftn(fft_charge*bc_grid))
+        return electric_potential_map.astype(CUPY_FLOAT)
 
     @staticmethod
     def _update_reciprocal_force_kernel(
@@ -510,27 +556,31 @@ class ElectrostaticPMEConstraint(Constraint):
         energy = 0
         for i in range(PME_ORDER):
             grid_x = grid_map[particle_id, 0, i]
+            spline_coefficient_x = spline_coefficient[particle_id, 0, i]
+            spline_derivative_coefficient_x = spline_derivative_coefficient[particle_id, 0, i]
             for j in range(PME_ORDER):
                 grid_y = grid_map[particle_id, 1, j]
+                spline_coefficient_y = spline_coefficient[particle_id, 1, j]
+                spline_derivative_coefficient_y = spline_derivative_coefficient[particle_id, 1, j]
                 for k in range(PME_ORDER):
                     grid_z = grid_map[particle_id, 2, k]
+                    spline_coefficient_z = spline_coefficient[particle_id, 2, k]
+                    spline_derivative_coefficient_z = spline_derivative_coefficient[particle_id, 2, k]
                     cur_energy = (
-                        spline_coefficient[particle_id, 0, i] *
-                        spline_coefficient[particle_id, 1, j] *
-                        spline_coefficient[particle_id, 2, k] *
+                        spline_coefficient_x * spline_coefficient_y * spline_coefficient_z *
                         electric_potential_map[grid_x, grid_y, grid_z]
                     )
                     force_x -= (
-                        cur_energy / spline_coefficient[particle_id, 0, i] *
-                        spline_derivative_coefficient[particle_id, 0, i]
+                        cur_energy / spline_coefficient_x *
+                        spline_derivative_coefficient_x
                     )
                     force_y -= (
-                        cur_energy / spline_coefficient[particle_id, 1, j] *
-                        spline_derivative_coefficient[particle_id, 1, j]
+                        cur_energy / spline_coefficient_y *
+                        spline_derivative_coefficient_y
                     )
                     force_z -= (
-                        cur_energy / spline_coefficient[particle_id, 2, k] *
-                        spline_derivative_coefficient[particle_id, 2, k]
+                        cur_energy / spline_coefficient_z *
+                        spline_derivative_coefficient_z
                     )
                     energy += cur_energy
         cuda.atomic.add(forces, (particle_id, 0), force_x * charge)
@@ -539,10 +589,9 @@ class ElectrostaticPMEConstraint(Constraint):
         cuda.atomic.add(potential_energy, 0, energy)
 
     def update(self):
-        self._forces = np.zeros_like(self._parent_ensemble.state.positions)
-        self._potential_energy = np.zeros([1], dtype=env.NUMPY_FLOAT)
-        device_forces = cuda.to_device(self._forces)
-        device_potential_energy = cuda.to_device(self._potential_energy)
+        self._check_bound_state()
+        self._direct_forces = cp.zeros_like(self._parent_ensemble.state.positions, CUPY_FLOAT)
+        self._direct_potential_energy = cp.zeros([1], CUPY_FLOAT)
         # Direct part
         block_per_grid_x = int(np.ceil(
             self._parent_ensemble.topology.num_particles / THREAD_PER_BLOCK[0]
@@ -560,54 +609,60 @@ class ElectrostaticPMEConstraint(Constraint):
             self._parent_ensemble.state.cell_list.device_particle_cell_index,
             self._parent_ensemble.state.cell_list.device_cell_list,
             self._parent_ensemble.state.cell_list.device_num_cell_vec,
-            self._device_neighbor_cell_template,
-            device_forces, device_potential_energy
+            DEVICE_NEIGHBOR_CELL_TEMPLATE,
+            self._direct_forces, self._direct_potential_energy
         )
-        forces_direct = device_forces.copy_to_host()
-        potential_energy_direct = device_potential_energy.copy_to_host()[0]
-        # Bspline
-        spline_coefficient, spline_derivative_coefficient, grid_map = self._update_bspline(
-            self._parent_ensemble.state.positions, self._grid_size,
-            self._parent_ensemble.state.pbc_matrix, self._parent_ensemble.state.pbc_inv
-        )
-        device_spline_coefficient = cuda.to_device(spline_coefficient)
-        device_grid_map = cuda.to_device(grid_map)
-        # Map charge
-        thread_per_block = 64
+        thread_per_block = (64)
         block_per_grid = int(np.ceil(
             self._parent_ensemble.topology.num_particles / thread_per_block
         ))
-        device_charge_map = cuda.to_device(np.zeros(self._grid_size, dtype=env.NUMPY_FLOAT))
+        # Bspline
+        spline_coefficient = cp.zeros(
+            [self._parent_ensemble.topology.num_particles, SPATIAL_DIM, PME_ORDER], CUPY_FLOAT
+        )
+        spline_derivative_coefficient = cp.zeros(
+            [self._parent_ensemble.topology.num_particles, SPATIAL_DIM, PME_ORDER], CUPY_FLOAT
+        )
+        grid_map = cp.zeros(
+            [self._parent_ensemble.topology.num_particles, SPATIAL_DIM, PME_ORDER], CUPY_INT
+        )
+        self._update_bspline[block_per_grid, thread_per_block](
+            self._parent_ensemble.state.device_positions, self._device_grid_size,
+            self._parent_ensemble.state.device_pbc_matrix,
+            spline_coefficient, spline_derivative_coefficient, grid_map
+        )
+        # Map charge
+        self._charge_map = cp.zeros(self._grid_size, CUPY_FLOAT)
         self._update_charge_map[block_per_grid, thread_per_block](
-            self._device_num_particles, device_spline_coefficient, device_grid_map,
-            self._device_charges, device_charge_map
+            self._device_num_particles, spline_coefficient, grid_map,
+            self._device_charges, self._charge_map
         )
         # Reciprocal convolution
-        electric_potential_map = self._update_electric_potential_map(
-            self._k, device_charge_map.copy_to_host(), self._b_grid, self._c_grid
+        self._electric_potential_map = self._update_electric_potential_map(
+            self._device_k, self._charge_map, self._device_bc_grid
         )
         # Reciprocal force
-        device_spline_derivative_coefficient = cuda.to_device(spline_derivative_coefficient)
-        device_electric_potential_map = cuda.to_device(electric_potential_map.astype(env.NUMPY_FLOAT))
-        device_forces = cuda.to_device(np.zeros_like(forces_direct, dtype=env.NUMPY_FLOAT))
-        device_potential_energy = cuda.to_device(np.zeros([1], dtype=env.NUMPY_FLOAT))
+        self._reciprocal_forces = cp.zeros_like(self._parent_ensemble.state.positions, CUPY_FLOAT)
+        self._reciprocal_potential_energy = cp.zeros([1], CUPY_FLOAT)
         self._update_reciprocal_force[block_per_grid, thread_per_block](
             self._device_num_particles,
-            device_spline_coefficient,
-            device_spline_derivative_coefficient,
-            device_grid_map,
-            device_electric_potential_map,
+            spline_coefficient,
+            spline_derivative_coefficient,
+            grid_map,
+            self._electric_potential_map,
             self._device_charges,
-            device_forces,
-            device_potential_energy
+            self._reciprocal_forces,
+            self._reciprocal_potential_energy
         )
-        forces_reciprocal = device_forces.copy_to_host()
-        forces_reciprocal = forces_reciprocal * self._grid_size / np.diagonal(self._parent_ensemble.state.pbc_matrix)
-        forces_reciprocal -= forces_reciprocal.mean(0)
-        potential_energy_resciprocal = device_potential_energy.copy_to_host()[0]
+        self._reciprocal_forces = self._reciprocal_forces * self._device_reciprocal_factor
+        self._reciprocal_forces -= self._reciprocal_forces.mean(0)
         # Summary
-        self._potential_energy = potential_energy_direct + potential_energy_resciprocal - self._potential_energy_self
-        self._forces = forces_direct + forces_reciprocal
+        self._potential_energy = (
+            self._direct_potential_energy +
+            self._reciprocal_potential_energy -
+            self._device_self_potential_energy
+        )
+        self._forces = (self._direct_forces +  self._reciprocal_forces)
 
     @property
     def grid_size(self):
