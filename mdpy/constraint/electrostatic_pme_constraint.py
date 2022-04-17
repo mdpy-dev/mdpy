@@ -448,11 +448,11 @@ class ElectrostaticPMEConstraint(Constraint):
         grid_index_x = position_x / shared_pbc_matrix[0] * shared_grid_size[0]
         grid_index_y = position_y / shared_pbc_matrix[1] * shared_grid_size[1]
         grid_index_z = position_z / shared_pbc_matrix[2] * shared_grid_size[2]
-        grid_index = cuda.local.array((3), NUMBA_INT)
+        grid_index = cuda.local.array((SPATIAL_DIM), NUMBA_INT)
         grid_index[0] = math.floor(grid_index_x)
         grid_index[1] = math.floor(grid_index_y)
         grid_index[2] = math.floor(grid_index_z)
-        grid_fraction = cuda.local.array((3), NUMBA_FLOAT)
+        grid_fraction = cuda.local.array((SPATIAL_DIM), NUMBA_FLOAT)
         grid_fraction[0] = grid_index_x - grid_index[0]
         grid_fraction[1] = grid_index_y - grid_index[1]
         grid_fraction[2] = grid_index_z - grid_index[2]
