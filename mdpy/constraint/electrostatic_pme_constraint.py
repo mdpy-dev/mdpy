@@ -11,7 +11,6 @@ import math
 import numpy as np
 import numba as nb
 import cupy as cp
-import scipy.fft as fft
 from numba import cuda
 from mdpy import SPATIAL_DIM
 from mdpy.environment import *
