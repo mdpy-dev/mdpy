@@ -48,6 +48,6 @@ class TestCharmmForcefield:
         f3 = os.path.join(data_dir, 'top_all36_prot.rtf')
         topology = PSFParser(self.psf_file_path).topology
         forcefield = CharmmForcefield(topology, np.diag([30, 30, 30]), long_range_solver='CUTOFF')
-        forcefield.set_param_files(f1, f2, f3)
+        forcefield.set_parameter_files(f1, f2, f3)
         ensemble = forcefield.create_ensemble()
         assert ensemble.num_constraints == 6

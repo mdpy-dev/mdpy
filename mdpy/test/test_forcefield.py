@@ -25,7 +25,7 @@ class TestForcefield:
         forcefield = Forcefield(self.topology)
 
         with pytest.raises(NotImplementedError):
-            forcefield.set_param_files()
+            forcefield.set_parameter_files()
 
         with pytest.raises(NotImplementedError):
             forcefield.check_parameters()
