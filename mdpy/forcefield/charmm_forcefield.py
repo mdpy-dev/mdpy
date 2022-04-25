@@ -31,7 +31,7 @@ class CharmmForcefield(Forcefield):
         self._ewald_direct_sum_error = ewald_direct_sum_error
         self._is_SHAKE = is_SHAKE
 
-    def set_param_files(self, *file_pathes) -> None:
+    def set_parameter_files(self, *file_pathes) -> None:
         self._parameters = CharmmTopparParser(*file_pathes).parameters
 
     def check_parameters(self):
@@ -93,7 +93,7 @@ class CharmmForcefield(Forcefield):
                     %(*improper, improper_name)
                 )
 
-    def create_ensemble(self):
+    def create_ensemble(self) -> Ensemble:
         self.check_parameters()
         ensemble = Ensemble(self._topology, self._pbc_matrix)
         constraints = []

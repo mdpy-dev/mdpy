@@ -118,9 +118,9 @@ class CharmmAngleConstraint(Constraint):
         forces, potential_energy
     ):
         angle_id = cuda.grid(1)
-        shared_num_angles = cuda.shared.array(shape=(1), dtype=nb.int32)
-        shared_pbc = cuda.shared.array(shape=(SPATIAL_DIM), dtype=nb.float32)
-        shared_half_pbc = cuda.shared.array(shape=(SPATIAL_DIM), dtype=nb.float32)
+        shared_num_angles = cuda.shared.array(shape=(1), dtype=NUMBA_INT)
+        shared_pbc = cuda.shared.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
+        shared_half_pbc = cuda.shared.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
         if cuda.threadIdx.x == 0:
             shared_num_angles[0] = int_parameters.shape[0]
         if cuda.threadIdx.x == 1:

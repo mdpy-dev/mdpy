@@ -13,25 +13,27 @@ test_order = [
      'environment',
      'base_dimension', 'unit', 'unit_definition', 'quantity',
      'check_quantity', 'geometry', 'pbc', 'select'
-     'particle', 'topology', 'state', 'cell_list', 'trajectory',
+     'particle', 'topology', 
+     'state', 'neighbor_list', 'trajectory', 
+     'ensemble',
      'charmm_toppar_parser',
      'psf_parser',
      'pdb_parser', 'pdb_writer',
      'dcd_parser',
      'hdf5_parser', 'hdf5_writer',
      'constraint',
-     'electrostatic_constraint'
-     'charmm_nonbonded_constraint', 'charmm_bond_constraint', 'charmm_angle_constraint',
-     'charmm_dihedral_constraint', 'charmm_improper_constraint',
+     'electrostatic_cutoff_constraint'
+     'charmm_vdw_constraint',
+     'charmm_bond_constraint',
+     'charmm_angle_constraint',
+     'charmm_dihedral_constraint',
+     'charmm_improper_constraint',
      'forcefield',
      'charmm_forcefield',
-     'ensemble',
      'minimizer',
      'steepest_descent_minimizer', 'conjugate_gradient_minimizer',
-     'integrator', 'verlet_integrator', 'langevin_integrator'
-     'simulation',
-     'dumper',
-     'pdb_dumper', 'log_dumper', 'hdf5_dumper',
+     'integrator',
+     'verlet_integrator', 'langevin_integrator'
      'analyser_result'
 ]
 

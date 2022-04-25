@@ -19,10 +19,10 @@ class TestIntegrator:
         pass
 
     def test_attributes(self):
-        integrator = Integrator(1)
+        integrator = Integrator(1, 10)
         assert integrator.time_step == 1
 
-        integrator = Integrator(Quantity(1, nanosecond))
+        integrator = Integrator(Quantity(1, nanosecond), 10)
         assert integrator.time_step == 1e6
 
         assert integrator.is_cached == False
@@ -30,6 +30,6 @@ class TestIntegrator:
         assert integrator.is_cached == True
 
     def test_exceptions(self):
-        integrator = Integrator(1)
+        integrator = Integrator(1, 10)
         with pytest.raises(NotImplementedError):
             integrator.integrate(0, 1)

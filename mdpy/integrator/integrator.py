@@ -12,8 +12,9 @@ from mdpy.utils import *
 from mdpy.unit import *
 
 class Integrator:
-    def __init__(self, time_step) -> None:
+    def __init__(self, time_step, neighbor_list_update_freq) -> None:
         self._time_step = check_quantity_value(time_step, default_time_unit)
+        self._neighbor_list_update_freq = neighbor_list_update_freq
         self._cur_positions = None
         self._pre_positions = None
 

@@ -7,6 +7,7 @@ author : Zhenyu Wei
 copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
+from turtle import position
 import pytest
 import numpy as np
 from mdpy import SPATIAL_DIM, env
@@ -59,9 +60,12 @@ class TestState:
 
     def test_set_positions(self):
         self.state.set_pbc_matrix(np.eye(3) * 100)
-        self.state.cell_list.set_cutoff_radius(12)
-        self.state.set_positions(np.ones([self.num_particles, SPATIAL_DIM]) * 10)
-        assert self.state.positions[0, 2] == 10
+        self.state.neighbor_list.set_cutoff_radius(12)
+        positions = np.random.randn(self.num_particles, SPATIAL_DIM) * 20
+        self.state.set_positions(positions)
+        print(self.state.positions[0, :])
+        print(positions[0, :])
+        assert self.state.positions[0, 2] == pytest.approx(positions[0, 2])
 
     def test_set_velocities(self):
         self.state.set_velocities(np.ones([self.num_particles, SPATIAL_DIM]) * 10)

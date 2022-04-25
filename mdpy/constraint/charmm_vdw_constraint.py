@@ -20,7 +20,7 @@ from mdpy.constraint import Constraint
 from mdpy.utils import *
 from mdpy.unit import *
 
-THREAD_PER_BLOCK = (32, 4)
+THREAD_PER_BLOCK = (64)
 class CharmmVDWConstraint(Constraint):
     def __init__(self, parameter_dict: dict, cutoff_radius=Quantity(12, angstrom)) -> None:
         super().__init__()
@@ -31,16 +31,12 @@ class CharmmVDWConstraint(Constraint):
         self._parameters_list = []
         # Kernel
         self._update = cuda.jit(nb.void(
-            NUMBA_FLOAT[:, ::1], # positions
-            NUMBA_FLOAT[:, ::1], # parameters
-            NUMBA_FLOAT[:, ::1], # pbc_matrix
             NUMBA_FLOAT[::1], # cutoff_radius
+            NUMBA_FLOAT[:, ::1], # parameters
             NUMBA_INT[:, ::1], # bonded_particle
             NUMBA_INT[:, ::1], # scaling_particles
-            NUMBA_INT[:, ::1], # particle_cell_index
-            NUMBA_INT[:, :, :, ::1], # cell_list
-            NUMBA_INT[::1], # num_cell_vec
-            NUMBA_INT[:, ::1], # neighbor_cell_template
+            NUMBA_INT[:, ::1], # neighbor_list
+            NUMBA_FLOAT[:, :, ::1], # neighbor_vec_list
             NUMBA_FLOAT[:, ::1], # forces
             NUMBA_FLOAT[::1] # potential_energy
         ))(self._update_kernel)
@@ -67,134 +63,81 @@ class CharmmVDWConstraint(Constraint):
         self._device_parameters_list = cuda.to_device(self._parameters_list)
         self._device_bonded_particles = cuda.to_device(self._parent_ensemble.topology.bonded_particles)
         self._device_scaling_particles = cuda.to_device(self._parent_ensemble.topology.scaling_particles)
-        block_per_grid_x = int(np.ceil(
-            self._parent_ensemble.topology.num_particles / THREAD_PER_BLOCK[0]
+        self._block_per_grid = int(np.ceil(
+            self._parent_ensemble.topology.num_particles / THREAD_PER_BLOCK
         ))
-        block_per_grid_y = int(np.ceil(
-            NUM_NEIGHBOR_CELLS / THREAD_PER_BLOCK[1]
-        ))
-        self._block_per_grid = (block_per_grid_x, block_per_grid_y)
 
     @staticmethod
     def _update_kernel(
-        positions, parameters, pbc_matrix, cutoff_radius,
-        bonded_particles, scaling_particles,
-        particle_cell_index, cell_list, num_cell_vec,
-        neighbor_cell_template,
+        cutoff_radius,
+        parameters,
+        bonded_particles,
+        scaling_particles,
+        neighbor_list,
+        neighbor_vec_list,
         forces, potential_energy
     ):
-        thread_x, thread_y = cuda.grid(2)
-        num_particles_per_cell = cell_list.shape[3]
-        num_particles = positions.shape[0]
-
-        id1 = thread_x
-        if id1 >= num_particles:
+        particle_id1 = cuda.grid(1)
+        num_particles = neighbor_list.shape[0]
+        if particle_id1 >= num_particles:
             return None
-        cell_id = thread_y
-        if cell_id >= NUM_NEIGHBOR_CELLS:
-            return None
-        # Shared array
-        thread_x = cuda.threadIdx.x
-        thread_y = cuda.threadIdx.y
-        # PBC matrix
-        shared_pbc_matrix = cuda.shared.array(shape=(SPATIAL_DIM), dtype=nb.float32)
-        shared_half_pbc_matrix = cuda.shared.array(shape=(SPATIAL_DIM), dtype=nb.float32)
         # Bonded particle
-        shared_bonded_particles = cuda.shared.array(
-            shape=(THREAD_PER_BLOCK[0], MAX_NUM_BONDED_PARTICLES), dtype=nb.int32
+        local_bonded_particles = cuda.local.array(
+            shape=(MAX_NUM_BONDED_PARTICLES), dtype=NUMBA_INT
         )
+        for i in range(MAX_NUM_BONDED_PARTICLES):
+            local_bonded_particles[i] = bonded_particles[particle_id1, i]
         # Scaling particles
-        shared_scaling_particles = cuda.shared.array(
-            shape=(THREAD_PER_BLOCK[0], MAX_NUM_SCALING_PARTICLES), dtype=nb.int32
+        local_scaling_particles = cuda.local.array(
+            shape=(MAX_NUM_SCALING_PARTICLES), dtype=NUMBA_INT
         )
+        for i in range(MAX_NUM_SCALING_PARTICLES):
+            local_scaling_particles[i] = scaling_particles[particle_id1, i]
         # Parameters
-        shared_parameters = cuda.shared.array(shape=(THREAD_PER_BLOCK[0], 4), dtype=nb.float32)
-        # num_cell_vec
-        shared_num_cell_vec = cuda.shared.array(shape=(3), dtype=nb.int32)
-        if thread_y == 0:
-            if thread_x == 0:
-                shared_pbc_matrix[0] = pbc_matrix[0, 0]
-                shared_pbc_matrix[1] = pbc_matrix[1, 1]
-                shared_pbc_matrix[2] = pbc_matrix[2, 2]
-                shared_half_pbc_matrix[0] = shared_pbc_matrix[0] / 2
-                shared_half_pbc_matrix[1] = shared_pbc_matrix[1] / 2
-                shared_half_pbc_matrix[2] = shared_pbc_matrix[2] / 2
-                shared_num_cell_vec[0] = num_cell_vec[0]
-                shared_num_cell_vec[1] = num_cell_vec[1]
-                shared_num_cell_vec[2] = num_cell_vec[2]
-            for i in range(MAX_NUM_BONDED_PARTICLES):
-                shared_bonded_particles[thread_x, i] = bonded_particles[id1, i]
-        elif thread_y == 1:
-            for i in range(MAX_NUM_SCALING_PARTICLES):
-                shared_scaling_particles[thread_x, i] = scaling_particles[id1, i]
-            shared_parameters[thread_x, 0] = parameters[id1, 0]
-            shared_parameters[thread_x, 1] = parameters[id1, 1]
-            shared_parameters[thread_x, 2] = parameters[id1, 2]
-            shared_parameters[thread_x, 3] = parameters[id1, 3]
-        cuda.syncthreads()
-
-        cell_id_x = particle_cell_index[id1, 0] + neighbor_cell_template[cell_id, 0]
-        cell_id_x = cell_id_x - shared_num_cell_vec[0] if cell_id_x >= shared_num_cell_vec[0] else cell_id_x
-        cell_id_y = particle_cell_index[id1, 1] + neighbor_cell_template[cell_id, 1]
-        cell_id_y = cell_id_y - shared_num_cell_vec[1] if cell_id_y >= shared_num_cell_vec[1] else cell_id_y
-        cell_id_z = particle_cell_index[id1, 2] + neighbor_cell_template[cell_id, 2]
-        cell_id_z = cell_id_z - shared_num_cell_vec[2] if cell_id_z >= shared_num_cell_vec[2] else cell_id_z
-        # id1 attribute
-        positions_id1_x = positions[id1, 0]
-        positions_id1_y = positions[id1, 1]
-        positions_id1_z = positions[id1, 2]
+        local_parameters = cuda.local.array(shape=(4), dtype=NUMBA_FLOAT)
+        local_parameters[0] = parameters[particle_id1, 0]
+        local_parameters[1] = parameters[particle_id1, 1]
+        local_parameters[2] = parameters[particle_id1, 2]
+        local_parameters[3] = parameters[particle_id1, 3]
         # cutoff
         cutoff_radius = cutoff_radius[0]
         force_x = 0
         force_y = 0
         force_z = 0
         energy = 0
-        for index in range(num_particles_per_cell):
-            id2 = cell_list[cell_id_x, cell_id_y, cell_id_z, index]
-            if id1 == id2: # self-self term
-                continue
-            if id2 == -1: # self-padding term
+        for neighbor_index in range(neighbor_list.shape[1]):
+            particle_id2 = neighbor_list[particle_id1, neighbor_index]
+            if particle_id2 == -1: # self-padding term
                 break
-            is_continue = False
-            for i in shared_bonded_particles[thread_x, :]:
+            if particle_id1 == particle_id2: # self-self term
+                continue
+            is_bonded = False
+            for i in local_bonded_particles:
                 if i == -1: # padding of bonded particle
                     break
-                elif id2 == i: # self-bonded particle term
-                    is_continue = True
+                elif particle_id2 == i: # self-bonded particle term
+                    is_bonded = True
                     break
-            if is_continue:
+            if is_bonded:
                 continue
-            x = (positions[id2, 0] - positions_id1_x)
-            if x >= shared_half_pbc_matrix[0]:
-                x -= shared_pbc_matrix[0]
-            elif x <= -shared_half_pbc_matrix[0]:
-                x += shared_pbc_matrix[0]
-            y = (positions[id2, 1] - positions_id1_y)
-            if y >= shared_half_pbc_matrix[1]:
-                y -= shared_pbc_matrix[1]
-            elif y <= -shared_half_pbc_matrix[1]:
-                y += shared_pbc_matrix[1]
-            z = (positions[id2, 2] - positions_id1_z)
-            if z >= shared_half_pbc_matrix[2]:
-                z -= shared_pbc_matrix[2]
-            elif z <= -shared_half_pbc_matrix[2]:
-                z += shared_pbc_matrix[2]
-            r = math.sqrt(x**2 + y**2 + z**2)
+            r = neighbor_vec_list[particle_id1, neighbor_index, 0]
             if r <= cutoff_radius:
-                scaled_x, scaled_y, scaled_z = x / r, y / r, z / r
+                scaled_x = neighbor_vec_list[particle_id1, neighbor_index, 1]
+                scaled_y = neighbor_vec_list[particle_id1, neighbor_index, 2]
+                scaled_z = neighbor_vec_list[particle_id1, neighbor_index, 3]
                 is_scaled = False
-                for i in shared_scaling_particles[thread_x, :]:
+                for i in local_scaling_particles:
                     if i == -1:
                         break
-                    if id2 == i:
+                    if particle_id2 == i:
                         is_scaled = True
                         break
                 if not is_scaled:
-                    epsilon1, sigma1 = shared_parameters[thread_x, :2]
-                    epsilon2, sigma2 = parameters[id2, :2]
+                    epsilon1, sigma1 = local_parameters[:2]
+                    epsilon2, sigma2 = parameters[particle_id2, :2]
                 else:
-                    epsilon1, sigma1 = shared_parameters[thread_x, 2:]
-                    epsilon2, sigma2 = parameters[id2, 2:]
+                    epsilon1, sigma1 = local_parameters[2:]
+                    epsilon2, sigma2 = parameters[particle_id2, 2:]
                 epsilon, sigma = (
                     math.sqrt(epsilon1 * epsilon2),
                     (sigma1 + sigma2) / 2
@@ -208,9 +151,9 @@ class CharmmVDWConstraint(Constraint):
                 force_z += scaled_z * force_val
                 # Energy still need divided by 2
                 energy += 2 * epsilon * (scaled_r12 - scaled_r6)
-        cuda.atomic.add(forces, (id1, 0), force_x)
-        cuda.atomic.add(forces, (id1, 1), force_y)
-        cuda.atomic.add(forces, (id1, 2), force_z)
+        cuda.atomic.add(forces, (particle_id1, 0), force_x)
+        cuda.atomic.add(forces, (particle_id1, 1), force_y)
+        cuda.atomic.add(forces, (particle_id1, 2), force_z)
         cuda.atomic.add(potential_energy, 0, energy)
 
     def update(self):
@@ -219,15 +162,11 @@ class CharmmVDWConstraint(Constraint):
         self._potential_energy = cp.zeros([1], CUPY_FLOAT)
         # Device
         self._update[self._block_per_grid, THREAD_PER_BLOCK](
-            self._parent_ensemble.state.device_positions,
-            self._device_parameters_list,
-            self._parent_ensemble.state.device_pbc_matrix,
             self._device_cutoff_radius,
+            self._device_parameters_list,
             self._device_bonded_particles,
             self._device_scaling_particles,
-            self._parent_ensemble.state.cell_list.device_particle_cell_index,
-            self._parent_ensemble.state.cell_list.device_cell_list,
-            self._parent_ensemble.state.cell_list.device_num_cell_vec,
-            DEVICE_NEIGHBOR_CELL_TEMPLATE,
+            self._parent_ensemble.state.neighbor_list.device_neighbor_list,
+            self._parent_ensemble.state.neighbor_list.device_neighbor_vec_list,
             self._forces, self._potential_energy
         )

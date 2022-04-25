@@ -36,9 +36,9 @@ class TestConjugrateGradientMinimizer:
         topology = PSFParser(os.path.join(data_dir, '6PO6.psf')).topology
 
         forcefield = CharmmForcefield(topology, np.diag(np.ones(3)*100), long_range_solver='CUTOFF')
-        forcefield.set_param_files(os.path.join(data_dir, 'par_all36_prot.prm'))
+        forcefield.set_parameter_files(os.path.join(data_dir, 'par_all36_prot.prm'))
         ensemble = forcefield.create_ensemble()
-        ensemble.state.cell_list.set_cutoff_radius(12)
+        ensemble.state.neighbor_list.set_cutoff_radius(12)
         ensemble.state.set_positions(pdb.positions)
         ensemble.state.set_velocities_to_temperature(300)
         ensemble.update()

@@ -9,7 +9,7 @@ copyright : (C)Copyright 2021-present, mdpy organization
 
 import numpy as np
 import cupy as cp
-from mdpy.core.cell_list import CellList
+from mdpy.core.neighbor_list import NeighborList
 from mdpy.core.topology import Topology
 from mdpy import SPATIAL_DIM
 from mdpy.environment import *
@@ -26,7 +26,7 @@ class State:
         self._positions = np.zeros(self._matrix_shape, dtype=NUMPY_FLOAT)
         self._velocities = np.zeros(self._matrix_shape, dtype=NUMPY_FLOAT)
         self.set_pbc_matrix(pbc_matrix)
-        self._cell_list = CellList(self._pbc_matrix.copy())
+        self._neighbor_list = NeighborList(self._pbc_matrix.copy())
         # Device array
         self._device_postitions = None
 
@@ -58,12 +58,12 @@ class State:
         self._device_pbc_matrix = cp.array(self._pbc_matrix, CUPY_FLOAT)
         self._device_pbc_inv = cp.array(self._pbc_inv, CUPY_FLOAT)
 
-    def set_positions(self, positions: np.ndarray):
+    def set_positions(self, positions: np.ndarray, is_update_neighbor_list=True):
         self._check_matrix_shape(positions)
         self._positions = wrap_positions(
             positions.astype(NUMPY_FLOAT), self._pbc_matrix, self._pbc_inv
         )
-        self._cell_list.update(self._positions)
+        self._neighbor_list.update(self._positions, is_update_neighbor_list)
         self._device_postitions = cp.array(self._positions, CUPY_FLOAT)
 
     def set_velocities(self, velocities: np.ndarray):
@@ -122,5 +122,5 @@ class State:
         return self._pbc_matrix, self._pbc_inv
 
     @property
-    def cell_list(self):
-        return self._cell_list
+    def neighbor_list(self):
+        return self._neighbor_list
