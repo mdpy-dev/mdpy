@@ -336,19 +336,3 @@ class NeighborList:
     @property
     def device_neighbor_vec_list(self):
         return self._device_neighbor_vec_list
-
-import mdpy as md
-import time
-if __name__ == '__main__':
-    pdb = md.io.PDBParser('/home/zhenyuwei/nutstore/ZhenyuWei/Note_Research/mdpy/mdpy/benchmark/data/str.pdb')
-    neighbor_list = NeighborList(pdb.pbc_matrix)
-    neighbor_list.set_cutoff_radius(10)
-    s = time.time()
-    for _ in range(100):
-        neighbor_list.update(pdb.positions, True)
-        for i in range(20):
-            neighbor_list.update(pdb.positions, False)
-    # print(neighbor_list._device_neighbor_list[0, :500])
-    # print(neighbor_list._device_neighbor_vec_list[0, :500, 0])
-    e = time.time()
-    print('Run xxx for %s s' %((e-s)/(21*100)))
