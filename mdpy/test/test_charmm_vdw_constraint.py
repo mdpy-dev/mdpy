@@ -53,7 +53,7 @@ class TestCharmmVDWConstraint:
             [0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 1, 0]
         ]).astype(env.NUMPY_FLOAT)
         self.ensemble = Ensemble(t, np.eye(3)*30)
-        self.ensemble.state.cell_list.set_cutoff_radius(5)
+        self.ensemble.state.neighbor_list.set_cutoff_radius(5)
         self.ensemble.state.set_positions(self.p)
         self.ensemble.state.set_velocities(velocities)
 
@@ -93,7 +93,7 @@ class TestCharmmVDWConstraint:
         self.ensemble.state.set_pbc_matrix(self.pbc)
         self.constraint.set_cutoff_radius(Quantity(0.91, nanometer))
         self.ensemble.add_constraints(self.constraint)
-        self.ensemble.state.cell_list.update(self.ensemble.state.positions)
+        self.ensemble.state.neighbor_list.update(self.ensemble.state.positions)
         # CA     0.000000  -0.070000     1.992400
         # NY     0.000000  -0.200000     1.850000
         # CPT    0.000000  -0.099000     1.860000

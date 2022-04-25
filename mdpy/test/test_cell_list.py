@@ -33,10 +33,10 @@ class TestCellList:
         with pytest.raises(UnitDimensionDismatchedError):
             self.cell_list.set_cutoff_radius(Quantity(1, second))
 
-        with pytest.raises(CellListPoorDefinedError):
+        with pytest.raises(NeighborListPoorDefinedError):
             self.cell_list.set_cutoff_radius(0)
 
-        with pytest.raises(CellListPoorDefinedError):
+        with pytest.raises(NeighborListPoorDefinedError):
             self.cell_list.set_cutoff_radius(24)
 
     def test_update(self):

@@ -47,7 +47,7 @@ class TestElectrostaticPMEConstraint:
             [0, 0, 0], [0, 10, 0], [0, 21, 0], [0, 11, 0]
         ])
         self.ensemble = Ensemble(t, np.eye(3)*30)
-        self.ensemble.state.cell_list.set_cutoff_radius(12)
+        self.ensemble.state.neighbor_list.set_cutoff_radius(12)
         self.ensemble.state.set_positions(self.p)
         self.constraint = ElectrostaticPMEConstraint()
 
