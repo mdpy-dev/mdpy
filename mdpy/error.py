@@ -120,13 +120,13 @@ class PBCPoorDefinedError(Exception):
     '''
     pass
 
-class CellListPoorDefinedError(Exception):
+class NeighborListPoorDefinedError(Exception):
     '''This error occurs when:
     - The pbc info of cell list is not defined well
     - The cutoff_radius of cell list is not defined well
 
     Used in:
-    - mdpy.core.cell_list
+    - mdpy.core.neighbor_list
     '''
     pass
 
