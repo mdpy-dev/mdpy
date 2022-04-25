@@ -13,8 +13,8 @@ from mdpy.integrator import Integrator
 from mdpy.utils import *
 
 class VerletIntegrator(Integrator):
-    def __init__(self, time_step) -> None:
-        super().__init__(time_step)
+    def __init__(self, time_step, neighbor_list_update_freq=10) -> None:
+        super().__init__(time_step, neighbor_list_update_freq)
         self._time_step_square = self._time_step**2
 
     def integrate(self, ensemble: Ensemble, num_steps: int=1):
@@ -41,7 +41,10 @@ class VerletIntegrator(Integrator):
                 2 * self._cur_positions - self._pre_positions +
                 accelration * self._time_step_square
             ), self._cur_positions
-            ensemble.state.set_positions(self._cur_positions)
+            if cur_step % self._neighbor_list_update_freq == 0:
+                ensemble.state.set_positions(self._cur_positions, True)
+            else:
+                ensemble.state.set_positions(self._cur_positions, False)
             # Update step
             cur_step += 1
         ensemble.state.set_velocities(unwrap_vec(
