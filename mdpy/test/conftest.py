@@ -13,8 +13,8 @@ test_order = [
      'environment',
      'base_dimension', 'unit', 'unit_definition', 'quantity',
      'check_quantity', 'geometry', 'pbc', 'select'
-     'particle', 'topology', 
-     'state', 'neighbor_list', 'trajectory', 
+     'particle', 'topology',
+     'state', 'neighbor_list', 'trajectory',
      'ensemble',
      'charmm_toppar_parser',
      'psf_parser',
