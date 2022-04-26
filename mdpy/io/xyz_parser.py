@@ -101,7 +101,3 @@ class XYZParser:
                 'positions property is not supported as `is_parse_all==False`, calling `get_position` method'
             )
         return self._positions.copy()
-
-if __name__ == '__main__':
-    parser = XYZParser('/home/zhenyuwei/nutstore/ZhenyuWei/Note_Research/mdpy/mdpy/mdpy/test/data/single_frame.xyz')
-    print(parser._xyz_info[0])
