@@ -19,7 +19,7 @@ from mdpy.constraint import Constraint
 from mdpy.utils import *
 from mdpy.unit import *
 
-THREAD_PER_BLOCK = (32)
+THREAD_PER_BLOCK = (64)
 
 class ElectrostaticCutoffConstraint(Constraint):
     def __init__(self, cutoff_radius=Quantity(12, angstrom)) -> None:

@@ -11,10 +11,8 @@ import math
 import numpy as np
 import numba as nb
 from numba import cuda
-from mdpy import SPATIAL_DIM
 from mdpy.environment import *
 from mdpy.core import Ensemble
-from mdpy.core import NUM_NEIGHBOR_CELLS, DEVICE_NEIGHBOR_CELL_TEMPLATE
 from mdpy.core import MAX_NUM_BONDED_PARTICLES, MAX_NUM_SCALING_PARTICLES
 from mdpy.constraint import Constraint
 from mdpy.utils import *
