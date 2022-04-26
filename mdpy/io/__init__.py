@@ -5,15 +5,16 @@ __license__ = "BSD"
 
 
 # Parameter file
-from .charmm_toppar_parser import CharmmTopparParser
+from mdpy.io.charmm_toppar_parser import CharmmTopparParser
 
 # Topology file
-from .psf_parser import PSFParser
+from mdpy.io.psf_parser import PSFParser
 
-# Position file
-from .pdb_parser import PDBParser
-from .pdb_writer import PDBWriter
-from .dcd_parser import DCDParser
+# Positions file
+from mdpy.io.pdb_parser import PDBParser
+from mdpy.io.pdb_writer import PDBWriter
+from mdpy.io.dcd_parser import DCDParser
+from mdpy.io.xyz_parser import XYZParser
 
 # Comprehensive file
 ## HDF5
@@ -69,16 +70,18 @@ HDF5_FILE_HIERARCHY = '''Hierarchy of HDF5 file created by mdpy
 |   +-- dataset "pbc_matrix"
 |
 '''
-from .hdf5_parser import HDF5Parser
-from .hdf5_writer import HDF5Writer
+from mdpy.io.hdf5_parser import HDF5Parser
+from mdpy.io.hdf5_writer import HDF5Writer
 
 # Other file
-from .log_writer import LogWriter
+from mdpy.io.log_writer import LogWriter
 
 __all__ = [
     'CharmmTopparParser',
     'PSFParser',
-    'PDBParser','PDBWriter', 'DCDParser',
+    'PDBParser','PDBWriter',
+    'DCDParser',
+    'XYZ_Parser',
     'HDF5Parser', 'HDF5Writer',
     'LogWriter'
 ]
