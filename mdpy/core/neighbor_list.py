@@ -18,9 +18,9 @@ from mdpy.utils import *
 from mdpy.unit import *
 from mdpy.error import *
 
-CELL_WIDTH = Quantity(2, angstrom)
+CELL_WIDTH = Quantity(3, angstrom)
 SKIN_WIDTH = Quantity(1, angstrom)
-THREAD_PER_BLOCK = 32
+THREAD_PER_BLOCK = 64
 
 class NeighborList:
     def __init__(self, pbc_matrix: np.ndarray, skin_width=SKIN_WIDTH, cell_width=CELL_WIDTH) -> None:
@@ -31,7 +31,7 @@ class NeighborList:
         self._cell_width = check_quantity_value(cell_width, default_length_unit)
         self.set_cutoff_radius(Quantity(1, angstrom))
         # Attributes
-        self._num_cells_vec = np.floor(self._pbc_diag / self._cell_width).astype(NUMPY_INT)
+        self._num_cells_vec = np.ceil(self._pbc_diag / self._cell_width).astype(NUMPY_INT)
         self._cell_list = np.zeros([
             self._num_cells_vec[0], self._num_cells_vec[1], self._num_cells_vec[1],
         ], dtype=NUMPY_INT)
@@ -92,7 +92,7 @@ class NeighborList:
         # Attributes
         self._cutoff_radius = cutoff_radius
         self._neighbor_ceil_shift = np.ceil((self._cutoff_radius+self._skin_width) / self._cell_width).astype(NUMPY_INT)
-        self._num_neighbor_cells = (self._neighbor_ceil_shift * 2)**3 + 1 # +1 for center cell
+        self._num_neighbor_cells = (self._neighbor_ceil_shift * 2 + 1)**3 # +1 for center cell
         # Device attributes
         self._device_cutoff_radius = cp.array([cutoff_radius], CUPY_FLOAT)
         self._device_neighbor_ceil_shift = cp.array([self._neighbor_ceil_shift], CUPY_INT)
@@ -104,21 +104,25 @@ class NeighborList:
         particle_cell_index = np.floor(positions / cell_width).astype(NUMPY_INT)
         # Set variable
         num_x, num_y, num_z = num_cells_vec
-        num_cell_particles = np.zeros((num_x, num_y, num_z), dtype=NUMPY_INT) # Number of particles in each cells
+        num_particles_each_cell = np.zeros((num_x, num_y, num_z), dtype=NUMPY_INT) # Number of particles in each cells
         for particle in range(num_particles):
             x, y, z = particle_cell_index[particle, :]
-            num_cell_particles[x, y, z] += 1
+            num_particles_each_cell[x, y, z] += 1
         # Build cell list
-        num_max_particles_per_cell = NUMPY_INT(np.ceil(num_cell_particles.max()))
-        cell_list = np.ones((
+        num_max_particles_per_cell = NUMPY_INT(num_particles_each_cell.max())
+        num_mean_particles_per_cell = NUMPY_INT(np.ceil(num_particles_each_cell.mean()))
+        cell_list = np.zeros((
             num_x, num_y, num_z, num_max_particles_per_cell
-        ), dtype=NUMPY_INT) - 2 # -1 for padding value
-        cur_cell_flag = np.zeros_like(num_cell_particles)
+        ), dtype=NUMPY_INT) - 1 # -1 for padding value
+        cur_cell_flag = np.zeros((num_x, num_y, num_z), dtype=NUMPY_INT)
         for particle in range(num_particles):
             x, y, z = particle_cell_index[particle]
             cell_list[x, y, z, cur_cell_flag[x, y, z]] = particle
             cur_cell_flag[x, y, z] += 1
-        return particle_cell_index, cell_list, num_max_particles_per_cell
+        return (
+            particle_cell_index, cell_list,
+            num_mean_particles_per_cell
+        )
 
     @staticmethod
     def _update_neighbor_list_kernel(
@@ -290,12 +294,12 @@ class NeighborList:
             num_particles / THREAD_PER_BLOCK
         ))
         if is_update_neighbor_list:
-            self._particle_cell_index, self._cell_list, num_max_particles_per_cell = self._update_cell_list(
+            self._particle_cell_index, self._cell_list, num_mean_particles_per_cell = self._update_cell_list(
                 positions, self._pbc_diag,
                 self._num_cells_vec, self._cell_width
             )
-            num_max_neighbors_per_particle = np.ceil(num_max_particles_per_cell * self._num_neighbor_cells * np.pi / 4).astype(NUMPY_INT)
-            self._device_neighbor_list = cp.ones((positions.shape[0], num_max_neighbors_per_particle), CUPY_INT) - 2
+            num_max_neighbors_per_particle = np.ceil(num_mean_particles_per_cell * self._num_neighbor_cells * np.pi / 6 * 1.1).astype(NUMPY_INT)
+            self._device_neighbor_list = cp.zeros((positions.shape[0], num_max_neighbors_per_particle), CUPY_INT) - 1
             self._device_neighbor_vec_list = cp.zeros((positions.shape[0], num_max_neighbors_per_particle, SPATIAL_DIM+1), CUPY_FLOAT)
             device_positions = cp.array(positions, CUPY_FLOAT)
             device_particle_cell_index = cp.array(self._particle_cell_index, CUPY_INT)

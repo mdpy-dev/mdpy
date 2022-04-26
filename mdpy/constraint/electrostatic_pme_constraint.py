@@ -22,7 +22,7 @@ from mdpy.unit import *
 from mdpy.error import *
 
 PME_ORDER = 4
-THREAD_PER_BLOCK = (32)
+THREAD_PER_BLOCK = (64)
 
 def bspline(x, order):
     if order == 2:
