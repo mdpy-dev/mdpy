@@ -34,7 +34,7 @@ class XYZParser:
         if self._num_particles != multiframe_positions[0].shape[0]:
             raise ArrayDimError(
                 'XYZ file contains %d particles, while positions of %d particles are provided' %(
-                    self._num_particles, self._positions.shape[0]
+                    self._num_particles, multiframe_positions[0].shape[0]
                 )
             )
         if self._num_frames == 1:
