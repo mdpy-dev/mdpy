@@ -20,6 +20,7 @@ test_order = [
      'psf_parser',
      'pdb_parser', 'pdb_writer',
      'dcd_parser',
+     'xyz_parser',
      'hdf5_parser', 'hdf5_writer',
      'constraint',
      'electrostatic_cutoff_constraint'
