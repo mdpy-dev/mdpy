@@ -28,13 +28,7 @@ class CharmmDihedralConstraint(Constraint):
         self._int_parameters = []
         self._float_parameters = []
         self._num_dihedrals = 0
-        self._kernel = nb.njit((
-            NUMBA_INT[:, :], # int_parameters
-            NUMBA_FLOAT[:, :], # float_parameters
-            NUMBA_FLOAT[:, ::1], # positions
-            NUMBA_FLOAT[:, ::1], # pbc_matrix
-            NUMBA_FLOAT[:, ::1] # pbc_inv
-        ))(self.kernel)
+        # Kernel
         self._update = cuda.jit(nb.void(
             NUMBA_INT[:, ::1], # int_parameters
             NUMBA_FLOAT[:, ::1], # float_parameters
