@@ -229,8 +229,8 @@ class ElectrostaticPMEConstraint(Constraint):
         self._parent_ensemble = ensemble
         self._constraint_id = ensemble.constraints.index(self)
         self._charges = self._parent_ensemble.topology.charges[:, 0]
-        if self._charges.sum() != 0:
-            raise EnsemblePoorDefinedError('mdpy.constraint.ElectrostaticPMEConstraint is bound to a non-neutralized ensemble')
+        # if self._charges.sum() != 0:
+        #     raise EnsemblePoorDefinedError('mdpy.constraint.ElectrostaticPMEConstraint is bound to a non-neutralized ensemble')
         # Grid size
         self._grid_size = self._get_grid_size()
         self._num_grids_total = np.prod(self._grid_size)
@@ -257,7 +257,6 @@ class ElectrostaticPMEConstraint(Constraint):
         self._device_reciprocal_factor = cp.array(
             self._grid_size / np.diagonal(self._parent_ensemble.state.pbc_matrix), CUPY_FLOAT
         )
-        print(self._device_reciprocal_factor)
 
     @staticmethod
     def _update_direct_part_kernel(
