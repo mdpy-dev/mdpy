@@ -41,7 +41,8 @@ setup(
         'pytest >= 6.2.0',
         'pytest-xdist >= 2.3.0',
         'MDAnalysis >= 2.0.0',
-        'h5py >= 3.6.0'
+        'h5py >= 3.6.0',
+        'cupy>=10.2.0'
     ],
     python_requires = '>=3.9'
 )
