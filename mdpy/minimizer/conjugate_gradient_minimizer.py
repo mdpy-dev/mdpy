@@ -7,9 +7,11 @@ author : Zhenyu Wei
 copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
+import cupy as cp
 import numpy as np
 from mdpy import SPATIAL_DIM
 from mdpy.core import Ensemble
+from mdpy.environment import CUPY_FLOAT
 from mdpy.minimizer import Minimizer
 from mdpy.unit import *
 from mdpy.utils import *
@@ -39,31 +41,30 @@ class ConjugateGradientMinimizer(Minimizer):
         while cur_iteration < max_iterations:
             cur_sub_iteration = 0
             pre_energy = cur_energy
-            cur_positions = ensemble.state.positions.copy()
+            cur_positions = ensemble.state.positions
             f0 = ensemble.forces.reshape([-1, 1])
             while cur_sub_iteration < self._max_sub_iterations:
-                d = np.zeros([ensemble.topology.num_particles*SPATIAL_DIM, 1])
+                d = cp.zeros([ensemble.topology.num_particles*SPATIAL_DIM, 1])
                 cur_f = ensemble.forces.reshape([-1, 1])
                 pre_f = cur_f.copy()
                 t = cur_f.copy()
                 ensemble.state.set_positions(
-                    ensemble.state.positions + self._theta * t.reshape([-1, 3]),
-                    *ensemble.state.pbc_info
+                    ensemble.state.positions + self._theta * t.reshape([-1, 3])
                 )
                 ensemble.update()
                 omega = - (ensemble.forces.reshape([-1, 1]) - cur_f) / self._theta
-                alpha = np.matmul(cur_f.T, cur_f) / (np.matmul(omega.T, t))
+                alpha = cp.matmul(cur_f.T, cur_f) / (cp.matmul(omega.T, t))
                 d += alpha * t
                 cur_f, pre_f = cur_f + alpha * omega, cur_f
                 if (cur_f**2).sum() / (f0**2).sum() < self._force_tol:
                     break
-                beta = np.matmul(cur_f.T, cur_f) / (np.matmul(pre_f.T, pre_f))
+                beta = cp.matmul(cur_f.T, cur_f) / (cp.matmul(pre_f.T, pre_f))
                 t = cur_f + beta * t
                 cur_sub_iteration += 1
-            ensemble.state.set_positions(cur_positions + d.reshape([-1, 3]))
+            ensemble.state.set_positions(cur_positions + d.reshape([-1, 3]).astype(CUPY_FLOAT))
             ensemble.update()
             cur_energy = ensemble.potential_energy
-            energy_error = np.abs((cur_energy - pre_energy) / pre_energy)
+            energy_error = cp.abs((cur_energy - pre_energy) / pre_energy)
             cur_iteration += 1
             if self._is_verbose and cur_iteration % self._log_freq == 0:
                 print('Iteration %d: %s %.4f' %(cur_iteration, self._energy2str(cur_energy), energy_error))
