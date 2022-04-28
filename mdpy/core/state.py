@@ -19,12 +19,11 @@ from mdpy.utils import *
 
 class State:
     def __init__(self, topology: Topology, pbc_matrix: np.ndarray) -> None:
-        self._particles = topology.particles
-        self._masses = topology.masses
-        self._num_particles = len(self._particles)
+        self._topology = topology
+        self._num_particles = len(self._topology.particles)
         self._matrix_shape = [self._num_particles, SPATIAL_DIM]
-        self._positions = np.zeros(self._matrix_shape, dtype=NUMPY_FLOAT)
-        self._velocities = np.zeros(self._matrix_shape, dtype=NUMPY_FLOAT)
+        self._positions = cp.zeros(self._matrix_shape, CUPY_FLOAT)
+        self._velocities = cp.zeros(self._matrix_shape, CUPY_FLOAT)
         self.set_pbc_matrix(pbc_matrix)
         self._neighbor_list = NeighborList(self._pbc_matrix.copy())
         # Device array
@@ -38,8 +37,6 @@ class State:
     __str__ = __repr__
 
     def _check_matrix_shape(self, matrix: np.ndarray):
-        if not isinstance(matrix, np.ndarray):
-            raise TypeError('Matrix should be numpy.ndarray, instead of %s' %type(matrix))
         row, col = matrix.shape
         if row != self._matrix_shape[0] or col != self._matrix_shape[1]:
             raise ArrayDimError(
@@ -54,30 +51,37 @@ class State:
         # While in MDPy the position is in shape of n x 3
         # So the scaled position will be Position * PBC instead of PBC * Position as usual
         self._pbc_matrix = np.ascontiguousarray(pbc_matrix, dtype=NUMPY_FLOAT)
-        self._pbc_inv = np.ascontiguousarray(np.linalg.inv(self._pbc_matrix), dtype=NUMPY_FLOAT)
+        self._pbc_diag = np.ascontiguousarray(np.diagonal(self._pbc_matrix), dtype=NUMPY_FLOAT)
         self._device_pbc_matrix = cp.array(self._pbc_matrix, CUPY_FLOAT)
-        self._device_pbc_inv = cp.array(self._pbc_inv, CUPY_FLOAT)
+        self._device_pbc_diag = cp.array(self._pbc_diag, CUPY_FLOAT)
 
-    def set_positions(self, positions: np.ndarray, is_update_neighbor_list=True):
+    def set_positions(self, positions: cp.ndarray, is_update_neighbor_list=True):
         self._check_matrix_shape(positions)
-        self._positions = wrap_positions(
-            positions.astype(NUMPY_FLOAT), self._pbc_matrix, self._pbc_inv
-        )
+        if isinstance(positions, np.ndarray):
+            positions = cp.array(positions, CUPY_FLOAT)
+        self._positions = positions
+        move_vec = (positions < - self._device_pbc_diag) * self._device_pbc_diag
+        move_vec -= (positions > self._device_pbc_diag) * self._device_pbc_diag
+        self._positions += move_vec
         self._neighbor_list.update(self._positions, is_update_neighbor_list)
-        self._device_postitions = cp.array(self._positions, CUPY_FLOAT)
 
-    def set_velocities(self, velocities: np.ndarray):
+    def set_velocities(self, velocities: cp.ndarray):
+        if isinstance(velocities, np.ndarray):
+            velocities = cp.array(velocities, CUPY_FLOAT)
         self._check_matrix_shape(velocities)
-        self._velocities = velocities.astype(NUMPY_FLOAT)
+        self._velocities = velocities.astype(CUPY_FLOAT)
 
     def set_velocities_to_temperature(self, temperature):
         temperature = check_quantity(temperature, default_temperature_unit)
         factor = Quantity(3) * KB * temperature / default_mass_unit
         factor = factor.convert_to(default_velocity_unit**2).value
-        self.set_velocities(self.generator(self._masses, factor))
+        # Generate force
+        velocities = cp.random.rand(self._num_particles, 3).astype(CUPY_FLOAT) - 0.5 # [-0.5, 0.5]
+        width = 2 * cp.sqrt(factor / self._topology.device_masses)
+        self.set_velocities(velocities * width)
 
     @staticmethod
-    def generator(masses, factor):
+    def generator(masses: cp.ndarray, factor):
         num_particles = masses.shape[0]
         velocities = np.random.rand(num_particles, 3).astype(masses.dtype)
         for particle in range(num_particles):
@@ -88,10 +92,6 @@ class State:
     @property
     def positions(self):
         return self._positions
-
-    @property
-    def device_positions(self):
-        return self._device_postitions
 
     @property
     def velocities(self):
@@ -108,18 +108,6 @@ class State:
     @property
     def device_pbc_matrix(self):
         return self._device_pbc_matrix
-
-    @property
-    def pbc_inv(self):
-        return self._pbc_inv
-
-    @property
-    def device_pbc_inv(self):
-        return self._device_pbc_inv
-
-    @property
-    def pbc_info(self):
-        return self._pbc_matrix, self._pbc_inv
 
     @property
     def neighbor_list(self):
