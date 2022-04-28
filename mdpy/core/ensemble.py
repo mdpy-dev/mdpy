@@ -9,6 +9,7 @@ copyright : (C)Copyright 2021-present, mdpy organization
 
 import numpy as np
 import cupy as cp
+import numba.cuda as cuda
 from mdpy.environment import *
 from mdpy.core import Topology, State
 from mdpy.error import *
@@ -30,6 +31,7 @@ class Ensemble:
         self._segments = []
         self._num_segments = 0
         self._constraints = []
+        self._streams = []
         self._num_constraints = 0
 
     def __repr__(self) -> str:
@@ -51,6 +53,7 @@ class Ensemble:
             if constraint.cutoff_radius > self.state.neighbor_list.cutoff_radius:
                 self.state.neighbor_list.set_cutoff_radius(constraint.cutoff_radius)
             self._num_constraints += 1
+            self._streams.append(cuda.stream())
 
     def update(self):
         self._forces = cp.zeros(self._matrix_shape, CUPY_FLOAT)
@@ -58,6 +61,7 @@ class Ensemble:
         self._total_energy, self._kinetic_energy = 0, 0
         for constraint in self._constraints:
             constraint.update()
+        cuda.synchronize()
         for constraint in self._constraints:
             self._forces += constraint.forces
             self._potential_energy += constraint.potential_energy
@@ -100,6 +104,10 @@ class Ensemble:
     @property
     def constraints(self):
         return self._constraints
+
+    @property
+    def streams(self):
+        return self._streams
 
     @property
     def num_constraints(self):
