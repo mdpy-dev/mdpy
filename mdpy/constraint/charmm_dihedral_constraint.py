@@ -213,7 +213,7 @@ class CharmmDihedralConstraint(Constraint):
         self._update[self._block_per_grid, THREAD_PER_BLOCK, self._parent_ensemble.streams[self._constraint_id]](
             self._device_int_parameters,
             self._device_float_parameters,
-            self._parent_ensemble.state.device_positions,
+            self._parent_ensemble.state.positions,
             self._parent_ensemble.state.device_pbc_matrix,
             self._forces, self._potential_energy
         )
