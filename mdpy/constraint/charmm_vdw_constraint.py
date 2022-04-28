@@ -57,9 +57,7 @@ class CharmmVDWConstraint(Constraint):
             elif len(param) == 4:
                 epsilon, sigma, epsilon14, sigma14 = param
                 self._parameters_list.append([epsilon, sigma, epsilon14, sigma14])
-        self._parameters_list = cp.array(np.vstack(self._parameters_list), CUPY_FLOAT)
-        self._bonded_particles = cp.array(self._parent_ensemble.topology.bonded_particles, CUPY_INT)
-        self._scaling_particles = cp.array(self._parent_ensemble.topology.scaling_particles, CUPY_INT)
+        self._device_parameters_list = cp.array(np.vstack(self._parameters_list), CUPY_FLOAT)
         self._block_per_grid = int(np.ceil(
             self._parent_ensemble.topology.num_particles / THREAD_PER_BLOCK
         ))
@@ -160,9 +158,9 @@ class CharmmVDWConstraint(Constraint):
         # Device
         self._update[self._block_per_grid, THREAD_PER_BLOCK, self._parent_ensemble.streams[self._constraint_id]](
             self._device_cutoff_radius,
-            self._parameters_list,
-            self._bonded_particles,
-            self._scaling_particles,
+            self._device_parameters_list,
+            self._parent_ensemble.topology.device_bonded_particles,
+            self._parent_ensemble.topology.device_scaling_particles,
             self._parent_ensemble.state.neighbor_list.device_neighbor_list,
             self._parent_ensemble.state.neighbor_list.device_neighbor_vec_list,
             self._forces, self._potential_energy
