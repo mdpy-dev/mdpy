@@ -8,7 +8,6 @@ copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
 import math
-from threading import local
 import numpy as np
 import numba as nb
 import numba.cuda as cuda
@@ -166,12 +165,12 @@ class CharmmDihedralConstraint(Constraint):
         force_val = - k * (1 - n * math.sin(factor))
         local_forces = cuda.local.array(shape=(4, SPATIAL_DIM), dtype=NUMBA_FLOAT)
         r12_times_sin_theta_123 = r12 * math.sqrt(1 - cos_theta_123**2)
-        r23_times_sin_theta_234 = r23 * math.sqrt(1 - cos_theta_234**2)
+        r34_times_sin_theta_234 = r34 * math.sqrt(1 - cos_theta_234**2)
         for i in range(SPATIAL_DIM):
             # force_1 = force_val / (r12 * np.sin(theta_123)) * get_unit_vec(np.cross(-v12, v23))
             local_forces[0, i] = force_val / r12_times_sin_theta_123 * (-n1[i] / rn1)
             # force_4 = force_val / (r34 * np.sin(theta_234)) * get_unit_vec(np.cross(v34, -v23))
-            local_forces[3, i] = force_val / r23_times_sin_theta_234 * (n2[i] / rn2)
+            local_forces[3, i] = force_val / r34_times_sin_theta_234 * (n2[i] / rn2)
         # forces[2, i] =  np.cross(
         #     -(np.cross(vo3,force_4)+np.cross(v34,force_4)/2+np.cross(-v12, force_1)/2), vo3
         # ) / ro3**2
