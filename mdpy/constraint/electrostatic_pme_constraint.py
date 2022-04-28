@@ -553,7 +553,7 @@ class ElectrostaticPMEConstraint(Constraint):
             [self._parent_ensemble.topology.num_particles, SPATIAL_DIM, PME_ORDER], CUPY_INT
         )
         self._update_bspline[block_per_grid, thread_per_block](
-            self._parent_ensemble.state.device_positions, self._device_grid_size,
+            self._parent_ensemble.state.positions, self._device_grid_size,
             self._parent_ensemble.state.device_pbc_matrix,
             spline_coefficient, spline_derivative_coefficient, grid_map
         )
