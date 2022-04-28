@@ -161,7 +161,7 @@ class CharmmVDWConstraint(Constraint):
             self._device_parameters_list,
             self._parent_ensemble.topology.device_bonded_particles,
             self._parent_ensemble.topology.device_scaling_particles,
-            self._parent_ensemble.state.neighbor_list.device_neighbor_list,
-            self._parent_ensemble.state.neighbor_list.device_neighbor_vec_list,
+            self._parent_ensemble.state.neighbor_list.neighbor_list,
+            self._parent_ensemble.state.neighbor_list.neighbor_vec_list,
             self._forces, self._potential_energy
         )
