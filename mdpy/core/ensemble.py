@@ -65,8 +65,7 @@ class Ensemble:
         for constraint in self._constraints:
             self._forces += constraint.forces
             self._potential_energy += constraint.potential_energy
-        self._forces = self._forces.get()
-        self._potential_energy = self._potential_energy.get()
+        self._potential_energy = self._potential_energy
         self._update_kinetic_energy()
         self._total_energy = self._potential_energy + self._kinetic_energy
 
@@ -74,7 +73,7 @@ class Ensemble:
         # Without reshape, the result of the first sum will be a 1d vector
         # , which will be a matrix after multiple with a 2d vector
         self._kinetic_energy = ((
-            (self._state.velocities**2).sum(1).reshape(self._topology.num_particles, 1) * self._topology.masses
+            (self._state.velocities**2).sum(1) * self._topology.device_masses[:, 0]
         ).sum() / 2)
 
     @property
