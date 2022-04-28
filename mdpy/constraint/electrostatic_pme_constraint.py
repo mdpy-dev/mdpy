@@ -249,7 +249,6 @@ class ElectrostaticPMEConstraint(Constraint):
         )
         self._device_self_potential_energy = cp.array(self._self_potential_energy, CUPY_FLOAT)
         self._device_charges = cp.array(self._charges, CUPY_FLOAT)
-        self._device_cutoff_radius = cp.array([self._cutoff_radius], CUPY_FLOAT)
         self._device_bonded_particles = cp.array(self._parent_ensemble.topology.bonded_particles, CUPY_INT)
         self._device_b_grid = cp.array(self._b_grid, CUPY_FLOAT)
         self._device_c_grid = cp.array(self._c_grid, CUPY_FLOAT)
