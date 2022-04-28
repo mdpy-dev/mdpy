@@ -20,6 +20,7 @@ from mdpy.error import *
 
 CELL_WIDTH = Quantity(3, angstrom)
 SKIN_WIDTH = Quantity(1, angstrom)
+NUM_MIN_NEIGHBORS = 300
 THREAD_PER_BLOCK = 64
 
 class NeighborList:
@@ -287,26 +288,34 @@ class NeighborList:
             )
             neighbor_index += 1
 
-    def update(self, positions: np.ndarray, is_update_neighbor_list=True):
+    def _judge_num_max_neighbors_per_particle(self, num_particles):
+        num_max_neighbors_per_particle = int(np.ceil(
+            num_particles / self._pbc_volume * self._cutoff_volume * 1.3
+        ))
+        print(num_max_neighbors_per_particle)
+        if num_particles < NUM_MIN_NEIGHBORS:
+            return num_particles
+        elif num_max_neighbors_per_particle < NUM_MIN_NEIGHBORS:
+            return NUM_MIN_NEIGHBORS
+        return num_max_neighbors_per_particle
+
+    def update(self, positions: cp.ndarray, is_update_neighbor_list=True):
         num_particles = positions.shape[0]
         block_per_grid = int(np.ceil(
             num_particles / THREAD_PER_BLOCK
         ))
         if is_update_neighbor_list:
-            num_max_neighbors_per_particle = int(np.ceil(
-                num_particles / self._pbc_volume * self._cutoff_volume * 1.3
-            ))
+            num_max_neighbors_per_particle = self._judge_num_max_neighbors_per_particle(num_particles)
             self._particle_cell_index, self._cell_list = self._update_cell_list(
-                positions, self._pbc_diag,
+                positions.get(), self._pbc_diag,
                 self._num_cells_vec, self._cell_width
             )
             self._device_neighbor_list = cp.zeros((positions.shape[0], num_max_neighbors_per_particle), CUPY_INT) - 1
             self._device_neighbor_vec_list = cp.zeros((positions.shape[0], num_max_neighbors_per_particle, SPATIAL_DIM+1), CUPY_FLOAT)
-            device_positions = cp.array(positions, CUPY_FLOAT)
             device_particle_cell_index = cp.array(self._particle_cell_index, CUPY_INT)
             device_cell_list = cp.array(self._cell_list, CUPY_INT)
             self._update_neighbor_list[block_per_grid, THREAD_PER_BLOCK](
-                device_positions,
+                positions,
                 self._device_pbc_matrix,
                 device_particle_cell_index,
                 device_cell_list,
@@ -318,9 +327,8 @@ class NeighborList:
                 self._device_neighbor_vec_list
             )
         else:
-            device_positions = cp.array(positions, CUPY_FLOAT)
             self._update_neighbor_vec_list[block_per_grid, THREAD_PER_BLOCK](
-                device_positions,
+                positions,
                 self._device_pbc_matrix,
                 self._device_neighbor_list,
                 self._device_neighbor_vec_list
