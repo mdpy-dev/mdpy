@@ -29,10 +29,6 @@ def get_norm_vec(p1, p2, p3):
 def get_bond(p1, p2):
     return np.linalg.norm(np.array(p1) - np.array(p2))
 
-def get_pbc_bond(p1, p2, pbc_matrix, pbc_inv):
-    bond_vec = unwrap_vec(np.array(p1) - np.array(p2), pbc_matrix, pbc_inv)
-    return np.linalg.norm(bond_vec)
-
 def get_angle(p1, p2, p3, is_angular=True):
     p1, p2, p3 = np.array(p1), np.array(p2), np.array(p3)
     v0 = p1 - p2
@@ -42,13 +38,6 @@ def get_angle(p1, p2, p3, is_angular=True):
         return arccos(cos_phi)
     else:
         return arccos(cos_phi) / np.pi * 180
-
-@nb.njit()
-def get_pbc_angle(p1, p2, p3, pbc_matrix, pbc_inv):
-    v0 = unwrap_vec(p1 - p2, pbc_matrix, pbc_inv)
-    v1 = unwrap_vec(p3 - p2, pbc_matrix, pbc_inv)
-    cos_phi = np.dot(v0, v1) / (np.linalg.norm(v0)*np.linalg.norm(v1))
-    return arccos(cos_phi)
 
 def get_included_angle(vec1, vec2, is_angular=True):
     cos_phi = np.dot(vec1, vec2) / (np.linalg.norm(vec1)*np.linalg.norm(vec2))
@@ -74,20 +63,6 @@ def get_dihedral(p1, p2, p3, p4, is_angular=True):
         return np.arctan2(x, y)
     else:
         return np.arctan2(x, y) / np.pi * 180
-
-@nb.njit()
-def get_pbc_dihedral(p1, p2, p3, p4, pbc_matrix, pbc_inv):
-    r1 = unwrap_vec(p2 - p1, pbc_matrix, pbc_inv)
-    r2 = unwrap_vec(p3 - p2, pbc_matrix, pbc_inv)
-    r3 = unwrap_vec(p4 - p3, pbc_matrix, pbc_inv)
-
-    n1 = np.cross(r1, r2)
-    n2 = np.cross(r2, r3)
-
-    x = np.dot(np.linalg.norm(r2) * r1, n2)
-    y = np.dot(n1, n2)
-
-    return np.arctan2(x, y)
 
 def generate_rotation_matrix(yaw, pitch, roll):
     shape = [SPATIAL_DIM, SPATIAL_DIM]

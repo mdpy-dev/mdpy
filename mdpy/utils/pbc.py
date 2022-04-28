@@ -25,20 +25,14 @@ def check_pbc_matrix(pbc_matrix):
         )
     return pbc_matrix
 
-def wrap_positions(positions: np.ndarray, pbc_matrix: np.ndarray, pbc_inv: np.array):
-    move_vec = - np.round(np.dot(positions, pbc_inv))
-    if np.max(np.abs(move_vec)) >= 2:
-        particle_id = np.unique([i[0] for i in np.argwhere(np.abs(move_vec) >= 2)])
-        raise ParticleLossError(
-            'Particle(s) with matrix id: %s moved beyond 2 PBC image.' %(particle_id)
-        )
-    move_vec = np.dot(move_vec, pbc_matrix)
+def wrap_positions(positions, pbc_diag):
+    half_pbc_diag = pbc_diag / 2
+    move_vec = (positions < - half_pbc_diag) * pbc_diag
+    move_vec -= (positions > half_pbc_diag) * pbc_diag
     return positions + move_vec
 
-@nb.njit()
-def unwrap_vec(vec: np.ndarray, pbc_matrix: np.ndarray, pbc_inv: np.array):
-    scaled_vec = np.dot(vec, pbc_inv)
-    temp_vec = np.empty(scaled_vec.shape)
-    np.round_(scaled_vec, 0, temp_vec)
-    scaled_vec -= temp_vec
-    return np.dot(scaled_vec, pbc_matrix)
+def unwrap_vec(vec, pbc_diag):
+    half_pbc_diag = pbc_diag / 2
+    shift = (vec < -half_pbc_diag) * pbc_diag
+    shift -= (vec > half_pbc_diag) * pbc_diag
+    return vec + shift

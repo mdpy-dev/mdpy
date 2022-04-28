@@ -44,7 +44,7 @@ class CoordinationNumberAnalyser:
                 vec = unwrap_vec(
                     trajectory.positions[frame, id1, :] -
                     trajectory.positions[frame, selected_matrix_ids_2, :],
-                    trajectory.pbc_matrix, trajectory.pbc_inv
+                    trajectory.pbc_diag
                 )
                 dist = np.sqrt((vec**2).sum(1))
                 hist, bin_edge = np.histogram(dist, self._num_bins, [0, self._cutoff_radius])

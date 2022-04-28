@@ -26,10 +26,8 @@ class ElectrostaticCutoffConstraint(Constraint):
         super().__init__()
         # Attributes
         self._cutoff_radius = check_quantity_value(cutoff_radius, default_length_unit)
-        self._device_cutoff_radius = cuda.to_device(np.array([self._cutoff_radius]))
-        self._int_parameters = []
-        self._float_parameters = []
-        self._device_k = cuda.to_device(np.array([4 * np.pi * EPSILON0.value], dtype=NUMPY_FLOAT))
+        self._device_cutoff_radius = cp.array([self._cutoff_radius], CUPY_FLOAT)
+        self._device_k = cp.array([4 * np.pi * EPSILON0.value], CUPY_FLOAT)
         # Kernel
         self._update = cuda.jit(nb.void(
             NUMBA_FLOAT[:, ::1], # charges
@@ -51,11 +49,9 @@ class ElectrostaticCutoffConstraint(Constraint):
     def bind_ensemble(self, ensemble: Ensemble):
         self._parent_ensemble = ensemble
         self._constraint_id = ensemble.constraints.index(self)
-        self._device_charges = cuda.to_device(self._parent_ensemble.topology.charges)
-        self._device_pbc_matrix = cuda.to_device(self._parent_ensemble.state.pbc_matrix)
-        self._device_cutoff_radius = cuda.to_device(np.array([self._cutoff_radius], dtype=NUMPY_FLOAT))
-        self._device_bonded_particles = cuda.to_device(self._parent_ensemble.topology.bonded_particles)
-        self._device_scaling_particles = cuda.to_device(self._parent_ensemble.topology.scaling_particles)
+        self._block_per_grid = int(np.ceil(
+            self._parent_ensemble.topology.num_particles / THREAD_PER_BLOCK
+        ))
 
     @staticmethod
     def _update_kernel(
@@ -128,17 +124,14 @@ class ElectrostaticCutoffConstraint(Constraint):
 
     def update(self):
         self._check_bound_state()
-        self._forces = cp.zeros_like(self._parent_ensemble.state.positions, CUPY_FLOAT)
+        self._forces = cp.zeros(self._parent_ensemble.state.matrix_shape, CUPY_FLOAT)
         self._potential_energy = cp.zeros([1], CUPY_FLOAT)
-
-        block_per_grid = int(np.ceil(
-            self._parent_ensemble.topology.num_particles / THREAD_PER_BLOCK
-        ))
-        self._update[block_per_grid, THREAD_PER_BLOCK](
-            self._device_charges, self._device_k,
+        # Update
+        self._update[self._block_per_grid, THREAD_PER_BLOCK, self._parent_ensemble.streams[self._constraint_id]](
+            self._parent_ensemble.topology.device_charges, self._device_k,
             self._device_cutoff_radius,
-            self._device_bonded_particles,
-            self._parent_ensemble.state.neighbor_list.device_neighbor_list,
-            self._parent_ensemble.state.neighbor_list.device_neighbor_vec_list,
+            self._parent_ensemble.topology.device_bonded_particles,
+            self._parent_ensemble.state.neighbor_list.neighbor_list,
+            self._parent_ensemble.state.neighbor_list.neighbor_vec_list,
             self._forces, self._potential_energy
         )

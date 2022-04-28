@@ -52,13 +52,12 @@ class ElectrostaticPMEConstraint(Constraint):
         self._k = 4 * np.pi * EPSILON0.value
         self._device_k = cp.array([4 * np.pi * EPSILON0.value], CUPY_FLOAT)
         # Attribute
-        self._charges = None
         self._grid_size = None
         self._b_grid = None
         self._c_grid = None
         # Kernel
         self._update_direct_part = cuda.jit(nb.void(
-            NUMBA_FLOAT[::1], # charges
+            NUMBA_FLOAT[:, ::1], # charges
             NUMBA_FLOAT[::1], # k
             NUMBA_FLOAT[::1], # ewald_coefficient
             NUMBA_FLOAT[::1], # cutoff_radius
@@ -80,7 +79,7 @@ class ElectrostaticPMEConstraint(Constraint):
             NUMBA_INT[::1], # num_particles
             NUMBA_FLOAT[:, :, ::1], # spline_coefficient
             NUMBA_INT[:, :, ::1], # grid_map
-            NUMBA_FLOAT[::1], # charges
+            NUMBA_FLOAT[:, ::1], # charges
             NUMBA_FLOAT[:, :, ::1] # charge_map
         ))(self._update_charge_map_kernel)
         self._update_electric_potential_map = self._update_electric_potential_map_kernel
@@ -90,7 +89,7 @@ class ElectrostaticPMEConstraint(Constraint):
             NUMBA_FLOAT[:, :, ::1], # spline_derivative_coefficient
             NUMBA_INT[:, :, ::1], # grid_map
             NUMBA_FLOAT[:, :, ::1], # electric_potential_map
-            NUMBA_FLOAT[::1], # charges
+            NUMBA_FLOAT[:, ::1], # charges
             NUMBA_FLOAT[:, ::1], # forces
             NUMBA_FLOAT[::1] # potential_energy
         ))(self._update_reciprocal_force_kernel)
@@ -222,14 +221,13 @@ class ElectrostaticPMEConstraint(Constraint):
         return c_grid
 
     def _get_self_potential_energy(self):
-        potential_energy = (self._charges**2).sum() * self._ewald_coefficient / self._k / np.sqrt(np.pi)
+        potential_energy = (self._parent_ensemble.topology.charges**2).sum() * self._ewald_coefficient / self._k / np.sqrt(np.pi)
         return potential_energy
 
     def bind_ensemble(self, ensemble: Ensemble):
         self._parent_ensemble = ensemble
         self._constraint_id = ensemble.constraints.index(self)
-        self._charges = self._parent_ensemble.topology.charges[:, 0]
-        if not np.isclose(self._charges.sum(), 0, atol=1e-3):
+        if not np.isclose(self._parent_ensemble.topology.charges.sum(), 0, atol=1e-3):
             raise EnsemblePoorDefinedError('mdpy.constraint.ElectrostaticPMEConstraint is bound to a non-neutralized ensemble')
         # Grid size
         self._grid_size = self._get_grid_size()
@@ -248,9 +246,6 @@ class ElectrostaticPMEConstraint(Constraint):
             [self._parent_ensemble.topology.num_particles], CUPY_INT
         )
         self._device_self_potential_energy = cp.array(self._self_potential_energy, CUPY_FLOAT)
-        self._device_charges = cp.array(self._charges, CUPY_FLOAT)
-        self._device_cutoff_radius = cp.array([self._cutoff_radius], CUPY_FLOAT)
-        self._device_bonded_particles = cp.array(self._parent_ensemble.topology.bonded_particles, CUPY_INT)
         self._device_b_grid = cp.array(self._b_grid, CUPY_FLOAT)
         self._device_c_grid = cp.array(self._c_grid, CUPY_FLOAT)
         self._device_bc_grid = cp.array(self._bc_grid, CUPY_FLOAT)
@@ -297,7 +292,7 @@ class ElectrostaticPMEConstraint(Constraint):
         force_y = 0
         force_z = 0
         energy = 0
-        e1 = charges[particle_id1]
+        e1 = charges[particle_id1, 0]
         for neighbor_index in range(neighbor_list.shape[1]):
             particle_id2 = neighbor_list[particle_id1, neighbor_index]
             if particle_id2 == -1: # self-padding term
@@ -316,7 +311,7 @@ class ElectrostaticPMEConstraint(Constraint):
                     scaled_x = neighbor_vec_list[particle_id1, neighbor_index, 1]
                     scaled_y = neighbor_vec_list[particle_id1, neighbor_index, 2]
                     scaled_z = neighbor_vec_list[particle_id1, neighbor_index, 3]
-                    e1e2 = e1 * charges[particle_id2]
+                    e1e2 = e1 * charges[particle_id2, 0]
                     ewald_r = shared_ewald_coefficient[0] * r
                     erf = math.erf(ewald_r)
                     force_val = e1e2 * (
@@ -335,7 +330,7 @@ class ElectrostaticPMEConstraint(Constraint):
                 scaled_x = neighbor_vec_list[particle_id1, neighbor_index, 1]
                 scaled_y = neighbor_vec_list[particle_id1, neighbor_index, 2]
                 scaled_z = neighbor_vec_list[particle_id1, neighbor_index, 3]
-                e1e2 = e1 * charges[particle_id2]
+                e1e2 = e1 * charges[particle_id2, 0]
                 ewald_r = shared_ewald_coefficient[0]*r
                 erfc = math.erfc(ewald_r)
                 force_val = - e1e2 * (
@@ -450,7 +445,7 @@ class ElectrostaticPMEConstraint(Constraint):
         num_particles = num_particles[0]
         if particle_id >= num_particles:
             return None
-        charge = charges[particle_id]
+        charge = charges[particle_id, 0]
         for i in range(PME_ORDER):
             grid_x = grid_map[particle_id, 0, i]
             charge_x = charge * spline_coefficient[particle_id, 0, i]
@@ -486,7 +481,7 @@ class ElectrostaticPMEConstraint(Constraint):
         num_particles = num_particles[0]
         if particle_id >= num_particles:
             return None
-        charge = charges[particle_id]
+        charge = charges[particle_id, 0]
         force_x = 0
         force_y = 0
         force_z = 0
@@ -527,20 +522,20 @@ class ElectrostaticPMEConstraint(Constraint):
 
     def update(self):
         self._check_bound_state()
-        self._direct_forces = cp.zeros_like(self._parent_ensemble.state.positions, CUPY_FLOAT)
+        self._direct_forces = cp.zeros(self._parent_ensemble.state.matrix_shape, CUPY_FLOAT)
         self._direct_potential_energy = cp.zeros([1], CUPY_FLOAT)
         # Direct part
         block_per_grid = int(np.ceil(
             self._parent_ensemble.topology.num_particles / THREAD_PER_BLOCK
         ))
-        self._update_direct_part[block_per_grid, THREAD_PER_BLOCK](
-            self._device_charges,
+        self._update_direct_part[block_per_grid, THREAD_PER_BLOCK, self._parent_ensemble.streams[self._constraint_id]](
+            self._parent_ensemble.topology.device_charges,
             self._device_k,
             self._device_ewald_coefficient,
             self._device_cutoff_radius,
-            self._device_bonded_particles,
-            self._parent_ensemble.state.neighbor_list.device_neighbor_list,
-            self._parent_ensemble.state.neighbor_list.device_neighbor_vec_list,
+            self._parent_ensemble.topology.device_bonded_particles,
+            self._parent_ensemble.state.neighbor_list.neighbor_list,
+            self._parent_ensemble.state.neighbor_list.neighbor_vec_list,
             self._direct_forces, self._direct_potential_energy
         )
         thread_per_block = (64)
@@ -558,30 +553,30 @@ class ElectrostaticPMEConstraint(Constraint):
             [self._parent_ensemble.topology.num_particles, SPATIAL_DIM, PME_ORDER], CUPY_INT
         )
         self._update_bspline[block_per_grid, thread_per_block](
-            self._parent_ensemble.state.device_positions, self._device_grid_size,
+            self._parent_ensemble.state.positions, self._device_grid_size,
             self._parent_ensemble.state.device_pbc_matrix,
             spline_coefficient, spline_derivative_coefficient, grid_map
         )
         # Map charge
         self._charge_map = cp.zeros(self._grid_size, CUPY_FLOAT)
-        self._update_charge_map[block_per_grid, thread_per_block](
+        self._update_charge_map[block_per_grid, thread_per_block, self._parent_ensemble.streams[self._constraint_id]](
             self._device_num_particles, spline_coefficient, grid_map,
-            self._device_charges, self._charge_map
+            self._parent_ensemble.topology.device_charges, self._charge_map
         )
         # Reciprocal convolution
         self._electric_potential_map = self._update_electric_potential_map(
             self._device_k, self._charge_map, self._device_bc_grid
         )
         # Reciprocal force
-        self._reciprocal_forces = cp.zeros_like(self._parent_ensemble.state.positions, CUPY_FLOAT)
+        self._reciprocal_forces = cp.zeros(self._parent_ensemble.state.matrix_shape, CUPY_FLOAT)
         self._reciprocal_potential_energy = cp.zeros([1], CUPY_FLOAT)
-        self._update_reciprocal_force[block_per_grid, thread_per_block](
+        self._update_reciprocal_force[block_per_grid, thread_per_block, self._parent_ensemble.streams[self._constraint_id]](
             self._device_num_particles,
             spline_coefficient,
             spline_derivative_coefficient,
             grid_map,
             self._electric_potential_map,
-            self._device_charges,
+            self._parent_ensemble.topology.device_charges,
             self._reciprocal_forces,
             self._reciprocal_potential_energy
         )

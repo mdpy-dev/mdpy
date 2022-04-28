@@ -165,7 +165,7 @@ def select_nearby(target: Trajectory, frame, matrix_ids, radius):
     for matrix_id in matrix_ids:
         vec = unwrap_vec(
             trajectory.positions[frame, matrix_id, :] - trajectory.positions[frame, :, :],
-            trajectory.pbc_matrix, trajectory.pbc_inv
+            trajectory.pbc_diag
         )
         temp = list(np.where(np.sqrt((vec**2).sum(1)) < radius)[0])
         temp.remove(matrix_id)
@@ -182,7 +182,7 @@ def select_in_sphere(target: Trajectory, frame, center, radius):
     selected_matrix_ids = []
     vec = unwrap_vec(
         center - trajectory.positions[frame, :, :],
-        trajectory.pbc_matrix, trajectory.pbc_inv
+        trajectory.pbc_diag
     )
     selected_matrix_ids.extend(
         list(np.where(np.sqrt((vec**2).sum(1)) < radius))

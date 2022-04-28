@@ -9,7 +9,9 @@ copyright : (C)Copyright 2021-present, mdpy organization
 
 import pytest, os
 import numpy as np
+import cupy as cp
 from mdpy.core import NeighborList
+from mdpy.environment import *
 from mdpy.io import PDBParser
 from mdpy.unit import *
 from mdpy.error import *
@@ -41,16 +43,11 @@ class TestNeighborList:
 
     def test_update(self):
         pdb = PDBParser(os.path.join(data_dir, '6PO6.pdb'))
-        self.neighbor_list.update(pdb.positions)
-        neighbor_list = self.neighbor_list.device_neighbor_list.get()
+        self.neighbor_list.update(cp.array(pdb.positions, CUPY_FLOAT))
+        neighbor_list = self.neighbor_list.neighbor_list.get()
         for i in range(10):
             r = ((pdb.positions[0, :] - pdb.positions)**2).sum(1)
             r = np.sqrt(r)
             for i in np.argwhere(r <= 4).flatten():
                 if i != 0:
                     assert i in list(neighbor_list[0, :])
-
-if __name__ == '__main__':
-    test = TestNeighborList()
-    test.setup()
-    test.test_update()

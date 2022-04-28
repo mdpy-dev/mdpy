@@ -7,9 +7,10 @@ author : Zhenyu Wei
 copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
+import cupy as cp
 import numpy as np
-from numpy.random import randn
 from mdpy.core import Ensemble
+from mdpy.environment import CUPY_FLOAT
 from mdpy.integrator import Integrator
 from mdpy.unit import *
 from mdpy.utils import *
@@ -37,8 +38,8 @@ class LangevinIntegrator(Integrator):
     def integrate(self, ensemble: Ensemble, num_steps: int=1):
         # Setting variables
         cur_step = 0
-        masses = ensemble.topology.masses
-        sqrt_masses = np.sqrt(masses)
+        masses = ensemble.topology.device_masses
+        sqrt_masses = cp.sqrt(masses)
         self._cur_acceleration = ensemble.forces / masses
         if self.is_cached == False:
             self._cur_velocities = ensemble.state.velocities
@@ -51,7 +52,7 @@ class LangevinIntegrator(Integrator):
             if cur_step != 0:
                 ensemble.update()
             ensemble.update()
-            xi_over_sqrt_masses = randn(*self._matrix_shape) / sqrt_masses
+            xi_over_sqrt_masses = cp.random.randn(*self._matrix_shape) / sqrt_masses
             self._pre_acceleration = self._cur_acceleration
             self._cur_positions, self._pre_positions = (
                 self._pre_positions +
@@ -61,9 +62,9 @@ class LangevinIntegrator(Integrator):
             ), self._cur_positions
             # Update position
             if cur_step % self._neighbor_list_update_freq == 0:
-                ensemble.state.set_positions(self._cur_positions, True)
+                ensemble.state.set_positions(self._cur_positions.astype(CUPY_FLOAT), True)
             else:
-                ensemble.state.set_positions(self._cur_positions, False)
+                ensemble.state.set_positions(self._cur_positions.astype(CUPY_FLOAT), False)
             ensemble.update()
             self._cur_acceleration = ensemble.forces / masses
             self._cur_velocities, self._pre_velocities = (

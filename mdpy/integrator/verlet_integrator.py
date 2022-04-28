@@ -20,7 +20,7 @@ class VerletIntegrator(Integrator):
     def integrate(self, ensemble: Ensemble, num_steps: int=1):
         # Setting variables
         cur_step = 0
-        masses = ensemble.topology.masses
+        masses = ensemble.topology.device_masses
         # Update force
         ensemble.update()
         accelration = ensemble.forces / masses
@@ -37,6 +37,7 @@ class VerletIntegrator(Integrator):
                 ensemble.update()
                 accelration = ensemble.forces / masses
             # Update positions and velocities
+            import time
             self._cur_positions, self._pre_positions = (
                 2 * self._cur_positions - self._pre_positions +
                 accelration * self._time_step_square
@@ -48,6 +49,5 @@ class VerletIntegrator(Integrator):
             # Update step
             cur_step += 1
         ensemble.state.set_velocities(unwrap_vec(
-            (self._cur_positions - self._pre_positions).astype(env.NUMPY_FLOAT),
-            *ensemble.state.pbc_info
+            self._cur_positions - self._pre_positions, ensemble.state.device_pbc_diag
         ) / 2 / self._time_step)

@@ -36,6 +36,7 @@ class Trajectory:
 
         self._pbc_matrix = np.zeros([SPATIAL_DIM, SPATIAL_DIM], dtype=env.NUMPY_FLOAT)
         self._pbc_inv = np.zeros([SPATIAL_DIM, SPATIAL_DIM], dtype=env.NUMPY_FLOAT)
+        self._pbc_diag = np.zeros([SPATIAL_DIM], dtype=env.NUMPY_FLOAT)
         self._is_pbc_specified = False
         self._time_step = None
 
@@ -57,6 +58,7 @@ class Trajectory:
         # So the scaled position will be Position * PBC instead of PBC * Position as usual
         self._pbc_matrix = np.ascontiguousarray(pbc_matrix, dtype=env.NUMPY_FLOAT)
         self._pbc_inv = np.ascontiguousarray(np.linalg.inv(self._pbc_matrix), dtype=env.NUMPY_FLOAT)
+        self._pbc_diag = np.ascontiguousarray(np.diagonal(self._pbc_matrix), dtype=env.NUMPY_FLOAT)
         self._is_pbc_specified = True
 
     def _check_array(self, array: np.ndarray):
@@ -177,6 +179,12 @@ class Trajectory:
         if not self._is_pbc_specified:
             raise PBCPoorDefinedError('PBC has not been specified before calling.')
         return self._pbc_inv
+
+    @property
+    def pbc_diag(self):
+        if not self._is_pbc_specified:
+            raise PBCPoorDefinedError('PBC has not been specified before calling.')
+        return self._pbc_diag
 
     @property
     def positions(self):

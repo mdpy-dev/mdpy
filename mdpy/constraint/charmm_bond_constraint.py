@@ -61,33 +61,11 @@ class CharmmBondConstraint(Constraint):
             # Bond parameters
             self._float_parameters.append(self._parameter_dict[bond_type])
             self._num_bonds += 1
-        self._int_parameters = np.vstack(self._int_parameters).astype(NUMPY_INT)
-        self._float_parameters = np.vstack(self._float_parameters).astype(NUMPY_FLOAT)
-        self._device_int_parameters = cuda.to_device(self._int_parameters)
-        self._device_float_parameters =cuda.to_device(self._float_parameters)
-
-    @staticmethod
-    def kernel(int_parameters, float_parameters, positions, pbc_matrix, pbc_inv):
-        forces = np.zeros_like(positions)
-        potential_energy = forces[0, 0]
-        num_parameters = int_parameters.shape[0]
-        for bond in range(num_parameters):
-            id1, id2, = int_parameters[bond, :]
-            k, r0 = float_parameters[bond, :]
-            force_vec = unwrap_vec(
-                positions[id2, :] - positions[id1, :],
-                pbc_matrix, pbc_inv
-            )
-            r = np.linalg.norm(force_vec)
-            force_vec /= r
-            # Forces
-            force_val = 2 * k * (r - r0)
-            force = force_val * force_vec
-            forces[id1, :] += force
-            forces[id2, :] -= force
-            # Potential energy
-            potential_energy += k * (r - r0)**2
-        return forces, potential_energy
+        self._device_int_parameters = cp.array(np.vstack(self._int_parameters), CUPY_INT)
+        self._device_float_parameters = cp.array(np.vstack(self._float_parameters), CUPY_FLOAT)
+        self._block_per_grid = (int(np.ceil(
+            self._parent_ensemble.topology.num_bonds / THREAD_PER_BLOCK
+        )))
 
     @staticmethod
     def _update_kernel(
@@ -156,16 +134,13 @@ class CharmmBondConstraint(Constraint):
 
     def update(self):
         self._check_bound_state()
-        self._forces = cp.zeros_like(self._parent_ensemble.state.positions, CUPY_FLOAT)
+        self._forces = cp.zeros(self._parent_ensemble.state.matrix_shape, CUPY_FLOAT)
         self._potential_energy = cp.zeros([1], CUPY_FLOAT)
         # Device
-        block_per_grid = (int(np.ceil(
-            self._parent_ensemble.topology.num_bonds / THREAD_PER_BLOCK
-        )))
-        self._update[block_per_grid, THREAD_PER_BLOCK](
+        self._update[self._block_per_grid, THREAD_PER_BLOCK, self._parent_ensemble.streams[self._constraint_id]](
             self._device_int_parameters,
             self._device_float_parameters,
-            self._parent_ensemble.state.device_positions,
+            self._parent_ensemble.state.positions,
             self._parent_ensemble.state.device_pbc_matrix,
             self._forces, self._potential_energy
         )

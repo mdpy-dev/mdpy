@@ -9,6 +9,7 @@ copyright : (C)Copyright 2021-present, mdpy organization
 
 import numpy as np
 import cupy as cp
+import numba.cuda as cuda
 from mdpy.environment import *
 from mdpy.core import Topology, State
 from mdpy.error import *
@@ -22,7 +23,7 @@ class Ensemble:
         self._topology = topology
         self._state = State(self._topology, pbc_matrix)
         self._matrix_shape = self._state.matrix_shape
-        self._forces = np.zeros(self._matrix_shape)
+        self._forces = cp.zeros(self._matrix_shape)
 
         self._total_energy = 0
         self._potential_energy = 0
@@ -30,6 +31,7 @@ class Ensemble:
         self._segments = []
         self._num_segments = 0
         self._constraints = []
+        self._streams = []
         self._num_constraints = 0
 
     def __repr__(self) -> str:
@@ -51,6 +53,7 @@ class Ensemble:
             if constraint.cutoff_radius > self.state.neighbor_list.cutoff_radius:
                 self.state.neighbor_list.set_cutoff_radius(constraint.cutoff_radius)
             self._num_constraints += 1
+            self._streams.append(cuda.stream())
 
     def update(self):
         self._forces = cp.zeros(self._matrix_shape, CUPY_FLOAT)
@@ -58,11 +61,11 @@ class Ensemble:
         self._total_energy, self._kinetic_energy = 0, 0
         for constraint in self._constraints:
             constraint.update()
+        cuda.synchronize()
         for constraint in self._constraints:
             self._forces += constraint.forces
             self._potential_energy += constraint.potential_energy
-        self._forces = self._forces.get()
-        self._potential_energy = self._potential_energy.get()
+        self._potential_energy = self._potential_energy
         self._update_kinetic_energy()
         self._total_energy = self._potential_energy + self._kinetic_energy
 
@@ -70,7 +73,7 @@ class Ensemble:
         # Without reshape, the result of the first sum will be a 1d vector
         # , which will be a matrix after multiple with a 2d vector
         self._kinetic_energy = ((
-            (self._state.velocities**2).sum(1).reshape(self._topology.num_particles, 1) * self._topology.masses
+            (self._state.velocities**2).sum(1) * self._topology.device_masses[:, 0]
         ).sum() / 2)
 
     @property
@@ -100,6 +103,10 @@ class Ensemble:
     @property
     def constraints(self):
         return self._constraints
+
+    @property
+    def streams(self):
+        return self._streams
 
     @property
     def num_constraints(self):

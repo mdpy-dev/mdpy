@@ -20,6 +20,7 @@ from mdpy.error import *
 
 CELL_WIDTH = Quantity(3, angstrom)
 SKIN_WIDTH = Quantity(1, angstrom)
+NUM_MIN_NEIGHBORS = 300
 THREAD_PER_BLOCK = 64
 
 class NeighborList:
@@ -27,6 +28,7 @@ class NeighborList:
         pbc_matrix = check_quantity_value(pbc_matrix, default_length_unit)
         self._pbc_matrix = check_pbc_matrix(pbc_matrix)
         self._pbc_diag = np.ascontiguousarray(self._pbc_matrix.diagonal(), dtype=NUMPY_FLOAT)
+        self._pbc_volume = np.prod(self._pbc_diag)
         self._skin_width = check_quantity_value(skin_width, default_length_unit)
         self._cell_width = check_quantity_value(cell_width, default_length_unit)
         self.set_cutoff_radius(Quantity(1, angstrom))
@@ -43,7 +45,7 @@ class NeighborList:
         # Device attribute
         self._device_skin_width = cp.array([self._skin_width], CUPY_FLOAT)
         self._device_pbc_matrix = cp.array(self._pbc_matrix, CUPY_FLOAT)
-        self._device_num_cell_vec = cp.array(self._num_cells_vec, CUPY_INT)
+        self._device_num_cells_vec = cp.array(self._num_cells_vec, CUPY_INT)
         # Kernels
         self._update_cell_list = nb.njit((
             NUMBA_FLOAT[:, ::1], # positions
@@ -74,6 +76,7 @@ class NeighborList:
         pbc_matrix = check_quantity_value(pbc_matrix, default_length_unit)
         self._pbc_matrix = check_pbc_matrix(pbc_matrix)
         self._pbc_diag = self._pbc_matrix.diagonal()
+        self._device_pbc_matrix = cp.array(self._pbc_matrix, CUPY_FLOAT)
 
     def set_cutoff_radius(self, cutoff_radius):
         cutoff_radius = check_quantity_value(cutoff_radius, default_length_unit)
@@ -93,6 +96,7 @@ class NeighborList:
         self._cutoff_radius = cutoff_radius
         self._neighbor_ceil_shift = np.ceil((self._cutoff_radius+self._skin_width) / self._cell_width).astype(NUMPY_INT)
         self._num_neighbor_cells = (self._neighbor_ceil_shift * 2 + 1)**3 # +1 for center cell
+        self._cutoff_volume = 4 / 3 * np.pi * (self._cutoff_radius+self._skin_width)**3
         # Device attributes
         self._device_cutoff_radius = cp.array([cutoff_radius], CUPY_FLOAT)
         self._device_neighbor_ceil_shift = cp.array([self._neighbor_ceil_shift], CUPY_INT)
@@ -110,7 +114,6 @@ class NeighborList:
             num_particles_each_cell[x, y, z] += 1
         # Build cell list
         num_max_particles_per_cell = NUMPY_INT(num_particles_each_cell.max())
-        num_mean_particles_per_cell = NUMPY_INT(np.ceil(num_particles_each_cell.mean()))
         cell_list = np.zeros((
             num_x, num_y, num_z, num_max_particles_per_cell
         ), dtype=NUMPY_INT) - 1 # -1 for padding value
@@ -119,10 +122,7 @@ class NeighborList:
             x, y, z = particle_cell_index[particle]
             cell_list[x, y, z, cur_cell_flag[x, y, z]] = particle
             cur_cell_flag[x, y, z] += 1
-        return (
-            particle_cell_index, cell_list,
-            num_mean_particles_per_cell
-        )
+        return particle_cell_index, cell_list
 
     @staticmethod
     def _update_neighbor_list_kernel(
@@ -288,41 +288,49 @@ class NeighborList:
             )
             neighbor_index += 1
 
-    def update(self, positions: np.ndarray, is_update_neighbor_list=True):
+    def _judge_num_max_neighbors_per_particle(self, num_particles):
+        num_max_neighbors_per_particle = int(np.ceil(
+            num_particles / self._pbc_volume * self._cutoff_volume * 1.3
+        ))
+        if num_particles < NUM_MIN_NEIGHBORS:
+            return num_particles
+        elif num_max_neighbors_per_particle < NUM_MIN_NEIGHBORS:
+            return NUM_MIN_NEIGHBORS
+        return num_max_neighbors_per_particle
+
+    def update(self, positions: cp.ndarray, is_update_neighbor_list=True):
         num_particles = positions.shape[0]
         block_per_grid = int(np.ceil(
             num_particles / THREAD_PER_BLOCK
         ))
         if is_update_neighbor_list:
-            self._particle_cell_index, self._cell_list, num_mean_particles_per_cell = self._update_cell_list(
-                positions, self._pbc_diag,
+            num_max_neighbors_per_particle = self._judge_num_max_neighbors_per_particle(num_particles)
+            self._particle_cell_index, self._cell_list = self._update_cell_list(
+                positions.get(), self._pbc_diag,
                 self._num_cells_vec, self._cell_width
             )
-            num_max_neighbors_per_particle = np.ceil(num_mean_particles_per_cell * self._num_neighbor_cells * np.pi / 6 * 1.1).astype(NUMPY_INT)
-            self._device_neighbor_list = cp.zeros((positions.shape[0], num_max_neighbors_per_particle), CUPY_INT) - 1
-            self._device_neighbor_vec_list = cp.zeros((positions.shape[0], num_max_neighbors_per_particle, SPATIAL_DIM+1), CUPY_FLOAT)
-            device_positions = cp.array(positions, CUPY_FLOAT)
+            self._neighbor_list = cp.zeros((positions.shape[0], num_max_neighbors_per_particle), CUPY_INT) - 1
+            self._neighbor_vec_list = cp.zeros((positions.shape[0], num_max_neighbors_per_particle, SPATIAL_DIM+1), CUPY_FLOAT)
             device_particle_cell_index = cp.array(self._particle_cell_index, CUPY_INT)
             device_cell_list = cp.array(self._cell_list, CUPY_INT)
             self._update_neighbor_list[block_per_grid, THREAD_PER_BLOCK](
-                device_positions,
+                positions,
                 self._device_pbc_matrix,
                 device_particle_cell_index,
                 device_cell_list,
-                self._device_num_cell_vec,
+                self._device_num_cells_vec,
                 self._device_cutoff_radius,
                 self._device_skin_width,
                 self._device_neighbor_ceil_shift,
-                self._device_neighbor_list,
-                self._device_neighbor_vec_list
+                self._neighbor_list,
+                self._neighbor_vec_list
             )
         else:
-            device_positions = cp.array(positions, CUPY_FLOAT)
             self._update_neighbor_vec_list[block_per_grid, THREAD_PER_BLOCK](
-                device_positions,
+                positions,
                 self._device_pbc_matrix,
-                self._device_neighbor_list,
-                self._device_neighbor_vec_list
+                self._neighbor_list,
+                self._neighbor_vec_list
             )
 
     @property
@@ -334,9 +342,9 @@ class NeighborList:
         return self._pbc_matrix
 
     @property
-    def device_neighbor_list(self):
-        return self._device_neighbor_list
+    def neighbor_list(self):
+        return self._neighbor_list
 
     @property
-    def device_neighbor_vec_list(self):
-        return self._device_neighbor_vec_list
+    def neighbor_vec_list(self):
+        return self._neighbor_vec_list

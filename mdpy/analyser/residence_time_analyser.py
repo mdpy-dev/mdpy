@@ -50,7 +50,7 @@ class ResidenceTimeAnalyser:
             vec = unwrap_vec(
                 trajectory.positions[0, id1, :] -
                 trajectory.positions[0, selected_matrix_ids_2, :],
-                trajectory.pbc_matrix, trajectory.pbc_inv
+                trajectory.pbc_diag
             )
             dist = np.sqrt((vec**2).sum(1))
             neighbor_index = np.where(dist <= self._cutoff_radius)[0]
@@ -69,7 +69,7 @@ class ResidenceTimeAnalyser:
                     vec = unwrap_vec(
                         trajectory.positions[frame, id1, :] -
                         trajectory.positions[frame, id2, :],
-                        trajectory.pbc_matrix, trajectory.pbc_inv
+                        trajectory.pbc_diag
                     )
                     dist = np.sqrt((vec**2).sum())
                     if dist < self._bin_edge[affiliation] or dist > self._bin_edge[affiliation+1]:

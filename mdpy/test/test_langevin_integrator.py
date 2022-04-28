@@ -18,7 +18,7 @@ cur_dir = os.path.dirname(os.path.abspath(__file__))
 data_dir = os.path.join(cur_dir, 'data')
 out_dir = os.path.join(cur_dir, 'out')
 
-class TestVerletIntegrator:
+class TestLangevinIntegrator:
     def setup(self):
         pass
 
@@ -45,5 +45,5 @@ class TestVerletIntegrator:
         integrator.integrate(ensemble, 1)
 
         # ATOM      1  N   VAL A   1       2.347  -0.970   3.962  1.00  0.00      A    N
-        assert ensemble.state.positions[0, 1] == pytest.approx(-0.970, abs=0.01)
-        assert ensemble.state.positions[0, 0] == pytest.approx(2.347, abs=0.01)
+        assert ensemble.state.positions.get()[0, 1] == pytest.approx(-0.970, abs=0.01)
+        assert ensemble.state.positions.get()[0, 0] == pytest.approx(2.347, abs=0.01)
