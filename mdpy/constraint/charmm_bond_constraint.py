@@ -68,29 +68,6 @@ class CharmmBondConstraint(Constraint):
         )))
 
     @staticmethod
-    def kernel(int_parameters, float_parameters, positions, pbc_matrix, pbc_inv):
-        forces = np.zeros_like(positions)
-        potential_energy = forces[0, 0]
-        num_parameters = int_parameters.shape[0]
-        for bond in range(num_parameters):
-            id1, id2, = int_parameters[bond, :]
-            k, r0 = float_parameters[bond, :]
-            force_vec = unwrap_vec(
-                positions[id2, :] - positions[id1, :],
-                pbc_matrix, pbc_inv
-            )
-            r = np.linalg.norm(force_vec)
-            force_vec /= r
-            # Forces
-            force_val = 2 * k * (r - r0)
-            force = force_val * force_vec
-            forces[id1, :] += force
-            forces[id2, :] -= force
-            # Potential energy
-            potential_energy += k * (r - r0)**2
-        return forces, potential_energy
-
-    @staticmethod
     def _update_kernel(
         int_parameters, float_parameters,
         positions, pbc_matrix,
