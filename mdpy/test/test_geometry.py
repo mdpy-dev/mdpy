@@ -35,22 +35,6 @@ def test_get_bond():
     position2 = [3, 2, 2]
     assert get_bond(position2, position1) == pytest.approx(np.sqrt(14))
 
-def test_get_pbc_bond():
-    pbc_matrix = np.diag(np.ones(3)*10).astype(env.NUMPY_FLOAT)
-    pbc_inv = np.linalg.inv(pbc_matrix).astype(env.NUMPY_FLOAT)
-
-    position1 = np.array([0, 1, 0]).astype(env.NUMPY_FLOAT)
-    position2 = np.array([0, 0, 0]).astype(env.NUMPY_FLOAT)
-    assert get_pbc_bond(position1, position2, pbc_matrix, pbc_inv) == 1
-
-    position1 = np.array([0, 5, 0]).astype(env.NUMPY_FLOAT)
-    position2 = np.array([0, 0, 0]).astype(env.NUMPY_FLOAT)
-    assert get_pbc_bond(position1, position2, pbc_matrix, pbc_inv) == 5
-
-    position1 = np.array([0, 6, 0]).astype(env.NUMPY_FLOAT)
-    position2 = np.array([0, 0, 0]).astype(env.NUMPY_FLOAT)
-    assert get_pbc_bond(position1, position2, pbc_matrix, pbc_inv) == pytest.approx(4)
-
 def test_get_angle():
     p1 = np.array([1, 1])
     p2 = np.array([0, 0])
@@ -60,27 +44,6 @@ def test_get_angle():
 
     angle = get_angle(p1, p2, p3, is_angular=False)
     assert angle == pytest.approx(45)
-
-def test_get_pbc_angle():
-    pbc_matrix = np.diag(np.ones(3)*10).astype(env.NUMPY_FLOAT)
-    pbc_inv = np.linalg.inv(pbc_matrix).astype(env.NUMPY_FLOAT)
-
-    p1 = np.array([1, 1, 0]).astype(env.NUMPY_FLOAT)
-    p2 = np.array([0, 0, 0]).astype(env.NUMPY_FLOAT)
-    p3 = np.array([0, 1, 0]).astype(env.NUMPY_FLOAT)
-    angle = get_pbc_angle(p1, p2, p3, pbc_matrix, pbc_inv)
-    assert angle == pytest.approx(np.pi / 4)
-
-    p1 = np.array([11, 1, 0]).astype(env.NUMPY_FLOAT)
-    p2 = np.array([0, 0, 0]).astype(env.NUMPY_FLOAT)
-    p3 = np.array([0, 1, 0]).astype(env.NUMPY_FLOAT)
-    angle = get_pbc_angle(p1, p2, p3, pbc_matrix, pbc_inv)
-    assert angle == pytest.approx(np.pi / 4)
-    p1 = np.array([1, 1, 0]).astype(env.NUMPY_FLOAT) + 5
-    p2 = np.array([0, 0, 0]).astype(env.NUMPY_FLOAT) + 5
-    p3 = np.array([0, 1, 0]).astype(env.NUMPY_FLOAT) + 5
-    angle = get_pbc_angle(p1, p2, p3, pbc_matrix, pbc_inv)
-    assert angle == pytest.approx(np.pi / 4)
 
 def test_get_included_angle():
     p1 = np.array([1, 1])
@@ -157,31 +120,3 @@ def test_get_dihedral():
 
     improper = get_dihedral(p1, p2, p3, p4, is_angular=False)
     assert improper == pytest.approx(-90)
-
-def test_get_pbc_dihedral():
-    pbc_matrix = np.diag(np.ones(3)*10).astype(env.NUMPY_FLOAT)
-    pbc_inv = np.linalg.inv(pbc_matrix).astype(env.NUMPY_FLOAT)
-
-    p1 = np.array([0, 1, 1]).astype(env.NUMPY_FLOAT) + 10
-    p2 = np.array([0, 0, 0]).astype(env.NUMPY_FLOAT)
-    p3 = np.array([1, 0, 0]).astype(env.NUMPY_FLOAT)
-    p4 = np.array([1, 1, 0]).astype(env.NUMPY_FLOAT)
-
-    dihedral = get_pbc_dihedral(p1, p2, p3, p4, pbc_matrix, pbc_inv)
-    assert dihedral == pytest.approx(- np.pi / 4)
-
-    p1 = np.array([0, 0, 0]).astype(env.NUMPY_FLOAT)
-    p2 = np.array([1, 0, 0]).astype(env.NUMPY_FLOAT)
-    p3 = np.array([0, 1, 0]).astype(env.NUMPY_FLOAT) - 10
-    p4 = np.array([0.5, 0.5, -1]).astype(env.NUMPY_FLOAT)
-
-    improper = get_pbc_dihedral(p1, p2, p3, p4, pbc_matrix, pbc_inv)
-    assert improper == pytest.approx(- np.pi / 2)
-
-    p1 = np.array([0, 1, 1]).astype(env.NUMPY_FLOAT)
-    p2 = np.array([0, 0, 0]).astype(env.NUMPY_FLOAT)
-    p3 = np.array([1, 0, 0]).astype(env.NUMPY_FLOAT)
-    p4 = np.array([1, 0, -1]).astype(env.NUMPY_FLOAT) - 10
-
-    dihedral = get_pbc_dihedral(p1, p2, p3, p4, pbc_matrix, pbc_inv)
-    assert dihedral == pytest.approx(- np.pi * 3/ 4)

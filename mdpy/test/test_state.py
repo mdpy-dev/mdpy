@@ -7,10 +7,9 @@ author : Zhenyu Wei
 copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
-from turtle import position
 import pytest
 import numpy as np
-from mdpy import SPATIAL_DIM, env
+from mdpy import SPATIAL_DIM
 from mdpy.core import Particle, Topology, State
 from mdpy.error import *
 from mdpy.unit import *
@@ -55,29 +54,25 @@ class TestState:
         with pytest.raises(PBCPoorDefinedError):
             self.state.set_pbc_matrix(np.diag([0, 0, 0]))
 
-        with pytest.raises(TypeError):
-            self.state.set_positions([1, 2, 3])
-
     def test_set_positions(self):
         self.state.set_pbc_matrix(np.eye(3) * 100)
         self.state.neighbor_list.set_cutoff_radius(12)
         positions = np.random.randn(self.num_particles, SPATIAL_DIM) * 20
         self.state.set_positions(positions)
-        print(self.state.positions[0, :])
-        print(positions[0, :])
-        assert self.state.positions[0, 2] == pytest.approx(positions[0, 2])
+        assert self.state.positions.get()[0, 2] == pytest.approx(positions[0, 2])
 
     def test_set_velocities(self):
         self.state.set_velocities(np.ones([self.num_particles, SPATIAL_DIM]) * 10)
-        assert self.state.velocities[0, 2] == 10
+        assert self.state.velocities.get()[0, 2] == 10
 
     def test_set_velocities_to_temperature(self):
         self.state.set_velocities_to_temperature(300)
         kinetic_energy = Quantity(0, default_energy_unit)
+        velocities = self.state.velocities.get()
         for particle in range(self.num_particles):
             kinetic_energy += Quantity(0.5) * (
-                Quantity(self.state._masses[particle], default_mass_unit) *
-                (Quantity(self.state.velocities[particle, :], default_velocity_unit)**2).sum()
+                Quantity(self.state._topology.masses[particle], default_mass_unit) *
+                (Quantity(velocities[particle, :], default_velocity_unit)**2).sum()
             )
         temperature = kinetic_energy * Quantity(2 / 3 / self.num_particles) / KB
         assert temperature < Quantity(315, default_temperature_unit)
@@ -89,9 +84,3 @@ class TestState:
 
         with pytest.raises(ArrayDimError):
             self.state.set_pbc_matrix(np.ones([4, 3]))
-
-        self.state.set_pbc_matrix(np.diag(np.ones(3)*10))
-        assert self.state.pbc_inv[1, 1] == env.NUMPY_FLOAT(0.1)
-
-        self.state.set_pbc_matrix(Quantity(np.diag(np.ones(3)), nanometer))
-        assert self.state.pbc_inv[2, 2] == env.NUMPY_FLOAT(0.1)
