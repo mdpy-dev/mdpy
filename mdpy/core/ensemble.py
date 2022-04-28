@@ -23,7 +23,7 @@ class Ensemble:
         self._topology = topology
         self._state = State(self._topology, pbc_matrix)
         self._matrix_shape = self._state.matrix_shape
-        self._forces = np.zeros(self._matrix_shape)
+        self._forces = cp.zeros(self._matrix_shape)
 
         self._total_energy = 0
         self._potential_energy = 0
