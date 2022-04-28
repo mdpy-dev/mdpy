@@ -44,7 +44,7 @@ class TestNeighborList:
     def test_update(self):
         pdb = PDBParser(os.path.join(data_dir, '6PO6.pdb'))
         self.neighbor_list.update(cp.array(pdb.positions, CUPY_FLOAT))
-        neighbor_list = self.neighbor_list.device_neighbor_list.get()
+        neighbor_list = self.neighbor_list.neighbor_list.get()
         for i in range(10):
             r = ((pdb.positions[0, :] - pdb.positions)**2).sum(1)
             r = np.sqrt(r)
