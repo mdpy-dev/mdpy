@@ -7,6 +7,7 @@ author : Zhenyu Wei
 copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
+from cupy.cuda.nvtx import RangePush, RangePop
 import math
 import numpy as np
 import numba as nb
@@ -304,6 +305,7 @@ class NeighborList:
             num_particles / THREAD_PER_BLOCK
         ))
         if is_update_neighbor_list:
+            RangePush('Update cell list')
             num_max_neighbors_per_particle = self._judge_num_max_neighbors_per_particle(num_particles)
             self._particle_cell_index, self._cell_list = self._update_cell_list(
                 positions.get(), self._pbc_diag,
@@ -313,6 +315,8 @@ class NeighborList:
             self._neighbor_vec_list = cp.zeros((positions.shape[0], num_max_neighbors_per_particle, SPATIAL_DIM+1), CUPY_FLOAT)
             device_particle_cell_index = cp.array(self._particle_cell_index, CUPY_INT)
             device_cell_list = cp.array(self._cell_list, CUPY_INT)
+            RangePop()
+            RangePush('Update neighbor list')
             self._update_neighbor_list[block_per_grid, THREAD_PER_BLOCK](
                 positions,
                 self._device_pbc_matrix,
@@ -325,13 +329,16 @@ class NeighborList:
                 self._neighbor_list,
                 self._neighbor_vec_list
             )
+            RangePop()
         else:
+            RangePush('Update neighbor list')
             self._update_neighbor_vec_list[block_per_grid, THREAD_PER_BLOCK](
                 positions,
                 self._device_pbc_matrix,
                 self._neighbor_list,
                 self._neighbor_vec_list
             )
+            RangePop()
 
     @property
     def cutoff_radius(self):

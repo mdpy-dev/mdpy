@@ -7,6 +7,7 @@ author : Zhenyu Wei
 copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
+from cupy.cuda.nvtx import RangePush, RangePop
 import numpy as np
 import cupy as cp
 import numba.cuda as cuda
@@ -60,14 +61,17 @@ class Ensemble:
         self._potential_energy = cp.zeros([1], CUPY_FLOAT)
         self._total_energy, self._kinetic_energy = 0, 0
         for constraint in self._constraints:
+            RangePush('Update %s' %constraint)
             constraint.update()
+            RangePop()
         cuda.synchronize()
+        RangePush('Constraint summation')
         for constraint in self._constraints:
             self._forces += constraint.forces
             self._potential_energy += constraint.potential_energy
-        self._potential_energy = self._potential_energy
         self._update_kinetic_energy()
         self._total_energy = self._potential_energy + self._kinetic_energy
+        RangePop()
 
     def _update_kinetic_energy(self):
         # Without reshape, the result of the first sum will be a 1d vector
