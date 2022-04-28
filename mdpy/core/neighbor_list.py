@@ -309,8 +309,8 @@ class NeighborList:
                 positions.get(), self._pbc_diag,
                 self._num_cells_vec, self._cell_width
             )
-            self._device_neighbor_list = cp.zeros((positions.shape[0], num_max_neighbors_per_particle), CUPY_INT) - 1
-            self._device_neighbor_vec_list = cp.zeros((positions.shape[0], num_max_neighbors_per_particle, SPATIAL_DIM+1), CUPY_FLOAT)
+            self._neighbor_list = cp.zeros((positions.shape[0], num_max_neighbors_per_particle), CUPY_INT) - 1
+            self._neighbor_vec_list = cp.zeros((positions.shape[0], num_max_neighbors_per_particle, SPATIAL_DIM+1), CUPY_FLOAT)
             device_particle_cell_index = cp.array(self._particle_cell_index, CUPY_INT)
             device_cell_list = cp.array(self._cell_list, CUPY_INT)
             self._update_neighbor_list[block_per_grid, THREAD_PER_BLOCK](
@@ -322,15 +322,15 @@ class NeighborList:
                 self._device_cutoff_radius,
                 self._device_skin_width,
                 self._device_neighbor_ceil_shift,
-                self._device_neighbor_list,
-                self._device_neighbor_vec_list
+                self._neighbor_list,
+                self._neighbor_vec_list
             )
         else:
             self._update_neighbor_vec_list[block_per_grid, THREAD_PER_BLOCK](
                 positions,
                 self._device_pbc_matrix,
-                self._device_neighbor_list,
-                self._device_neighbor_vec_list
+                self._neighbor_list,
+                self._neighbor_vec_list
             )
 
     @property
@@ -342,9 +342,9 @@ class NeighborList:
         return self._pbc_matrix
 
     @property
-    def device_neighbor_list(self):
-        return self._device_neighbor_list
+    def neighbor_list(self):
+        return self._neighbor_list
 
     @property
-    def device_neighbor_vec_list(self):
-        return self._device_neighbor_vec_list
+    def neighbor_vec_list(self):
+        return self._neighbor_vec_list
