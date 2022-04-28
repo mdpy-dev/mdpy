@@ -292,7 +292,6 @@ class NeighborList:
         num_max_neighbors_per_particle = int(np.ceil(
             num_particles / self._pbc_volume * self._cutoff_volume * 1.3
         ))
-        print(num_max_neighbors_per_particle)
         if num_particles < NUM_MIN_NEIGHBORS:
             return num_particles
         elif num_max_neighbors_per_particle < NUM_MIN_NEIGHBORS:
