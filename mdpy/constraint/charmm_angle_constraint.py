@@ -295,7 +295,7 @@ class CharmmAngleConstraint(Constraint):
         self._forces = cp.zeros_like(self._parent_ensemble.state.positions, CUPY_FLOAT)
         self._potential_energy = cp.zeros([1], CUPY_FLOAT)
         # Device
-        self._update[self._block_per_grid, THREAD_PER_BLOCK](
+        self._update[self._block_per_grid, THREAD_PER_BLOCK, self._parent_ensemble.streams[self._constraint_id]](
             self._int_parameters,
             self._float_parameters,
             self._parent_ensemble.state.device_positions,

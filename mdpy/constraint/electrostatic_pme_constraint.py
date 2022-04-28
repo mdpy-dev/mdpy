@@ -532,7 +532,7 @@ class ElectrostaticPMEConstraint(Constraint):
         block_per_grid = int(np.ceil(
             self._parent_ensemble.topology.num_particles / THREAD_PER_BLOCK
         ))
-        self._update_direct_part[block_per_grid, THREAD_PER_BLOCK](
+        self._update_direct_part[block_per_grid, THREAD_PER_BLOCK, self._parent_ensemble.streams[self._constraint_id]](
             self._device_charges,
             self._device_k,
             self._device_ewald_coefficient,
@@ -563,7 +563,7 @@ class ElectrostaticPMEConstraint(Constraint):
         )
         # Map charge
         self._charge_map = cp.zeros(self._grid_size, CUPY_FLOAT)
-        self._update_charge_map[block_per_grid, thread_per_block](
+        self._update_charge_map[block_per_grid, thread_per_block, self._parent_ensemble.streams[self._constraint_id]](
             self._device_num_particles, spline_coefficient, grid_map,
             self._device_charges, self._charge_map
         )
@@ -574,7 +574,7 @@ class ElectrostaticPMEConstraint(Constraint):
         # Reciprocal force
         self._reciprocal_forces = cp.zeros_like(self._parent_ensemble.state.positions, CUPY_FLOAT)
         self._reciprocal_potential_energy = cp.zeros([1], CUPY_FLOAT)
-        self._update_reciprocal_force[block_per_grid, thread_per_block](
+        self._update_reciprocal_force[block_per_grid, thread_per_block, self._parent_ensemble.streams[self._constraint_id]](
             self._device_num_particles,
             spline_coefficient,
             spline_derivative_coefficient,
