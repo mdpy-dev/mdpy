@@ -74,8 +74,8 @@ class Topology:
         for index, particle in enumerate(self._particles):
             self._bonded_particles[index, :particle.num_bonded_particles] = particle.bonded_particles
             self._scaling_particles[index, :particle.num_scaling_particles] = particle.scaling_particles
-        self._device_charges = cp.array(self._charges, CUPY_FLOAT)
         self._device_masses = cp.array(self._masses, CUPY_FLOAT)
+        self._device_charges = cp.array(self._charges, CUPY_FLOAT)
         self._device_bonded_particles = cp.array(self._bonded_particles, CUPY_INT)
         self._device_scaling_particles = cp.array(self._scaling_particles, CUPY_INT)
         self._is_joined = True
@@ -255,7 +255,7 @@ class Topology:
 
     @property
     def device_charges(self):
-        return self._charges
+        return self._device_charges
 
     @property
     def bonded_particles(self):
