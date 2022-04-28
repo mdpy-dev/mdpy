@@ -8,6 +8,7 @@ copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
 import numpy as np
+import cupy as cp
 from copy import deepcopy
 from mdpy import env
 from mdpy.unit import Unit, QUANTITY_PRECISION
@@ -31,6 +32,8 @@ class Quantity:
         else:
             if isinstance(value, np.ndarray):
                 self._value = value.astype(env.NUMPY_FLOAT)
+            elif isinstance(value, cp.ndarray):
+                self._value = value.get().astype(env.NUMPY_FLOAT)
             else:
                 self._value = np.array(value).astype(env.NUMPY_FLOAT)
                 if self._value.shape == ():
