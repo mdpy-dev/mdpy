@@ -526,7 +526,7 @@ class ElectrostaticPMEConstraint(Constraint):
 
     def update(self):
         self._check_bound_state()
-        self._direct_forces = cp.zeros_like(self._parent_ensemble.state.positions, CUPY_FLOAT)
+        self._direct_forces = cp.zeros(self._parent_ensemble.state.matrix_shape, CUPY_FLOAT)
         self._direct_potential_energy = cp.zeros([1], CUPY_FLOAT)
         # Direct part
         block_per_grid = int(np.ceil(
@@ -572,7 +572,7 @@ class ElectrostaticPMEConstraint(Constraint):
             self._device_k, self._charge_map, self._device_bc_grid
         )
         # Reciprocal force
-        self._reciprocal_forces = cp.zeros_like(self._parent_ensemble.state.positions, CUPY_FLOAT)
+        self._reciprocal_forces = cp.zeros(self._parent_ensemble.state.matrix_shape, CUPY_FLOAT)
         self._reciprocal_potential_energy = cp.zeros([1], CUPY_FLOAT)
         self._update_reciprocal_force[block_per_grid, thread_per_block, self._parent_ensemble.streams[self._constraint_id]](
             self._device_num_particles,

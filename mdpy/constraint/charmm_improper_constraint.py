@@ -203,7 +203,7 @@ class CharmmImproperConstraint(Constraint):
     def update(self):
         self._check_bound_state()
         # V(improper) = Kpsi(psi - psi0)**2
-        self._forces = cp.zeros_like(self._parent_ensemble.state.positions, CUPY_FLOAT)
+        self._forces = cp.zeros(self._parent_ensemble.state.matrix_shape, CUPY_FLOAT)
         self._potential_energy = cp.zeros([1], CUPY_FLOAT)
         # Device
         self._update[self._block_per_grid, THREAD_PER_BLOCK, self._parent_ensemble.streams[self._constraint_id]](
