@@ -46,10 +46,10 @@ class ConjugateGradientMinimizer(Minimizer):
                 cur_f = ensemble.forces.reshape([-1, 1])
                 pre_f = cur_f.copy()
                 t = cur_f.copy()
-                ensemble.state.set_positions(wrap_positions(
+                ensemble.state.set_positions(
                     ensemble.state.positions + self._theta * t.reshape([-1, 3]),
                     *ensemble.state.pbc_info
-                ))
+                )
                 ensemble.update()
                 omega = - (ensemble.forces.reshape([-1, 1]) - cur_f) / self._theta
                 alpha = np.matmul(cur_f.T, cur_f) / (np.matmul(omega.T, t))
