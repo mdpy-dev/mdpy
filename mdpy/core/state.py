@@ -52,17 +52,16 @@ class State:
         # So the scaled position will be Position * PBC instead of PBC * Position as usual
         self._pbc_matrix = np.ascontiguousarray(pbc_matrix, dtype=NUMPY_FLOAT)
         self._pbc_diag = np.ascontiguousarray(np.diagonal(self._pbc_matrix), dtype=NUMPY_FLOAT)
+        self._half_pbc_diag = self._pbc_diag / 2
         self._device_pbc_matrix = cp.array(self._pbc_matrix, CUPY_FLOAT)
         self._device_pbc_diag = cp.array(self._pbc_diag, CUPY_FLOAT)
+        self._device_half_pbc_diag = cp.array(self._half_pbc_diag, CUPY_FLOAT)
 
     def set_positions(self, positions: cp.ndarray, is_update_neighbor_list=True):
         self._check_matrix_shape(positions)
         if isinstance(positions, np.ndarray):
             positions = cp.array(positions, CUPY_FLOAT)
-        self._positions = positions
-        move_vec = (positions < - self._device_pbc_diag) * self._device_pbc_diag
-        move_vec -= (positions > self._device_pbc_diag) * self._device_pbc_diag
-        self._positions += move_vec
+        self._positions = wrap_positions(positions, self._device_pbc_diag)
         self._neighbor_list.update(self._positions, is_update_neighbor_list)
 
     def set_velocities(self, velocities: cp.ndarray):
@@ -108,6 +107,22 @@ class State:
     @property
     def device_pbc_matrix(self):
         return self._device_pbc_matrix
+
+    @property
+    def pbc_diag(self):
+        return self._pbc_diag
+
+    @property
+    def device_pbc_diag(self):
+        return self._device_pbc_diag
+
+    @property
+    def half_pbc_diag(self):
+        return self._half_pbc_diag
+
+    @property
+    def device_half_pbc_diag(self):
+        return self._device_half_pbc_diag
 
     @property
     def neighbor_list(self):
