@@ -67,8 +67,8 @@ class CharmmDihedralConstraint(Constraint):
                 # dihedral coefficient
                 self._float_parameters.append(float_param)
             self._num_dihedrals += 1
-        self._int_parameters = cp.array(np.vstack(self._int_parameters), CUPY_INT)
-        self._float_parameters = cp.array(np.vstack(self._float_parameters), CUPY_FLOAT)
+        self._device_int_parameters = cp.array(np.vstack(self._int_parameters), CUPY_INT)
+        self._device_float_parameters = cp.array(np.vstack(self._float_parameters), CUPY_FLOAT)
         self._block_per_grid = (int(np.ceil(
             self._parent_ensemble.topology.num_dihedrals / THREAD_PER_BLOCK
         )))
@@ -211,8 +211,8 @@ class CharmmDihedralConstraint(Constraint):
         self._potential_energy = cp.zeros([1], CUPY_FLOAT)
         # Device
         self._update[self._block_per_grid, THREAD_PER_BLOCK, self._parent_ensemble.streams[self._constraint_id]](
-            self._int_parameters,
-            self._float_parameters,
+            self._device_int_parameters,
+            self._device_float_parameters,
             self._parent_ensemble.state.device_positions,
             self._parent_ensemble.state.device_pbc_matrix,
             self._forces, self._potential_energy
