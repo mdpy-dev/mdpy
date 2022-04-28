@@ -244,7 +244,7 @@ class Topology:
     @property
     def masses(self):
         return self._masses
-    
+
     @property
     def device_masses(self):
         return self._device_masses
@@ -252,7 +252,7 @@ class Topology:
     @property
     def charges(self):
         return self._charges
-    
+
     @property
     def device_charges(self):
         return self._charges
