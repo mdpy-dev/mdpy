@@ -8,6 +8,7 @@ copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
 import math
+from re import L
 import numpy as np
 import numba as nb
 import cupy as cp
@@ -70,49 +71,6 @@ class CharmmAngleConstraint(Constraint):
         )))
 
     @staticmethod
-    def _cpu_kernel(int_parameters, float_parameters, positions, pbc_matrix, pbc_inv):
-        forces = np.zeros_like(positions)
-        potential_energy = forces[0, 0]
-        num_angles = int_parameters.shape[0]
-        for angle in range(num_angles):
-            id1, id2, id3 = int_parameters[angle]
-            k, theta0, ku, u0 = float_parameters[angle, :]
-            r21 = unwrap_vec(
-                positions[id1, :] - positions[id2, :],
-                pbc_matrix, pbc_inv
-            )
-            l21 = np.linalg.norm(r21)
-            r23 = unwrap_vec(
-                positions[id3, :] - positions[id2, :],
-                pbc_matrix, pbc_inv
-            )
-            l23 = np.linalg.norm(r23)
-            cos_theta = np.dot(r21, r23) / (l21 * l23)
-            theta = np.arccos(cos_theta)
-            # Force
-            force_val = - 2 * k * (theta - theta0)
-            vec_norm = np.cross(r21, r23)
-            force_vec1 = get_unit_vec(np.cross(r21, vec_norm)) / l21
-            force_vec3 = get_unit_vec(np.cross(-r23, vec_norm)) / l23
-            forces[id1, :] += force_val * force_vec1
-            forces[id2, :] -= force_val * (force_vec1 + force_vec3)
-            forces[id3, :] += force_val * force_vec3
-            # Potential energy
-            potential_energy += k * (theta - theta0)**2
-            # Urey-Bradley
-            r13 = unwrap_vec(
-                positions[id3, :] - positions[id1, :],
-                pbc_matrix, pbc_inv
-            )
-            l13 = np.linalg.norm(r13)
-            force_val = 2 * ku * (l13 - u0)
-            force_vec = r13 / l13
-            forces[id1, :] += force_val * force_vec
-            forces[id3, :] -= force_val * force_vec
-            potential_energy += ku * (l13 - u0)**2
-        return forces, potential_energy
-
-    @staticmethod
     def _update_kernel(
         int_parameters, float_parameters,
         positions, pbc_matrix,
@@ -137,157 +95,103 @@ class CharmmAngleConstraint(Constraint):
         id1, id2, id3 = int_parameters[angle_id, :]
         k, theta0, ku, u0 = float_parameters[angle_id, :]
         # Initialization
-        force_1_x = 0
-        force_1_y = 0
-        force_1_z = 0
-        force_2_x = 0
-        force_2_y = 0
-        force_2_z = 0
-        force_3_x = 0
-        force_3_y = 0
-        force_3_z = 0
+        particle_ids = cuda.local.array(shape=(4), dtype=NUMBA_INT)
+        local_positions = cuda.local.array(shape=(3, SPATIAL_DIM), dtype=NUMBA_FLOAT)
+        local_forces = cuda.local.array(shape=(3, SPATIAL_DIM), dtype=NUMBA_FLOAT)
+        for i in range(3):
+            particle_ids[i] = int_parameters[angle_id, i]
+            for j in range(SPATIAL_DIM):
+                local_positions[i, j] = positions[particle_ids[i], j]
         energy = 0
         # Positions
-        position_1_x = positions[id1, 0]
-        position_1_y = positions[id1, 1]
-        position_1_z = positions[id1, 2]
-        position_2_x = positions[id2, 0]
-        position_2_y = positions[id2, 1]
-        position_2_z = positions[id2, 2]
-        position_3_x = positions[id3, 0]
-        position_3_y = positions[id3, 1]
-        position_3_z = positions[id3, 2]
         # vec
         # r21
-        x21 = position_1_x - position_2_x
-        if x21 >= shared_half_pbc[0]:
-            x21 -= shared_pbc[0]
-        elif x21 <= -shared_half_pbc[0]:
-            x21 += shared_pbc[0]
-        y21 = position_1_y - position_2_y
-        if y21 >= shared_half_pbc[1]:
-            y21 -= shared_pbc[1]
-        elif y21 <= -shared_half_pbc[1]:
-            y21 += shared_pbc[1]
-        z21 = position_1_z - position_2_z
-        if z21 >= shared_half_pbc[2]:
-            z21 -= shared_pbc[2]
-        elif z21 <= -shared_half_pbc[2]:
-            z21 += shared_pbc[2]
-        l21 = math.sqrt(x21**2 + y21**2 + z21**2)
-        scaled_x21 = x21 / l21
-        scaled_y21 = y21 / l21
-        scaled_z21 = z21 / l21
-        # r23
-        x23 = position_3_x - position_2_x
-        if x23 >= shared_half_pbc[0]:
-            x23 -= shared_pbc[0]
-        elif x23 <= -shared_half_pbc[0]:
-            x23 += shared_pbc[0]
-        y23 = position_3_y - position_2_y
-        if y23 >= shared_half_pbc[1]:
-            y23 -= shared_pbc[1]
-        elif y23 <= -shared_half_pbc[1]:
-            y23 += shared_pbc[1]
-        z23 = position_3_z - position_2_z
-        if z23 >= shared_half_pbc[2]:
-            z23 -= shared_pbc[2]
-        elif z23 <= -shared_half_pbc[2]:
-            z23 += shared_pbc[2]
-        l23 = math.sqrt(x23**2 + y23**2 + z23**2)
-        scaled_x23 = x23 / l23
-        scaled_y23 = y23 / l23
-        scaled_z23 = z23 / l23
-        # r13
-        x13 = position_3_x - position_1_x
-        if x13 >= shared_half_pbc[0]:
-            x13 -= shared_pbc[0]
-        elif x13 <= -shared_half_pbc[0]:
-            x13 += shared_pbc[0]
-        y13 = position_3_y - position_1_y
-        if y13 >= shared_half_pbc[1]:
-            y13 -= shared_pbc[1]
-        elif y13 <= -shared_half_pbc[1]:
-            y13 += shared_pbc[1]
-        z13 = position_3_z - position_1_z
-        if z13 >= shared_half_pbc[2]:
-            z13 -= shared_pbc[2]
-        elif z13 <= -shared_half_pbc[2]:
-            z13 += shared_pbc[2]
-        l13 = math.sqrt(x13**2 + y13**2 + z13**2)
-        scaled_x13 = x13 / l13
-        scaled_y13 = y13 / l13
-        scaled_z13 = z13 / l13
-        # Harmonic angle
-        # theta dot(r21, r23) / (l21 * l23)
-        theta = math.acos(
-            scaled_x21*scaled_x23 +
-            scaled_y21*scaled_y23 +
-            scaled_z21*scaled_z23
-        )
-        delta_theta = theta - theta0
-        energy += k * delta_theta**2
-        # vec_norm cross(r21, r23)
-        vec_norm_x = scaled_y21*scaled_z23 - scaled_y23*scaled_z21
-        vec_norm_y = - scaled_x21*scaled_z23 + scaled_x23*scaled_z21
-        vec_norm_z = scaled_x21*scaled_y23 - scaled_x23*scaled_y21
-        # force_vec1 cross(r21, vec_norm)
-        force_vec1_x = scaled_y21*vec_norm_z - vec_norm_y*scaled_z21
-        force_vec1_y = - scaled_x21*vec_norm_z + vec_norm_x*scaled_z21
-        force_vec1_z = scaled_x21*vec_norm_y - vec_norm_x*scaled_y21
-        force_vec1_norm = math.sqrt(
-            force_vec1_x**2 + force_vec1_y**2 + force_vec1_z**2
-        )
-        # force_vec3 cross(-r23, vec_norm)
-        force_vec3_x = - scaled_y23*vec_norm_z + vec_norm_y*scaled_z23
-        force_vec3_y = scaled_x23*vec_norm_z - vec_norm_x*scaled_z23
-        force_vec3_z = - scaled_x23*vec_norm_y + vec_norm_x*scaled_y23
-        force_vec3_norm = math.sqrt(
-            force_vec3_x**2 + force_vec3_y**2 + force_vec3_z**2
-        )
+        v21 = cuda.local.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
+        v23 = cuda.local.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
+        v13 = cuda.local.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
+        r21, r23, r13 = 0, 0, 0
+        for i in range(SPATIAL_DIM):
+            v21[i] = local_positions[0, i] - local_positions[1, i]
+            if v21[i] >= shared_half_pbc[i]:
+                v21[i] -= shared_pbc[i]
+            elif v21[i] <= -shared_half_pbc[i]:
+                v21[i] += shared_pbc[i]
+            r21 += v21[i]**2
+            v23[i] = local_positions[2, i] - local_positions[1, i]
+            if v23[i] >= shared_half_pbc[i]:
+                v23[i] -= shared_pbc[i]
+            elif v23[i] <= -shared_half_pbc[i]:
+                v23[i] += shared_pbc[i]
+            r23 += v23[i]**2
+            v13[i] = local_positions[2, i] - local_positions[0, i]
+            if v13[i] >= shared_half_pbc[i]:
+                v13[i] -= shared_pbc[i]
+            elif v13[i] <= -shared_half_pbc[i]:
+                v13[i] += shared_pbc[i]
+            r13 += v13[i]**2
+        r21 = math.sqrt(r21)
+        r23 = math.sqrt(r23)
+        r13 = math.sqrt(r13)
+        scaled_v21 = cuda.local.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
+        scaled_v23 = cuda.local.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
+        scaled_v13 = cuda.local.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
 
+        theta = 0
+        for i in range(SPATIAL_DIM):
+            scaled_v21[i] = v21[i] / r21
+            scaled_v23[i] = v23[i] / r23
+            scaled_v13[i] = v13[i] / r13
+            theta += scaled_v21[i] * scaled_v23[i]
+        # Harmonic angle
+        # theta dot(v21, v23) / (r21 * r23)
+        theta = math.acos(theta)
+        delta_theta = theta - theta0
         force_val = - 2 * k * delta_theta
+        energy += force_val * delta_theta *  -0.5
+        # vec_norm cross(r21, r23)
+        vec_norm = cuda.local.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
+        vec_norm[0] = scaled_v21[1]*scaled_v23[2] - scaled_v21[2]*scaled_v23[1]
+        vec_norm[1] = - scaled_v21[0]*scaled_v23[2] + scaled_v21[2]*scaled_v23[0]
+        vec_norm[2] = scaled_v21[0]*scaled_v23[1] - scaled_v21[1]*scaled_v23[0]
+        # force_vec1 cross(r21, vec_norm)
+        force_vec1 = cuda.local.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
+        force_vec1[0] = scaled_v21[1]*vec_norm[2] - scaled_v21[2]*vec_norm[1]
+        force_vec1[1] = - scaled_v21[0]*vec_norm[2] + scaled_v21[2]*vec_norm[0]
+        force_vec1[2] = scaled_v21[0]*vec_norm[1] - scaled_v21[1]*vec_norm[0]
+        # force_vec3 cross(-r23, vec_norm)
+        force_vec3 = cuda.local.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
+        force_vec3[0] = - scaled_v23[1]*vec_norm[2] + scaled_v23[2]*vec_norm[1]
+        force_vec3[1] = scaled_v23[0]*vec_norm[2] - scaled_v23[2]*vec_norm[0]
+        force_vec3[2] = - scaled_v23[0]*vec_norm[1] + scaled_v23[1]*vec_norm[0]
+        norm_force_vec1 = 0
+        norm_force_vec3 = 0
+        for i in range(SPATIAL_DIM):
+            norm_force_vec1 += force_vec1[i]**2
+            norm_force_vec3 += force_vec3[i]**2
+        norm_force_vec1 = math.sqrt(norm_force_vec1)
+        norm_force_vec3 = math.sqrt(norm_force_vec3)
+
         # particle1
-        force_val1 = force_val / l21 / force_vec1_norm
-        force_1_x += force_val1 * force_vec1_x
-        force_1_y += force_val1 * force_vec1_y
-        force_1_z += force_val1 * force_vec1_z
-        # particle3
-        force_val3 = force_val / l23 / force_vec3_norm
-        force_3_x += force_val3 * force_vec3_x
-        force_3_y += force_val3 * force_vec3_y
-        force_3_z += force_val3 * force_vec3_z
-        # particle2
-        force_2_x -= force_1_x + force_3_x
-        force_2_y -= force_1_y + force_3_y
-        force_2_z -= force_1_z + force_3_z
+        force_val1 = force_val / r21 / norm_force_vec1
+        force_val3 = force_val / r23 / norm_force_vec3
+        for i in range(SPATIAL_DIM):
+            local_forces[0, i] = force_val1 * force_vec1[i]
+            local_forces[2, i] = force_val3 * force_vec3[i]
+            local_forces[1, i] = - (local_forces[0, i] + local_forces[2, i])
 
         # Urey-Bradley
-        delta_u = l13 - u0
+        delta_u = r13 - u0
         energy += ku * delta_u**2
         force_val = 2 * ku * delta_u
-        force_val_x = force_val * scaled_x13
-        force_val_y = force_val * scaled_y13
-        force_val_z = force_val * scaled_z13
-        # particle1
-        force_1_x += force_val_x
-        force_1_y += force_val_y
-        force_1_z += force_val_z
-        # particle1
-        force_3_x -= force_val_x
-        force_3_y -= force_val_y
-        force_3_z -= force_val_z
+        for i in range(SPATIAL_DIM):
+            force_val_ub = force_val * scaled_v13[i]
+            local_forces[0, i] += force_val_ub
+            local_forces[2, i] -= force_val_ub
 
         # Summary
-        cuda.atomic.add(forces, (id1, 0), force_1_x)
-        cuda.atomic.add(forces, (id1, 1), force_1_y)
-        cuda.atomic.add(forces, (id1, 2), force_1_z)
-        cuda.atomic.add(forces, (id2, 0), force_2_x)
-        cuda.atomic.add(forces, (id2, 1), force_2_y)
-        cuda.atomic.add(forces, (id2, 2), force_2_z)
-        cuda.atomic.add(forces, (id3, 0), force_3_x)
-        cuda.atomic.add(forces, (id3, 1), force_3_y)
-        cuda.atomic.add(forces, (id3, 2), force_3_z)
+        for i in range(3):
+            for j in range(SPATIAL_DIM):
+                cuda.atomic.add(forces, (particle_ids[i], j), local_forces[i, j])
         cuda.atomic.add(potential_energy, 0, energy)
 
     def update(self):
