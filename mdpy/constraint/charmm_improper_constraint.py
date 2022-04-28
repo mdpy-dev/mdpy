@@ -65,6 +65,9 @@ class CharmmImproperConstraint(Constraint):
             self._num_impropers += 1
         self._int_parameters = cp.array(np.vstack(self._int_parameters), CUPY_INT)
         self._float_parameters = cp.array(np.vstack(self._float_parameters), CUPY_FLOAT)
+        self._block_per_grid = (int(np.ceil(
+            self._parent_ensemble.topology.num_impropers / THREAD_PER_BLOCK
+        )))
 
     @staticmethod
     def _update_kernel(
@@ -203,10 +206,7 @@ class CharmmImproperConstraint(Constraint):
         self._forces = cp.zeros_like(self._parent_ensemble.state.positions, CUPY_FLOAT)
         self._potential_energy = cp.zeros([1], CUPY_FLOAT)
         # Device
-        block_per_grid = (int(np.ceil(
-            self._parent_ensemble.topology.num_impropers / THREAD_PER_BLOCK
-        )))
-        self._update[block_per_grid, THREAD_PER_BLOCK](
+        self._update[self._block_per_grid, THREAD_PER_BLOCK](
             self._int_parameters,
             self._float_parameters,
             self._parent_ensemble.state.device_positions,
