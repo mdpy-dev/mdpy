@@ -25,7 +25,7 @@ class CharmmVDWConstraint(Constraint):
         # Attributes
         self._parameter_dict = parameter_dict
         self._cutoff_radius = check_quantity_value(cutoff_radius, default_length_unit)
-        self._device_cutoff_radius = cuda.to_device(np.array([self._cutoff_radius]))
+        self._device_cutoff_radius = cp.array([self._cutoff_radius], CUPY_FLOAT)
         self._parameters_list = []
         # Kernel
         self._update = cuda.jit(nb.void(
@@ -57,10 +57,9 @@ class CharmmVDWConstraint(Constraint):
             elif len(param) == 4:
                 epsilon, sigma, epsilon14, sigma14 = param
                 self._parameters_list.append([epsilon, sigma, epsilon14, sigma14])
-        self._parameters_list = np.vstack(self._parameters_list).astype(NUMPY_FLOAT)
-        self._device_parameters_list = cuda.to_device(self._parameters_list)
-        self._device_bonded_particles = cuda.to_device(self._parent_ensemble.topology.bonded_particles)
-        self._device_scaling_particles = cuda.to_device(self._parent_ensemble.topology.scaling_particles)
+        self._parameters_list = cp.array(np.vstack(self._parameters_list), CUPY_FLOAT)
+        self._bonded_particles = cp.array(self._parent_ensemble.topology.bonded_particles, CUPY_INT)
+        self._scaling_particles = cp.array(self._parent_ensemble.topology.scaling_particles, CUPY_INT)
         self._block_per_grid = int(np.ceil(
             self._parent_ensemble.topology.num_particles / THREAD_PER_BLOCK
         ))
@@ -161,9 +160,9 @@ class CharmmVDWConstraint(Constraint):
         # Device
         self._update[self._block_per_grid, THREAD_PER_BLOCK](
             self._device_cutoff_radius,
-            self._device_parameters_list,
-            self._device_bonded_particles,
-            self._device_scaling_particles,
+            self._parameters_list,
+            self._bonded_particles,
+            self._scaling_particles,
             self._parent_ensemble.state.neighbor_list.device_neighbor_list,
             self._parent_ensemble.state.neighbor_list.device_neighbor_vec_list,
             self._forces, self._potential_energy
