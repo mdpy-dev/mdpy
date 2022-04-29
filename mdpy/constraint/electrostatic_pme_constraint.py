@@ -285,7 +285,7 @@ class ElectrostaticPMEConstraint(Constraint):
             shared_ewald_coefficient[0] = ewald_coefficient[0]
         elif thread_x == 1:
             shared_cutoff_radius[0] = cutoff_radius[0]
-            shared_sqrt_pi[0] = sqrt_pi = math.sqrt(math.pi)
+            shared_sqrt_pi[0] = math.sqrt(math.pi)
         cuda.syncthreads()
 
         # id1 attribute
@@ -322,7 +322,6 @@ class ElectrostaticPMEConstraint(Constraint):
                     force_y -= scaled_y * force_val
                     force_z -= scaled_z * force_val
                     energy -= e1e2 * erf / shared_k[0] / r / 2
-                    is_bonded = True
                     break
             if is_bonded:
                 continue
