@@ -156,7 +156,7 @@ class CharmmVDWConstraint(Constraint):
         self._forces = cp.zeros(self._parent_ensemble.state.matrix_shape, CUPY_FLOAT)
         self._potential_energy = cp.zeros([1], CUPY_FLOAT)
         # Device
-        self._update[self._block_per_grid, THREAD_PER_BLOCK, self._parent_ensemble.streams[self._constraint_id]](
+        self._update[self._block_per_grid, THREAD_PER_BLOCK](
             self._device_cutoff_radius,
             self._device_parameters_list,
             self._parent_ensemble.topology.device_bonded_particles,
