@@ -7,7 +7,6 @@ author : Zhenyu Wei
 copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
-from cupy.cuda.nvtx import RangePush, RangePop
 import math
 import numpy as np
 import numba as nb
@@ -522,7 +521,6 @@ class ElectrostaticPMEConstraint(Constraint):
 
     def update(self):
         self._check_bound_state()
-        RangePush('Direct part')
         self._direct_forces = cp.zeros(self._parent_ensemble.state.matrix_shape, CUPY_FLOAT)
         self._direct_potential_energy = cp.zeros([1], CUPY_FLOAT)
         # Direct part
@@ -539,14 +537,11 @@ class ElectrostaticPMEConstraint(Constraint):
             self._parent_ensemble.state.neighbor_list.neighbor_vec_list,
             self._direct_forces, self._direct_potential_energy
         )
-        RangePop()
-        RangePush('Reciprocal part')
         thread_per_block = (64)
         block_per_grid = int(np.ceil(
             self._parent_ensemble.topology.num_particles / thread_per_block
         ))
         # Bspline
-        RangePush('Bspline')
         spline_coefficient = cp.zeros(
             [self._parent_ensemble.topology.num_particles, SPATIAL_DIM, PME_ORDER], CUPY_FLOAT
         )
@@ -561,23 +556,17 @@ class ElectrostaticPMEConstraint(Constraint):
             self._parent_ensemble.state.device_pbc_matrix,
             spline_coefficient, spline_derivative_coefficient, grid_map
         )
-        RangePop()
         # Map charge
-        RangePush('Map charge')
         self._charge_map = cp.zeros(self._grid_size, CUPY_FLOAT)
         self._update_charge_map[block_per_grid, thread_per_block, self._parent_ensemble.streams[self._constraint_id]](
             self._device_num_particles, spline_coefficient, grid_map,
             self._parent_ensemble.topology.device_charges, self._charge_map
         )
-        RangePop()
         # Reciprocal convolution
-        RangePush('Convolution')
         self._electric_potential_map = self._update_electric_potential_map(
             self._device_k, self._charge_map, self._device_bc_grid
         )
-        RangePop()
         # Reciprocal force
-        RangePush('Assign Force')
         self._reciprocal_forces = cp.zeros(self._parent_ensemble.state.matrix_shape, CUPY_FLOAT)
         self._reciprocal_potential_energy = cp.zeros([1], CUPY_FLOAT)
         self._update_reciprocal_force[block_per_grid, thread_per_block, self._parent_ensemble.streams[self._constraint_id]](
@@ -592,8 +581,6 @@ class ElectrostaticPMEConstraint(Constraint):
         )
         self._reciprocal_forces = self._reciprocal_forces * self._device_reciprocal_factor
         self._reciprocal_forces -= self._reciprocal_forces.mean(0)
-        RangePop()
-        RangePop()
         # Summary
         self._potential_energy = (
             self._direct_potential_energy +
