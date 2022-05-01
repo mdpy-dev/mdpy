@@ -34,7 +34,7 @@ class CharmmImproperConstraint(Constraint):
             NUMBA_FLOAT[:, ::1], # pbc_matrix
             NUMBA_FLOAT[:, ::1], # forces
             NUMBA_FLOAT[::1] # potential_energy
-        ))(self._update_kernel)
+        ))(self._update_charmm_improper_kernel)
 
     def __repr__(self) -> str:
         return '<mdpy.constraint.CharmmImproperConstraint object>'
@@ -70,7 +70,7 @@ class CharmmImproperConstraint(Constraint):
         )))
 
     @staticmethod
-    def _update_kernel(
+    def _update_charmm_improper_kernel(
         int_parameters, float_parameters,
         positions, pbc_matrix,
         forces, potential_energy

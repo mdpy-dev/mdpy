@@ -82,7 +82,7 @@ class ElectrostaticPMEConstraint(Constraint):
             NUMBA_FLOAT[:, ::1], # charges
             NUMBA_FLOAT[:, :, ::1] # charge_map
         ))(self._update_charge_map_kernel)
-        self._update_electric_potential_map = self._update_electric_potential_map_kernel
+        self._update_electric_potential_map = self._update_reciprocal_electric_potential_map_kernel
         self._update_reciprocal_force = cuda.jit(nb.void(
             NUMBA_INT[::1], # num_particles
             NUMBA_FLOAT[:, :, ::1], # spline_coefficient
@@ -457,7 +457,7 @@ class ElectrostaticPMEConstraint(Constraint):
                     cuda.atomic.add(charge_map, (grid_x, grid_y, grid_z), charge_xyz)
 
     @staticmethod
-    def _update_electric_potential_map_kernel(k, charge_map, bc_grid):
+    def _update_reciprocal_electric_potential_map_kernel(k, charge_map, bc_grid):
         # Convolution
         fft_charge = cp.fft.fftn(charge_map / k)
         fft_charge[0, 0, 0] = 0

@@ -37,7 +37,7 @@ class CharmmVDWConstraint(Constraint):
             NUMBA_FLOAT[:, :, ::1], # neighbor_vec_list
             NUMBA_FLOAT[:, ::1], # forces
             NUMBA_FLOAT[::1] # potential_energy
-        ))(self._update_kernel)
+        ))(self._update_charmm_vdw_kernel)
 
     def __repr__(self) -> str:
         return '<mdpy.constraint.CharmmVDWConstraint object>'
@@ -63,7 +63,7 @@ class CharmmVDWConstraint(Constraint):
         ))
 
     @staticmethod
-    def _update_kernel(
+    def _update_charmm_vdw_kernel(
         cutoff_radius,
         parameters,
         bonded_particles,
