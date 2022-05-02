@@ -37,7 +37,7 @@ class CharmmVDWConstraint(Constraint):
             NUMBA_FLOAT[:, :, ::1], # neighbor_vec_list
             NUMBA_FLOAT[:, ::1], # forces
             NUMBA_FLOAT[::1] # potential_energy
-        ))(self._update_kernel)
+        ))(self._update_charmm_vdw_kernel)
 
     def __repr__(self) -> str:
         return '<mdpy.constraint.CharmmVDWConstraint object>'
@@ -63,7 +63,7 @@ class CharmmVDWConstraint(Constraint):
         ))
 
     @staticmethod
-    def _update_kernel(
+    def _update_charmm_vdw_kernel(
         cutoff_radius,
         parameters,
         bonded_particles,
@@ -156,7 +156,7 @@ class CharmmVDWConstraint(Constraint):
         self._forces = cp.zeros(self._parent_ensemble.state.matrix_shape, CUPY_FLOAT)
         self._potential_energy = cp.zeros([1], CUPY_FLOAT)
         # Device
-        self._update[self._block_per_grid, THREAD_PER_BLOCK, self._parent_ensemble.streams[self._constraint_id]](
+        self._update[self._block_per_grid, THREAD_PER_BLOCK](
             self._device_cutoff_radius,
             self._device_parameters_list,
             self._parent_ensemble.topology.device_bonded_particles,

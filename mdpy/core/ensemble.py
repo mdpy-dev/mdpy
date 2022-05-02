@@ -53,7 +53,6 @@ class Ensemble:
             if constraint.cutoff_radius > self.state.neighbor_list.cutoff_radius:
                 self.state.neighbor_list.set_cutoff_radius(constraint.cutoff_radius)
             self._num_constraints += 1
-            self._streams.append(cuda.stream())
 
     def update(self):
         self._forces = cp.zeros(self._matrix_shape, CUPY_FLOAT)
@@ -65,7 +64,6 @@ class Ensemble:
         for constraint in self._constraints:
             self._forces += constraint.forces
             self._potential_energy += constraint.potential_energy
-        self._potential_energy = self._potential_energy
         self._update_kinetic_energy()
         self._total_energy = self._potential_energy + self._kinetic_energy
 
@@ -103,10 +101,6 @@ class Ensemble:
     @property
     def constraints(self):
         return self._constraints
-
-    @property
-    def streams(self):
-        return self._streams
 
     @property
     def num_constraints(self):

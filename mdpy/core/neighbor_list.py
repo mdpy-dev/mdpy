@@ -146,43 +146,40 @@ class NeighborList:
         shared_num_cell_vec = cuda.shared.array(shape=(SPATIAL_DIM), dtype=NUMBA_INT)
         thread_x = cuda.threadIdx.x
         if thread_x == 0:
-            shared_pbc_matrix[0] = pbc_matrix[0, 0]
-            shared_pbc_matrix[1] = pbc_matrix[1, 1]
-            shared_pbc_matrix[2] = pbc_matrix[2, 2]
-            shared_half_pbc_matrix[0] = shared_pbc_matrix[0] / 2
-            shared_half_pbc_matrix[1] = shared_pbc_matrix[1] / 2
-            shared_half_pbc_matrix[2] = shared_pbc_matrix[2] / 2
+            for i in range(SPATIAL_DIM):
+                shared_pbc_matrix[i] = pbc_matrix[i, i]
+                shared_half_pbc_matrix[i] = shared_pbc_matrix[i] / 2
         if thread_x == 1:
-            shared_num_cell_vec[0] = num_cell_vec[0]
-            shared_num_cell_vec[1] = num_cell_vec[1]
-            shared_num_cell_vec[2] = num_cell_vec[2]
+            for i in range(SPATIAL_DIM):
+                shared_num_cell_vec[i] = num_cell_vec[i]
         cuda.syncthreads()
         # Read local data
         cutoff_radius = cutoff_radius[0] + skin_width[0]
         neighbor_ceil_shift = neighbor_ceil_shift[0]
         neighbor_ceil_lower = - neighbor_ceil_shift - 1
         neighbor_ceil_upper = neighbor_ceil_shift + 2
-        central_cell_x = particle_cell_index[particle_id1, 0]
-        central_cell_y = particle_cell_index[particle_id1, 1]
-        central_cell_z = particle_cell_index[particle_id1, 2]
-        position_x = positions[particle_id1, 0]
-        position_y = positions[particle_id1, 1]
-        position_z = positions[particle_id1, 2]
+        central_cell = cuda.local.array(shape=(SPATIAL_DIM), dtype=NUMBA_INT)
+        position_id1 = cuda.local.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
+        for i in range(SPATIAL_DIM):
+            central_cell[i] = particle_cell_index[particle_id1, i]
+            position_id1[i] = positions[particle_id1, i]
         neighbor_index = 0
+        r = 0
+        vec = cuda.local.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
         for i in range(neighbor_ceil_lower, neighbor_ceil_upper):
-            cell_x = central_cell_x + i
+            cell_x = central_cell[0] + i
             if cell_x < 0:
                 cell_x += shared_num_cell_vec[0]
             elif cell_x >= shared_num_cell_vec[0]:
                 cell_x -= shared_num_cell_vec[0]
             for j in range(neighbor_ceil_lower, neighbor_ceil_upper):
-                cell_y = central_cell_y + j
+                cell_y = central_cell[1] + j
                 if cell_y < 0:
                     cell_y += shared_num_cell_vec[1]
                 elif cell_y >= shared_num_cell_vec[1]:
                     cell_y -= shared_num_cell_vec[1]
                 for k in range(neighbor_ceil_lower, neighbor_ceil_upper):
-                    cell_z = central_cell_z + k
+                    cell_z = central_cell[2] + k
                     if cell_z < 0:
                         cell_z += shared_num_cell_vec[2]
                     elif cell_z >= shared_num_cell_vec[2]:
@@ -193,31 +190,21 @@ class NeighborList:
                             break
                         if particle_id2 == particle_id1:
                             continue
-                        x = (positions[particle_id2, 0] - position_x)
-                        if x >= shared_half_pbc_matrix[0]:
-                            x -= shared_pbc_matrix[0]
-                        elif x <= -shared_half_pbc_matrix[0]:
-                            x += shared_pbc_matrix[0]
-                        y = (positions[particle_id2, 1] - position_y)
-                        if y >= shared_half_pbc_matrix[1]:
-                            y -= shared_pbc_matrix[1]
-                        elif y <= -shared_half_pbc_matrix[1]:
-                            y += shared_pbc_matrix[1]
-                        z = (positions[particle_id2, 2] - position_z)
-                        if z >= shared_half_pbc_matrix[2]:
-                            z -= shared_pbc_matrix[2]
-                        elif z <= -shared_half_pbc_matrix[2]:
-                            z += shared_pbc_matrix[2]
-                        r = math.sqrt(x**2 + y**2 + z**2)
+                        r = 0
+                        for i in range(SPATIAL_DIM):
+                            vec[i] = (positions[particle_id2, i] - position_id1[i])
+                            if vec[i] >= shared_half_pbc_matrix[i]:
+                                vec[i] -= shared_pbc_matrix[i]
+                            elif vec[i] <= -shared_half_pbc_matrix[i]:
+                                vec[i] += shared_pbc_matrix[i]
+                            r += vec[i]**2
+                        r = math.sqrt(r)
                         if r <= (cutoff_radius):
                             cuda.atomic.add(neighbor_list, (particle_id1, neighbor_index), 1 + particle_id2)
-                            scaled_x = x / r
-                            scaled_y = y / r
-                            scaled_z = z / r
                             cuda.atomic.add(neighbor_vec_list, (particle_id1, neighbor_index, 0), r)
-                            cuda.atomic.add(neighbor_vec_list, (particle_id1, neighbor_index, 1), scaled_x)
-                            cuda.atomic.add(neighbor_vec_list, (particle_id1, neighbor_index, 2), scaled_y)
-                            cuda.atomic.add(neighbor_vec_list, (particle_id1, neighbor_index, 3), scaled_z)
+                            cuda.atomic.add(neighbor_vec_list, (particle_id1, neighbor_index, 1), vec[0] / r)
+                            cuda.atomic.add(neighbor_vec_list, (particle_id1, neighbor_index, 2), vec[1] / r)
+                            cuda.atomic.add(neighbor_vec_list, (particle_id1, neighbor_index, 3), vec[2] / r)
                             neighbor_index += 1
 
     @staticmethod
@@ -235,56 +222,44 @@ class NeighborList:
         shared_half_pbc_matrix = cuda.shared.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
         thread_x = cuda.threadIdx.x
         if thread_x == 0:
-            shared_pbc_matrix[0] = pbc_matrix[0, 0]
-            shared_pbc_matrix[1] = pbc_matrix[1, 1]
-            shared_pbc_matrix[2] = pbc_matrix[2, 2]
-            shared_half_pbc_matrix[0] = shared_pbc_matrix[0] / 2
-            shared_half_pbc_matrix[1] = shared_pbc_matrix[1] / 2
-            shared_half_pbc_matrix[2] = shared_pbc_matrix[2] / 2
+            for i in range(SPATIAL_DIM):
+                shared_pbc_matrix[i] = pbc_matrix[i, i]
+                shared_half_pbc_matrix[i] = shared_pbc_matrix[i] / 2
         cuda.syncthreads()
-        position_x = positions[particle_id1, 0]
-        position_y = positions[particle_id1, 1]
-        position_z = positions[particle_id1, 2]
+        position_id1 = cuda.local.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
+        for i in range(SPATIAL_DIM):
+            position_id1[i] = positions[particle_id1, i]
         neighbor_index = 0
+        vec = cuda.local.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
         for particle_id2 in neighbor_list[particle_id1, :]:
             if particle_id2 == -1:
                 break
             if particle_id1 == particle_id2:
                 continue
-            x = (positions[particle_id2, 0] - position_x)
-            if x >= shared_half_pbc_matrix[0]:
-                x -= shared_pbc_matrix[0]
-            elif x <= -shared_half_pbc_matrix[0]:
-                x += shared_pbc_matrix[0]
-            y = (positions[particle_id2, 1] - position_y)
-            if y >= shared_half_pbc_matrix[1]:
-                y -= shared_pbc_matrix[1]
-            elif y <= -shared_half_pbc_matrix[1]:
-                y += shared_pbc_matrix[1]
-            z = (positions[particle_id2, 2] - position_z)
-            if z >= shared_half_pbc_matrix[2]:
-                z -= shared_pbc_matrix[2]
-            elif z <= -shared_half_pbc_matrix[2]:
-                z += shared_pbc_matrix[2]
-            r = math.sqrt(x**2 + y**2 + z**2)
-            scaled_x = x / r
-            scaled_y = y / r
-            scaled_z = z / r
+            r = 0
+            for i in range(SPATIAL_DIM):
+                vec[i] = (positions[particle_id2, i] - position_id1[i])
+                if vec[i] >= shared_half_pbc_matrix[i]:
+                    vec[i] -= shared_pbc_matrix[i]
+                elif vec[i] <= -shared_half_pbc_matrix[i]:
+                    vec[i] += shared_pbc_matrix[i]
+                r += vec[i]**2
+            r = math.sqrt(r)
             cuda.atomic.add(
                 neighbor_vec_list, (particle_id1, neighbor_index, 0),
                 r - neighbor_vec_list[particle_id1, neighbor_index, 0]
             )
             cuda.atomic.add(
                 neighbor_vec_list, (particle_id1, neighbor_index, 1),
-                scaled_x - neighbor_vec_list[particle_id1, neighbor_index, 1]
+                vec[0] / r - neighbor_vec_list[particle_id1, neighbor_index, 1]
             )
             cuda.atomic.add(
                 neighbor_vec_list, (particle_id1, neighbor_index, 2),
-                scaled_y - neighbor_vec_list[particle_id1, neighbor_index, 2]
+                vec[1] / r - neighbor_vec_list[particle_id1, neighbor_index, 2]
             )
             cuda.atomic.add(
                 neighbor_vec_list, (particle_id1, neighbor_index, 3),
-                scaled_z - neighbor_vec_list[particle_id1, neighbor_index, 3]
+                vec[2] / r - neighbor_vec_list[particle_id1, neighbor_index, 3]
             )
             neighbor_index += 1
 

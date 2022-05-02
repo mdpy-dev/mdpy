@@ -7,7 +7,6 @@ author : Zhenyu Wei
 copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
-from mdpy import env
 from mdpy.core import Ensemble
 from mdpy.integrator import Integrator
 from mdpy.utils import *
@@ -37,7 +36,6 @@ class VerletIntegrator(Integrator):
                 ensemble.update()
                 accelration = ensemble.forces / masses
             # Update positions and velocities
-            import time
             self._cur_positions, self._pre_positions = (
                 2 * self._cur_positions - self._pre_positions +
                 accelration * self._time_step_square

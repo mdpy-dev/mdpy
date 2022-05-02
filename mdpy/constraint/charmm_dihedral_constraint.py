@@ -35,7 +35,7 @@ class CharmmDihedralConstraint(Constraint):
             NUMBA_FLOAT[:, ::1], # pbc_matrix
             NUMBA_FLOAT[:, ::1], # forces
             NUMBA_FLOAT[::1] # potential_energy
-        ))(self._update_kernel)
+        ))(self._update_charmm_dihedral_kernel)
 
     def __repr__(self) -> str:
         return '<mdpy.constraint.CharmmDihedralConstraint object>'
@@ -74,7 +74,7 @@ class CharmmDihedralConstraint(Constraint):
         )))
 
     @staticmethod
-    def _update_kernel(
+    def _update_charmm_dihedral_kernel(
         int_parameters, float_parameters,
         positions, pbc_matrix,
         forces, potential_energy
@@ -210,7 +210,7 @@ class CharmmDihedralConstraint(Constraint):
         self._forces = cp.zeros(self._parent_ensemble.state.matrix_shape, CUPY_FLOAT)
         self._potential_energy = cp.zeros([1], CUPY_FLOAT)
         # Device
-        self._update[self._block_per_grid, THREAD_PER_BLOCK, self._parent_ensemble.streams[self._constraint_id]](
+        self._update[self._block_per_grid, THREAD_PER_BLOCK](
             self._device_int_parameters,
             self._device_float_parameters,
             self._parent_ensemble.state.positions,
