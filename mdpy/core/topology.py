@@ -10,7 +10,7 @@ copyright : (C)Copyright 2021-present, mdpy organization
 import numpy as np
 import cupy as cp
 from mdpy import env
-from mdpy.core import MAX_NUM_BONDED_PARTICLES, MAX_NUM_SCALING_PARTICLES
+from mdpy.core import MAX_NUM_EXCLUED_PARTICLES, MAX_NUM_SCALING_PARTICLES
 from mdpy.core import Particle
 from mdpy.environment import CUPY_FLOAT, CUPY_INT
 from mdpy.error import *
@@ -31,7 +31,7 @@ class Topology:
         self._is_joined = False
         self._masses = []
         self._charges = []
-        self._bonded_particles = []
+        self._excluded_particles = []
         self._scaling_particles = []
 
     def __repr__(self) -> str:
@@ -65,25 +65,25 @@ class Topology:
         for index, particle in enumerate(self._particles):
             self._masses[index, 0] = particle.mass
             self._charges[index, 0] = particle.charge
-        self._bonded_particles = np.ones([
-            self._num_particles, MAX_NUM_BONDED_PARTICLES
+        self._excluded_particles = np.ones([
+            self._num_particles, MAX_NUM_EXCLUED_PARTICLES
         ], dtype=env.NUMPY_INT) * -1
         self._scaling_particles = np.ones([
             self._num_particles, MAX_NUM_SCALING_PARTICLES
         ], dtype=env.NUMPY_INT) * -1
         for index, particle in enumerate(self._particles):
-            self._bonded_particles[index, :particle.num_bonded_particles] = particle.bonded_particles
+            self._excluded_particles[index, :particle.num_excluded_particles] = particle.excluded_particles
             self._scaling_particles[index, :particle.num_scaling_particles] = particle.scaling_particles
         self._device_masses = cp.array(self._masses, CUPY_FLOAT)
         self._device_charges = cp.array(self._charges, CUPY_FLOAT)
-        self._device_bonded_particles = cp.array(self._bonded_particles, CUPY_INT)
+        self._device_excluded_particles = cp.array(self._excluded_particles, CUPY_INT)
         self._device_scaling_particles = cp.array(self._scaling_particles, CUPY_INT)
         self._is_joined = True
 
     def split(self):
         self._masses = []
         self._charges = []
-        self._bonded_particles = []
+        self._excluded_particles = []
         self._scaling_particles = []
         self._is_joined = False
 
@@ -258,12 +258,12 @@ class Topology:
         return self._device_charges
 
     @property
-    def bonded_particles(self):
-        return self._bonded_particles
+    def excluded_particles(self):
+        return self._excluded_particles
 
     @property
-    def device_bonded_particles(self):
-        return self._device_bonded_particles
+    def device_excluded_particles(self):
+        return self._device_excluded_particles
 
     @property
     def scaling_particles(self):
