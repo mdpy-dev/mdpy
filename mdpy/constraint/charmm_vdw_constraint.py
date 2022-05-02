@@ -13,7 +13,7 @@ import numba as nb
 from numba import cuda
 from mdpy.environment import *
 from mdpy.core import Ensemble
-from mdpy.core import MAX_NUM_EXCLUED_PARTICLES, MAX_NUM_SCALING_PARTICLES
+from mdpy.core import MAX_NUM_EXCLUDED_PARTICLES, MAX_NUM_SCALED_PARTICLES
 from mdpy.constraint import Constraint
 from mdpy.utils import *
 from mdpy.unit import *
@@ -32,7 +32,7 @@ class CharmmVDWConstraint(Constraint):
             NUMBA_FLOAT[::1], # cutoff_radius
             NUMBA_FLOAT[:, ::1], # parameters
             NUMBA_INT[:, ::1], # bonded_particle
-            NUMBA_INT[:, ::1], # scaling_particles
+            NUMBA_INT[:, ::1], # scaled_particles
             NUMBA_INT[:, ::1], # neighbor_list
             NUMBA_FLOAT[:, :, ::1], # neighbor_vec_list
             NUMBA_FLOAT[:, ::1], # forces
@@ -67,7 +67,7 @@ class CharmmVDWConstraint(Constraint):
         cutoff_radius,
         parameters,
         excluded_particles,
-        scaling_particles,
+        scaled_particles,
         neighbor_list,
         neighbor_vec_list,
         forces, potential_energy
@@ -78,16 +78,16 @@ class CharmmVDWConstraint(Constraint):
             return None
         # Bonded particle
         local_excluded_particles = cuda.local.array(
-            shape=(MAX_NUM_EXCLUED_PARTICLES), dtype=NUMBA_INT
+            shape=(MAX_NUM_EXCLUDED_PARTICLES), dtype=NUMBA_INT
         )
-        for i in range(MAX_NUM_EXCLUED_PARTICLES):
+        for i in range(MAX_NUM_EXCLUDED_PARTICLES):
             local_excluded_particles[i] = excluded_particles[particle_id1, i]
         # Scaling particles
-        local_scaling_particles = cuda.local.array(
-            shape=(MAX_NUM_SCALING_PARTICLES), dtype=NUMBA_INT
+        local_scaled_particles = cuda.local.array(
+            shape=(MAX_NUM_SCALED_PARTICLES), dtype=NUMBA_INT
         )
-        for i in range(MAX_NUM_SCALING_PARTICLES):
-            local_scaling_particles[i] = scaling_particles[particle_id1, i]
+        for i in range(MAX_NUM_SCALED_PARTICLES):
+            local_scaled_particles[i] = scaled_particles[particle_id1, i]
         # Parameters
         local_parameters = cuda.local.array(shape=(4), dtype=NUMBA_FLOAT)
         local_parameters[0] = parameters[particle_id1, 0]
@@ -121,7 +121,7 @@ class CharmmVDWConstraint(Constraint):
                 scaled_y = neighbor_vec_list[particle_id1, neighbor_index, 2]
                 scaled_z = neighbor_vec_list[particle_id1, neighbor_index, 3]
                 is_scaled = False
-                for i in local_scaling_particles:
+                for i in local_scaled_particles:
                     if i == -1:
                         break
                     if particle_id2 == i:
@@ -160,7 +160,7 @@ class CharmmVDWConstraint(Constraint):
             self._device_cutoff_radius,
             self._device_parameters_list,
             self._parent_ensemble.topology.device_excluded_particles,
-            self._parent_ensemble.topology.device_scaling_particles,
+            self._parent_ensemble.topology.device_scaled_particles,
             self._parent_ensemble.state.neighbor_list.neighbor_list,
             self._parent_ensemble.state.neighbor_list.neighbor_vec_list,
             self._forces, self._potential_energy

@@ -14,7 +14,7 @@ import cupy as cp
 from numba import cuda
 from mdpy.environment import *
 from mdpy.core import Ensemble
-from mdpy.core import MAX_NUM_EXCLUED_PARTICLES
+from mdpy.core import MAX_NUM_EXCLUDED_PARTICLES
 from mdpy.constraint import Constraint
 from mdpy.utils import *
 from mdpy.unit import *
@@ -68,9 +68,9 @@ class ElectrostaticCutoffConstraint(Constraint):
             return None
         # Bonded particle
         local_excluded_particles = cuda.local.array(
-            shape=(MAX_NUM_EXCLUED_PARTICLES), dtype=NUMBA_INT
+            shape=(MAX_NUM_EXCLUDED_PARTICLES), dtype=NUMBA_INT
         )
-        for i in range(MAX_NUM_EXCLUED_PARTICLES):
+        for i in range(MAX_NUM_EXCLUDED_PARTICLES):
             local_excluded_particles[i] = excluded_particles[particle_id1, i]
 
         shared_k = cuda.shared.array(shape=(1), dtype=NUMBA_FLOAT)

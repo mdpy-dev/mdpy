@@ -69,22 +69,22 @@ class TestParticle:
         particle.del_bonded_particle(3)
         assert particle.num_excluded_particles == 1
 
-    def test_scaling_particles(self):
+    def test_scaled_particles(self):
         particle = Particle(particle_id=1, particle_type='C', matrix_id=0)
         particle.add_scaling_particle(1, 0.5)
-        assert particle.num_scaling_particles == 1
-        assert particle.scaling_particles[0] == 1
+        assert particle.num_scaled_particles == 1
+        assert particle.scaled_particles[0] == 1
         assert particle.scaling_factors[0] == 0.5
 
         particle.add_scaling_particle(2, 0)
-        assert particle.num_scaling_particles == 2
-        assert particle.scaling_particles[1] == 2
+        assert particle.num_scaled_particles == 2
+        assert particle.scaled_particles[1] == 2
         assert particle.scaling_factors[1] == 0
 
         with pytest.raises(ParticleConflictError):
             particle.add_scaling_particle(0, 0)
 
         particle.del_scaling_particle(1)
-        assert particle.num_scaling_particles == 1
+        assert particle.num_scaled_particles == 1
         particle.del_scaling_particle(3)
-        assert particle.num_scaling_particles == 1
+        assert particle.num_scaled_particles == 1

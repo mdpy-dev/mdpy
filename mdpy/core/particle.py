@@ -31,9 +31,9 @@ class Particle:
         # Topology infomation
         self._excluded_particles = []
         self._num_excluded_particles = 0
-        self._scaling_particles = []
+        self._scaled_particles = []
         self._scaling_factors = []
-        self._num_scaling_particles = 0
+        self._num_scaled_particles = 0
 
     def __repr__(self) -> str:
         return '<mdpy.core.Particle object: %s-%s-%d at %x>' %(
@@ -78,18 +78,18 @@ class Particle:
             raise ParticleConflictError(
                 'Particle itself can not be added to the scaling_particle list.'
             )
-        elif not particle_matrix_id in self._scaling_particles:
-            self._scaling_particles.append(particle_matrix_id)
+        elif not particle_matrix_id in self._scaled_particles:
+            self._scaled_particles.append(particle_matrix_id)
             self._scaling_factors.append(factor)
-            self._num_scaling_particles += 1
+            self._num_scaled_particles += 1
 
     def del_scaling_particle(self, particle_matrix_id):
-        if particle_matrix_id in self._scaling_particles:
+        if particle_matrix_id in self._scaled_particles:
             self._scaling_factors.remove(
-                self._scaling_factors[self._scaling_particles.index(particle_matrix_id)]
+                self._scaling_factors[self._scaled_particles.index(particle_matrix_id)]
             )
-            self._scaling_particles.remove(particle_matrix_id)
-            self._num_scaling_particles -= 1
+            self._scaled_particles.remove(particle_matrix_id)
+            self._num_scaled_particles -= 1
 
     @property
     def particle_id(self):
@@ -136,13 +136,13 @@ class Particle:
         return self._num_excluded_particles
 
     @property
-    def scaling_particles(self):
-        return self._scaling_particles
+    def scaled_particles(self):
+        return self._scaled_particles
 
     @property
     def scaling_factors(self):
         return self._scaling_factors
 
     @property
-    def num_scaling_particles(self):
-        return self._num_scaling_particles
+    def num_scaled_particles(self):
+        return self._num_scaled_particles
