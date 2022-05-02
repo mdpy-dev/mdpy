@@ -130,8 +130,8 @@ class Topology:
         # bond_replica = [p2, p1]
         # if not bond in self._bonds and not bond_replica in self._bonds:
         self._bonds.append(bond)
-        self._particles[p1].add_bonded_particle(p2)
-        self._particles[p2].add_bonded_particle(p1)
+        self._particles[p1].add_excluded_particle(p2)
+        self._particles[p2].add_excluded_particle(p1)
         self._num_bonds += 1
 
     def del_bond(self, bond):
@@ -144,13 +144,13 @@ class Topology:
         bond_replica = [p2, p1]
         if bond in self._bonds:
             self._bonds.remove(bond)
-            self._particles[p1].del_bonded_particle(p2)
-            self._particles[p2].del_bonded_particle(p1)
+            self._particles[p1].del_excluded_particle(p2)
+            self._particles[p2].del_excluded_particle(p1)
             self._num_bonds -= 1
         elif bond_replica in self._bonds:
             self._bonds.remove(bond_replica)
-            self._particles[p1].del_bonded_particle(p2)
-            self._particles[p2].del_bonded_particle(p1)
+            self._particles[p1].del_excluded_particle(p2)
+            self._particles[p2].del_excluded_particle(p1)
             self._num_bonds -= 1
 
     def add_angle(self, angle):
@@ -163,8 +163,8 @@ class Topology:
         # angle_replica = [p3, p2, p1]
         # if not angle in self._angles and not angle_replica in self._angles:
         self._angles.append(angle)
-        self._particles[p1].add_bonded_particle(p3)
-        self._particles[p3].add_bonded_particle(p1)
+        self._particles[p1].add_excluded_particle(p3)
+        self._particles[p3].add_excluded_particle(p1)
         self._num_angles += 1
 
     def del_angle(self, angle):
@@ -177,13 +177,13 @@ class Topology:
         angle_replica = [p3, p2, p1]
         if angle in self._angles:
             self._angles.remove(angle)
-            self._particles[p1].del_bonded_particle(p3)
-            self._particles[p3].del_bonded_particle(p1)
+            self._particles[p1].del_excluded_particle(p3)
+            self._particles[p3].del_excluded_particle(p1)
             self._num_angles -= 1
         elif angle_replica in self._angles:
             self._angles.remove(angle_replica)
-            self._particles[p1].del_bonded_particle(p3)
-            self._particles[p3].del_bonded_particle(p1)
+            self._particles[p1].del_excluded_particle(p3)
+            self._particles[p3].del_excluded_particle(p1)
             self._num_angles -= 1
 
     def add_dihedral(self, dihedral, scaling_factor=1):
@@ -196,8 +196,8 @@ class Topology:
         # dihedral_replica = [p4, p3, p2, p1]
         # if not dihedral in self._dihedrals and not dihedral_replica in self._dihedrals:
         self._dihedrals.append(dihedral)
-        self._particles[p1].add_scaling_particle(p4, scaling_factor)
-        self._particles[p4].add_scaling_particle(p1, scaling_factor)
+        self._particles[p1].add_scaled_particle(p4, scaling_factor)
+        self._particles[p4].add_scaled_particle(p1, scaling_factor)
         self._num_dihedrals += 1
 
     def del_dihedral(self, dihedral):
@@ -210,13 +210,13 @@ class Topology:
         dihedral_replica = [p4, p3, p2, p1]
         if dihedral in self._dihedrals:
             self._dihedrals.remove(dihedral)
-            self._particles[p1].del_scaling_particle(p4)
-            self._particles[p4].del_scaling_particle(p1)
+            self._particles[p1].del_scaled_particle(p4)
+            self._particles[p4].del_scaled_particle(p1)
             self._num_dihedrals -= 1
         elif dihedral_replica in self._dihedrals:
             self._dihedrals.remove(dihedral_replica)
-            self._particles[p1].del_scaling_particle(p4)
-            self._particles[p4].del_scaling_particle(p1)
+            self._particles[p1].del_scaled_particle(p4)
+            self._particles[p4].del_scaled_particle(p1)
             self._num_dihedrals -= 1
 
     def add_improper(self, improper):

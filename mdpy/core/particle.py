@@ -54,7 +54,7 @@ class Particle:
         # Only used by Topology
         self._matrix_id = matrix_id
 
-    def add_bonded_particle(self, particle_matrix_id):
+    def add_excluded_particle(self, particle_matrix_id):
         if particle_matrix_id in self._excluded_particles:
             raise ParticleConflictError(
                 'Particle %d has been added twice to the excluded_particles of Particle %d'
@@ -62,28 +62,28 @@ class Particle:
             )
         if particle_matrix_id == self._matrix_id:
             raise ParticleConflictError(
-                'Particle itself can not be added to the bonded_particle list.'
+                'Particle itself can not be added to the excluded_particles list.'
             )
         self._excluded_particles.append(particle_matrix_id)
         self._num_excluded_particles += 1
 
-    def del_bonded_particle(self, particle_matrix_id):
+    def del_excluded_particle(self, particle_matrix_id):
         if particle_matrix_id in self._excluded_particles:
             self._excluded_particles.remove(particle_matrix_id)
             self._num_excluded_particles -= 1
 
-    def add_scaling_particle(self, particle_matrix_id: int, factor):
+    def add_scaled_particle(self, particle_matrix_id: int, factor):
         # Benzene give two dihedral with same 1 4 particles
         if particle_matrix_id == self._matrix_id:
             raise ParticleConflictError(
-                'Particle itself can not be added to the scaling_particle list.'
+                'Particle itself can not be added to the scaled_particles list.'
             )
         elif not particle_matrix_id in self._scaled_particles:
             self._scaled_particles.append(particle_matrix_id)
             self._scaling_factors.append(factor)
             self._num_scaled_particles += 1
 
-    def del_scaling_particle(self, particle_matrix_id):
+    def del_scaled_particle(self, particle_matrix_id):
         if particle_matrix_id in self._scaled_particles:
             self._scaling_factors.remove(
                 self._scaling_factors[self._scaled_particles.index(particle_matrix_id)]

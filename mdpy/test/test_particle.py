@@ -50,41 +50,41 @@ class TestParticle:
 
     def test_excluded_particles(self):
         particle = Particle(particle_id=1, particle_type='C', matrix_id=0)
-        particle.add_bonded_particle(1)
+        particle.add_excluded_particle(1)
         assert particle.num_excluded_particles == 1
         assert particle.excluded_particles[0] == 1
 
-        particle.add_bonded_particle(2)
+        particle.add_excluded_particle(2)
         assert particle.num_excluded_particles == 2
         assert particle.excluded_particles[1] == 2
 
         with pytest.raises(ParticleConflictError):
-            particle.add_bonded_particle(1)
+            particle.add_excluded_particle(1)
 
         with pytest.raises(ParticleConflictError):
-            particle.add_bonded_particle(0)
+            particle.add_excluded_particle(0)
 
-        particle.del_bonded_particle(1)
+        particle.del_excluded_particle(1)
         assert particle.num_excluded_particles == 1
-        particle.del_bonded_particle(3)
+        particle.del_excluded_particle(3)
         assert particle.num_excluded_particles == 1
 
     def test_scaled_particles(self):
         particle = Particle(particle_id=1, particle_type='C', matrix_id=0)
-        particle.add_scaling_particle(1, 0.5)
+        particle.add_scaled_particle(1, 0.5)
         assert particle.num_scaled_particles == 1
         assert particle.scaled_particles[0] == 1
         assert particle.scaling_factors[0] == 0.5
 
-        particle.add_scaling_particle(2, 0)
+        particle.add_scaled_particle(2, 0)
         assert particle.num_scaled_particles == 2
         assert particle.scaled_particles[1] == 2
         assert particle.scaling_factors[1] == 0
 
         with pytest.raises(ParticleConflictError):
-            particle.add_scaling_particle(0, 0)
+            particle.add_scaled_particle(0, 0)
 
-        particle.del_scaling_particle(1)
+        particle.del_scaled_particle(1)
         assert particle.num_scaled_particles == 1
-        particle.del_scaling_particle(3)
+        particle.del_scaled_particle(3)
         assert particle.num_scaled_particles == 1

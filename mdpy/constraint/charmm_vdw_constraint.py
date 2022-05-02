@@ -31,7 +31,7 @@ class CharmmVDWConstraint(Constraint):
         self._update = cuda.jit(nb.void(
             NUMBA_FLOAT[::1], # cutoff_radius
             NUMBA_FLOAT[:, ::1], # parameters
-            NUMBA_INT[:, ::1], # bonded_particle
+            NUMBA_INT[:, ::1], # excluded_particle
             NUMBA_INT[:, ::1], # scaled_particles
             NUMBA_INT[:, ::1], # neighbor_list
             NUMBA_FLOAT[:, :, ::1], # neighbor_vec_list
