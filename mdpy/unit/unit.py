@@ -22,9 +22,9 @@ class Unit:
             the dimension of unit
         relative_value : int or float
             the relative value of ``self`` to the basic unit of ``base_dimension``
-        '''        
+        '''
         self._base_dimension = base_dimension
-        self._relative_value = env.UNIT_FLOAT(relative_value) # The relative value to the normal unit like angstrom in Length 
+        self._relative_value = env.UNIT_FLOAT(relative_value) # The relative value to the normal unit like angstrom in Length
 
     def is_dimension_less(self):
         '''
@@ -35,16 +35,16 @@ class Unit:
         bool
             - True, the unit is dimensionless
             - False, the unit isn't dimensionless
-        '''        
+        '''
         if self._base_dimension.is_dimension_less():
             return True
         else:
             return False
-    
+
     def set_relative_value_to_one(self):
         '''
         set_relative_value_to_one sets ``self.relative_value = 1``
-        '''        
+        '''
         self._relative_value = 1
 
     def __repr__(self):
@@ -84,10 +84,10 @@ class Unit:
                 )
         else:
             raise NotImplementedError(
-                '+ between %s and mdpy.unit.Unit is not implemented' 
+                '+ between %s and mdpy.unit.Unit is not implemented'
                 %(type(other))
             )
-    
+
     __iadd__ = __add__
 
     def __radd__(self, other):
@@ -103,7 +103,7 @@ class Unit:
                 )
         else:
             raise NotImplementedError(
-                '+ between mdpy.unit.Unit and %s is not implemented' 
+                '+ between mdpy.unit.Unit and %s is not implemented'
                 %(type(other))
             )
 
@@ -120,7 +120,7 @@ class Unit:
                 )
         else:
             raise NotImplementedError(
-                '- between %s and mdpy.unit.Unit is not implemented' 
+                '- between %s and mdpy.unit.Unit is not implemented'
                 %(type(other))
             )
 
@@ -139,7 +139,7 @@ class Unit:
                 )
         else:
             raise NotImplementedError(
-                '- between mdpy.unit.Unit and %s is not implemented' 
+                '- between mdpy.unit.Unit and %s is not implemented'
                 %(type(other))
             )
 
@@ -151,7 +151,7 @@ class Unit:
             )
         else:
             raise NotImplementedError(
-                '* between %s and mdpy.unit.Unit is not implemented' 
+                '* between %s and mdpy.unit.Unit is not implemented'
                 %(type(other))
             )
 
@@ -166,7 +166,7 @@ class Unit:
             )
         else:
             raise NotImplementedError(
-                '/ between %s and mdpy.unit.Unit is not implemented' 
+                '/ between %s and mdpy.unit.Unit is not implemented'
                 %(type(other))
             )
 
@@ -185,7 +185,7 @@ class Unit:
             )
         else:
             raise NotImplementedError(
-                '/ between mdpy.unit.Unit and %s is not implemented' 
+                '/ between mdpy.unit.Unit and %s is not implemented'
                 %(type(other))
             )
 
@@ -198,7 +198,7 @@ class Unit:
                 self._relative_value**value
             )
         raise ValueError('The power term should be a single number')
-        
+
 
     def sqrt(self):
         '''
@@ -208,12 +208,12 @@ class Unit:
         -------
         Unit
             square root of ``self``
-        '''        
+        '''
         return Unit(
             self._base_dimension.sqrt(),
             np.sqrt(self._relative_value)
         )
-            
+
     @property
     def unit_name(self):
         '''
@@ -223,7 +223,7 @@ class Unit:
         -------
         str
             the name of unit
-        '''        
+        '''
         return self.base_dimension.name
 
     @property
@@ -235,7 +235,7 @@ class Unit:
         -------
         BaseDimension
             the dimension of unit
-        '''        
+        '''
         return self._base_dimension
 
     @property
@@ -247,5 +247,5 @@ class Unit:
         -------
         int or float
             the relative value to the basic unit
-        '''        
+        '''
         return self._relative_value
