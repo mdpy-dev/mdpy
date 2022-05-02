@@ -7,7 +7,6 @@ author : Zhenyu Wei
 copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
-from cupy.cuda.nvtx import RangePush, RangePop
 from mdpy.core import Ensemble
 from mdpy.integrator import Integrator
 from mdpy.utils import *
@@ -34,23 +33,17 @@ class VerletIntegrator(Integrator):
             )
         while cur_step < num_steps:
             if cur_step != 0:
-                RangePush('Ensemble update')
                 ensemble.update()
-                RangePop()
                 accelration = ensemble.forces / masses
             # Update positions and velocities
-            RangePush('Integrating')
             self._cur_positions, self._pre_positions = (
                 2 * self._cur_positions - self._pre_positions +
                 accelration * self._time_step_square
             ), self._cur_positions
-            RangePop()
-            RangePush('Update neighbor list')
             if cur_step % self._neighbor_list_update_freq == 0:
                 ensemble.state.set_positions(self._cur_positions, True)
             else:
                 ensemble.state.set_positions(self._cur_positions, False)
-            RangePop()
             # Update step
             cur_step += 1
         ensemble.state.set_velocities(unwrap_vec(
