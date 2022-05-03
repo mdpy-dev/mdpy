@@ -113,9 +113,9 @@ class NeighborList:
             x, y, z = particle_cell_index[particle, :]
             num_particles_each_cell[x, y, z] += 1
         # Build cell list
-        max_num_particles_per_cell = NUMPY_INT(num_particles_each_cell.max())
+        num_max_particles_per_cell = NUMPY_INT(num_particles_each_cell.max())
         cell_list = np.zeros((
-            num_x, num_y, num_z, max_num_particles_per_cell
+            num_x, num_y, num_z, num_max_particles_per_cell
         ), dtype=NUMPY_INT) - 1 # -1 for padding value
         cur_cell_flag = np.zeros((num_x, num_y, num_z), dtype=NUMPY_INT)
         for particle in range(num_particles):
@@ -153,19 +153,19 @@ class NeighborList:
             for i in range(SPATIAL_DIM):
                 shared_num_cell_vec[i] = num_cell_vec[i]
         cuda.syncthreads()
-        # Read shared data
+        # Read local data
         cutoff_radius = cutoff_radius[0] + skin_width[0]
         neighbor_ceil_shift = neighbor_ceil_shift[0]
         neighbor_ceil_lower = - neighbor_ceil_shift - 1
         neighbor_ceil_upper = neighbor_ceil_shift + 2
-        central_cell = cuda.shared.array(shape=(SPATIAL_DIM), dtype=NUMBA_INT)
-        position_id1 = cuda.shared.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
+        central_cell = cuda.local.array(shape=(SPATIAL_DIM), dtype=NUMBA_INT)
+        position_id1 = cuda.local.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
         for i in range(SPATIAL_DIM):
             central_cell[i] = particle_cell_index[particle_id1, i]
             position_id1[i] = positions[particle_id1, i]
         neighbor_index = 0
         r = 0
-        vec = cuda.shared.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
+        vec = cuda.local.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
         for i in range(neighbor_ceil_lower, neighbor_ceil_upper):
             cell_x = central_cell[0] + i
             if cell_x < 0:
@@ -226,11 +226,11 @@ class NeighborList:
                 shared_pbc_matrix[i] = pbc_matrix[i, i]
                 shared_half_pbc_matrix[i] = shared_pbc_matrix[i] / 2
         cuda.syncthreads()
-        position_id1 = cuda.shared.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
+        position_id1 = cuda.local.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
         for i in range(SPATIAL_DIM):
             position_id1[i] = positions[particle_id1, i]
         neighbor_index = 0
-        vec = cuda.shared.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
+        vec = cuda.local.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
         for particle_id2 in neighbor_list[particle_id1, :]:
             if particle_id2 == -1:
                 break
@@ -263,15 +263,15 @@ class NeighborList:
             )
             neighbor_index += 1
 
-    def _judge_max_num_neighbors_per_particle(self, num_particles):
-        max_num_neighbors_per_particle = int(np.ceil(
+    def _judge_num_max_neighbors_per_particle(self, num_particles):
+        num_max_neighbors_per_particle = int(np.ceil(
             num_particles / self._pbc_volume * self._cutoff_volume * 1.3
         ))
         if num_particles < NUM_MIN_NEIGHBORS:
             return num_particles
-        elif max_num_neighbors_per_particle < NUM_MIN_NEIGHBORS:
+        elif num_max_neighbors_per_particle < NUM_MIN_NEIGHBORS:
             return NUM_MIN_NEIGHBORS
-        return max_num_neighbors_per_particle
+        return num_max_neighbors_per_particle
 
     def update(self, positions: cp.ndarray, is_update_neighbor_list=True):
         num_particles = positions.shape[0]
@@ -279,13 +279,13 @@ class NeighborList:
             num_particles / THREAD_PER_BLOCK
         ))
         if is_update_neighbor_list:
-            max_num_neighbors_per_particle = self._judge_max_num_neighbors_per_particle(num_particles)
+            num_max_neighbors_per_particle = self._judge_num_max_neighbors_per_particle(num_particles)
             self._particle_cell_index, self._cell_list = self._update_cell_list(
                 positions.get(), self._pbc_diag,
                 self._num_cells_vec, self._cell_width
             )
-            self._neighbor_list = cp.zeros((positions.shape[0], max_num_neighbors_per_particle), CUPY_INT) - 1
-            self._neighbor_vec_list = cp.zeros((positions.shape[0], max_num_neighbors_per_particle, SPATIAL_DIM+1), CUPY_FLOAT)
+            self._neighbor_list = cp.zeros((positions.shape[0], num_max_neighbors_per_particle), CUPY_INT) - 1
+            self._neighbor_vec_list = cp.zeros((positions.shape[0], num_max_neighbors_per_particle, SPATIAL_DIM+1), CUPY_FLOAT)
             device_particle_cell_index = cp.array(self._particle_cell_index, CUPY_INT)
             device_cell_list = cp.array(self._cell_list, CUPY_INT)
             self._update_neighbor_list[block_per_grid, THREAD_PER_BLOCK](
