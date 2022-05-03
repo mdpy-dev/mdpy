@@ -13,7 +13,7 @@ import numba as nb
 from numba import cuda
 from mdpy.environment import *
 from mdpy.core import Ensemble
-from mdpy.core import MAX_NUM_BONDED_PARTICLES, MAX_NUM_SCALING_PARTICLES
+from mdpy.core import MAX_NUM_EXCLUDED_PARTICLES, MAX_NUM_SCALED_PARTICLES
 from mdpy.constraint import Constraint
 from mdpy.utils import *
 from mdpy.unit import *
@@ -31,8 +31,8 @@ class CharmmVDWConstraint(Constraint):
         self._update = cuda.jit(nb.void(
             NUMBA_FLOAT[::1], # cutoff_radius
             NUMBA_FLOAT[:, ::1], # parameters
-            NUMBA_INT[:, ::1], # bonded_particle
-            NUMBA_INT[:, ::1], # scaling_particles
+            NUMBA_INT[:, ::1], # excluded_particle
+            NUMBA_INT[:, ::1], # scaled_particles
             NUMBA_INT[:, ::1], # neighbor_list
             NUMBA_FLOAT[:, :, ::1], # neighbor_vec_list
             NUMBA_FLOAT[:, ::1], # forces
@@ -66,8 +66,8 @@ class CharmmVDWConstraint(Constraint):
     def _update_charmm_vdw_kernel(
         cutoff_radius,
         parameters,
-        bonded_particles,
-        scaling_particles,
+        excluded_particles,
+        scaled_particles,
         neighbor_list,
         neighbor_vec_list,
         forces, potential_energy
@@ -77,17 +77,17 @@ class CharmmVDWConstraint(Constraint):
         if particle_id1 >= num_particles:
             return None
         # Bonded particle
-        local_bonded_particles = cuda.local.array(
-            shape=(MAX_NUM_BONDED_PARTICLES), dtype=NUMBA_INT
+        local_excluded_particles = cuda.local.array(
+            shape=(MAX_NUM_EXCLUDED_PARTICLES), dtype=NUMBA_INT
         )
-        for i in range(MAX_NUM_BONDED_PARTICLES):
-            local_bonded_particles[i] = bonded_particles[particle_id1, i]
+        for i in range(MAX_NUM_EXCLUDED_PARTICLES):
+            local_excluded_particles[i] = excluded_particles[particle_id1, i]
         # Scaling particles
-        local_scaling_particles = cuda.local.array(
-            shape=(MAX_NUM_SCALING_PARTICLES), dtype=NUMBA_INT
+        local_scaled_particles = cuda.local.array(
+            shape=(MAX_NUM_SCALED_PARTICLES), dtype=NUMBA_INT
         )
-        for i in range(MAX_NUM_SCALING_PARTICLES):
-            local_scaling_particles[i] = scaling_particles[particle_id1, i]
+        for i in range(MAX_NUM_SCALED_PARTICLES):
+            local_scaled_particles[i] = scaled_particles[particle_id1, i]
         # Parameters
         local_parameters = cuda.local.array(shape=(4), dtype=NUMBA_FLOAT)
         local_parameters[0] = parameters[particle_id1, 0]
@@ -107,7 +107,7 @@ class CharmmVDWConstraint(Constraint):
             if particle_id1 == particle_id2: # self-self term
                 continue
             is_bonded = False
-            for i in local_bonded_particles:
+            for i in local_excluded_particles:
                 if i == -1: # padding of bonded particle
                     break
                 elif particle_id2 == i: # self-bonded particle term
@@ -121,7 +121,7 @@ class CharmmVDWConstraint(Constraint):
                 scaled_y = neighbor_vec_list[particle_id1, neighbor_index, 2]
                 scaled_z = neighbor_vec_list[particle_id1, neighbor_index, 3]
                 is_scaled = False
-                for i in local_scaling_particles:
+                for i in local_scaled_particles:
                     if i == -1:
                         break
                     if particle_id2 == i:
@@ -159,8 +159,8 @@ class CharmmVDWConstraint(Constraint):
         self._update[self._block_per_grid, THREAD_PER_BLOCK](
             self._device_cutoff_radius,
             self._device_parameters_list,
-            self._parent_ensemble.topology.device_bonded_particles,
-            self._parent_ensemble.topology.device_scaling_particles,
+            self._parent_ensemble.topology.device_excluded_particles,
+            self._parent_ensemble.topology.device_scaled_particles,
             self._parent_ensemble.state.neighbor_list.neighbor_list,
             self._parent_ensemble.state.neighbor_list.neighbor_vec_list,
             self._forces, self._potential_energy

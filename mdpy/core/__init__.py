@@ -19,9 +19,9 @@ for i in range(-1, 2):
             index += 1
 DEVICE_NEIGHBOR_CELL_TEMPLATE = cp.array(NEIGHBOR_CELL_TEMPLATE, CUPY_INT)
 
-# Threshold value for num_bonded_particles and num_scaling_particles
-MAX_NUM_BONDED_PARTICLES = 15
-MAX_NUM_SCALING_PARTICLES = 15
+# Threshold value for num_excluded_particles and num_scaled_particles
+MAX_NUM_EXCLUDED_PARTICLES = 15
+MAX_NUM_SCALED_PARTICLES = 15
 
 from mdpy.core.particle import Particle
 from mdpy.core.topology import Topology

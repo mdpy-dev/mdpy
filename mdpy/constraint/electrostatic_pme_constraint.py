@@ -15,7 +15,7 @@ from numba import cuda
 from mdpy import SPATIAL_DIM
 from mdpy.environment import *
 from mdpy.core import Ensemble
-from mdpy.core import MAX_NUM_BONDED_PARTICLES
+from mdpy.core import MAX_NUM_EXCLUDED_PARTICLES
 from mdpy.constraint import Constraint
 from mdpy.utils import *
 from mdpy.unit import *
@@ -61,7 +61,7 @@ class ElectrostaticPMEConstraint(Constraint):
             NUMBA_FLOAT[::1], # k
             NUMBA_FLOAT[::1], # ewald_coefficient
             NUMBA_FLOAT[::1], # cutoff_radius
-            NUMBA_INT[:, ::1], # bonded_particles
+            NUMBA_INT[:, ::1], # excluded_particles
             NUMBA_INT[:, ::1], # neighbor_list
             NUMBA_FLOAT[:, :, ::1], # neighbor_vec_list
             NUMBA_FLOAT[:, ::1], # force
@@ -258,7 +258,7 @@ class ElectrostaticPMEConstraint(Constraint):
         charges,
         k, ewald_coefficient,
         cutoff_radius,
-        bonded_particles,
+        excluded_particles,
         neighbor_list,
         neighbor_vec_list,
         forces, potential_energy
@@ -268,11 +268,11 @@ class ElectrostaticPMEConstraint(Constraint):
         if particle_id1 >= num_particles:
             return None
         # Bonded particle
-        local_bonded_particles = cuda.local.array(
-            shape=(MAX_NUM_BONDED_PARTICLES), dtype=NUMBA_INT
+        local_excluded_particles = cuda.local.array(
+            shape=(MAX_NUM_EXCLUDED_PARTICLES), dtype=NUMBA_INT
         )
-        for i in range(MAX_NUM_BONDED_PARTICLES):
-            local_bonded_particles[i] = bonded_particles[particle_id1, i]
+        for i in range(MAX_NUM_EXCLUDED_PARTICLES):
+            local_excluded_particles[i] = excluded_particles[particle_id1, i]
 
         shared_k = cuda.shared.array(shape=(1), dtype=NUMBA_FLOAT)
         shared_ewald_coefficient = cuda.shared.array(shape=(1), dtype=NUMBA_FLOAT)
@@ -302,7 +302,7 @@ class ElectrostaticPMEConstraint(Constraint):
             if particle_id1 == particle_id2: # self-self term
                 continue
             is_bonded = False
-            for i in local_bonded_particles:
+            for i in local_excluded_particles:
                 if i == -1: # padding of bonded particle
                     break
                 elif particle_id2 == i: # self-bonded particle term
@@ -532,7 +532,7 @@ class ElectrostaticPMEConstraint(Constraint):
             self._device_k,
             self._device_ewald_coefficient,
             self._device_cutoff_radius,
-            self._parent_ensemble.topology.device_bonded_particles,
+            self._parent_ensemble.topology.device_excluded_particles,
             self._parent_ensemble.state.neighbor_list.neighbor_list,
             self._parent_ensemble.state.neighbor_list.neighbor_vec_list,
             self._direct_forces, self._direct_potential_energy

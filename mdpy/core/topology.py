@@ -10,7 +10,7 @@ copyright : (C)Copyright 2021-present, mdpy organization
 import numpy as np
 import cupy as cp
 from mdpy import env
-from mdpy.core import MAX_NUM_BONDED_PARTICLES, MAX_NUM_SCALING_PARTICLES
+from mdpy.core import MAX_NUM_EXCLUDED_PARTICLES, MAX_NUM_SCALED_PARTICLES
 from mdpy.core import Particle
 from mdpy.environment import CUPY_FLOAT, CUPY_INT
 from mdpy.error import *
@@ -31,8 +31,8 @@ class Topology:
         self._is_joined = False
         self._masses = []
         self._charges = []
-        self._bonded_particles = []
-        self._scaling_particles = []
+        self._excluded_particles = []
+        self._scaled_particles = []
 
     def __repr__(self) -> str:
         return '<mdpy.core.Toplogy object: %d particles at %x>' %(self._num_particles, id(self))
@@ -65,26 +65,26 @@ class Topology:
         for index, particle in enumerate(self._particles):
             self._masses[index, 0] = particle.mass
             self._charges[index, 0] = particle.charge
-        self._bonded_particles = np.ones([
-            self._num_particles, MAX_NUM_BONDED_PARTICLES
+        self._excluded_particles = np.ones([
+            self._num_particles, MAX_NUM_EXCLUDED_PARTICLES
         ], dtype=env.NUMPY_INT) * -1
-        self._scaling_particles = np.ones([
-            self._num_particles, MAX_NUM_SCALING_PARTICLES
+        self._scaled_particles = np.ones([
+            self._num_particles, MAX_NUM_SCALED_PARTICLES
         ], dtype=env.NUMPY_INT) * -1
         for index, particle in enumerate(self._particles):
-            self._bonded_particles[index, :particle.num_bonded_particles] = particle.bonded_particles
-            self._scaling_particles[index, :particle.num_scaling_particles] = particle.scaling_particles
+            self._excluded_particles[index, :particle.num_excluded_particles] = particle.excluded_particles
+            self._scaled_particles[index, :particle.num_scaled_particles] = particle.scaled_particles
         self._device_masses = cp.array(self._masses, CUPY_FLOAT)
         self._device_charges = cp.array(self._charges, CUPY_FLOAT)
-        self._device_bonded_particles = cp.array(self._bonded_particles, CUPY_INT)
-        self._device_scaling_particles = cp.array(self._scaling_particles, CUPY_INT)
+        self._device_excluded_particles = cp.array(self._excluded_particles, CUPY_INT)
+        self._device_scaled_particles = cp.array(self._scaled_particles, CUPY_INT)
         self._is_joined = True
 
     def split(self):
         self._masses = []
         self._charges = []
-        self._bonded_particles = []
-        self._scaling_particles = []
+        self._excluded_particles = []
+        self._scaled_particles = []
         self._is_joined = False
 
     def add_particles(self, particles):
@@ -130,8 +130,8 @@ class Topology:
         # bond_replica = [p2, p1]
         # if not bond in self._bonds and not bond_replica in self._bonds:
         self._bonds.append(bond)
-        self._particles[p1].add_bonded_particle(p2)
-        self._particles[p2].add_bonded_particle(p1)
+        self._particles[p1].add_excluded_particle(p2)
+        self._particles[p2].add_excluded_particle(p1)
         self._num_bonds += 1
 
     def del_bond(self, bond):
@@ -144,13 +144,13 @@ class Topology:
         bond_replica = [p2, p1]
         if bond in self._bonds:
             self._bonds.remove(bond)
-            self._particles[p1].del_bonded_particle(p2)
-            self._particles[p2].del_bonded_particle(p1)
+            self._particles[p1].del_excluded_particle(p2)
+            self._particles[p2].del_excluded_particle(p1)
             self._num_bonds -= 1
         elif bond_replica in self._bonds:
             self._bonds.remove(bond_replica)
-            self._particles[p1].del_bonded_particle(p2)
-            self._particles[p2].del_bonded_particle(p1)
+            self._particles[p1].del_excluded_particle(p2)
+            self._particles[p2].del_excluded_particle(p1)
             self._num_bonds -= 1
 
     def add_angle(self, angle):
@@ -163,8 +163,8 @@ class Topology:
         # angle_replica = [p3, p2, p1]
         # if not angle in self._angles and not angle_replica in self._angles:
         self._angles.append(angle)
-        self._particles[p1].add_bonded_particle(p3)
-        self._particles[p3].add_bonded_particle(p1)
+        self._particles[p1].add_excluded_particle(p3)
+        self._particles[p3].add_excluded_particle(p1)
         self._num_angles += 1
 
     def del_angle(self, angle):
@@ -177,13 +177,13 @@ class Topology:
         angle_replica = [p3, p2, p1]
         if angle in self._angles:
             self._angles.remove(angle)
-            self._particles[p1].del_bonded_particle(p3)
-            self._particles[p3].del_bonded_particle(p1)
+            self._particles[p1].del_excluded_particle(p3)
+            self._particles[p3].del_excluded_particle(p1)
             self._num_angles -= 1
         elif angle_replica in self._angles:
             self._angles.remove(angle_replica)
-            self._particles[p1].del_bonded_particle(p3)
-            self._particles[p3].del_bonded_particle(p1)
+            self._particles[p1].del_excluded_particle(p3)
+            self._particles[p3].del_excluded_particle(p1)
             self._num_angles -= 1
 
     def add_dihedral(self, dihedral, scaling_factor=1):
@@ -196,8 +196,8 @@ class Topology:
         # dihedral_replica = [p4, p3, p2, p1]
         # if not dihedral in self._dihedrals and not dihedral_replica in self._dihedrals:
         self._dihedrals.append(dihedral)
-        self._particles[p1].add_scaling_particle(p4, scaling_factor)
-        self._particles[p4].add_scaling_particle(p1, scaling_factor)
+        self._particles[p1].add_scaled_particle(p4, scaling_factor)
+        self._particles[p4].add_scaled_particle(p1, scaling_factor)
         self._num_dihedrals += 1
 
     def del_dihedral(self, dihedral):
@@ -210,13 +210,13 @@ class Topology:
         dihedral_replica = [p4, p3, p2, p1]
         if dihedral in self._dihedrals:
             self._dihedrals.remove(dihedral)
-            self._particles[p1].del_scaling_particle(p4)
-            self._particles[p4].del_scaling_particle(p1)
+            self._particles[p1].del_scaled_particle(p4)
+            self._particles[p4].del_scaled_particle(p1)
             self._num_dihedrals -= 1
         elif dihedral_replica in self._dihedrals:
             self._dihedrals.remove(dihedral_replica)
-            self._particles[p1].del_scaling_particle(p4)
-            self._particles[p4].del_scaling_particle(p1)
+            self._particles[p1].del_scaled_particle(p4)
+            self._particles[p4].del_scaled_particle(p1)
             self._num_dihedrals -= 1
 
     def add_improper(self, improper):
@@ -258,20 +258,20 @@ class Topology:
         return self._device_charges
 
     @property
-    def bonded_particles(self):
-        return self._bonded_particles
+    def excluded_particles(self):
+        return self._excluded_particles
 
     @property
-    def device_bonded_particles(self):
-        return self._device_bonded_particles
+    def device_excluded_particles(self):
+        return self._device_excluded_particles
 
     @property
-    def scaling_particles(self):
-        return self._scaling_particles
+    def scaled_particles(self):
+        return self._scaled_particles
 
     @property
-    def device_scaling_particles(self):
-        return self._device_scaling_particles
+    def device_scaled_particles(self):
+        return self._device_scaled_particles
 
     @property
     def particles(self) -> list[Particle]:
