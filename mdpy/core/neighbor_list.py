@@ -153,19 +153,19 @@ class NeighborList:
             for i in range(SPATIAL_DIM):
                 shared_num_cell_vec[i] = num_cell_vec[i]
         cuda.syncthreads()
-        # Read local data
+        # Read shared data
         cutoff_radius = cutoff_radius[0] + skin_width[0]
         neighbor_ceil_shift = neighbor_ceil_shift[0]
         neighbor_ceil_lower = - neighbor_ceil_shift - 1
         neighbor_ceil_upper = neighbor_ceil_shift + 2
-        central_cell = cuda.local.array(shape=(SPATIAL_DIM), dtype=NUMBA_INT)
-        position_id1 = cuda.local.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
+        central_cell = cuda.shared.array(shape=(SPATIAL_DIM), dtype=NUMBA_INT)
+        position_id1 = cuda.shared.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
         for i in range(SPATIAL_DIM):
             central_cell[i] = particle_cell_index[particle_id1, i]
             position_id1[i] = positions[particle_id1, i]
         neighbor_index = 0
         r = 0
-        vec = cuda.local.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
+        vec = cuda.shared.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
         for i in range(neighbor_ceil_lower, neighbor_ceil_upper):
             cell_x = central_cell[0] + i
             if cell_x < 0:
