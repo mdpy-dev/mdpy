@@ -226,11 +226,11 @@ class NeighborList:
                 shared_pbc_matrix[i] = pbc_matrix[i, i]
                 shared_half_pbc_matrix[i] = shared_pbc_matrix[i] / 2
         cuda.syncthreads()
-        position_id1 = cuda.local.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
+        position_id1 = cuda.shared.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
         for i in range(SPATIAL_DIM):
             position_id1[i] = positions[particle_id1, i]
         neighbor_index = 0
-        vec = cuda.local.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
+        vec = cuda.shared.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
         for particle_id2 in neighbor_list[particle_id1, :]:
             if particle_id2 == -1:
                 break
