@@ -10,6 +10,7 @@ copyright : (C)Copyright 2021-present, mdpy organization
 import numpy as np
 import cupy as cp
 from mdpy.core.neighbor_list import NeighborList
+from mdpy.core.tile_list import TileList
 from mdpy.core.topology import Topology
 from mdpy import SPATIAL_DIM
 from mdpy.environment import *
@@ -26,6 +27,7 @@ class State:
         self._velocities = cp.zeros(self._matrix_shape, CUPY_FLOAT)
         self.set_pbc_matrix(pbc_matrix)
         self._neighbor_list = NeighborList(self._pbc_matrix.copy())
+        self._tile_list = TileList(self._pbc_matrix.copy())
         # Device array
         self._device_postitions = None
 
@@ -63,6 +65,8 @@ class State:
             positions = cp.array(positions, CUPY_FLOAT)
         self._positions = wrap_positions(positions, self._device_pbc_diag)
         self._neighbor_list.update(self._positions, is_update_neighbor_list)
+        if is_update_neighbor_list:
+            self._tile_list.update(self._positions)
 
     def set_velocities(self, velocities: cp.ndarray):
         if isinstance(velocities, np.ndarray):
@@ -127,3 +131,7 @@ class State:
     @property
     def neighbor_list(self):
         return self._neighbor_list
+
+    @property
+    def tile_list(self):
+        return self._tile_list
