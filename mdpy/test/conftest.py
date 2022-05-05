@@ -14,7 +14,8 @@ test_order = [
      'base_dimension', 'unit', 'unit_definition', 'quantity',
      'check_quantity', 'geometry', 'pbc', 'select'
      'particle', 'topology',
-     'state', 'neighbor_list', 'trajectory',
+     'tile_list',
+     'state', 'trajectory',
      'ensemble',
      'charmm_toppar_parser',
      'psf_parser',
