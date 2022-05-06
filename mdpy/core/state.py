@@ -64,7 +64,7 @@ class State:
         if isinstance(positions, np.ndarray):
             positions = cp.array(positions, CUPY_FLOAT)
         self._positions = wrap_positions(positions, self._device_pbc_diag)
-        self._neighbor_list.update(self._positions, is_update_neighbor_list)
+        # self._neighbor_list.update(self._positions, is_update_neighbor_list)
         if is_update_neighbor_list:
             self._tile_list.update(self._positions)
 
