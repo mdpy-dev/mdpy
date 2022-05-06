@@ -15,7 +15,7 @@ from numba import cuda
 from mdpy import SPATIAL_DIM
 from mdpy.environment import *
 from mdpy.core import Ensemble
-from mdpy.core import MAX_NUM_EXCLUDED_PARTICLES
+from mdpy.core import NUM_PARTICLES_PER_TILE, MAX_NUM_EXCLUDED_PARTICLES
 from mdpy.constraint import Constraint
 from mdpy.utils import *
 from mdpy.unit import *
@@ -57,14 +57,16 @@ class ElectrostaticPMEConstraint(Constraint):
         self._c_grid = None
         # Kernel
         self._update_direct_part = cuda.jit(nb.void(
+            NUMBA_FLOAT[:, ::1], # positions
             NUMBA_FLOAT[:, ::1], # charges
             NUMBA_FLOAT[::1], # k
             NUMBA_FLOAT[::1], # ewald_coefficient
             NUMBA_FLOAT[::1], # cutoff_radius
+            NUMBA_FLOAT[:, ::1], # pbc_matrix
             NUMBA_INT[:, ::1], # excluded_particles
-            NUMBA_INT[:, ::1], # neighbor_list
-            NUMBA_FLOAT[:, :, ::1], # neighbor_vec_list
-            NUMBA_FLOAT[:, ::1], # force
+            NUMBA_INT[:, ::1], # tile_list
+            NUMBA_INT[:, ::1], # tile_neighbors
+            NUMBA_FLOAT[:, ::1], # forces
             NUMBA_FLOAT[::1] # potential_energy
         ))(self._update_direct_part_kernel)
         self._update_bspline = cuda.jit(nb.void(
@@ -255,93 +257,122 @@ class ElectrostaticPMEConstraint(Constraint):
 
     @staticmethod
     def _update_direct_part_kernel(
+        positions,
         charges,
         k, ewald_coefficient,
         cutoff_radius,
+        pbc_matrix,
         excluded_particles,
-        neighbor_list,
-        neighbor_vec_list,
+        tile_list,
+        tile_neighbors,
         forces, potential_energy
     ):
-        particle_id1 = cuda.grid(1)
-        num_particles = neighbor_list.shape[0]
-        if particle_id1 >= num_particles:
-            return None
-        # Bonded particle
-        local_excluded_particles = cuda.local.array(
-            shape=(MAX_NUM_EXCLUDED_PARTICLES), dtype=NUMBA_INT
-        )
-        for i in range(MAX_NUM_EXCLUDED_PARTICLES):
-            local_excluded_particles[i] = excluded_particles[particle_id1, i]
-
-        shared_k = cuda.shared.array(shape=(1), dtype=NUMBA_FLOAT)
-        shared_ewald_coefficient = cuda.shared.array(shape=(1), dtype=NUMBA_FLOAT)
-        shared_cutoff_radius = cuda.shared.array(shape=(1), dtype=NUMBA_FLOAT)
-        shared_sqrt_pi = cuda.shared.array(shape=(1), dtype=NUMBA_FLOAT)
+        # tile information
+        tile_id1 = cuda.blockIdx.x
+        tile_id2 = tile_neighbors[tile_id1, cuda.blockIdx.y]
         thread_x = cuda.threadIdx.x
+        if tile_id1 >= tile_list.shape[0]:
+            return
+        if tile_id2 == -1:
+            return
+        # shared data
+        shared_particle_index = cuda.shared.array(shape=(NUM_PARTICLES_PER_TILE), dtype=NUMBA_INT)
+        shared_positions = cuda.shared.array(shape=(NUM_PARTICLES_PER_TILE, SPATIAL_DIM), dtype=NUMBA_FLOAT)
+        shared_charges = cuda.shared.array(shape=(NUM_PARTICLES_PER_TILE), dtype=NUMBA_FLOAT)
+        shared_pbc_matrix = cuda.shared.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
+        shared_half_pbc_matrix = cuda.shared.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
         if thread_x == 0:
-            shared_k[0] = k[0]
-            shared_ewald_coefficient[0] = ewald_coefficient[0]
-        elif thread_x == 1:
-            shared_cutoff_radius[0] = cutoff_radius[0]
-            shared_sqrt_pi[0] = math.sqrt(math.pi)
+            for i in range(SPATIAL_DIM):
+                shared_pbc_matrix[i] = pbc_matrix[i, i]
+                shared_half_pbc_matrix[i] = shared_pbc_matrix[i] / 2
+        shared_particle_index[thread_x] = tile_list[tile_id2, thread_x]
+        for i in range(SPATIAL_DIM):
+            shared_positions[thread_x, i] = positions[shared_particle_index[thread_x], i]
+        shared_charges[thread_x] = charges[shared_particle_index[thread_x], 0]
         cuda.syncthreads()
 
-        # id1 attribute
-        force_x = 0
-        force_y = 0
-        force_z = 0
-        energy = 0
-        e1 = charges[particle_id1, 0]
-        for neighbor_index in range(neighbor_list.shape[1]):
-            particle_id2 = neighbor_list[particle_id1, neighbor_index]
-            if particle_id2 == -1: # self-padding term
+        # Local data
+        particle_1 = tile_list[tile_id1, thread_x]
+        if particle_1 == -1:
+            return
+        e1 = charges[particle_1, 0]
+        local_excluded_particles = cuda.local.array(shape=(MAX_NUM_EXCLUDED_PARTICLES), dtype=NUMBA_INT)
+        num_excluded_particles = 0
+        for i in range(MAX_NUM_EXCLUDED_PARTICLES):
+            local_excluded_particles[i] = excluded_particles[particle_1, i]
+            if local_excluded_particles[i] == -1:
                 break
-            if particle_id1 == particle_id2:
+            num_excluded_particles += 1
+
+        local_positions = cuda.local.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
+        local_forces = cuda.local.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
+        vec = cuda.local.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
+        for i in range(SPATIAL_DIM):
+            local_positions[i] = positions[particle_1, i]
+            local_forces[i] = 0
+
+        energy = 0
+        k = k[0]
+        ewald_coefficient = ewald_coefficient[0]
+        cutoff_radius = cutoff_radius[0]
+        sqrt_pi = math.sqrt(math.pi)
+
+        for index in range(NUM_PARTICLES_PER_TILE):
+            particle_2 = shared_particle_index[index]
+            if particle_2 == -1:
+                break
+            if particle_1 == particle_2:
                 continue
-            if particle_id1 == particle_id2: # self-self term
-                continue
-            is_bonded = False
-            for i in local_excluded_particles:
-                if i == -1: # padding of bonded particle
-                    break
-                elif particle_id2 == i: # self-bonded particle term
-                    is_bonded = True
-                    r = neighbor_vec_list[particle_id1, neighbor_index, 0]
-                    scaled_x = neighbor_vec_list[particle_id1, neighbor_index, 1]
-                    scaled_y = neighbor_vec_list[particle_id1, neighbor_index, 2]
-                    scaled_z = neighbor_vec_list[particle_id1, neighbor_index, 3]
-                    e1e2 = e1 * charges[particle_id2, 0]
-                    ewald_r = shared_ewald_coefficient[0] * r
+            is_excluded = False
+            for i in range(num_excluded_particles):
+                if particle_2 == local_excluded_particles[i]:
+                    is_excluded = True
+                    r = 0
+                    for i in range(SPATIAL_DIM):
+                        vec[i] = shared_positions[index, i] - local_positions[i]
+                        if vec[i] < - shared_half_pbc_matrix[i]:
+                            vec[i] += shared_pbc_matrix[i]
+                        elif vec[i] > shared_half_pbc_matrix[i]:
+                            vec[i] -= shared_pbc_matrix[i]
+                        r += vec[i]**2
+                    r = math.sqrt(r)
+                    for i in range(SPATIAL_DIM):
+                        vec[i] /= r
+                    e1e2 = e1 * shared_charges[index]
+                    ewald_r = ewald_coefficient * r
                     erf = math.erf(ewald_r)
                     force_val = e1e2 * (
-                        2*shared_ewald_coefficient[0]*math.exp(-(ewald_r)**2) / shared_sqrt_pi[0] - erf / r
-                    ) / shared_k[0] / r
-                    force_x -= scaled_x * force_val
-                    force_y -= scaled_y * force_val
-                    force_z -= scaled_z * force_val
-                    energy -= e1e2 * erf / shared_k[0] / r / 2
+                        2*ewald_coefficient*math.exp(-(ewald_r)**2) / sqrt_pi - erf / r
+                    ) / k / r
+                    for i in range(SPATIAL_DIM):
+                        local_forces[i] -= force_val * vec[i]
+                    energy -= e1e2 * erf / k / r / 2
                     break
-            if is_bonded:
+            if is_excluded:
                 continue
-            r = neighbor_vec_list[particle_id1, neighbor_index, 0]
-            if r <= shared_cutoff_radius[0]:
-                scaled_x = neighbor_vec_list[particle_id1, neighbor_index, 1]
-                scaled_y = neighbor_vec_list[particle_id1, neighbor_index, 2]
-                scaled_z = neighbor_vec_list[particle_id1, neighbor_index, 3]
-                e1e2 = e1 * charges[particle_id2, 0]
-                ewald_r = shared_ewald_coefficient[0]*r
+            r = 0
+            for i in range(SPATIAL_DIM):
+                vec[i] = shared_positions[index, i] - local_positions[i]
+                if vec[i] < - shared_half_pbc_matrix[i]:
+                    vec[i] += shared_pbc_matrix[i]
+                elif vec[i] > shared_half_pbc_matrix[i]:
+                    vec[i] -= shared_pbc_matrix[i]
+                r += vec[i]**2
+            r = math.sqrt(r)
+            if r <= cutoff_radius:
+                for i in range(SPATIAL_DIM):
+                    vec[i] /= r
+                e1e2 = e1 * shared_charges[index]
+                ewald_r = ewald_coefficient * r
                 erfc = math.erfc(ewald_r)
                 force_val = - e1e2 * (
-                    2*shared_ewald_coefficient[0]*math.exp(-(ewald_r)**2) / shared_sqrt_pi[0] + erfc / r
-                ) / shared_k[0] / r
-                force_x += scaled_x * force_val
-                force_y += scaled_y * force_val
-                force_z += scaled_z * force_val
-                energy += e1e2 * erfc / shared_k[0] / r / 2
-        cuda.atomic.add(forces, (particle_id1, 0), force_x)
-        cuda.atomic.add(forces, (particle_id1, 1), force_y)
-        cuda.atomic.add(forces, (particle_id1, 2), force_z)
+                    2*ewald_coefficient*math.exp(-(ewald_r)**2) / sqrt_pi + erfc / r
+                ) / k / r
+                for i in range(SPATIAL_DIM):
+                    local_forces[i] += force_val * vec[i]
+                energy += e1e2 * erfc / k / r / 2
+        for i in range(SPATIAL_DIM):
+            cuda.atomic.add(forces, (particle_1, i), local_forces[i])
         cuda.atomic.add(potential_energy, 0, energy)
 
     @staticmethod
@@ -524,17 +555,24 @@ class ElectrostaticPMEConstraint(Constraint):
         self._direct_forces = cp.zeros(self._parent_ensemble.state.matrix_shape, CUPY_FLOAT)
         self._direct_potential_energy = cp.zeros([1], CUPY_FLOAT)
         # Direct part
-        block_per_grid = int(np.ceil(
-            self._parent_ensemble.topology.num_particles / THREAD_PER_BLOCK
+        thread_per_block = (32, 1)
+        block_per_grid_x = int(np.ceil(
+            self._parent_ensemble.state.tile_list.num_tiles * NUM_PARTICLES_PER_TILE / thread_per_block[0]
         ))
-        self._update_direct_part[block_per_grid, THREAD_PER_BLOCK](
+        block_per_grid_y = int(np.ceil(
+            self._parent_ensemble.state.tile_list.tile_neighbors.shape[1]
+        ))
+        self._block_per_grid = (block_per_grid_x, block_per_grid_y)
+        self._update_direct_part[self._block_per_grid, thread_per_block](
+            self._parent_ensemble.state.positions,
             self._parent_ensemble.topology.device_charges,
             self._device_k,
             self._device_ewald_coefficient,
             self._device_cutoff_radius,
+            self._parent_ensemble.state.device_pbc_matrix,
             self._parent_ensemble.topology.device_excluded_particles,
-            self._parent_ensemble.state.neighbor_list.neighbor_list,
-            self._parent_ensemble.state.neighbor_list.neighbor_vec_list,
+            self._parent_ensemble.state.tile_list.tile_list,
+            self._parent_ensemble.state.tile_list.tile_neighbors,
             self._direct_forces, self._direct_potential_energy
         )
         thread_per_block = (64)
@@ -596,3 +634,27 @@ class ElectrostaticPMEConstraint(Constraint):
     @property
     def ewald_coefficient(self):
         return self._ewald_coefficient
+
+if __name__ == '__main__':
+    import os
+    import mdpy as md
+    from mdpy.unit import *
+    data_dir = '/home/zhenyuwei/nutstore/ZhenyuWei/Note_Research/mdpy/mdpy/benchmark/data'
+    psf_file = os.path.join(data_dir, 'str.psf')
+    pdb_file = os.path.join(data_dir, 'str.pdb')
+    cutoff_radius = Quantity(9, angstrom)
+    # IO
+    psf = md.io.PSFParser(psf_file)
+    pdb = md.io.PDBParser(pdb_file)
+    charmm_prm = md.io.CharmmTopparParser(
+        os.path.join(data_dir, 'par_all36_prot.prm'),
+        os.path.join(data_dir, 'toppar_water_ions_namd.str'),
+    )
+    # constraint
+    ensemble = md.core.Ensemble(psf.topology, pdb.pbc_matrix)
+    constraint = ElectrostaticPMEConstraint()
+    ensemble.add_constraints(constraint)
+    ensemble.state.set_positions(pdb.positions)
+    constraint.update()
+    # print(constraint.forces)
+    print(Quantity(constraint.forces, default_force_unit).convert_to(kilojoule_permol_over_nanometer).value)
