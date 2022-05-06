@@ -50,8 +50,8 @@ class Ensemble:
                 )
             self._constraints.append(constraint)
             constraint.bind_ensemble(self)
-            if constraint.cutoff_radius > self.state.neighbor_list.cutoff_radius:
-                self.state.neighbor_list.set_cutoff_radius(constraint.cutoff_radius)
+            if constraint.cutoff_radius > self.state.tile_list.cutoff_radius:
+                self.state.tile_list.set_cutoff_radius(constraint.cutoff_radius)
             self._num_constraints += 1
 
     def update(self):
