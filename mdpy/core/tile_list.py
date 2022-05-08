@@ -424,13 +424,23 @@ if __name__ == '__main__':
     print('Run update for %s s' %((te-ts)/epoch))
     RangePop()
 
-    RangePush('Sort matrix')
+    RangePush('Sort float matrix')
     ts = time.time()
     for i in range(epoch):
         tile_list.sort_matrix(positions)
     te = time.time()
-    print('Run sort for %s s' %((te-ts)/epoch))
+    print('Run sort float for %s s' %((te-ts)/epoch))
     RangePop()
+
+    int_data = cp.random.randint(0, 100, size=(positions.shape[0], 15), dtype=CUPY_INT)
+    RangePush('Sort int matrix')
+    ts = time.time()
+    for i in range(epoch):
+        tile_list.sort_matrix(int_data)
+    te = time.time()
+    print('Run sort int for %s s' %((te-ts)/epoch))
+    RangePop()
+
 
     sorted_positions = tile_list.sort_matrix(positions)
     RangePush('Unsort matrix')
@@ -440,4 +450,3 @@ if __name__ == '__main__':
     te = time.time()
     print('Run unsort for %s s' %((te-ts)/epoch))
     RangePop()
-    
