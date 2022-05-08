@@ -30,9 +30,16 @@ class Topology:
         self._num_impropers = 0
         self._is_joined = False
         self._masses = []
+        self._device_masses = []
         self._charges = []
+        self._device_charges = []
+        self._device_sorted_charges = []
         self._excluded_particles = []
+        self._device_excluded_particles = []
+        self._device_sorted_excluded_particles = []
         self._scaled_particles = []
+        self._device_scaled_particles = []
+        self._device_sorted_scaled_particles = []
 
     def __repr__(self) -> str:
         return '<mdpy.core.Toplogy object: %d particles at %x>' %(self._num_particles, id(self))
@@ -242,77 +249,101 @@ class Topology:
             self._num_impropers -= 1
 
     @property
-    def masses(self):
+    def masses(self) -> np.ndarray:
         return self._masses
 
     @property
-    def device_masses(self):
+    def device_masses(self) -> cp.ndarray:
         return self._device_masses
 
     @property
-    def charges(self):
+    def charges(self) -> np.ndarray:
         return self._charges
 
     @property
-    def device_charges(self):
+    def device_charges(self) -> cp.ndarray:
         return self._device_charges
 
     @property
-    def excluded_particles(self):
+    def device_sorted_charges(self) -> cp.ndarray:
+        return self._device_sorted_charges
+
+    @device_sorted_charges.setter
+    def device_sorted_charges(self, sorted_charges: cp.ndarray):
+        self._device_sorted_charges = sorted_charges
+
+    @property
+    def excluded_particles(self) -> np.ndarray:
         return self._excluded_particles
 
     @property
-    def device_excluded_particles(self):
+    def device_excluded_particles(self) -> cp.ndarray:
         return self._device_excluded_particles
 
     @property
-    def scaled_particles(self):
+    def device_sorted_excluded_particles(self) -> cp.ndarray:
+        return self._device_sorted_excluded_particles
+
+    @device_sorted_excluded_particles.setter
+    def device_sorted_excluded_particles(self, sorted_excluded_particles: cp.ndarray):
+        self._device_sorted_excluded_particles = sorted_excluded_particles
+
+    @property
+    def scaled_particles(self) -> np.ndarray:
         return self._scaled_particles
 
     @property
-    def device_scaled_particles(self):
+    def device_scaled_particles(self) -> cp.ndarray:
         return self._device_scaled_particles
+
+    @property
+    def device_sorted_scaled_particles(self) -> cp.ndarray:
+        return self._device_sorted_scaled_particles
+
+    @device_sorted_scaled_particles.setter
+    def device_sorted_scaled_particles(self, sorted_scaled_particles: cp.ndarray):
+        self._device_sorted_scaled_particles = sorted_scaled_particles
 
     @property
     def particles(self) -> list[Particle]:
         return self._particles
 
     @property
-    def num_particles(self):
+    def num_particles(self) -> int:
         return self._num_particles
 
     @property
-    def bonds(self):
+    def bonds(self) -> list:
         return self._bonds
 
     @property
-    def num_bonds(self):
+    def num_bonds(self) -> int:
         return self._num_bonds
 
     @property
-    def angles(self):
+    def angles(self) -> list:
         return self._angles
 
     @property
-    def num_angles(self):
+    def num_angles(self) -> int:
         return self._num_angles
 
     @property
-    def dihedrals(self):
+    def dihedrals(self) -> list:
         return self._dihedrals
 
     @property
-    def num_dihedrals(self):
+    def num_dihedrals(self) -> int:
         return self._num_dihedrals
 
     @property
-    def impropers(self):
+    def impropers(self) -> list:
         return self._impropers
 
     @property
-    def num_impropers(self):
+    def num_impropers(self) -> int:
         return self._num_impropers
 
     @property
-    def is_joined(self):
+    def is_joined(self) -> bool:
         return self._is_joined
