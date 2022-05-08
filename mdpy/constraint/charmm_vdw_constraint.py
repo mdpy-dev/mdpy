@@ -155,7 +155,7 @@ class CharmmVDWConstraint(Constraint):
                 elif vec[i] > shared_half_pbc_matrix[i]:
                     vec[i] -= shared_pbc_matrix[i]
                 r += vec[i]**2
-            r = NUMBA_FLOAT(math.sqrt(r))
+            r = math.sqrt(r)
             if r <= cutoff_radius:
                 for i in range(SPATIAL_DIM):
                     vec[i] /= r
@@ -166,15 +166,15 @@ class CharmmVDWConstraint(Constraint):
                         break
                 if not is_scaled:
                     epsilon = math.sqrt(local_parameters[0] * shared_parameters[0, index])
-                    sigma = (local_parameters[1] + shared_parameters[1, index]) / 2
+                    sigma = (local_parameters[1] + shared_parameters[1, index]) * NUMBA_FLOAT(0.5)
                 else:
-                    epsilon = NUMBA_FLOAT(math.sqrt(local_parameters[2] * shared_parameters[2, index]))
-                    sigma = (local_parameters[3] + shared_parameters[3, index]) / 2
-                scaled_r = NUMBA_FLOAT(sigma / r)
+                    epsilon = math.sqrt(local_parameters[2] * shared_parameters[2, index])
+                    sigma = (local_parameters[3] + shared_parameters[3, index]) * NUMBA_FLOAT(0.5)
+                scaled_r = sigma / r
                 scaled_r6 = scaled_r**6
                 scaled_r12 = scaled_r6**2
-                energy += 2 * epsilon * (scaled_r12 - scaled_r6)
-                force_val = - (2 * scaled_r12 - scaled_r6) / r * epsilon * 24
+                energy += NUMBA_FLOAT(2) * epsilon * (scaled_r12 - scaled_r6)
+                force_val = - (NUMBA_FLOAT(2) * scaled_r12 - scaled_r6) / r * epsilon * NUMBA_FLOAT(24)
                 for i in range(SPATIAL_DIM):
                     local_forces[i] += force_val * vec[i]
         for i in range(SPATIAL_DIM):
