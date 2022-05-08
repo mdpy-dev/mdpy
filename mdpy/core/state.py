@@ -22,10 +22,9 @@ class State:
         self._num_particles = len(self._topology.particles)
         self._matrix_shape = [self._num_particles, SPATIAL_DIM]
         self._positions = cp.zeros(self._matrix_shape, CUPY_FLOAT)
+        self._sorted_positions = cp.zeros(self._matrix_shape, CUPY_FLOAT)
         self._velocities = cp.zeros(self._matrix_shape, CUPY_FLOAT)
         self.set_pbc_matrix(pbc_matrix)
-        # Device array
-        self._device_postitions = None
 
     def __repr__(self) -> str:
         return '<mdpy.core.State object with %d particles at %x>' %(
@@ -77,37 +76,45 @@ class State:
         self.set_velocities(velocities * width)
 
     @property
-    def positions(self):
+    def positions(self) -> cp.ndarray:
         return self._positions
 
     @property
-    def velocities(self):
+    def sorted_positions(self) -> cp.ndarray:
+        return self._sorted_positions
+
+    @sorted_positions.setter
+    def sorted_positions(self, sorted_positions: cp.ndarray):
+        self._sorted_positions = sorted_positions
+
+    @property
+    def velocities(self) -> cp.ndarray:
         return self._velocities
 
     @property
-    def matrix_shape(self):
+    def matrix_shape(self) -> list:
         return self._matrix_shape
 
     @property
-    def pbc_matrix(self):
+    def pbc_matrix(self) -> np.ndarray:
         return self._pbc_matrix
 
     @property
-    def device_pbc_matrix(self):
+    def device_pbc_matrix(self) -> cp.ndarray:
         return self._device_pbc_matrix
 
     @property
-    def pbc_diag(self):
+    def pbc_diag(self) -> np.ndarray:
         return self._pbc_diag
 
     @property
-    def device_pbc_diag(self):
+    def device_pbc_diag(self) -> cp.ndarray:
         return self._device_pbc_diag
 
     @property
-    def half_pbc_diag(self):
+    def half_pbc_diag(self) -> np.ndarray:
         return self._half_pbc_diag
 
     @property
-    def device_half_pbc_diag(self):
+    def device_half_pbc_diag(self) -> cp.ndarray:
         return self._device_half_pbc_diag

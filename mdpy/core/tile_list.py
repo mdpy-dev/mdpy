@@ -266,7 +266,7 @@ class TileList:
     def sort_matrix(self, unsorted_matrix: cp.ndarray):
         matrix_type = unsorted_matrix.dtype
         sorted_matrix = cp.zeros(
-            (self._num_tiles*NUM_PARTICLES_PER_TILE, unsorted_matrix.shape[1]),
+            (unsorted_matrix.shape[1], self._num_tiles*NUM_PARTICLES_PER_TILE),
             dtype=matrix_type
         )
         thread_per_block = 32
@@ -292,12 +292,12 @@ class TileList:
         if unsorted_index == -1:
             return
         for i in range(unsorted_matrix.shape[1]):
-            sorted_matrix[idx, i] = unsorted_matrix[unsorted_index, i]
+            sorted_matrix[i, idx] = unsorted_matrix[unsorted_index, i]
 
     def unsort_matrix(self, sorted_matrix: cp.ndarray):
         matrix_type = sorted_matrix.dtype
         unsorted_matrix = cp.zeros(
-            (self._num_particles, sorted_matrix.shape[1]),
+            (self._num_particles, sorted_matrix.shape[0]),
             dtype=matrix_type
         )
         thread_per_block = 32
@@ -323,7 +323,7 @@ class TileList:
         if unsorted_index == -1:
             return
         for i in range(unsorted_matrix.shape[1]):
-            unsorted_matrix[unsorted_index, i] = sorted_matrix[idx, i]
+            unsorted_matrix[unsorted_index, i] = sorted_matrix[i, idx]
 
     def update(self, positions: cp.ndarray):
         self._num_particles = positions.shape[0]
@@ -382,6 +382,10 @@ class TileList:
     @property
     def tile_neighbors(self) -> cp.ndarray:
         return self._tile_neighbors
+
+    @property
+    def sorted_matrix_mapping_index(self) -> cp.ndarray:
+        return self._sorted_matrix_mapping_index
 
     @property
     def num_cells_vec(self):

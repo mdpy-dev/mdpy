@@ -10,14 +10,6 @@ from mdpy.environment import *
 
 # Cell list searching constant
 NUM_NEIGHBOR_CELLS = 3**SPATIAL_DIM
-NEIGHBOR_CELL_TEMPLATE = np.zeros([NUM_NEIGHBOR_CELLS, SPATIAL_DIM], dtype=NUMPY_INT)
-index = 0
-for i in range(-1, 2):
-    for j in range(-1, 2):
-        for k in range(-1, 2):
-            NEIGHBOR_CELL_TEMPLATE[index, :] = [i, j, k]
-            index += 1
-DEVICE_NEIGHBOR_CELL_TEMPLATE = cp.array(NEIGHBOR_CELL_TEMPLATE, CUPY_INT)
 
 # Tile information
 NUM_PARTICLES_PER_TILE = 32
