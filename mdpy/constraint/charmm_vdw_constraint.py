@@ -90,16 +90,16 @@ class CharmmVDWConstraint(Constraint):
         if local_thread_x <= 2:
             shared_pbc_matrix[local_thread_x] = pbc_matrix[local_thread_x, local_thread_x]
             shared_half_pbc_matrix[local_thread_x] = shared_pbc_matrix[local_thread_x] / 2
-        shared_positions = cuda.shared.array(shape=(NUM_PARTICLES_PER_TILE, SPATIAL_DIM), dtype=NUMBA_FLOAT)
-        shared_parameters = cuda.shared.array(shape=(NUM_PARTICLES_PER_TILE, 4), dtype=NUMBA_FLOAT)
+        shared_positions = cuda.shared.array(shape=(SPATIAL_DIM, NUM_PARTICLES_PER_TILE), dtype=NUMBA_FLOAT)
+        shared_parameters = cuda.shared.array(shape=(4, NUM_PARTICLES_PER_TILE), dtype=NUMBA_FLOAT)
         shared_particle_index_2 = cuda.shared.array(shape=(NUM_PARTICLES_PER_TILE), dtype=NUMBA_INT)
         index = tile2_start_index+local_thread_x
         shared_particle_index_2[local_thread_x] = sorted_matrix_mapping_index[index]
         if shared_particle_index_2[local_thread_x] != -1:
             for i in range(SPATIAL_DIM):
-                shared_positions[local_thread_x, i] = sorted_positions[i, index]
+                shared_positions[i, local_thread_x] = sorted_positions[i, index]
             for i in range(4):
-                shared_parameters[local_thread_x, i] = sorted_parameters[i, index]
+                shared_parameters[i, local_thread_x] = sorted_parameters[i, index]
         cuda.syncthreads()
 
         # Local data
@@ -107,14 +107,14 @@ class CharmmVDWConstraint(Constraint):
         if particle_1 == -1:
             return
         local_excluded_particles = cuda.local.array(shape=(MAX_NUM_EXCLUDED_PARTICLES), dtype=NUMBA_INT)
-        num_excluded_particles = 0
+        num_excluded_particles = NUMBA_INT(0)
         for i in range(MAX_NUM_EXCLUDED_PARTICLES):
             local_excluded_particles[i] = sorted_excluded_particles[i, global_thread_x]
             if local_excluded_particles[i] == -1:
                 break
             num_excluded_particles += 1
         local_scaled_particles = cuda.local.array(shape=(MAX_NUM_SCALED_PARTICLES), dtype=NUMBA_INT)
-        num_scaled_particles = 0
+        num_scaled_particles = NUMBA_INT(0)
         for i in range(MAX_NUM_SCALED_PARTICLES):
             local_scaled_particles[i] = sorted_scaled_particles[i, global_thread_x]
             if local_scaled_particles[i] == -1:
@@ -126,7 +126,7 @@ class CharmmVDWConstraint(Constraint):
         local_positions = cuda.local.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
         local_forces = cuda.local.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
         vec = cuda.local.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
-        energy = 0
+        energy = NUMBA_FLOAT(0)
         cutoff_radius = cutoff_radius[0]
         for i in range(SPATIAL_DIM):
             local_positions[i] = sorted_positions[i, global_thread_x]
@@ -147,15 +147,15 @@ class CharmmVDWConstraint(Constraint):
             if is_excluded:
                 continue
 
-            r = 0
+            r = NUMBA_FLOAT(0)
             for i in range(SPATIAL_DIM):
-                vec[i] = shared_positions[index, i] - local_positions[i]
+                vec[i] = shared_positions[i, index] - local_positions[i]
                 if vec[i] < - shared_half_pbc_matrix[i]:
                     vec[i] += shared_pbc_matrix[i]
                 elif vec[i] > shared_half_pbc_matrix[i]:
                     vec[i] -= shared_pbc_matrix[i]
                 r += vec[i]**2
-            r = math.sqrt(r)
+            r = NUMBA_FLOAT(math.sqrt(r))
             if r <= cutoff_radius:
                 for i in range(SPATIAL_DIM):
                     vec[i] /= r
@@ -165,16 +165,12 @@ class CharmmVDWConstraint(Constraint):
                         is_scaled = True
                         break
                 if not is_scaled:
-                    epsilon, sigma = (
-                        math.sqrt(local_parameters[0] * shared_parameters[index, 0]),
-                        (local_parameters[1] + shared_parameters[index, 1]) / 2
-                    )
+                    epsilon = math.sqrt(local_parameters[0] * shared_parameters[0, index])
+                    sigma = (local_parameters[1] + shared_parameters[1, index]) / 2
                 else:
-                    epsilon, sigma = (
-                        math.sqrt(local_parameters[2] * shared_parameters[index, 2]),
-                        (local_parameters[3] + shared_parameters[index, 3]) / 2
-                    )
-                scaled_r = sigma / r
+                    epsilon = NUMBA_FLOAT(math.sqrt(local_parameters[2] * shared_parameters[2, index]))
+                    sigma = (local_parameters[3] + shared_parameters[3, index]) / 2
+                scaled_r = NUMBA_FLOAT(sigma / r)
                 scaled_r6 = scaled_r**6
                 scaled_r12 = scaled_r6**2
                 energy += 2 * epsilon * (scaled_r12 - scaled_r6)
