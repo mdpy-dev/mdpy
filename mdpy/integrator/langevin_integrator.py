@@ -63,7 +63,7 @@ class LangevinIntegrator(Integrator):
             # Update position
             ensemble.state.set_positions(self._cur_positions)
             if cur_step % self._neighbor_list_update_freq == 0:
-                ensemble.tile_list.update(ensemble.state.positions)
+                ensemble.update_tile_list()
             ensemble.update()
             self._cur_acceleration = ensemble.forces / masses
             self._cur_velocities, self._pre_velocities = (
