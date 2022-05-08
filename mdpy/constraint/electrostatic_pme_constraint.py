@@ -557,10 +557,10 @@ class ElectrostaticPMEConstraint(Constraint):
         # Direct part
         thread_per_block = (32, 1)
         block_per_grid_x = int(np.ceil(
-            self._parent_ensemble.state.tile_list.num_tiles * NUM_PARTICLES_PER_TILE / thread_per_block[0]
+            self._parent_ensemble.tile_list.num_tiles * NUM_PARTICLES_PER_TILE / thread_per_block[0]
         ))
         block_per_grid_y = int(np.ceil(
-            self._parent_ensemble.state.tile_list.tile_neighbors.shape[1]
+            self._parent_ensemble.tile_list.tile_neighbors.shape[1]
         ))
         self._block_per_grid = (block_per_grid_x, block_per_grid_y)
         self._update_direct_part[self._block_per_grid, thread_per_block](
@@ -571,8 +571,8 @@ class ElectrostaticPMEConstraint(Constraint):
             self._device_cutoff_radius,
             self._parent_ensemble.state.device_pbc_matrix,
             self._parent_ensemble.topology.device_excluded_particles,
-            self._parent_ensemble.state.tile_list.tile_list,
-            self._parent_ensemble.state.tile_list.tile_neighbors,
+            self._parent_ensemble.tile_list.tile_list,
+            self._parent_ensemble.tile_list.tile_neighbors,
             self._direct_forces, self._direct_potential_energy
         )
         thread_per_block = (64)

@@ -188,10 +188,10 @@ class CharmmVDWConstraint(Constraint):
         self._forces = cp.zeros(self._parent_ensemble.state.matrix_shape, CUPY_FLOAT)
         self._potential_energy = cp.zeros([1], CUPY_FLOAT)
         block_per_grid_x = int(np.ceil(
-            self._parent_ensemble.state.tile_list.num_tiles * NUM_PARTICLES_PER_TILE / THREAD_PER_BLOCK[0]
+            self._parent_ensemble.tile_list.num_tiles * NUM_PARTICLES_PER_TILE / THREAD_PER_BLOCK[0]
         ))
         block_per_grid_y = int(np.ceil(
-            self._parent_ensemble.state.tile_list.tile_neighbors.shape[1]
+            self._parent_ensemble.tile_list.tile_neighbors.shape[1]
         ))
         self._block_per_grid = (block_per_grid_x, block_per_grid_y)
         # Device
@@ -202,8 +202,8 @@ class CharmmVDWConstraint(Constraint):
             self._parent_ensemble.state.device_pbc_matrix,
             self._parent_ensemble.topology.device_excluded_particles,
             self._parent_ensemble.topology.device_scaled_particles,
-            self._parent_ensemble.state.tile_list.tile_list,
-            self._parent_ensemble.state.tile_list.tile_neighbors,
+            self._parent_ensemble.tile_list.tile_list,
+            self._parent_ensemble.tile_list.tile_neighbors,
             self._forces, self._potential_energy
         )
 
@@ -228,7 +228,8 @@ if __name__ == '__main__':
     ensemble.add_constraints(constraint)
     id1, id2 = 6570, 6569
     ensemble.state.set_positions(pdb.positions)
-    print(ensemble.state.tile_list.tile_neighbors.shape)
+    ensemble.tile_list.update(ensemble.state.positions)
+    print(ensemble.tile_list.tile_neighbors.shape)
     constraint.update()
     # print(constraint.forces)
     print(Quantity(constraint.forces, default_force_unit).convert_to(kilojoule_permol_over_nanometer).value)
