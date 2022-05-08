@@ -89,7 +89,7 @@ class TileList:
     def set_cutoff_radius(self, cutoff_radius):
         cutoff_radius = check_quantity_value(cutoff_radius, default_length_unit)
         if cutoff_radius == 0:
-            raise NeighborListPoorDefinedError(
+            raise TileListPoorDefinedError(
                 'Cutoff radius is poor defined, current value %.3f'
                 %(cutoff_radius)
             )
@@ -97,7 +97,7 @@ class TileList:
         num_cells_vec = np.floor(self._pbc_diag / cell_matrix).astype(NUMPY_INT)
         for i in num_cells_vec:
             if i < 2:
-                raise NeighborListPoorDefinedError(
+                raise TileListPoorDefinedError(
                     'The cutoff_radius is too large to create cell list'
                 )
         # Attributes

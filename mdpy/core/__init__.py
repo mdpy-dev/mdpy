@@ -28,7 +28,6 @@ MAX_NUM_SCALED_PARTICLES = 15
 
 from mdpy.core.particle import Particle
 from mdpy.core.topology import Topology
-from mdpy.core.neighbor_list import NeighborList
 from mdpy.core.tile_list import TileList
 from mdpy.core.state import State
 from mdpy.core.trajectory import Trajectory
@@ -37,7 +36,6 @@ from mdpy.core.ensemble import Ensemble
 __all__ = [
     'Particle',
     'Topology',
-    'NeighborList',
     'TileList',
     'State',
     'Trajectory',
