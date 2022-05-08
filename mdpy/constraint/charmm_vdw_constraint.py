@@ -190,7 +190,6 @@ class CharmmVDWConstraint(Constraint):
         sorted_forces = cp.zeros((SPATIAL_DIM, self._parent_ensemble.tile_list.num_tiles * NUM_PARTICLES_PER_TILE), CUPY_FLOAT)
         self._potential_energy = cp.zeros([1], CUPY_FLOAT)
         sorted_positions = self._parent_ensemble.tile_list.sort_matrix(self._parent_ensemble.state.positions)
-        print(sorted_positions.flags)
         device_sorted_parameter_list = self._parent_ensemble.tile_list.sort_matrix(self._device_parameters)
         block_per_grid_x = self._parent_ensemble.tile_list.num_tiles
         block_per_grid_y = self._parent_ensemble.tile_list.tile_neighbors.shape[1]
