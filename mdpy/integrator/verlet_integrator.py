@@ -40,10 +40,9 @@ class VerletIntegrator(Integrator):
                 2 * self._cur_positions - self._pre_positions +
                 accelration * self._time_step_square
             ), self._cur_positions
+            ensemble.state.set_positions(self._cur_positions)
             if cur_step % self._neighbor_list_update_freq == 0:
-                ensemble.state.set_positions(self._cur_positions, True)
-            else:
-                ensemble.state.set_positions(self._cur_positions, False)
+                ensemble.tile_list.update(ensemble.state.positions)
             # Update step
             cur_step += 1
         ensemble.state.set_velocities(unwrap_vec(

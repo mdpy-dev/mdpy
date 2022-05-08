@@ -61,10 +61,9 @@ class LangevinIntegrator(Integrator):
                 self._b * self._sigma * self._time_step_3_over_2 / 2 * xi_over_sqrt_masses
             ), self._cur_positions
             # Update position
+            ensemble.state.set_positions(self._cur_positions)
             if cur_step % self._neighbor_list_update_freq == 0:
-                ensemble.state.set_positions(self._cur_positions.astype(CUPY_FLOAT), True)
-            else:
-                ensemble.state.set_positions(self._cur_positions.astype(CUPY_FLOAT), False)
+                ensemble.tile_list.update(ensemble.state.positions)
             ensemble.update()
             self._cur_acceleration = ensemble.forces / masses
             self._cur_velocities, self._pre_velocities = (
