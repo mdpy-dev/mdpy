@@ -65,6 +65,18 @@ class Ensemble:
         self._update_kinetic_energy()
         self._total_energy = self._potential_energy + self._kinetic_energy
 
+    def update_tile_list(self):
+        self._tile_list.update(self._state.positions)
+        self._topology.device_sorted_charges = self._tile_list.sort_matrix(
+            self._topology.device_charges
+        )
+        self._topology.device_sorted_excluded_particles = self._tile_list.sort_matrix(
+            self._topology.device_excluded_particles
+        )
+        self._topology.device_sorted_scaled_particles = self._tile_list.sort_matrix(
+            self._topology.device_scaled_particles
+        )
+
     def _update_kinetic_energy(self):
         # Without reshape, the result of the first sum will be a 1d vector
         # , which will be a matrix after multiple with a 2d vector
