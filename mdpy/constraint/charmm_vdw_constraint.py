@@ -89,7 +89,7 @@ class CharmmVDWConstraint(Constraint):
         shared_half_pbc_matrix = cuda.shared.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
         if local_thread_x <= 2:
             shared_pbc_matrix[local_thread_x] = pbc_matrix[local_thread_x, local_thread_x]
-            shared_half_pbc_matrix[local_thread_x] = shared_pbc_matrix[local_thread_x] / 2
+            shared_half_pbc_matrix[local_thread_x] = shared_pbc_matrix[local_thread_x] * NUMBA_FLOAT(0.5)
         shared_positions = cuda.shared.array(shape=(SPATIAL_DIM, NUM_PARTICLES_PER_TILE), dtype=NUMBA_FLOAT)
         shared_parameters = cuda.shared.array(shape=(4, NUM_PARTICLES_PER_TILE), dtype=NUMBA_FLOAT)
         shared_particle_index_2 = cuda.shared.array(shape=(NUM_PARTICLES_PER_TILE), dtype=NUMBA_INT)
@@ -178,7 +178,7 @@ class CharmmVDWConstraint(Constraint):
                 for i in range(SPATIAL_DIM):
                     local_forces[i] += force_val * vec[i]
         for i in range(SPATIAL_DIM):
-            sorted_forces[i, global_thread_x] += local_forces[i]
+            cuda.atomic.add(sorted_forces, (i, global_thread_x), local_forces[i])
         cuda.atomic.add(potential_energy, 0, energy)
 
     def update(self):
