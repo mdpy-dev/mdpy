@@ -287,10 +287,9 @@ class ElectrostaticPMEConstraint(Constraint):
         shared_particle_index_2 = cuda.shared.array(shape=(NUM_PARTICLES_PER_TILE), dtype=NUMBA_INT)
         index = tile2_start_index+local_thread_x
         shared_particle_index_2[local_thread_x] = sorted_matrix_mapping_index[index]
-        if shared_particle_index_2[local_thread_x] != -1:
-            for i in range(SPATIAL_DIM):
-                shared_positions[i, local_thread_x] = sorted_positions[i, index]
-            shared_charges[local_thread_x] = sorted_charges[0, index]
+        for i in range(SPATIAL_DIM):
+            shared_positions[i, local_thread_x] = sorted_positions[i, index]
+        shared_charges[local_thread_x] = sorted_charges[0, index]
         cuda.syncthreads()
 
         # Local data
