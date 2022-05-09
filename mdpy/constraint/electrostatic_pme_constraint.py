@@ -311,7 +311,7 @@ class ElectrostaticPMEConstraint(Constraint):
         k = k[0]
         ewald_coefficient = ewald_coefficient[0]
         cutoff_radius = cutoff_radius[0]
-        sqrt_pi = math.sqrt(math.pi)
+        sqrt_pi = math.sqrt(NUMBA_FLOAT(math.pi))
         e1 = sorted_charges[0, global_thread_x]
         for i in range(SPATIAL_DIM):
             local_positions[i] = sorted_positions[i, global_thread_x]
@@ -362,6 +362,7 @@ class ElectrostaticPMEConstraint(Constraint):
                 for i in range(SPATIAL_DIM):
                     local_forces[i] += force_val * vec[i]
                 energy += e1e2 * erfc / k / r * NUMBA_FLOAT(0.5)
+
         for i in range(SPATIAL_DIM):
             cuda.atomic.add(sorted_forces, (i, global_thread_x), local_forces[i])
         cuda.atomic.add(potential_energy, 0, energy)
