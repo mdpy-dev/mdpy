@@ -615,7 +615,7 @@ class ElectrostaticPMEConstraint(Constraint):
             self._reciprocal_potential_energy -
             self._device_self_potential_energy
         )
-        self._forces = (self._direct_forces +  self._reciprocal_forces)
+        self._forces = (self._direct_forces + self._reciprocal_forces)
 
     @property
     def grid_size(self):

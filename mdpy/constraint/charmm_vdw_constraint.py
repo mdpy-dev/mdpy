@@ -130,7 +130,6 @@ class CharmmVDWConstraint(Constraint):
         for i in range(SPATIAL_DIM):
             local_positions[i] = sorted_positions[i, global_thread_x]
             local_forces[i] = 0
-
         # Computation
         for index in range(NUM_PARTICLES_PER_TILE):
             particle_2 = shared_particle_index_2[index]
