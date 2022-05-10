@@ -183,9 +183,9 @@ class CharmmVDWConstraint(Constraint):
                 #     local_forces[i] += force_val * vec[i]
         # for i in range(SPATIAL_DIM):
         #     cuda.atomic.add(sorted_forces, (i, global_thread_x), local_forces[i])
-        cuda.atomic.add(sorted_forces, (0, global_thread_x), local_forces[0])
-        cuda.atomic.add(sorted_forces, (1, global_thread_x), local_forces[1])
-        cuda.atomic.add(sorted_forces, (2, global_thread_x), local_forces[2])
+        cuda.atomic.add(sorted_forces, (0, global_thread_x), force_x)
+        cuda.atomic.add(sorted_forces, (1, global_thread_x), force_y)
+        cuda.atomic.add(sorted_forces, (2, global_thread_x), force_z)
         cuda.atomic.add(potential_energy, 0, energy)
 
     def update(self):
