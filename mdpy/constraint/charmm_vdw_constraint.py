@@ -92,6 +92,7 @@ class CharmmVDWConstraint(Constraint):
         shared_parameters = cuda.shared.array(shape=(4, NUM_PARTICLES_PER_TILE, NUM_TILES_PER_THREAD), dtype=NUMBA_FLOAT)
         num_tiles = 0
         tile_start_index = block_y*NUM_TILES_PER_THREAD
+        cuda.syncthreads()
         for tile_index in range(NUM_TILES_PER_THREAD):
             tile_id2 = tile_neighbors[tile_id1, tile_start_index+tile_index]
             if tile_id2 == -1:
@@ -113,26 +114,27 @@ class CharmmVDWConstraint(Constraint):
             return
         local_excluded_particles = cuda.local.array(shape=(MAX_NUM_EXCLUDED_PARTICLES), dtype=NUMBA_INT)
         num_excluded_particles = NUMBA_INT(0)
-        for i in range(MAX_NUM_EXCLUDED_PARTICLES):
-            local_excluded_particles[i] = sorted_excluded_particles[i, global_thread_x]
-            if local_excluded_particles[i] == -1:
-                break
-            num_excluded_particles += 1
         local_scaled_particles = cuda.local.array(shape=(MAX_NUM_SCALED_PARTICLES), dtype=NUMBA_INT)
         num_scaled_particles = NUMBA_INT(0)
-        for i in range(MAX_NUM_SCALED_PARTICLES):
-            local_scaled_particles[i] = sorted_scaled_particles[i, global_thread_x]
-            if local_scaled_particles[i] == -1:
-                break
-            num_scaled_particles += 1
         local_parameters = cuda.local.array(shape=(4), dtype=NUMBA_FLOAT)
-        for i in range(4):
-            local_parameters[i] = sorted_parameters[i, global_thread_x]
         local_positions = cuda.local.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
         local_forces = cuda.local.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
         vec = cuda.local.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
         energy = NUMBA_FLOAT(0)
         cutoff_radius = cutoff_radius[0]
+        cuda.syncthreads()
+        for i in range(MAX_NUM_EXCLUDED_PARTICLES):
+            local_excluded_particles[i] = sorted_excluded_particles[i, global_thread_x]
+            if local_excluded_particles[i] == -1:
+                break
+            num_excluded_particles += 1
+        for i in range(MAX_NUM_SCALED_PARTICLES):
+            local_scaled_particles[i] = sorted_scaled_particles[i, global_thread_x]
+            if local_scaled_particles[i] == -1:
+                break
+            num_scaled_particles += 1
+        for i in range(4):
+            local_parameters[i] = sorted_parameters[i, global_thread_x]
         for i in range(SPATIAL_DIM):
             local_positions[i] = sorted_positions[i, global_thread_x]
             local_forces[i] = 0
