@@ -51,8 +51,8 @@ def test_temperature():
     assert Quantity(1) * kelvin / kelvin == 1
 
 def test_charge():
-    assert Quantity(1) * coulomb / e == 1/1.602176634e-19
-    q1, q2 = Quantity(1, e), Quantity(1, e)
+    assert Quantity(1) * coulomb / elementary_charge == 1/1.602176634e-19
+    q1, q2 = Quantity(1, elementary_charge), Quantity(1, elementary_charge)
     length = Quantity(1, angstrom)
     energy_val = q1 * q2 / Quantity(4*np.pi) / EPSILON0 / length
     assert energy_val.unit.base_dimension == energy
