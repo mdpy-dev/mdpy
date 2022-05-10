@@ -8,7 +8,6 @@ copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
 import math
-from turtle import position
 import numpy as np
 import numba as nb
 from numba import cuda
