@@ -120,7 +120,7 @@ class CharmmVDWConstraint(Constraint):
             if local_scaled_particles[i] == -1:
                 break
             num_scaled_particles += 1
-        local_parameters = cuda.local.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
+        local_parameters = cuda.local.array(shape=(4), dtype=NUMBA_FLOAT)
         for i in range(4):
             local_parameters[i] = sorted_parameters[i, global_thread_x]
         local_positions = cuda.local.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
