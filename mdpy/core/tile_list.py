@@ -263,6 +263,41 @@ class TileList:
                         cur_neighbor_tile_index += 1
                         cur_tile_index += 1
 
+    def update(self, positions: cp.ndarray):
+        self._num_particles = positions.shape[0]
+        positive_postions = positions + self._device_half_pbc_diag
+        result = self._update_cell_information_kernel(
+            positive_postions, self._num_cells_vec, self._device_cell_width
+        )
+        sorted_particle_index = result[0]
+        cell_particle_information = result[1]
+        cell_tile_information = result[2]
+        self._num_tiles = result[3]
+        max_num_tiles_per_cell = result[4]
+        # Create tile list
+        block_per_grid = int(np.ceil(self._num_tiles / THREAD_PER_BLOCK))
+        self._tile_list = cp.zeros((self._num_tiles, NUM_PARTICLES_PER_TILE), dtype=CUPY_INT) - 1
+        self._tile_cell_index = cp.zeros((self._num_tiles, SPATIAL_DIM), dtype=CUPY_INT)
+        self._sorted_matrix_mapping_index = cp.zeros(self._num_tiles*NUM_PARTICLES_PER_TILE, dtype=CUPY_INT) - 1
+        self._update_tile_list[block_per_grid, THREAD_PER_BLOCK](
+            sorted_particle_index,
+            cell_particle_information,
+            cell_tile_information,
+            self._device_num_cells_vec,
+            self._sorted_matrix_mapping_index,
+            self._tile_list,
+            self._tile_cell_index
+        )
+        self._tile_neighbors = cp.zeros((self._num_tiles, max_num_tiles_per_cell * NUM_NEIGHBOR_CELLS), dtype=CUPY_INT) - 1
+        self._tile_num_neighbors = cp.zeros((self._num_tiles), dtype=CUPY_INT)
+        self._update_tile_neighbor[block_per_grid, THREAD_PER_BLOCK](
+            self._tile_list,
+            self._tile_cell_index,
+            cell_tile_information,
+            self._device_num_cells_vec,
+            self._tile_neighbors
+        )
+
     def sort_matrix(self, unsorted_matrix: cp.ndarray):
         matrix_type = unsorted_matrix.dtype
         sorted_matrix = cp.zeros(
@@ -325,40 +360,6 @@ class TileList:
         for i in range(unsorted_matrix.shape[1]):
             unsorted_matrix[unsorted_index, i] = sorted_matrix[i, idx]
 
-    def update(self, positions: cp.ndarray):
-        self._num_particles = positions.shape[0]
-        positive_postions = positions + self._device_half_pbc_diag
-        result = self._update_cell_information_kernel(
-            positive_postions, self._num_cells_vec, self._device_cell_width
-        )
-        sorted_particle_index = result[0]
-        cell_particle_information = result[1]
-        cell_tile_information = result[2]
-        self._num_tiles = result[3]
-        max_num_tiles_per_cell = result[4]
-        # Create tile list
-        block_per_grid = int(np.ceil(self._num_tiles / THREAD_PER_BLOCK))
-        self._tile_list = cp.zeros((self._num_tiles, NUM_PARTICLES_PER_TILE), dtype=CUPY_INT) - 1
-        self._tile_cell_index = cp.zeros((self._num_tiles, SPATIAL_DIM), dtype=CUPY_INT)
-        self._sorted_matrix_mapping_index = cp.zeros(self._num_tiles*NUM_PARTICLES_PER_TILE, dtype=CUPY_INT) - 1
-        self._update_tile_list[block_per_grid, THREAD_PER_BLOCK](
-            sorted_particle_index,
-            cell_particle_information,
-            cell_tile_information,
-            self._device_num_cells_vec,
-            self._sorted_matrix_mapping_index,
-            self._tile_list,
-            self._tile_cell_index
-        )
-        self._tile_neighbors = cp.zeros((self._num_tiles, max_num_tiles_per_cell * NUM_NEIGHBOR_CELLS), dtype=CUPY_INT) - 1
-        self._update_tile_neighbor[block_per_grid, THREAD_PER_BLOCK](
-            self._tile_list,
-            self._tile_cell_index,
-            cell_tile_information,
-            self._device_num_cells_vec,
-            self._tile_neighbors
-        )
-
     @property
     def cell_width(self):
         return self._cell_width
@@ -414,7 +415,7 @@ if __name__ == '__main__':
             print('# Tile %d, cell_index: %s' %(tile, tile_list.tile_cell_index[tile, :]))
             print(tile_list.sorted_matrix_mapping_index[tile*NUM_PARTICLES_PER_TILE:(tile+1)*NUM_PARTICLES_PER_TILE])
             print(tile_list.sort_matrix(positive_positions)[tile*NUM_PARTICLES_PER_TILE:(tile+1)*NUM_PARTICLES_PER_TILE, :])
-    if True:
+    if not True:
         sorted_positions = tile_list.sort_matrix(positions)
         unsorted_positions = tile_list.unsort_matrix(sorted_positions)
         print(cp.hstack([positions, unsorted_positions])[:100, :])
