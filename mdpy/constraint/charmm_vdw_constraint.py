@@ -130,9 +130,6 @@ class CharmmVDWConstraint(Constraint):
         for i in range(SPATIAL_DIM):
             local_positions[i] = sorted_positions[i, global_thread_x]
             local_forces[i] = 0
-        force_x = NUMBA_FLOAT(0)
-        force_y = NUMBA_FLOAT(0)
-        force_z = NUMBA_FLOAT(0)
         # Computation
         for index in range(NUM_PARTICLES_PER_TILE):
             particle_2 = shared_particle_index_2[index]
@@ -176,16 +173,10 @@ class CharmmVDWConstraint(Constraint):
                 scaled_r12 = scaled_r6**2
                 energy += NUMBA_FLOAT(2) * epsilon * (scaled_r12 - scaled_r6)
                 force_val = - (NUMBA_FLOAT(2) * scaled_r12 - scaled_r6) / r * epsilon * NUMBA_FLOAT(24)
-                force_x += force_val * vec[0]
-                force_y += force_val * vec[1]
-                force_z += force_val * vec[2]
-                # for i in range(SPATIAL_DIM):
-                #     local_forces[i] += force_val * vec[i]
-        # for i in range(SPATIAL_DIM):
-        #     cuda.atomic.add(sorted_forces, (i, global_thread_x), local_forces[i])
-        cuda.atomic.add(sorted_forces, (0, global_thread_x), force_x)
-        cuda.atomic.add(sorted_forces, (1, global_thread_x), force_y)
-        cuda.atomic.add(sorted_forces, (2, global_thread_x), force_z)
+                for i in range(SPATIAL_DIM):
+                    local_forces[i] += force_val * vec[i]
+        for i in range(SPATIAL_DIM):
+            cuda.atomic.add(sorted_forces, (i, global_thread_x), local_forces[i])
         cuda.atomic.add(potential_energy, 0, energy)
 
     def update(self):
