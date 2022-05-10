@@ -60,10 +60,10 @@ EPSILON0 = Quantity(8.85418e-12, second**2*coulomb**2/meter**3/kilogram).convert
 __all__ = [
     'Quantity',
 
-    'default_length_unit', 'default_mass_unit', 'default_time_unit', 
+    'default_length_unit', 'default_mass_unit', 'default_time_unit',
     'default_temperature_unit', 'default_charge_unit', 'default_mol_unit',
     'default_frequency_unit', 'default_velocity_unit', 'default_accelrated_velocity_unit',
-    'default_energy_unit', 'default_power_unit', 'default_force_unit', 
+    'default_energy_unit', 'default_power_unit', 'default_force_unit',
     'default_current_unit', 'default_voltage_unit', 'default_resistance_unit',
     'default_capacitance_unit', 'default_conductance_unit', 'default_electric_intensity_unit',
 
@@ -76,9 +76,9 @@ __all__ = [
     'mol', 'kilomol',
     'joule', 'kilojoule',  'joule_permol', 'kilojoule_permol', 'calorie', 'kilocalorie',  'calorie_premol', 'kilocalorie_permol', 'ev', 'hartree',
     'newton', 'kilonewton',
-    'kilojoule_permol_over_angstrom', 'kilojoule_permol_over_nanometer', 
+    'kilojoule_permol_over_angstrom', 'kilojoule_permol_over_nanometer',
     'kilocalorie_permol_over_angstrom', 'kilocalorie_permol_over_nanometer',
     'watt', 'kilowatt',
-    
+
     'NA', 'KB', 'EPSILON0'
 ]
