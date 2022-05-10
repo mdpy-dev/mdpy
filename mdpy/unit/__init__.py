@@ -20,7 +20,7 @@ from .unit_definition import kilogram, gram, amu, dalton
 from .unit_definition import day, hour, minute
 from .unit_definition import second, millisecond, microsecond, nanosecond, picosecond, femtosecond
 from .unit_definition import kelvin
-from .unit_definition import coulomb, e, ampere, volt, ohm, farad, siemens, hertz
+from .unit_definition import coulomb, elementary_charge, ampere, volt, ohm, farad, siemens, hertz
 from .unit_definition import mol, kilomol
 from .unit_definition import joule, kilojoule, joule_permol, kilojoule_permol, calorie, kilocalorie, calorie_premol, kilocalorie_permol, ev, hartree
 from .unit_definition import newton, kilonewton
@@ -32,7 +32,7 @@ default_length_unit = angstrom
 default_mass_unit = dalton
 default_time_unit = femtosecond
 default_temperature_unit = kelvin
-default_charge_unit = e
+default_charge_unit = elementary_charge
 default_mol_unit = mol
 
 default_frequency_unit = 1 / default_time_unit
@@ -72,7 +72,7 @@ __all__ = [
     'day', 'hour', 'minute',
     'second', 'millisecond', 'microsecond', 'nanosecond', 'picosecond', 'femtosecond',
     'kelvin',
-    'coulomb', 'e', 'ampere', 'volt', 'ohm', 'farad', 'siemens', 'hertz',
+    'coulomb', 'elementary_charge', 'ampere', 'volt', 'ohm', 'farad', 'siemens', 'hertz',
     'mol', 'kilomol',
     'joule', 'kilojoule',  'joule_permol', 'kilojoule_permol', 'calorie', 'kilocalorie',  'calorie_premol', 'kilocalorie_permol', 'ev', 'hartree',
     'newton', 'kilonewton',

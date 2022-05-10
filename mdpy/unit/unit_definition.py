@@ -87,7 +87,7 @@ kilowatt = Unit(power, 1e3)
 ######################
 
 coulomb = Unit(charge, 1)
-e = Unit(charge, 1.602176634e-19)
+elementary_charge = Unit(charge, 1.602176634e-19)
 
 ampere = coulomb / second
 volt = watt / ampere
