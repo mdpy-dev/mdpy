@@ -10,6 +10,7 @@ copyright : (C)Copyright 2021-present, mdpy organization
 import pytest, os
 import numpy as np
 import cupy as cp
+import mdpy as md
 from mdpy import SPATIAL_DIM
 from mdpy.core import TileList
 from mdpy.core.tile_list import NUM_PARTICLES_PER_TILE
@@ -81,3 +82,37 @@ class TestTileList:
                     elif diff < - self.tile_list.num_cells_vec[i] / 2:
                         diff += self.tile_list.num_cells_vec[i]
                     assert np.abs(diff) <= 1
+
+    def test_exclusion_map(self):
+        pdb = md.io.PDBParser(os.path.join(data_dir, 'solvated_6PO6.pdb'))
+        topology = md.io.PSFParser(os.path.join(data_dir, 'solvated_6PO6.psf')).topology
+        positions = cp.array(pdb.positions, CUPY_FLOAT)
+        device_excluded_particles = cp.array(topology.excluded_particles, CUPY_INT)
+
+        tile_list = md.core.TileList(pdb.pbc_matrix)
+        tile_list.set_cutoff_radius(Quantity(8, angstrom))
+        tile_list.update(positions)
+        exclusion_mask = tile_list.generate_exclusion_mask_map(device_excluded_particles)
+
+        for tile_index in np.random.randint(0, tile_list.num_tiles, 30):
+            print(tile_index, tile_list.tile_list[tile_index, :])
+            tile_neighbors = tile_list.tile_neighbors[tile_index]
+            particle_neighbors = np.zeros([tile_neighbors.shape[0]*NUM_PARTICLES_PER_TILE], NUMPY_INT) - 1
+            for i, j in enumerate(tile_neighbors):
+                if j != -1:
+                    particle_neighbors[i*NUM_PARTICLES_PER_TILE:(i+1)*NUM_PARTICLES_PER_TILE] = tile_list.tile_list[j, :].get()
+            particle_start_index = tile_index * NUM_PARTICLES_PER_TILE
+            for i, j in enumerate(tile_list.tile_list[tile_index]):
+                sorted_index = particle_start_index + i
+                if j == -1:
+                    is_excluded = np.ones_like(particle_neighbors, NUMPY_BIT)
+                else:
+                    is_excluded = np.zeros_like(particle_neighbors, NUMPY_BIT)
+                    excluded_particles = list(device_excluded_particles[j, :].get())
+                    excluded_particles = [i for i in excluded_particles if i != -1]
+                    for k, l in enumerate(particle_neighbors):
+                        if l == -1:
+                            is_excluded[k] = 1
+                        elif l in excluded_particles:
+                            is_excluded[k] = 1
+                assert np.all(exclusion_mask[sorted_index, :].get() == is_excluded)
