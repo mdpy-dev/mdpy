@@ -117,11 +117,12 @@ class CharmmVDWConstraint(Constraint):
         for i in range(SPATIAL_DIM):
             local_positions[i] = sorted_positions[i, global_thread_x]
             local_forces[i] = 0
+
         # Computation
         for tile_index in range(num_tiles):
             particle_start_index = (tile_start_index + tile_index) * NUM_PARTICLES_PER_TILE
             for index in range(NUM_PARTICLES_PER_TILE):
-                if exclusion_map[global_thread_x, particle_start_index + index] == 1:
+                if exclusion_map[particle_start_index + index, global_thread_x]:
                     continue
                 r = NUMBA_FLOAT(0)
                 for i in range(SPATIAL_DIM):
