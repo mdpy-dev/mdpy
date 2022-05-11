@@ -70,11 +70,8 @@ class Ensemble:
         self._topology.device_sorted_charges = self._tile_list.sort_matrix(
             self._topology.device_charges
         )
-        self._topology.device_sorted_excluded_particles = self._tile_list.sort_matrix(
+        self._topology.device_exclusion_map = self._tile_list.generate_exclusion_mask_map(
             self._topology.device_excluded_particles
-        )
-        self._topology.device_sorted_scaled_particles = self._tile_list.sort_matrix(
-            self._topology.device_scaled_particles
         )
 
     def _update_kinetic_energy(self):
