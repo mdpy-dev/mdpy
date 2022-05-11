@@ -54,6 +54,7 @@ class TileList:
             NUMBA_INT[:, ::1], # tile_cell_index
             NUMBA_INT[:, ::1], # cell_tile_information
             NUMBA_INT[::1], # num_cells_vec
+            NUMBA_INT[::1], # tile_num_neighbors
             NUMBA_INT[:, ::1], # tile_neighbor
         ))(self._update_tile_neighbor_kernel)
         self._sort_int_matrix = cuda.jit(nb.void(
@@ -227,6 +228,7 @@ class TileList:
         tile_cell_index,
         cell_tile_information,
         num_cells_vec,
+        tile_num_neighbors,
         tile_neighbors
     ):
         tile_id = cuda.grid(1)
@@ -268,6 +270,7 @@ class TileList:
                         tile_neighbors[tile_id, cur_neighbor_tile_index] = cur_tile_index
                         cur_neighbor_tile_index += 1
                         cur_tile_index += 1
+        tile_num_neighbors[tile_id] = cur_neighbor_tile_index
 
     def update(self, positions: cp.ndarray) -> None:
         self._num_particles = positions.shape[0]
@@ -295,13 +298,17 @@ class TileList:
             self._tile_cell_index
         )
         self._tile_neighbors = cp.zeros((self._num_tiles, max_num_tiles_per_cell * NUM_NEIGHBOR_CELLS), dtype=CUPY_INT) - 1
+        self._tile_num_neighbors = cp.zeros((self._num_tiles), dtype=CUPY_INT)
         self._update_tile_neighbor[block_per_grid, THREAD_PER_BLOCK](
             self._tile_list,
             self._tile_cell_index,
             cell_tile_information,
             self._device_num_cells_vec,
+            self._tile_num_neighbors,
             self._tile_neighbors
         )
+        # self._tile_neighbors = self._tile_neighbors[:, :int(cp.max(self._tile_num_neighbors))]
+        self._tile_neighbors = cp.array(self._tile_neighbors[:, :int(cp.max(self._tile_num_neighbors))], CUPY_INT)
 
     def sort_matrix(self, unsorted_matrix: cp.ndarray) -> cp.ndarray:
         matrix_type = unsorted_matrix.dtype
