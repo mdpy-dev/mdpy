@@ -19,7 +19,7 @@ from mdpy.utils import *
 from mdpy.unit import *
 
 THREAD_PER_BLOCK = (NUM_PARTICLES_PER_TILE, 1)
-NUM_TILES_PER_THREAD = 9
+NUM_TILES_PER_THREAD = 3
 class CharmmVDWConstraint(Constraint):
     def __init__(self, parameter_dict: dict, cutoff_radius=Quantity(12, angstrom)) -> None:
         super().__init__()
