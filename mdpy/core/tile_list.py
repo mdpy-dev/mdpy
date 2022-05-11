@@ -11,7 +11,7 @@ import numpy as np
 import cupy as cp
 import numba.cuda as cuda
 from mdpy import SPATIAL_DIM
-from mdpy.core import NUM_NEIGHBOR_CELLS, NUM_PARTICLES_PER_TILE
+from mdpy.core import MAX_NUM_EXCLUDED_PARTICLES, NUM_NEIGHBOR_CELLS, NUM_PARTICLES_PER_TILE
 from mdpy.environment import *
 from mdpy.utils import *
 from mdpy.unit import *
@@ -76,12 +76,12 @@ class TileList:
             NUMBA_INT[::1], # sorted_matrix_mapping_index
             NUMBA_FLOAT[:, ::1] # unsorted_matrix
         ))(self._unsort_matrix_kernel)
-        self._generate_mask_map = cuda.jit(nb.void(
-            NUMBA_INT[:, ::1], # particle_infomation
+        self._generate_exclusion_mask_map = cuda.jit(nb.void(
+            NUMBA_INT[:, ::1], # excluded_particles
             NUMBA_INT[:, ::1], # tile_neighbor
             NUMBA_INT[::1], # sorted_matrix_mapping_index
             NUMBA_BIT[:, ::1] # mask_map
-        ))(self._generate_mask_map_kernel)
+        ))(self._generate_exclusion_mask_map_kernel)
 
     def set_pbc_matrix(self, pbc_matrix: np.ndarray) -> None:
         pbc_matrix = check_quantity_value(pbc_matrix, default_length_unit)
@@ -365,7 +365,7 @@ class TileList:
         for i in range(unsorted_matrix.shape[1]):
             unsorted_matrix[unsorted_index, i] = sorted_matrix[i, idx]
 
-    def generate_mask_map(self, particle_infomation: cp.ndarray) -> cp.ndarray:
+    def generate_exclusion_mask_map(self, particle_infomation: cp.ndarray) -> cp.ndarray:
         mask_map = cp.zeros((
             self._num_tiles * NUM_PARTICLES_PER_TILE,
             self._tile_neighbors.shape[1] * NUM_PARTICLES_PER_TILE
@@ -374,7 +374,7 @@ class TileList:
         block_per_grid_x = self._num_tiles
         block_per_grid_y = self._tile_neighbors.shape[1]
         block_per_grid = (block_per_grid_x, block_per_grid_y)
-        self._generate_mask_map[block_per_grid, thread_per_block](
+        self._generate_exclusion_mask_map[block_per_grid, thread_per_block](
             particle_infomation,
             self._tile_neighbors,
             self._sorted_matrix_mapping_index,
@@ -383,28 +383,41 @@ class TileList:
         return mask_map
 
     @staticmethod
-    def _generate_mask_map_kernel(particle_infomation, tile_neighbors, sorted_matrix_mapping_index, mask_map):
+    def _generate_exclusion_mask_map_kernel(
+        excluded_particles,
+        tile_neighbors,
+        sorted_matrix_mapping_index,
+        mask_map
+    ):
         tile_id1 = cuda.blockIdx.x
         tile_id2 = tile_neighbors[tile_id1, cuda.blockIdx.y]
-        if tile_id2 == -1:
-            return
         local_thread_x = cuda.threadIdx.x
         global_thread_x = tile_id1 * cuda.blockDim.x + local_thread_x
+        start_index = cuda.blockIdx.y * NUM_PARTICLES_PER_TILE
+        if tile_id2 == -1:
+            for particle_index in range(NUM_PARTICLES_PER_TILE):
+                mask_map[global_thread_x, start_index + particle_index] = 1
+            return
         shared_particle_index = cuda.shared.array(shape=(NUM_PARTICLES_PER_TILE), dtype=NUMBA_INT)
         particle_start_index2 = tile_id2 * NUM_PARTICLES_PER_TILE
         shared_particle_index[local_thread_x] = sorted_matrix_mapping_index[particle_start_index2+local_thread_x]
         cuda.syncthreads()
-
         particle1 = sorted_matrix_mapping_index[global_thread_x]
-        start_index = cuda.blockIdx.y * NUM_PARTICLES_PER_TILE
+        if particle1 == -1:
+            for particle_index in range(NUM_PARTICLES_PER_TILE):
+                mask_map[global_thread_x, start_index + particle_index] = 1
+            return
         for particle_index in range(NUM_PARTICLES_PER_TILE):
-            for information_index in range(particle_infomation.shape[1]):
-                information = particle_infomation[particle1, information_index]
-                if information == -1:
-                    break
-                if information == shared_particle_index[particle_index]:
-                    mask_map[global_thread_x, start_index + particle_index] = 1
-                    break
+            if shared_particle_index[particle_index] == -1:
+                mask_map[global_thread_x, start_index + particle_index] = 1
+            else:
+                for information_index in range(MAX_NUM_EXCLUDED_PARTICLES):
+                    information = excluded_particles[particle1, information_index]
+                    if information == -1:
+                        break
+                    elif information == shared_particle_index[particle_index]:
+                        mask_map[global_thread_x, start_index + particle_index] = 1
+                        break
 
     @property
     def cell_width(self):
@@ -467,8 +480,8 @@ if __name__ == '__main__':
         unsorted_positions = tile_list.unsort_matrix(sorted_positions)
         print(cp.hstack([positions, unsorted_positions])[:100, :])
     if True:
-        excluded_mask_map = tile_list.generate_mask_map(cp.array(psf.topology.excluded_particles, CUPY_INT))
-        print(cp.count_nonzero(excluded_mask_map))
+        excluded_mask_map = tile_list.generate_exclusion_mask_map(cp.array(psf.topology.excluded_particles, CUPY_INT))
+        print(cp.count_nonzero(excluded_mask_map==0))
         num_excluded_particles = 0
         for particle in psf.topology.particles:
             num_excluded_particles += particle.num_excluded_particles
@@ -514,7 +527,7 @@ if __name__ == '__main__':
     RangePush('Unsort matrix')
     ts = time.time()
     for i in range(epoch):
-        tile_list.generate_mask_map(excluded_particles)
+        tile_list.generate_exclusion_mask_map(excluded_particles)
     te = time.time()
     print('Run generate mask for %s s' %((te-ts)/epoch))
     RangePop()
