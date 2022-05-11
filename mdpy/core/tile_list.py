@@ -374,8 +374,8 @@ class TileList:
 
     def generate_exclusion_mask_map(self, particle_infomation: cp.ndarray) -> cp.ndarray:
         mask_map = cp.zeros((
-            self._num_tiles * NUM_PARTICLES_PER_TILE,
-            self._tile_neighbors.shape[1] * NUM_PARTICLES_PER_TILE
+            self._tile_neighbors.shape[1] * NUM_PARTICLES_PER_TILE,
+            self._num_tiles * NUM_PARTICLES_PER_TILE
         ), CUPY_BIT)
         thread_per_block = (32, 1)
         block_per_grid_x = self._num_tiles
@@ -403,7 +403,7 @@ class TileList:
         start_index = cuda.blockIdx.y * NUM_PARTICLES_PER_TILE
         if tile_id2 == -1:
             for particle_index in range(NUM_PARTICLES_PER_TILE):
-                mask_map[global_thread_x, start_index + particle_index] = 1
+                mask_map[start_index + particle_index, global_thread_x] = 1
             return
         shared_particle_index = cuda.shared.array(shape=(NUM_PARTICLES_PER_TILE), dtype=NUMBA_INT)
         particle_start_index2 = tile_id2 * NUM_PARTICLES_PER_TILE
@@ -412,21 +412,21 @@ class TileList:
         particle1 = sorted_matrix_mapping_index[global_thread_x]
         if particle1 == -1:
             for particle_index in range(NUM_PARTICLES_PER_TILE):
-                mask_map[global_thread_x, start_index + particle_index] = 1
+                mask_map[start_index + particle_index, global_thread_x] = 1
             return
         for particle_index in range(NUM_PARTICLES_PER_TILE):
             particle2 = shared_particle_index[particle_index]
             if particle2 == -1:
-                mask_map[global_thread_x, start_index + particle_index] = 1
+                mask_map[start_index + particle_index, global_thread_x] = 1
             elif particle1 == particle2:
-                mask_map[global_thread_x, start_index + particle_index] = 1
+                mask_map[start_index + particle_index, global_thread_x] = 1
             else:
                 for information_index in range(MAX_NUM_EXCLUDED_PARTICLES):
                     particle2 = excluded_particles[particle1, information_index]
                     if particle2 == -1:
                         break
                     elif particle2 == shared_particle_index[particle_index]:
-                        mask_map[global_thread_x, start_index + particle_index] = 1
+                        mask_map[start_index + particle_index, global_thread_x] = 1
                         break
 
     @property
