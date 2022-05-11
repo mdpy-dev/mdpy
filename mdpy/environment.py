@@ -14,6 +14,10 @@ from mdpy.error import *
 
 precision = 'single'
 
+CUPY_BIT = cp.uint8
+NUMBA_BIT = nb.uint8
+NUMPY_BIT = np.uint8
+
 if precision == 'single':
     CUPY_FLOAT = cp.float32
     NUMBA_FLOAT = nb.float32
