@@ -284,7 +284,7 @@ class Topology:
         return self._device_exclusion_map
 
     @device_exclusion_map.setter
-    def device_excluded_map(self, exclusion_map: cp.ndarray):
+    def device_exclusion_map(self, exclusion_map: cp.ndarray):
         self._device_exclusion_map = exclusion_map
 
     @property
