@@ -120,31 +120,55 @@ class CharmmVDWConstraint(Constraint):
 
         # Computation
         for tile_index in range(num_tiles):
-            particle_start_index = (tile_start_index + tile_index) * NUM_PARTICLES_PER_TILE
-            for index in range(NUM_PARTICLES_PER_TILE):
-                if exclusion_map[particle_start_index + index, global_thread_x]:
-                    continue
-                r = NUMBA_FLOAT(0)
-                for i in range(SPATIAL_DIM):
-                    vec[i] = shared_positions[i, index, tile_index] - local_positions[i]
-                    if vec[i] < - shared_half_pbc_matrix[i]:
-                        vec[i] += shared_pbc_matrix[i]
-                    elif vec[i] > shared_half_pbc_matrix[i]:
-                        vec[i] -= shared_pbc_matrix[i]
-                    r += vec[i]**2
-                r = math.sqrt(r)
-                if r <= cutoff_radius:
+            exclusion_flag = exclusion_map[tile_start_index + tile_index, global_thread_x]
+            if exclusion_flag == 0:
+                for index in range(NUM_PARTICLES_PER_TILE):
+                    r = NUMBA_FLOAT(0)
                     for i in range(SPATIAL_DIM):
-                        vec[i] /= r
-                    epsilon = math.sqrt(local_parameters[0] * shared_parameters[0, index, tile_index])
-                    sigma = (local_parameters[1] + shared_parameters[1, index, tile_index]) * NUMBA_FLOAT(0.5)
-                    scaled_r = sigma / r
-                    scaled_r6 = scaled_r**6
-                    scaled_r12 = scaled_r6**2
-                    energy += NUMBA_FLOAT(2) * epsilon * (scaled_r12 - scaled_r6)
-                    force_val = - (NUMBA_FLOAT(2) * scaled_r12 - scaled_r6) / r * epsilon * NUMBA_FLOAT(24)
+                        vec[i] = shared_positions[i, index, tile_index] - local_positions[i]
+                        if vec[i] < - shared_half_pbc_matrix[i]:
+                            vec[i] += shared_pbc_matrix[i]
+                        elif vec[i] > shared_half_pbc_matrix[i]:
+                            vec[i] -= shared_pbc_matrix[i]
+                        r += vec[i]**2
+                    r = math.sqrt(r)
+                    if r <= cutoff_radius:
+                        for i in range(SPATIAL_DIM):
+                            vec[i] /= r
+                        epsilon = math.sqrt(local_parameters[0] * shared_parameters[0, index, tile_index])
+                        sigma = (local_parameters[1] + shared_parameters[1, index, tile_index]) * NUMBA_FLOAT(0.5)
+                        scaled_r = sigma / r
+                        scaled_r6 = scaled_r**6
+                        scaled_r12 = scaled_r6**2
+                        energy += NUMBA_FLOAT(2) * epsilon * (scaled_r12 - scaled_r6)
+                        force_val = - (NUMBA_FLOAT(2) * scaled_r12 - scaled_r6) / r * epsilon * NUMBA_FLOAT(24)
+                        for i in range(SPATIAL_DIM):
+                            local_forces[i] += force_val * vec[i]
+            else:
+                for index in range(NUM_PARTICLES_PER_TILE):
+                    if exclusion_flag >> index &0b1:
+                        continue
+                    r = NUMBA_FLOAT(0)
                     for i in range(SPATIAL_DIM):
-                        local_forces[i] += force_val * vec[i]
+                        vec[i] = shared_positions[i, index, tile_index] - local_positions[i]
+                        if vec[i] < - shared_half_pbc_matrix[i]:
+                            vec[i] += shared_pbc_matrix[i]
+                        elif vec[i] > shared_half_pbc_matrix[i]:
+                            vec[i] -= shared_pbc_matrix[i]
+                        r += vec[i]**2
+                    r = math.sqrt(r)
+                    if r <= cutoff_radius:
+                        for i in range(SPATIAL_DIM):
+                            vec[i] /= r
+                        epsilon = math.sqrt(local_parameters[0] * shared_parameters[0, index, tile_index])
+                        sigma = (local_parameters[1] + shared_parameters[1, index, tile_index]) * NUMBA_FLOAT(0.5)
+                        scaled_r = sigma / r
+                        scaled_r6 = scaled_r**6
+                        scaled_r12 = scaled_r6**2
+                        energy += NUMBA_FLOAT(2) * epsilon * (scaled_r12 - scaled_r6)
+                        force_val = - (NUMBA_FLOAT(2) * scaled_r12 - scaled_r6) / r * epsilon * NUMBA_FLOAT(24)
+                        for i in range(SPATIAL_DIM):
+                            local_forces[i] += force_val * vec[i]
         for i in range(SPATIAL_DIM):
             cuda.atomic.add(sorted_forces, (i, global_thread_x), local_forces[i])
         cuda.atomic.add(potential_energy, 0, energy)
