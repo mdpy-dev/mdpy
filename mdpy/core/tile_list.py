@@ -21,7 +21,7 @@ SKIN_WIDTH = Quantity(1, angstrom)
 THREAD_PER_BLOCK = 32
 
 class TileList:
-    def __init__(self, pbc_matrix: np.ndarray, skin_width=SKIN_WIDTH,) -> None:
+    def __init__(self, pbc_matrix: np.ndarray, skin_width=SKIN_WIDTH) -> None:
         pbc_matrix = check_quantity_value(pbc_matrix, default_length_unit)
         self._pbc_matrix = check_pbc_matrix(pbc_matrix)
         self._pbc_diag = np.ascontiguousarray(self._pbc_matrix.diagonal(), dtype=NUMPY_FLOAT)
@@ -76,8 +76,14 @@ class TileList:
             NUMBA_INT[::1], # sorted_matrix_mapping_index
             NUMBA_FLOAT[:, ::1] # unsorted_matrix
         ))(self._unsort_matrix_kernel)
+        self._generate_mask_map = cuda.jit(nb.void(
+            NUMBA_INT[:, ::1], # particle_infomation
+            NUMBA_INT[:, ::1], # tile_neighbor
+            NUMBA_INT[::1], # sorted_matrix_mapping_index
+            NUMBA_BIT[:, ::1] # mask_map
+        ))(self._generate_mask_map_kernel)
 
-    def set_pbc_matrix(self, pbc_matrix: np.ndarray):
+    def set_pbc_matrix(self, pbc_matrix: np.ndarray) -> None:
         pbc_matrix = check_quantity_value(pbc_matrix, default_length_unit)
         self._pbc_matrix = check_pbc_matrix(pbc_matrix)
         self._pbc_diag = self._pbc_matrix.diagonal()
@@ -86,7 +92,7 @@ class TileList:
         self._device_pbc_diag = cp.array(self._pbc_diag, CUPY_FLOAT)
         self._device_half_pbc_diag = cp.array(self._half_pbc_diag, CUPY_FLOAT)
 
-    def set_cutoff_radius(self, cutoff_radius):
+    def set_cutoff_radius(self, cutoff_radius) -> None:
         cutoff_radius = check_quantity_value(cutoff_radius, default_length_unit)
         if cutoff_radius == 0:
             raise TileListPoorDefinedError(
@@ -263,7 +269,7 @@ class TileList:
                         cur_neighbor_tile_index += 1
                         cur_tile_index += 1
 
-    def update(self, positions: cp.ndarray):
+    def update(self, positions: cp.ndarray) -> None:
         self._num_particles = positions.shape[0]
         positive_postions = positions + self._device_half_pbc_diag
         result = self._update_cell_information_kernel(
@@ -289,7 +295,6 @@ class TileList:
             self._tile_cell_index
         )
         self._tile_neighbors = cp.zeros((self._num_tiles, max_num_tiles_per_cell * NUM_NEIGHBOR_CELLS), dtype=CUPY_INT) - 1
-        self._tile_num_neighbors = cp.zeros((self._num_tiles), dtype=CUPY_INT)
         self._update_tile_neighbor[block_per_grid, THREAD_PER_BLOCK](
             self._tile_list,
             self._tile_cell_index,
@@ -298,7 +303,7 @@ class TileList:
             self._tile_neighbors
         )
 
-    def sort_matrix(self, unsorted_matrix: cp.ndarray):
+    def sort_matrix(self, unsorted_matrix: cp.ndarray) -> cp.ndarray:
         matrix_type = unsorted_matrix.dtype
         sorted_matrix = cp.zeros(
             (unsorted_matrix.shape[1], self._num_tiles*NUM_PARTICLES_PER_TILE),
@@ -329,7 +334,7 @@ class TileList:
         for i in range(unsorted_matrix.shape[1]):
             sorted_matrix[i, idx] = unsorted_matrix[unsorted_index, i]
 
-    def unsort_matrix(self, sorted_matrix: cp.ndarray):
+    def unsort_matrix(self, sorted_matrix: cp.ndarray) -> cp.ndarray:
         matrix_type = sorted_matrix.dtype
         unsorted_matrix = cp.zeros(
             (self._num_particles, sorted_matrix.shape[0]),
@@ -359,6 +364,47 @@ class TileList:
             return
         for i in range(unsorted_matrix.shape[1]):
             unsorted_matrix[unsorted_index, i] = sorted_matrix[i, idx]
+
+    def generate_mask_map(self, particle_infomation: cp.ndarray) -> cp.ndarray:
+        mask_map = cp.zeros((
+            self._num_tiles * NUM_PARTICLES_PER_TILE,
+            self._tile_neighbors.shape[1] * NUM_PARTICLES_PER_TILE
+        ), CUPY_BIT)
+        thread_per_block = (32, 1)
+        block_per_grid_x = self._num_tiles
+        block_per_grid_y = self._tile_neighbors.shape[1]
+        block_per_grid = (block_per_grid_x, block_per_grid_y)
+        self._generate_mask_map[block_per_grid, thread_per_block](
+            particle_infomation,
+            self._tile_neighbors,
+            self._sorted_matrix_mapping_index,
+            mask_map
+        )
+        return mask_map
+
+    @staticmethod
+    def _generate_mask_map_kernel(particle_infomation, tile_neighbors, sorted_matrix_mapping_index, mask_map):
+        tile_id1 = cuda.blockIdx.x
+        tile_id2 = tile_neighbors[tile_id1, cuda.blockIdx.y]
+        if tile_id2 == -1:
+            return
+        local_thread_x = cuda.threadIdx.x
+        global_thread_x = tile_id1 * cuda.blockDim.x + local_thread_x
+        shared_particle_index = cuda.shared.array(shape=(NUM_PARTICLES_PER_TILE), dtype=NUMBA_INT)
+        particle_start_index2 = tile_id2 * NUM_PARTICLES_PER_TILE
+        shared_particle_index[local_thread_x] = sorted_matrix_mapping_index[particle_start_index2+local_thread_x]
+        cuda.syncthreads()
+
+        particle1 = sorted_matrix_mapping_index[global_thread_x]
+        start_index = cuda.blockIdx.y * NUM_PARTICLES_PER_TILE
+        for particle_index in range(NUM_PARTICLES_PER_TILE):
+            for information_index in range(particle_infomation.shape[1]):
+                information = particle_infomation[particle1, information_index]
+                if information == -1:
+                    break
+                if information == shared_particle_index[particle_index]:
+                    mask_map[global_thread_x, start_index + particle_index] = 1
+                    break
 
     @property
     def cell_width(self):
@@ -401,6 +447,7 @@ if __name__ == '__main__':
     import mdpy as md
     from cupy.cuda.nvtx import RangePush, RangePop
     pdb = md.io.PDBParser('/home/zhenyuwei/nutstore/ZhenyuWei/Note_Research/mdpy/mdpy/benchmark/str/medium.pdb')
+    psf = md.io.PSFParser('/home/zhenyuwei/nutstore/ZhenyuWei/Note_Research/mdpy/mdpy/benchmark/str/medium.psf')
     positions = cp.array(pdb.positions, CUPY_FLOAT)
     positive_positions = positions + cp.array(np.diagonal(pdb.pbc_matrix)) / 2
 
@@ -419,6 +466,13 @@ if __name__ == '__main__':
         sorted_positions = tile_list.sort_matrix(positions)
         unsorted_positions = tile_list.unsort_matrix(sorted_positions)
         print(cp.hstack([positions, unsorted_positions])[:100, :])
+    if True:
+        excluded_mask_map = tile_list.generate_mask_map(cp.array(psf.topology.excluded_particles, CUPY_INT))
+        print(cp.count_nonzero(excluded_mask_map))
+        num_excluded_particles = 0
+        for particle in psf.topology.particles:
+            num_excluded_particles += particle.num_excluded_particles
+        print(num_excluded_particles)
 
     epoch = 30
     RangePush('Update tile')
@@ -454,4 +508,13 @@ if __name__ == '__main__':
         tile_list.unsort_matrix(sorted_positions)
     te = time.time()
     print('Run unsort for %s s' %((te-ts)/epoch))
+    RangePop()
+
+    excluded_particles = cp.array(psf.topology.excluded_particles, CUPY_INT)
+    RangePush('Unsort matrix')
+    ts = time.time()
+    for i in range(epoch):
+        tile_list.generate_mask_map(excluded_particles)
+    te = time.time()
+    print('Run generate mask for %s s' %((te-ts)/epoch))
     RangePop()
