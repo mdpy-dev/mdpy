@@ -19,7 +19,7 @@ from mdpy.utils import *
 from mdpy.unit import *
 
 THREAD_PER_BLOCK = (NUM_PARTICLES_PER_TILE, 1)
-NUM_TILES_PER_THREAD = 3
+NUM_TILES_PER_THREAD = 9
 class CharmmVDWConstraint(Constraint):
     def __init__(self, parameter_dict: dict, cutoff_radius=Quantity(12, angstrom)) -> None:
         super().__init__()
@@ -88,9 +88,13 @@ class CharmmVDWConstraint(Constraint):
         shared_parameters = cuda.shared.array(shape=(2, NUM_PARTICLES_PER_TILE, NUM_TILES_PER_THREAD), dtype=NUMBA_FLOAT)
         cuda.syncthreads()
         num_tiles = 0
+        num_neighbor_tiles = tile_neighbors.shape[1]
         tile_start_index = block_y * NUM_TILES_PER_THREAD
         for tile_index in range(NUM_TILES_PER_THREAD):
-            tile_id2 = tile_neighbors[tile_id1, tile_start_index + tile_index]
+            index = tile_start_index + tile_index
+            if index >= num_neighbor_tiles:
+                break
+            tile_id2 = tile_neighbors[tile_id1, index]
             if tile_id2 == -1:
                 break
             num_tiles += 1
