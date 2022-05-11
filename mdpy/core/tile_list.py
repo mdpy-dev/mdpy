@@ -408,14 +408,17 @@ class TileList:
                 mask_map[global_thread_x, start_index + particle_index] = 1
             return
         for particle_index in range(NUM_PARTICLES_PER_TILE):
-            if shared_particle_index[particle_index] == -1:
+            particle2 = shared_particle_index[particle_index]
+            if particle2 == -1:
+                mask_map[global_thread_x, start_index + particle_index] = 1
+            elif particle1 == particle2:
                 mask_map[global_thread_x, start_index + particle_index] = 1
             else:
                 for information_index in range(MAX_NUM_EXCLUDED_PARTICLES):
-                    information = excluded_particles[particle1, information_index]
-                    if information == -1:
+                    particle2 = excluded_particles[particle1, information_index]
+                    if particle2 == -1:
                         break
-                    elif information == shared_particle_index[particle_index]:
+                    elif particle2 == shared_particle_index[particle_index]:
                         mask_map[global_thread_x, start_index + particle_index] = 1
                         break
 
@@ -459,8 +462,8 @@ if __name__ == '__main__':
     import time
     import mdpy as md
     from cupy.cuda.nvtx import RangePush, RangePop
-    pdb = md.io.PDBParser('/home/zhenyuwei/nutstore/ZhenyuWei/Note_Research/mdpy/mdpy/benchmark/str/medium.pdb')
-    psf = md.io.PSFParser('/home/zhenyuwei/nutstore/ZhenyuWei/Note_Research/mdpy/mdpy/benchmark/str/medium.psf')
+    pdb = md.io.PDBParser('/home/zhenyuwei/nutstore/ZhenyuWei/Note_Research/mdpy/mdpy/benchmark/data/str.pdb')
+    psf = md.io.PSFParser('/home/zhenyuwei/nutstore/ZhenyuWei/Note_Research/mdpy/mdpy/benchmark/data/str.psf')
     positions = cp.array(pdb.positions, CUPY_FLOAT)
     positive_positions = positions + cp.array(np.diagonal(pdb.pbc_matrix)) / 2
 
@@ -481,7 +484,8 @@ if __name__ == '__main__':
         print(cp.hstack([positions, unsorted_positions])[:100, :])
     if True:
         excluded_mask_map = tile_list.generate_exclusion_mask_map(cp.array(psf.topology.excluded_particles, CUPY_INT))
-        print(cp.count_nonzero(excluded_mask_map==0))
+        print(excluded_mask_map)
+        print(cp.count_nonzero(excluded_mask_map==1))
         num_excluded_particles = 0
         for particle in psf.topology.particles:
             num_excluded_particles += particle.num_excluded_particles
