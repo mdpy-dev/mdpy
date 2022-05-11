@@ -545,25 +545,26 @@ class ElectrostaticPMEConstraint(Constraint):
         self._check_bound_state()
         # Direct part
         self._direct_potential_energy = cp.zeros([1], CUPY_FLOAT)
-        sorted_positions = self._parent_ensemble.tile_list.sort_matrix(self._parent_ensemble.state.positions)
-        sorted_forces = cp.zeros((SPATIAL_DIM, self._parent_ensemble.tile_list.num_tiles * NUM_PARTICLES_PER_TILE), CUPY_FLOAT)
-        thread_per_block = (32, 1)
-        block_per_grid_x = self._parent_ensemble.tile_list.num_tiles
-        block_per_grid_y = self._parent_ensemble.tile_list.tile_neighbors.shape[1]
-        block_per_grid = (block_per_grid_x, block_per_grid_y)
-        self._update_direct_part[block_per_grid, thread_per_block](
-            self._device_k,
-            self._device_ewald_coefficient,
-            self._device_cutoff_radius,
-            self._parent_ensemble.state.device_pbc_matrix,
-            sorted_positions,
-            self._parent_ensemble.topology.device_sorted_charges,
-            self._parent_ensemble.topology.device_sorted_excluded_particles,
-            self._parent_ensemble.tile_list.sorted_matrix_mapping_index,
-            self._parent_ensemble.tile_list.tile_neighbors,
-            sorted_forces, self._direct_potential_energy
-        )
-        self._direct_forces = self._parent_ensemble.tile_list.unsort_matrix(sorted_forces)
+        # sorted_positions = self._parent_ensemble.tile_list.sort_matrix(self._parent_ensemble.state.positions)
+        # sorted_forces = cp.zeros((SPATIAL_DIM, self._parent_ensemble.tile_list.num_tiles * NUM_PARTICLES_PER_TILE), CUPY_FLOAT)
+        # thread_per_block = (32, 1)
+        # block_per_grid_x = self._parent_ensemble.tile_list.num_tiles
+        # block_per_grid_y = self._parent_ensemble.tile_list.tile_neighbors.shape[1]
+        # block_per_grid = (block_per_grid_x, block_per_grid_y)
+        # self._update_direct_part[block_per_grid, thread_per_block](
+        #     self._device_k,
+        #     self._device_ewald_coefficient,
+        #     self._device_cutoff_radius,
+        #     self._parent_ensemble.state.device_pbc_matrix,
+        #     sorted_positions,
+        #     self._parent_ensemble.topology.device_sorted_charges,
+        #     self._parent_ensemble.topology.device_sorted_excluded_particles,
+        #     self._parent_ensemble.tile_list.sorted_matrix_mapping_index,
+        #     self._parent_ensemble.tile_list.tile_neighbors,
+        #     sorted_forces, self._direct_potential_energy
+        # )
+        # self._direct_forces = self._parent_ensemble.tile_list.unsort_matrix(sorted_forces)
+        self._direct_forces = cp.zeros(self._parent_ensemble.state.matrix_shape, CUPY_FLOAT)
 
         thread_per_block = (64)
         block_per_grid = int(np.ceil(
