@@ -36,10 +36,9 @@ class Topology:
         self._device_sorted_charges = []
         self._excluded_particles = []
         self._device_excluded_particles = []
-        self._device_sorted_excluded_particles = []
+        self._device_exclusion_map = []
         self._scaled_particles = []
         self._device_scaled_particles = []
-        self._device_sorted_scaled_particles = []
 
     def __repr__(self) -> str:
         return '<mdpy.core.Toplogy object: %d particles at %x>' %(self._num_particles, id(self))
@@ -281,12 +280,12 @@ class Topology:
         return self._device_excluded_particles
 
     @property
-    def device_sorted_excluded_particles(self) -> cp.ndarray:
-        return self._device_sorted_excluded_particles
+    def device_exclusion_map(self) -> cp.ndarray:
+        return self._device_exclusion_map
 
-    @device_sorted_excluded_particles.setter
-    def device_sorted_excluded_particles(self, sorted_excluded_particles: cp.ndarray):
-        self._device_sorted_excluded_particles = sorted_excluded_particles
+    @device_exclusion_map.setter
+    def device_excluded_map(self, exclusion_map: cp.ndarray):
+        self._device_exclusion_map = exclusion_map
 
     @property
     def scaled_particles(self) -> np.ndarray:
@@ -295,14 +294,6 @@ class Topology:
     @property
     def device_scaled_particles(self) -> cp.ndarray:
         return self._device_scaled_particles
-
-    @property
-    def device_sorted_scaled_particles(self) -> cp.ndarray:
-        return self._device_sorted_scaled_particles
-
-    @device_sorted_scaled_particles.setter
-    def device_sorted_scaled_particles(self, sorted_scaled_particles: cp.ndarray):
-        self._device_sorted_scaled_particles = sorted_scaled_particles
 
     @property
     def particles(self) -> list[Particle]:
