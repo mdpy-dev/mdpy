@@ -14,6 +14,7 @@ from mdpy.utils.check_quantity import check_quantity, check_quantity_value
 from mdpy.utils.select import select, check_selection_condition, check_topological_selection_condition, parse_selection_condition
 from mdpy.utils.select import SELECTION_SUPPORTED_KEYWORDS
 from mdpy.utils.select import SELECTION_SUPPORTED_STERIC_KEYWORDS, SELECTION_SUPPORTED_TOPOLOGICAL_KEYWORDS
+from mdpy.utils.space_filling_curve import generate_hilbert_curve
 
 __all__ = [
     'get_unit_vec', 'get_norm_vec',
@@ -26,5 +27,6 @@ __all__ = [
     'check_quantity', 'check_quantity_value',
     'select', 'check_selection_condition', 'check_topological_selection_condition', 'parse_selection_condition',
     'SELECTION_SUPPORTED_KEYWORDS', 'SELECTION_SUPPORTED_STERIC_KEYWORDS',
-    'SELECTION_SUPPORTED_TOPOLOGICAL_KEYWORDS'
+    'SELECTION_SUPPORTED_TOPOLOGICAL_KEYWORDS',
+    'generate_hilbert_curve'
 ]
