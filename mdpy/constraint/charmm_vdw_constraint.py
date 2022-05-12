@@ -130,6 +130,31 @@ class CharmmVDWConstraint(Constraint):
                 exclusion_flag = exclusion_map[flag_start_index + flag_index, global_thread_x]
                 if exclusion_flag == NUMBA_BIT(255):
                     continue
+                elif exclusion_flag == NUMBA_BIT(0):
+                    particle_start_index = flag_index * NUM_PARTICLES_PER_FLAG
+                    for index in range(NUM_PARTICLES_PER_FLAG):
+                        particle_index = particle_start_index + index # 0-31 Yhe index of particles within tile
+                        r = NUMBA_FLOAT(0)
+                        for i in range(SPATIAL_DIM):
+                            vec[i] = shared_positions[i, particle_index, tile_index] - local_positions[i]
+                            if vec[i] < - shared_half_pbc_matrix[i]:
+                                vec[i] += shared_pbc_matrix[i]
+                            elif vec[i] > shared_half_pbc_matrix[i]:
+                                vec[i] -= shared_pbc_matrix[i]
+                            r += vec[i]**2
+                        r = math.sqrt(r)
+                        if r <= cutoff_radius:
+                            for i in range(SPATIAL_DIM):
+                                vec[i] /= r
+                            epsilon = math.sqrt(local_parameters[0] * shared_parameters[0, particle_index, tile_index])
+                            sigma = (local_parameters[1] + shared_parameters[1, particle_index, tile_index]) * NUMBA_FLOAT(0.5)
+                            scaled_r = sigma / r
+                            scaled_r6 = scaled_r**6
+                            scaled_r12 = scaled_r6**2
+                            energy += NUMBA_FLOAT(2) * epsilon * (scaled_r12 - scaled_r6)
+                            force_val = - (NUMBA_FLOAT(2) * scaled_r12 - scaled_r6) / r * epsilon * NUMBA_FLOAT(24)
+                            for i in range(SPATIAL_DIM):
+                                local_forces[i] += force_val * vec[i]
                 else:
                     particle_start_index = flag_index * NUM_PARTICLES_PER_FLAG
                     for index in range(NUM_PARTICLES_PER_FLAG):
