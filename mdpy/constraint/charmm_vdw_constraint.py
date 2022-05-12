@@ -148,6 +148,8 @@ class CharmmVDWConstraint(Constraint):
                         force_val = - (NUMBA_FLOAT(2) * scaled_r12 - scaled_r6) / r * epsilon * NUMBA_FLOAT(24)
                         for i in range(SPATIAL_DIM):
                             local_forces[i] += force_val * vec[i]
+            elif exclusion_flag == 4294967295:
+                continue
             else:
                 for index in range(NUM_PARTICLES_PER_TILE):
                     if exclusion_flag >> index &0b1:
@@ -176,6 +178,15 @@ class CharmmVDWConstraint(Constraint):
         for i in range(SPATIAL_DIM):
             cuda.atomic.add(sorted_forces, (i, global_thread_x), local_forces[i])
         cuda.atomic.add(potential_energy, 0, energy)
+
+    @staticmethod
+    def _update_scaled_interaction(
+        positions,
+        parameters,
+        scaled_particles,
+        forces, potential_energy
+    ):
+        pass
 
     def update(self):
         self._check_bound_state()
