@@ -13,6 +13,8 @@ NUM_NEIGHBOR_CELLS = 3**SPATIAL_DIM
 
 # Tile information
 NUM_PARTICLES_PER_TILE = 32
+NUM_PARTICLES_PER_FLAG = 8
+NUM_FLAGS_PER_TILE = int(NUM_PARTICLES_PER_TILE / NUM_PARTICLES_PER_FLAG)
 
 # Threshold value for num_excluded_particles and num_scaled_particles
 MAX_NUM_EXCLUDED_PARTICLES = 15

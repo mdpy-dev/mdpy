@@ -11,7 +11,8 @@ import numpy as np
 import cupy as cp
 import numba.cuda as cuda
 from mdpy import SPATIAL_DIM
-from mdpy.core import MAX_NUM_EXCLUDED_PARTICLES, NUM_NEIGHBOR_CELLS, NUM_PARTICLES_PER_TILE
+from mdpy.core import MAX_NUM_EXCLUDED_PARTICLES, NUM_NEIGHBOR_CELLS
+from mdpy.core import NUM_PARTICLES_PER_TILE, NUM_FLAGS_PER_TILE, NUM_PARTICLES_PER_FLAG
 from mdpy.environment import *
 from mdpy.utils import *
 from mdpy.unit import *
@@ -373,7 +374,8 @@ class TileList:
 
     def generate_exclusion_mask_map(self, particle_infomation: cp.ndarray) -> cp.ndarray:
         mask_map = cp.zeros((
-            self._tile_neighbors.shape[1], self._num_tiles * NUM_PARTICLES_PER_TILE
+            self._tile_neighbors.shape[1] * NUM_FLAGS_PER_TILE,
+            self._num_tiles * NUM_PARTICLES_PER_TILE
         ), CUPY_BIT)
         thread_per_block = (32, 1)
         block_per_grid_x = self._num_tiles
@@ -385,7 +387,6 @@ class TileList:
             self._sorted_matrix_mapping_index,
             mask_map
         )
-        # mask_map = cp.array(np.packbits(mask_map.get(), 0), CUPY_BIT)
         return mask_map
 
     @staticmethod
@@ -399,34 +400,42 @@ class TileList:
         tile_id2 = tile_neighbors[tile_id1, cuda.blockIdx.y]
         local_thread_x = cuda.threadIdx.x
         global_thread_x = tile_id1 * cuda.blockDim.x + local_thread_x
+        flag_start_index = cuda.blockIdx.y * NUM_FLAGS_PER_TILE
+        local_flags = cuda.local.array(shape=(NUM_FLAGS_PER_TILE), dtype=NUMBA_BIT)
+        for i in range(NUM_FLAGS_PER_TILE):
+            local_flags[i] = 0
         if tile_id2 == -1:
-            mask_map[cuda.blockIdx.y, global_thread_x] = 4294967295 # 2**32 - 1 all 1
+            for i in range(NUM_FLAGS_PER_TILE):
+                mask_map[flag_start_index + i, global_thread_x] = 255 # 2**8 -1 all 1
             return
 
-        flag = NUMBA_INT(0)
         shared_particle_index = cuda.shared.array(shape=(NUM_PARTICLES_PER_TILE), dtype=NUMBA_INT)
         particle_start_index2 = tile_id2 * NUM_PARTICLES_PER_TILE
         shared_particle_index[local_thread_x] = sorted_matrix_mapping_index[particle_start_index2+local_thread_x]
         cuda.syncthreads()
         particle1 = sorted_matrix_mapping_index[global_thread_x]
         if particle1 == -1:
-            mask_map[cuda.blockIdx.y, global_thread_x] = 4294967295 # 2**32 - 1 all 1
+            for i in range(NUM_FLAGS_PER_TILE):
+                mask_map[flag_start_index + i, global_thread_x] = 255 # 2**8 -1 all 1
             return
-        for particle_index in range(NUM_PARTICLES_PER_TILE):
-            particle2 = shared_particle_index[particle_index]
-            if particle2 == -1:
-                flag = flag ^ (1 << particle_index)
-            elif particle1 == particle2:
-                flag = flag ^ (1 << particle_index)
-            else:
-                for information_index in range(MAX_NUM_EXCLUDED_PARTICLES):
-                    particle2 = excluded_particles[particle1, information_index]
-                    if particle2 == -1:
-                        break
-                    elif particle2 == shared_particle_index[particle_index]:
-                        flag = flag ^ (1 << particle_index)
-                        break
-        mask_map[cuda.blockIdx.y, global_thread_x] = flag
+        for flag_index in range(NUM_FLAGS_PER_TILE):
+            particle_start_index = flag_index * NUM_PARTICLES_PER_FLAG
+            for particle_index in range(NUM_PARTICLES_PER_FLAG):
+                particle2 = shared_particle_index[particle_start_index + particle_index]
+                if particle2 == -1:
+                    local_flags[flag_index] = local_flags[flag_index] ^ (1 << particle_index)
+                elif particle1 == particle2:
+                    local_flags[flag_index] = local_flags[flag_index] ^ (1 << particle_index)
+                else:
+                    for information_index in range(MAX_NUM_EXCLUDED_PARTICLES):
+                        excluded_particle = excluded_particles[particle1, information_index]
+                        if excluded_particle == -1:
+                            break
+                        elif particle2 == excluded_particle:
+                            local_flags[flag_index] = local_flags[flag_index] ^ (1 << particle_index)
+                            break
+        for i in range(NUM_FLAGS_PER_TILE):
+            mask_map[flag_start_index + i, global_thread_x] = local_flags[i]
 
     @property
     def cell_width(self):
@@ -468,8 +477,8 @@ if __name__ == '__main__':
     import time
     import mdpy as md
     from cupy.cuda.nvtx import RangePush, RangePop
-    pdb = md.io.PDBParser('/home/zhenyuwei/nutstore/ZhenyuWei/Note_Research/mdpy/mdpy/benchmark/str/medium.pdb')
-    psf = md.io.PSFParser('/home/zhenyuwei/nutstore/ZhenyuWei/Note_Research/mdpy/mdpy/benchmark/str/medium.psf')
+    pdb = md.io.PDBParser('/home/zhenyuwei/nutstore/ZhenyuWei/Note_Research/mdpy/mdpy/benchmark/data/str.pdb')
+    psf = md.io.PSFParser('/home/zhenyuwei/nutstore/ZhenyuWei/Note_Research/mdpy/mdpy/benchmark/data/str.psf')
     positions = cp.array(pdb.positions, CUPY_FLOAT)
     positive_positions = positions + cp.array(np.diagonal(pdb.pbc_matrix)) / 2
 
