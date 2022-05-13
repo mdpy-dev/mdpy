@@ -7,7 +7,6 @@ author : Zhenyu Wei
 copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
-import math
 import numpy as np
 import cupy as cp
 import numba.cuda as cuda
@@ -20,9 +19,6 @@ from mdpy.error import *
 
 SKIN_WIDTH = Quantity(1, angstrom)
 THREAD_PER_BLOCK = 32
-HILBERT_CURVE_ORDER = 3
-NUM_HILBERT_POINTS = 2**HILBERT_CURVE_ORDER
-CELL_SEQUENCE = cp.array(generate_hilbert_curve_sequence(HILBERT_CURVE_ORDER), CUPY_INT)
 
 class TileList:
     def __init__(self, pbc_matrix: np.ndarray, skin_width=SKIN_WIDTH) -> None:
@@ -45,20 +41,15 @@ class TileList:
         self._device_half_pbc_diag = cp.array(self._half_pbc_diag, CUPY_FLOAT)
         # Kernel
         self._update_tile_list = cuda.jit(nb.void(
-            NUMBA_FLOAT[:, ::1], # positions
             NUMBA_INT[::1], # sorted_particle_index
             NUMBA_INT[:, ::1], # cell_particle_information
             NUMBA_INT[:, ::1], # cell_tile_information
             NUMBA_INT[::1], # num_cells_vec
             NUMBA_INT[::1], # sorted_matrix_index
-            NUMBA_FLOAT[:, ::1], # tile_bounding_box
             NUMBA_INT[:, ::1], # tile_list
             NUMBA_INT[:, ::1] # tile_cell_index
         ))(self._update_tile_list_kernel)
         self._update_tile_neighbor = cuda.jit(nb.void(
-            NUMBA_FLOAT[:, ::1], # pbc_matrix
-            NUMBA_FLOAT[::1], # cutoff_radius
-            NUMBA_FLOAT[:, ::1], # tile_bounding_box
             NUMBA_INT[:, ::1], # tile_list
             NUMBA_INT[:, ::1], # tile_cell_index
             NUMBA_INT[:, ::1], # cell_tile_information
@@ -132,9 +123,7 @@ class TileList:
         cell_width: cp.ndarray
     ):
         num_cells = np.prod(num_cells_vec)
-        temp = positions / cell_width
-        # Cell index
-        particle_cell_index = cp.floor(temp).astype(CUPY_INT)
+        particle_cell_index = cp.floor(positions / cell_width).astype(CUPY_INT)
         particle_cell_index_single = (
             particle_cell_index[:, 2] + particle_cell_index[:, 1] * num_cells_vec[2] +
             particle_cell_index[:, 0] * num_cells_vec[2] * num_cells_vec[1]
@@ -149,21 +138,6 @@ class TileList:
             particle_start_index,
             num_particles_each_cell
         ], axis=1).astype(CUPY_INT)
-        # Subcell Hilbert curve sort
-        # Sub cell index of particle with same cell
-        particle_sub_cell_index = cp.floor((temp - particle_cell_index)*NUM_HILBERT_POINTS).astype(CUPY_INT)[sorted_particle_index] # 0-(NUM_HILBERT_POINTS-1)
-        particle_sub_cell_index_single = (
-            particle_sub_cell_index[:, 2] + particle_sub_cell_index[:, 1] * NUM_HILBERT_POINTS +
-            particle_sub_cell_index[:, 0] * NUM_HILBERT_POINTS**2
-        ) # z varies fastest to match the c order of reshape
-        particle_sub_cell_sequence = CELL_SEQUENCE[particle_sub_cell_index_single]
-        sorted_index = cp.zeros_like(sorted_particle_index)
-        for i in range(num_cells):
-            particle_start_index, num_particles_cur_cell = cell_particle_information[i, :]
-            sorted_index[particle_start_index:particle_start_index+num_particles_cur_cell] = sorted_particle_index[cp.argsort(
-                particle_sub_cell_sequence[particle_start_index:particle_start_index+num_particles_cur_cell]
-            ) + particle_start_index]
-
         # Tile information
         num_tiles_each_ceil = cp.ceil(num_particles_each_cell / NUM_PARTICLES_PER_TILE).astype(CUPY_INT)
         num_tiles = int(num_tiles_each_ceil.sum())
@@ -175,7 +149,7 @@ class TileList:
             num_tiles_each_ceil
         ], axis=1).astype(CUPY_INT)
         return (
-            sorted_index,
+            sorted_particle_index,
             cell_particle_information,
             cell_tile_information,
             num_tiles,
@@ -184,13 +158,11 @@ class TileList:
 
     @staticmethod
     def _update_tile_list_kernel(
-        positions,
         sorted_particle_index,
         cell_particle_information,
         cell_tile_information,
         num_cells_vec,
         sorted_matrix_mapping_index,
-        tile_bounding_box,
         tile_list,
         tile_cell_index,
     ):
@@ -232,34 +204,12 @@ class TileList:
         # Assign particles to tile
         tile_particle_index = 0
         sorted_matrix_index = tile_index * NUM_PARTICLES_PER_TILE # The index of sorted_particle
-        # Bounding box:
-        # [center_x, center_y, center_z, half_diag_length]
-        bounding_box = cuda.local.array(shape=(4), dtype=NUMBA_FLOAT)
-        box_max = cuda.local.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
-        box_min = cuda.local.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
-        for i in range(SPATIAL_DIM):
-            bounding_box[i] = 0
-            box_max[i] = 0
-            box_min[i] = 0
-        bounding_box[3] = 0
         for index in range(tile_particle_start_index, tile_particle_end_index):
             particle_index = sorted_particle_index[index]
-            for i in range(SPATIAL_DIM):
-                pos = positions[particle_index, i]
-                if pos > box_max[i]:
-                    box_max[i] = pos
-                if pos < box_max[i]:
-                    box_min[i] = pos
-                bounding_box[i] += pos
             tile_list[tile_index, tile_particle_index] = particle_index
             sorted_matrix_mapping_index[sorted_matrix_index] = particle_index
             tile_particle_index += 1
             sorted_matrix_index += 1
-        num_particles = tile_particle_end_index - tile_particle_start_index
-        for i in range(SPATIAL_DIM):
-            tile_bounding_box[tile_index, i] = bounding_box[i] / num_particles
-            bounding_box[3] += (box_max[i] - box_min[i])**2
-        tile_bounding_box[tile_index, 3] = math.sqrt(bounding_box[3])# * NUMBA_FLOAT(0.5)
         # Get 3d cell index
         decomposition = cell_index
         num_cells_z = num_cells_vec[2]
@@ -274,9 +224,6 @@ class TileList:
 
     @staticmethod
     def _update_tile_neighbor_kernel(
-        pbc_matrix,
-        cutoff_radius,
-        tile_bounding_box,
         tile_list,
         tile_cell_index,
         cell_tile_information,
@@ -287,29 +234,15 @@ class TileList:
         tile_id = cuda.grid(1)
         if tile_id >= tile_list.shape[0]:
             return
-        # shared data
-        local_thread_x = cuda.threadIdx.x
-        shared_pbc_matrix = cuda.shared.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
-        shared_half_pbc_matrix = cuda.shared.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
-        if local_thread_x <= 2:
-            shared_pbc_matrix[local_thread_x] = pbc_matrix[local_thread_x, local_thread_x]
-            shared_half_pbc_matrix[local_thread_x] = shared_pbc_matrix[local_thread_x] * NUMBA_FLOAT(0.5)
-        cuda.syncthreads()
-
         num_cells_x = num_cells_vec[0]
         num_cells_y = num_cells_vec[1]
         num_cells_z = num_cells_vec[2]
         num_cells_yz = num_cells_y * num_cells_z
         central_cell_index = cuda.local.array(shape=(SPATIAL_DIM), dtype=NUMBA_INT)
         neighbor_cell_index = cuda.local.array(shape=(SPATIAL_DIM), dtype=NUMBA_INT)
-        bounding_box = cuda.local.array(shape=(4), dtype=NUMBA_FLOAT)
-        vec = cuda.local.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
         for i in range(SPATIAL_DIM):
             central_cell_index[i] = tile_cell_index[tile_id, i]
-            bounding_box[i] = tile_bounding_box[tile_id, i]
-        bounding_box[3] = tile_bounding_box[tile_id, 3]
         cur_neighbor_tile_index = 0
-        cutoff_radius = cutoff_radius[0]
         for i in range(-1, 2):
             neighbor_cell_index[0] = central_cell_index[0] + i
             if neighbor_cell_index[0] >= num_cells_x:
@@ -334,18 +267,8 @@ class TileList:
                     )
                     cur_tile_index = cell_tile_information[cell_index, 0]
                     for _ in range(cell_tile_information[cell_index, 1]):
-                        r = NUMBA_FLOAT(0)
-                        for i in range(SPATIAL_DIM):
-                            vec[i] = bounding_box[i] - tile_bounding_box[cur_tile_index, i]
-                            if vec[i] < - shared_half_pbc_matrix[i]:
-                                vec[i] += shared_pbc_matrix[i]
-                            elif vec[i] > shared_half_pbc_matrix[i]:
-                                vec[i] -= shared_pbc_matrix[i]
-                            r += vec[i]**2
-                        r = math.sqrt(r) - bounding_box[i] - tile_bounding_box[cur_tile_index, 3]
-                        if r < cutoff_radius:
-                            tile_neighbors[tile_id, cur_neighbor_tile_index] = cur_tile_index
-                            cur_neighbor_tile_index += 1
+                        tile_neighbors[tile_id, cur_neighbor_tile_index] = cur_tile_index
+                        cur_neighbor_tile_index += 1
                         cur_tile_index += 1
         tile_num_neighbors[tile_id] = cur_neighbor_tile_index
 
@@ -362,29 +285,21 @@ class TileList:
         max_num_tiles_per_cell = result[4]
         # Create tile list
         block_per_grid = int(np.ceil(self._num_tiles / THREAD_PER_BLOCK))
-        self._tile_bounding_box = cp.zeros((self._num_tiles, SPATIAL_DIM+1), dtype=CUPY_FLOAT)
         self._tile_list = cp.zeros((self._num_tiles, NUM_PARTICLES_PER_TILE), dtype=CUPY_INT) - 1
         self._tile_cell_index = cp.zeros((self._num_tiles, SPATIAL_DIM), dtype=CUPY_INT)
         self._sorted_matrix_mapping_index = cp.zeros(self._num_tiles*NUM_PARTICLES_PER_TILE, dtype=CUPY_INT) - 1
         self._update_tile_list[block_per_grid, THREAD_PER_BLOCK](
-            positive_postions,
             sorted_particle_index,
             cell_particle_information,
             cell_tile_information,
             self._device_num_cells_vec,
             self._sorted_matrix_mapping_index,
-            self._tile_bounding_box,
             self._tile_list,
             self._tile_cell_index
         )
-        # print(self._tile_list[10, :])
-        # print(self._tile_bounding_box[10, :])
         self._tile_neighbors = cp.zeros((self._num_tiles, max_num_tiles_per_cell * NUM_NEIGHBOR_CELLS), dtype=CUPY_INT) - 1
         self._tile_num_neighbors = cp.zeros((self._num_tiles), dtype=CUPY_INT)
         self._update_tile_neighbor[block_per_grid, THREAD_PER_BLOCK](
-            self._device_pbc_matrix,
-            self._device_cutoff_radius,
-            self._tile_bounding_box,
             self._tile_list,
             self._tile_cell_index,
             cell_tile_information,
@@ -487,6 +402,7 @@ class TileList:
         if tile_id2 == -1:
             mask_map[cuda.blockIdx.y, global_thread_x] = 4294967295 # 2**32 - 1 all 1
             return
+
         flag = NUMBA_INT(0)
         shared_particle_index = cuda.shared.array(shape=(NUM_PARTICLES_PER_TILE), dtype=NUMBA_INT)
         particle_start_index2 = tile_id2 * NUM_PARTICLES_PER_TILE
