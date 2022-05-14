@@ -15,7 +15,7 @@ from mdpy.unit import *
 from mdpy.error import *
 
 cur_dir = os.path.dirname(os.path.abspath(__file__))
-data_dir = os.path.join(cur_dir, 'data')
+data_dir = os.path.join(cur_dir, 'data/hdf5_parser')
 out_dir = os.path.join(cur_dir, 'out')
 file_path = os.path.join(data_dir, 'test_hdf5_parser.hdf5')
 

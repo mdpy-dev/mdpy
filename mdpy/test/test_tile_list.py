@@ -94,7 +94,7 @@ class TestTileList:
         tile_list.update(positions)
         exclusion_mask = tile_list.generate_exclusion_mask_map(device_excluded_particles)
 
-        for tile_index in np.random.randint(0, tile_list.num_tiles, 30):
+        for tile_index in np.random.randint(0, tile_list.num_tiles, 5):
             print(tile_index, tile_list.tile_list[tile_index, :])
             tile_neighbors = tile_list.tile_neighbors[tile_index]
             particle_neighbors = np.zeros([tile_neighbors.shape[0]*NUM_PARTICLES_PER_TILE], NUMPY_INT) - 1
@@ -109,10 +109,20 @@ class TestTileList:
                 else:
                     is_excluded = np.zeros_like(particle_neighbors, NUMPY_BIT)
                     excluded_particles = list(device_excluded_particles[j, :].get())
-                    excluded_particles = [i for i in excluded_particles if i != -1]
+                    excluded_particles = [x for x in excluded_particles if x != -1] + [j]
                     for k, l in enumerate(particle_neighbors):
                         if l == -1:
                             is_excluded[k] = 1
                         elif l in excluded_particles:
                             is_excluded[k] = 1
-                assert np.all(exclusion_mask[sorted_index, :].get() == is_excluded)
+                exclusion_mask_res = exclusion_mask[:, sorted_index].get()
+                target_is_excluded = np.zeros_like(is_excluded)
+                index = 0
+                for i in exclusion_mask_res:
+                    for j in range(NUM_PARTICLES_PER_TILE):
+                        target_is_excluded[index] = i >> j &0b1
+                        index += 1
+                assert np.all(target_is_excluded == is_excluded)
+
+test = TestTileList()
+test.test_exclusion_map()

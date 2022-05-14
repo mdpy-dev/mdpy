@@ -16,7 +16,7 @@ from mdpy.io import CharmmTopparParser
 from mdpy.io.charmm_toppar_parser import RMIN_TO_SIGMA_FACTOR
 
 cur_dir = os.path.dirname(os.path.abspath(__file__))
-data_dir = os.path.join(cur_dir, 'data')
+data_dir = os.path.join(cur_dir, 'data/toppar_parser')
 
 class TestCharmmTopparParser:
     def setup(self):

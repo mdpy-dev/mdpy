@@ -12,7 +12,7 @@ from mdpy import env
 from mdpy.io import PSFParser
 
 cur_dir = os.path.dirname(os.path.abspath(__file__))
-data_dir = os.path.join(cur_dir, 'data')
+data_dir = os.path.join(cur_dir, 'data/psf_parser')
 
 class TestPSFParser:
     def setup(self):

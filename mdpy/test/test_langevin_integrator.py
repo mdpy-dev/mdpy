@@ -15,7 +15,7 @@ from mdpy.integrator import LangevinIntegrator
 from mdpy.unit import *
 
 cur_dir = os.path.dirname(os.path.abspath(__file__))
-data_dir = os.path.join(cur_dir, 'data')
+data_dir = os.path.join(cur_dir, 'data/simulation')
 out_dir = os.path.join(cur_dir, 'out')
 
 class TestLangevinIntegrator:
@@ -35,11 +35,12 @@ class TestLangevinIntegrator:
         pdb = PDBParser(os.path.join(data_dir, '6PO6.pdb'))
         topology = PSFParser(os.path.join(data_dir, '6PO6.psf')).topology
 
-        forcefield = CharmmForcefield(topology, np.diag(np.ones(3)*100), long_range_solver='CUTOFF')
+        forcefield = CharmmForcefield(topology, np.diag(np.ones(3)*100), long_range_solver='PME')
         forcefield.set_parameter_files(os.path.join(data_dir, 'par_all36_prot.prm'))
         ensemble = forcefield.create_ensemble()
-        ensemble.state.neighbor_list.set_cutoff_radius(12)
+        ensemble.tile_list.set_cutoff_radius(12)
         ensemble.state.set_positions(pdb.positions)
+        ensemble.update_tile_list()
         ensemble.state.set_velocities_to_temperature(300)
         integrator = LangevinIntegrator(1, 300, Quantity(1, 1/picosecond))
         integrator.integrate(ensemble, 1)
