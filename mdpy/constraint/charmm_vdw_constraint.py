@@ -8,6 +8,7 @@ copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
 import math
+from re import L
 import numpy as np
 import numba as nb
 from numba import cuda
@@ -29,7 +30,7 @@ class CharmmVDWConstraint(Constraint):
         self._device_cutoff_radius = cp.array([self._cutoff_radius], CUPY_FLOAT)
         self._parameters = []
         # Kernel
-        self._update = cuda.jit(nb.void(
+        self._update_charmm_vdw = cuda.jit(nb.void(
             NUMBA_FLOAT[::1], # cutoff_radius
             NUMBA_FLOAT[:, ::1], # pbc_matrix
             NUMBA_FLOAT[:, ::1], # sorted_positions
@@ -40,6 +41,15 @@ class CharmmVDWConstraint(Constraint):
             NUMBA_FLOAT[:, ::1], # sorted_forces
             NUMBA_FLOAT[::1] # potential_energy
         ))(self._update_charmm_vdw_kernel)
+        self._update_scaled_charmm_vdw = cuda.jit(nb.void(
+            NUMBA_FLOAT[:, ::1], # positions
+            NUMBA_FLOAT[:, ::1], # parameters
+            NUMBA_FLOAT[:, ::1], # pbc_matrix
+            NUMBA_FLOAT[::1], # cutoff_radius
+            NUMBA_INT[:, ::1], # scaled_particles
+            NUMBA_FLOAT[:, ::1], # positions
+            NUMBA_FLOAT[::1] # potential_energy
+        ))(self._update_scaled_charmm_vdw_kernel)
 
     def __repr__(self) -> str:
         return '<mdpy.constraint.CharmmVDWConstraint object>'
@@ -180,13 +190,74 @@ class CharmmVDWConstraint(Constraint):
         cuda.atomic.add(potential_energy, 0, energy)
 
     @staticmethod
-    def _update_scaled_interaction(
+    def _update_scaled_charmm_vdw_kernel(
         positions,
         parameters,
+        pbc_matrix,
+        cutoff_radius,
         scaled_particles,
         forces, potential_energy
     ):
-        pass
+        particle1 = cuda.grid(1)
+        local_thread_x = cuda.threadIdx.x
+        if particle1 >= positions.shape[0]:
+            return
+
+        shared_pbc_matrix = cuda.shared.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
+        shared_half_pbc_matrix = cuda.shared.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
+        if local_thread_x <= 2:
+            shared_pbc_matrix[local_thread_x] = pbc_matrix[local_thread_x, local_thread_x]
+            shared_half_pbc_matrix[local_thread_x] = shared_pbc_matrix[local_thread_x] * NUMBA_FLOAT(0.5)
+
+        local_parameters = cuda.local.array(shape=(4), dtype=NUMBA_FLOAT)
+        local_positions = cuda.local.array(shape=(3), dtype=NUMBA_FLOAT)
+        local_forces = cuda.local.array(shape=(3), dtype=NUMBA_FLOAT)
+        vec = cuda.local.array(shape=(3), dtype=NUMBA_FLOAT)
+        for i in range(SPATIAL_DIM):
+            local_positions[i] = positions[particle1, i]
+            local_forces[i] = 0
+            local_parameters[i] = parameters[particle1, i]
+        local_parameters[3] = parameters[particle1, 3]
+        cutoff_radius = cutoff_radius[0]
+        energy = NUMBA_FLOAT(0)
+        is_scaled = False
+        for i in range(scaled_particles.shape[1]):
+            particle2 = scaled_particles[particle1, i]
+            if particle2 == -1:
+                break
+            is_scaled = True
+            r = NUMBA_FLOAT(0)
+            for i in range(SPATIAL_DIM):
+                vec[i] = positions[particle2, i] - local_positions[i]
+                if vec[i] < - shared_half_pbc_matrix[i]:
+                    vec[i] += shared_pbc_matrix[i]
+                elif vec[i] > shared_half_pbc_matrix[i]:
+                    vec[i] -= shared_pbc_matrix[i]
+                r += vec[i]**2
+            r = math.sqrt(r)
+            if r < cutoff_radius:
+                for i in range(SPATIAL_DIM):
+                    vec[i] /= r
+                epsilon1 = math.sqrt(local_parameters[0] * parameters[particle2, 0])
+                sigma1 = (local_parameters[1] + parameters[particle2, 1]) * NUMBA_FLOAT(0.5)
+                scaled_r = sigma1 / r
+                scaled_r6 = scaled_r**6
+                scaled_r12 = scaled_r6**2
+                energy -= NUMBA_FLOAT(2) * epsilon1 * (scaled_r12 - scaled_r6)
+                force_val = (NUMBA_FLOAT(2) * scaled_r12 - scaled_r6) / r * epsilon1 * NUMBA_FLOAT(24)
+                epsilon2 = math.sqrt(local_parameters[2] * parameters[particle2, 2])
+                sigma2 = (local_parameters[3] + parameters[particle2, 3]) * NUMBA_FLOAT(0.5)
+                scaled_r = sigma2 / r
+                scaled_r6 = scaled_r**6
+                scaled_r12 = scaled_r6**2
+                energy += NUMBA_FLOAT(2) * epsilon2 * (scaled_r12 - scaled_r6)
+                force_val -= (NUMBA_FLOAT(2) * scaled_r12 - scaled_r6) / r * epsilon2 * NUMBA_FLOAT(24)
+                for i in range(SPATIAL_DIM):
+                    local_forces[i] += force_val * vec[i]
+        if is_scaled:
+            for i in range(SPATIAL_DIM):
+                cuda.atomic.add(forces, (particle1, i), local_forces[i])
+            cuda.atomic.add(potential_energy, 0, energy)
 
     def update(self):
         self._check_bound_state()
@@ -194,13 +265,13 @@ class CharmmVDWConstraint(Constraint):
         self._potential_energy = cp.zeros([1], CUPY_FLOAT)
         sorted_positions = self._parent_ensemble.tile_list.sort_matrix(self._parent_ensemble.state.positions)
         device_sorted_parameter_list = self._parent_ensemble.tile_list.sort_matrix(self._device_parameters)
+        # update
         block_per_grid_x = self._parent_ensemble.tile_list.num_tiles
         block_per_grid_y = int(np.ceil(
             self._parent_ensemble.tile_list.tile_neighbors.shape[1] / NUM_TILES_PER_THREAD
         ))
         block_per_grid = (block_per_grid_x, block_per_grid_y)
-        # Device
-        self._update[block_per_grid, THREAD_PER_BLOCK](
+        self._update_charmm_vdw[block_per_grid, THREAD_PER_BLOCK](
             self._device_cutoff_radius,
             self._parent_ensemble.state.device_pbc_matrix,
             sorted_positions,
@@ -211,6 +282,20 @@ class CharmmVDWConstraint(Constraint):
             sorted_forces, self._potential_energy
         )
         self._forces = self._parent_ensemble.tile_list.unsort_matrix(sorted_forces)
+
+        thread_per_block = 64
+        block_per_grid = int(np.ceil(
+            self._parent_ensemble.topology.num_particles / thread_per_block
+        ))
+        self._update_scaled_charmm_vdw[block_per_grid, thread_per_block](
+            self._parent_ensemble.state.positions,
+            self._device_parameters,
+            self._parent_ensemble.tile_list._device_pbc_matrix,
+            self._device_cutoff_radius,
+            self._parent_ensemble.topology.device_scaled_particles,
+            self._forces, self._potential_energy
+        )
+
 
 if __name__ == '__main__':
     import os
