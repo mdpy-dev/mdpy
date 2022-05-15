@@ -14,7 +14,7 @@ from mdpy.utils import check_quantity_value
 from mdpy.error import *
 from mdpy.unit import *
 from mdpy.utils import *
-from mdpy.utils.select import *
+from mdpy.utils.particle_select import *
 
 class Trajectory:
     def __init__(
