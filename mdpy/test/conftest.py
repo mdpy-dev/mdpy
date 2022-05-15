@@ -12,7 +12,7 @@ import pytest
 test_order = [
      'environment',
      'base_dimension', 'unit', 'unit_definition', 'quantity',
-     'check_quantity', 'geometry', 'pbc', 'select'
+     'check_quantity', 'geometry', 'pbc', 'particle_select'
      'particle', 'topology',
      'tile_list',
      'state', 'trajectory',
