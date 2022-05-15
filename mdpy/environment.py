@@ -25,6 +25,9 @@ if precision == 'single':
     CUPY_INT = cp.int32
     NUMBA_INT = nb.int32
     NUMPY_INT = np.int32
+    CUPY_UINT = cp.uint32
+    NUMBA_UINT = nb.uint32
+    NUMPY_UINT = np.uint32
 elif precision == 'double':
     CUPY_FLOAT = cp.float64
     NUMBA_FLOAT = nb.float64
@@ -32,6 +35,9 @@ elif precision == 'double':
     CUPY_INT = cp.int64
     NUMBA_INT = nb.int64
     NUMPY_INT = np.int64
+    CUPY_UINT = cp.uint64
+    NUMBA_UINT = nb.uint64
+    NUMPY_UINT = np.uint64
 
 class MDPYEnvironment:
     def __init__(self) -> None:
