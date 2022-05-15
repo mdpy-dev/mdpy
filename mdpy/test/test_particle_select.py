@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- encoding: utf-8 -*-
 '''
-file : test_select.py
+file : test_particle_select.py
 created time : 2022/02/20
 author : Zhenyu Wei
 copyright : (C)Copyright 2021-present, mdpy organization
@@ -11,7 +11,7 @@ import os
 import pytest
 from mdpy.core import Particle, Topology, Trajectory
 from mdpy.io import PSFParser, PDBParser
-from mdpy.utils.select import *
+from mdpy.utils.particle_select import *
 from mdpy.error import *
 
 cur_dir = os.path.dirname(os.path.abspath(__file__))

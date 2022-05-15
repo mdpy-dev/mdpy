@@ -19,7 +19,7 @@ from mdpy.unit import *
 from mdpy.error import *
 
 cur_dir = os.path.dirname(os.path.abspath(__file__))
-data_dir = os.path.join(cur_dir, 'data')
+data_dir = os.path.join(cur_dir, 'data/simulation')
 
 class TestTileList:
     def setup(self):
@@ -83,6 +83,34 @@ class TestTileList:
                         diff += self.tile_list.num_cells_vec[i]
                     assert np.abs(diff) <= 1
 
+    def test_find_neighbors(self):
+        pdb = md.io.PDBParser(os.path.join(data_dir, 'solvated_6PO6.pdb'))
+        topology = md.io.PSFParser(os.path.join(data_dir, 'solvated_6PO6.psf')).topology
+        positions = cp.array(pdb.positions, CUPY_FLOAT)
+        tile_list = md.core.TileList(pdb.pbc_matrix)
+        tile_list.set_cutoff_radius(Quantity(8, angstrom))
+        tile_list.update(positions)
+
+        particle_id = 613
+        tile_id = cp.argwhere(tile_list._sorted_particle_index == particle_id)[0, 0] // 32
+        print(tile_list._tile_list[tile_id, :])
+        print(cp.sort(tile_list._tile_neighbors[tile_id]))
+        neighbor_particles = []
+        for tile in tile_list.tile_neighbors[tile_id]:
+            if tile != -1:
+                neighbor_particles.append(tile_list.tile_list[tile])
+        neighbor_particles = cp.hstack(neighbor_particles)
+        neighbor_particles = list(neighbor_particles[neighbor_particles != -1].flatten().get())
+        diff = (positions - positions[particle_id, :]) / tile_list._device_pbc_diag
+        diff = (cp.round(diff) - diff) * tile_list._device_pbc_diag
+        r = cp.sqrt((diff**2).sum(1))
+        for i in neighbor_particles:
+            print(i, end=' ')
+        for neighbor in cp.argwhere(r < 8).flatten():
+            if r[neighbor] < 5:
+                print(neighbor, r[neighbor], neighbor in neighbor_particles)
+            # assert neighbor in neighbor_particles
+
     def test_exclusion_map(self):
         pdb = md.io.PDBParser(os.path.join(data_dir, 'solvated_6PO6.pdb'))
         topology = md.io.PSFParser(os.path.join(data_dir, 'solvated_6PO6.psf')).topology
@@ -125,4 +153,5 @@ class TestTileList:
                 assert np.all(target_is_excluded == is_excluded)
 
 test = TestTileList()
-test.test_exclusion_map()
+test.setup()
+test.test_find_neighbors()
