@@ -319,7 +319,7 @@ class ElectrostaticFDPEConstraint(Constraint):
         )
         # Reaction field potential map
         self._device_reaction_filed_electric_potential_map = cp.zeros(self._inner_grid_size, dtype=CUPY_FLOAT)
-        for _ in range(500):
+        for _ in range(150):
             self._update_reaction_field_electric_potential_map[block_per_grid, thread_per_block](
                 self._device_relative_permittivity_map,
                 self._device_coulombic_electric_potential_map,
@@ -420,8 +420,8 @@ if __name__ == '__main__':
     positions = np.array([
         [-10, 0, 0],
         [10, 0, 0],
-        [0, 0, 0],
-        [0, -10, 0],
+        [0, 1, 0],
+        [0, -20, 0],
     ], NUMPY_FLOAT)
     ensemble = md.core.Ensemble(topology, np.eye(3) * 50)
     ensemble.state.set_positions(positions)
@@ -453,7 +453,7 @@ if __name__ == '__main__':
     ax1 = fig.add_subplot(311)
     coulombic_electric_potential_map = constraint.device_coulombic_electric_potential_map.get()[1:-1, 1:-1, 1:-1]
     coulombic_electric_potential_map = Quantity(coulombic_electric_potential_map, default_energy_unit/default_charge_unit).convert_to(kilojoule_permol / elementary_charge).value
-    coulombic_forces = constraint.columbic_forces.get()
+    coulombic_forces = constraint.columbic_forces.get() / 100
     coulombic_forces[:2, :] = 0
     Ey_columbic, Ex_columbic = np.gradient(-coulombic_electric_potential_map[:, :, constraint.total_grid_size[1]//2].T)
     ax1.streamplot(x, y, Ex_columbic, Ey_columbic, linewidth=1, cmap='RdBu', density=2)
@@ -475,7 +475,7 @@ if __name__ == '__main__':
     ax2 = fig.add_subplot(312)
     reaction_field_electric_potential_map = constraint.device_reaction_field_electric_potential_map.get()
     reaction_field_electric_potential_map = Quantity(reaction_field_electric_potential_map, default_energy_unit/default_charge_unit).convert_to(kilojoule_permol / elementary_charge).value
-    reaction_field_forces = constraint.reaction_field_forces.get()
+    reaction_field_forces = constraint.reaction_field_forces.get() / 100
     reaction_field_forces[:2, :] = 0
     c = ax2.contourf(X, Y, reaction_field_electric_potential_map[:, :, constraint.total_grid_size[1]//2].T, 100, cmap='RdBu')
     Ey, Ex = np.gradient(-reaction_field_electric_potential_map[:, :, constraint.total_grid_size[1]//2].T)
@@ -516,5 +516,5 @@ if __name__ == '__main__':
     plt.colorbar(c)
     fig.tight_layout()
     plt.show()
-    fig.savefig(os.path.join(img_dir, 'solution_03.png'), dpi=300)
+    fig.savefig(os.path.join(img_dir, 'solution_04.png'), dpi=300)
 
