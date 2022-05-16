@@ -10,7 +10,6 @@ copyright : (C)Copyright 2021-present, mdpy organization
 import cupy as cp
 import numpy as np
 from mdpy.core import Ensemble
-from mdpy.environment import CUPY_FLOAT
 from mdpy.integrator import Integrator
 from mdpy.unit import *
 from mdpy.utils import *
