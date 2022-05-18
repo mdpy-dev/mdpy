@@ -7,6 +7,7 @@ author : Zhenyu Wei
 copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
+from threading import local
 import time
 import math
 import numpy as np
@@ -60,6 +61,7 @@ class ElectrostaticFDPEConstraint(Constraint):
         self._update_coulombic_force_and_potential_energy = cuda.jit(nb.void(
             NUMBA_FLOAT[:, ::1], # positions
             NUMBA_FLOAT[:, ::1], # charges
+            NUMBA_FLOAT[:, ::1], # pbc_matrix
             NUMBA_FLOAT[::1], # k0
             NUMBA_FLOAT[::1], # cavity_relative_permittivity
             NUMBA_FLOAT[:, ::1], # forces
@@ -87,6 +89,7 @@ class ElectrostaticFDPEConstraint(Constraint):
         # device attributes
         self._device_inner_grid_size = cp.array(self._inner_grid_size, CUPY_INT)
         self._device_total_grid_size = cp.array(self._total_grid_size, CUPY_INT)
+        self._device_reaction_filed_electric_potential_map = cp.zeros(self._inner_grid_size, dtype=CUPY_FLOAT)
 
     def set_relative_permittivity_map(self, relative_permittivity_map: cp.ndarray) -> None:
         map_shape = relative_permittivity_map.shape
@@ -229,7 +232,7 @@ class ElectrostaticFDPEConstraint(Constraint):
 
     @staticmethod
     def _update_coulombic_force_and_potential_energy_kernel(
-        positions, charges,
+        positions, charges, pbc_matrix,
         k0, cavity_relative_permittivity,
         forces, potential_energy
     ):
@@ -241,6 +244,12 @@ class ElectrostaticFDPEConstraint(Constraint):
             return
         if particle_id1 == particle_id2:
             return
+        local_thread_x = cuda.threadIdx.x
+        shared_pbc_matrix = cuda.shared.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
+        shared_half_pbc_matrix = cuda.shared.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
+        if local_thread_x <= 2:
+            shared_pbc_matrix[local_thread_x] = pbc_matrix[local_thread_x, local_thread_x]
+            shared_half_pbc_matrix[local_thread_x] = shared_pbc_matrix[local_thread_x] * NUMBA_FLOAT(0.5)
         k0 = k0[0]
         cavity_relative_permittivity = cavity_relative_permittivity[0]
         factor = k0 * cavity_relative_permittivity
@@ -249,6 +258,12 @@ class ElectrostaticFDPEConstraint(Constraint):
         r = NUMBA_FLOAT(0)
         vec = cuda.local.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
         for i in range(SPATIAL_DIM):
+            vec[i] = positions[particle_id2, i] - positions[particle_id1, i]
+            if vec[i] < - pbc_matrix[i, i] / 2:
+                vec[i] += shared_pbc_matrix[i]
+            elif vec[i] > shared_half_pbc_matrix[i]:
+                vec[i] -= shared_pbc_matrix[i]
+            r += vec[i]**2
             vec[i] = (positions[particle_id2, i] - positions[particle_id1, i])
             r += vec[i]**2
         r = math.sqrt(r)
@@ -318,8 +333,7 @@ class ElectrostaticFDPEConstraint(Constraint):
             self._device_coulombic_electric_potential_map
         )
         # Reaction field potential map
-        self._device_reaction_filed_electric_potential_map = cp.zeros(self._inner_grid_size, dtype=CUPY_FLOAT)
-        for _ in range(150):
+        for _ in range(500):
             self._update_reaction_field_electric_potential_map[block_per_grid, thread_per_block](
                 self._device_relative_permittivity_map,
                 self._device_coulombic_electric_potential_map,
@@ -327,6 +341,7 @@ class ElectrostaticFDPEConstraint(Constraint):
                 self._device_inner_grid_size,
                 self._device_reaction_filed_electric_potential_map
             )
+            cuda.synchronize()
         # Coulombic force and potential energy
         self._columbic_forces = cp.zeros((self._parent_ensemble.topology.num_particles, SPATIAL_DIM), CUPY_FLOAT)
         self._columbic_potential_energy = cp.zeros((1), CUPY_FLOAT)
@@ -338,6 +353,7 @@ class ElectrostaticFDPEConstraint(Constraint):
         self._update_coulombic_force_and_potential_energy[block_per_grid, thread_per_block](
             positive_positions,
             self._parent_ensemble.topology.device_charges,
+            self._parent_ensemble.state.device_pbc_matrix,
             self._device_k0,
             self._device_cavity_relative_permittivity,
             self._columbic_forces, self._columbic_potential_energy
@@ -400,121 +416,3 @@ class ElectrostaticFDPEConstraint(Constraint):
     @property
     def reaction_field_potential_energy(self) -> cp.ndarray:
         return self._reaction_field_potential_energy
-
-
-import os
-import mdpy as md
-import numpy as np
-import matplotlib.pyplot as plt
-
-if __name__ == '__main__':
-    img_dir = '/home/zhenyuwei/nutstore/ZhenyuWei/Note_Class/MEng/advanced_fluid_mechanics/final/image'
-    topology = md.core.Topology()
-    topology.add_particles([
-        md.core.Particle(charge=-1),
-        md.core.Particle(charge=-1),
-        md.core.Particle(charge=2),
-        md.core.Particle(charge=1),
-        # md.core.Particle(charge=1),
-    ])
-    positions = np.array([
-        [-10, 0, 0],
-        [10, 0, 0],
-        [0, 1, 0],
-        [0, -20, 0],
-    ], NUMPY_FLOAT)
-    ensemble = md.core.Ensemble(topology, np.eye(3) * 50)
-    ensemble.state.set_positions(positions)
-    # constraint
-    constraint = ElectrostaticFDPEConstraint(0.5, 2)
-    ensemble.add_constraints(constraint)
-    relative_permittivity_map = cp.ones(constraint._inner_grid_size) * 80
-    relative_permittivity_map[:30, :, :] = 2
-    relative_permittivity_map[-30:, :, :] = 2
-    relative_permittivity_map[:, :15, :] = 80
-    relative_permittivity_map[:, -15:, :] = 80
-    constraint.set_relative_permittivity_map(relative_permittivity_map)
-    # Update
-    constraint.update()
-    # Visualization
-    fig = plt.figure(figsize=[9, 18])
-    x = np.linspace(
-        ensemble.state.pbc_matrix[0, 0] / -2,
-        ensemble.state.pbc_matrix[0, 0] / 2,
-        constraint.total_grid_size[0], endpoint=True
-    )[1:-1]
-    y = np.linspace(
-        ensemble.state.pbc_matrix[1, 1] / -2,
-        ensemble.state.pbc_matrix[1, 1] / 2,
-        constraint.total_grid_size[1], endpoint=True
-    )[1:-1]
-    X, Y = np.meshgrid(x, y)
-
-    ax1 = fig.add_subplot(311)
-    coulombic_electric_potential_map = constraint.device_coulombic_electric_potential_map.get()[1:-1, 1:-1, 1:-1]
-    coulombic_electric_potential_map = Quantity(coulombic_electric_potential_map, default_energy_unit/default_charge_unit).convert_to(kilojoule_permol / elementary_charge).value
-    coulombic_forces = constraint.columbic_forces.get() / 100
-    coulombic_forces[:2, :] = 0
-    Ey_columbic, Ex_columbic = np.gradient(-coulombic_electric_potential_map[:, :, constraint.total_grid_size[1]//2].T)
-    ax1.streamplot(x, y, Ex_columbic, Ey_columbic, linewidth=1, cmap='RdBu', density=2)
-    c = ax1.contourf(X, Y, coulombic_electric_potential_map[:, :, constraint.total_grid_size[1]//2].T, 100, cmap='RdBu')
-    for particle in range(ensemble.topology.num_particles):
-        ax1.scatter(
-            [positions[particle, 0]], [positions[particle, 1]],
-            c='navy' if ensemble.topology.charges[particle, 0] > 0 else 'brown'
-        )
-        ax1.plot(
-            [positions[particle, 0], positions[particle, 0] + coulombic_forces[particle, 0]],
-            [positions[particle, 1], positions[particle, 1] + coulombic_forces[particle, 1]],
-            c='navy' if ensemble.topology.charges[particle, 0] > 0 else 'brown'
-        )
-    plt.colorbar(c)
-
-    # print((Quantity(4*np.pi*coulombic_forces, default_force_unit) * EPSILON0).convert_to(elementary_charge**2/angstrom**2).value)
-
-    ax2 = fig.add_subplot(312)
-    reaction_field_electric_potential_map = constraint.device_reaction_field_electric_potential_map.get()
-    reaction_field_electric_potential_map = Quantity(reaction_field_electric_potential_map, default_energy_unit/default_charge_unit).convert_to(kilojoule_permol / elementary_charge).value
-    reaction_field_forces = constraint.reaction_field_forces.get() / 100
-    reaction_field_forces[:2, :] = 0
-    c = ax2.contourf(X, Y, reaction_field_electric_potential_map[:, :, constraint.total_grid_size[1]//2].T, 100, cmap='RdBu')
-    Ey, Ex = np.gradient(-reaction_field_electric_potential_map[:, :, constraint.total_grid_size[1]//2].T)
-    ax2.streamplot(x, y, Ex, Ey, linewidth=1, cmap='RdBu', density=2)
-    for particle in range(ensemble.topology.num_particles):
-        ax2.scatter(
-            [positions[particle, 0]], [positions[particle, 1]],
-            c='navy' if ensemble.topology.charges[particle, 0] > 0 else 'brown'
-        )
-        ax2.plot(
-            [positions[particle, 0], positions[particle, 0] + reaction_field_forces[particle, 0]],
-            [positions[particle, 1], positions[particle, 1] + reaction_field_forces[particle, 1]],
-            c='navy' if ensemble.topology.charges[particle, 0] > 0 else 'brown'
-        )
-    ax2.set_xlabel('X (A)', fontsize=15)
-    ax2.set_ylabel('Y (A)', fontsize=15)
-    plt.colorbar(c)
-
-    ax3 = fig.add_subplot(313)
-    c = ax3.contourf(X, Y, reaction_field_electric_potential_map[:, :, constraint.total_grid_size[1]//2].T + coulombic_electric_potential_map[:, :, constraint.total_grid_size[1]//2].T, 100, cmap='RdBu')
-    Ey, Ex = np.gradient(-(
-        reaction_field_electric_potential_map[:, :, constraint.total_grid_size[1]//2] +
-        coulombic_electric_potential_map[:, :, constraint.total_grid_size[1]//2]
-    ).T)
-    ax3.streamplot(x, y, Ex, Ey, linewidth=1, cmap='RdBu', density=2)
-    for particle in range(ensemble.topology.num_particles):
-        ax3.scatter(
-            [positions[particle, 0]], [positions[particle, 1]],
-            c='navy' if ensemble.topology.charges[particle, 0] > 0 else 'brown'
-        )
-        ax3.plot(
-            [positions[particle, 0], positions[particle, 0] + reaction_field_forces[particle, 0] + coulombic_forces[particle, 0]],
-            [positions[particle, 1], positions[particle, 1] + reaction_field_forces[particle, 1] + coulombic_forces[particle, 1]],
-            c='navy' if ensemble.topology.charges[particle, 0] > 0 else 'brown'
-        )
-    print((Quantity(4*np.pi*coulombic_forces, default_force_unit) * EPSILON0).convert_to(elementary_charge**2/angstrom**2).value)
-    print((Quantity(4*np.pi*reaction_field_forces, default_force_unit) * EPSILON0).convert_to(elementary_charge**2/angstrom**2).value)
-    plt.colorbar(c)
-    fig.tight_layout()
-    plt.show()
-    fig.savefig(os.path.join(img_dir, 'solution_04.png'), dpi=300)
-
