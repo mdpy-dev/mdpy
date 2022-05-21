@@ -8,6 +8,7 @@ copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
 import os
+import math
 import numpy as np
 import cupy as cp
 import numba.cuda as cuda
@@ -18,8 +19,8 @@ from mdpy.utils import *
 from mdpy.unit import *
 from mdpy.error import *
 
-SKIN_WIDTH = Quantity(1, angstrom)
-THREAD_PER_BLOCK = 32
+SKIN_WIDTH = Quantity(3.5, angstrom)
+THREAD_PER_BLOCK = 16
 
 cur_dir = os.path.dirname(os.path.abspath(__file__))
 lookup_table_dir = os.path.join(cur_dir, '../../data/space_filling_curve_lookup_table/')
@@ -57,6 +58,8 @@ class TileList:
         ))(self._construct_tile_list_kernel)
         self._find_tile_neighbors = cuda.jit(nb.void(
             NUMBA_INT[::1], # num_cells_vec
+            NUMBA_FLOAT[::1], # cutoff_radius
+            NUMBA_FLOAT[:, ::1], # pbc_matrix
             NUMBA_INT[::1], # sorted_tile_index
             NUMBA_INT[:, ::1], # tile_cell_index
             NUMBA_INT[:, ::1], # tile_cell_information
@@ -97,7 +100,8 @@ class TileList:
         # Attributes
         self._cutoff_radius = cutoff_radius
         self._cell_width = self._cutoff_radius + self._skin_width
-        self._num_cells_vec = np.ceil(self._pbc_diag / self._cell_width).astype(NUMPY_INT)
+        self._num_cells_vec = np.floor(self._pbc_diag / self._cell_width).astype(NUMPY_INT)
+        self._num_cells_vec[self._num_cells_vec < 3] = 3
         # Device attributes
         self._device_cutoff_radius = cp.array([self._cutoff_radius], CUPY_FLOAT)
         self._device_cell_width = cp.array([self._cell_width], CUPY_FLOAT)
@@ -139,9 +143,12 @@ class TileList:
                 if data < box_min[i]:
                     box_min[i] = data
             cur_index += 1
+        diag = NUMBA_FLOAT(0)
         for i in range(SPATIAL_DIM):
             tile_box[tile_id, i] = local_box[i] / cur_index
-            tile_box[tile_id, i+SPATIAL_DIM] = box_max[i] - box_min[i]
+            tile_box[tile_id, i+SPATIAL_DIM] = (box_max[i] - box_min[i]) * NUMBA_FLOAT(0.5)
+            diag += tile_box[tile_id, i+SPATIAL_DIM]**2
+        tile_box[tile_id, 6] = math.sqrt(diag)
 
     def _construct_tile_cell_list(self):
         num_cells = np.prod(self._num_cells_vec)
@@ -164,6 +171,8 @@ class TileList:
     @staticmethod
     def _find_tile_neighbors_kernel(
         num_cells_vec,
+        cutoff_radius,
+        pbc_matrix,
         sorted_tile_index,
         tile_cell_index,
         tile_cell_information,
@@ -183,7 +192,20 @@ class TileList:
         central_cell_index[1] = tile_cell_index[tile_id, 1]
         central_cell_index[2] = tile_cell_index[tile_id, 2]
 
+        # shared data
+        local_thread_x = cuda.threadIdx.x
+        shared_pbc_matrix = cuda.shared.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
+        shared_half_pbc_matrix = cuda.shared.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
+        if local_thread_x <= 2:
+            shared_pbc_matrix[local_thread_x] = pbc_matrix[local_thread_x, local_thread_x]
+            shared_half_pbc_matrix[local_thread_x] = shared_pbc_matrix[local_thread_x] * NUMBA_FLOAT(0.5)
+
         neighbor_cell_index = cuda.local.array(shape=(SPATIAL_DIM), dtype=NUMBA_INT)
+        local_box = cuda.local.array(shape=(7), dtype=NUMBA_FLOAT)
+        vec = cuda.local.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
+        cutoff_radius = cutoff_radius[0]
+        for i in range(7):
+            local_box[i] = tile_box[tile_id, i]
         cur_neighbor_tile_index = 0
         for i in range(-1, 2):
             neighbor_cell_index[0] = central_cell_index[0] + i
@@ -208,11 +230,22 @@ class TileList:
                         neighbor_cell_index[0] * num_cells_yz
                     )
                     cur_tile_index = tile_cell_information[cell_index, 0]
-                    if tile_id == 143:
-                        print(central_cell_index[0], central_cell_index[1], central_cell_index[2], neighbor_cell_index[0], neighbor_cell_index[1], neighbor_cell_index[2], tile_cell_information[cell_index, 1])
                     for _ in range(tile_cell_information[cell_index, 1]):
-                        tile_neighbors[tile_id, cur_neighbor_tile_index] = sorted_tile_index[cur_tile_index]
-                        cur_neighbor_tile_index += 1
+                        neighbor_tile_id = sorted_tile_index[cur_tile_index]
+                        is_neighbor = True
+                        r = NUMBA_FLOAT(0)
+                        for i in range(SPATIAL_DIM):
+                            vec[i] = abs(tile_box[neighbor_tile_id, i] - local_box[i])
+                            if vec[i] > shared_half_pbc_matrix[i]:
+                                vec[i] = shared_pbc_matrix[i] - vec[i]
+                            if vec[i] - local_box[i+3] - tile_box[neighbor_tile_id, i+3] >= cutoff_radius:
+                                is_neighbor = False
+                                break
+                            r += vec[i]**2
+                        if is_neighbor:
+                            if math.sqrt(r) - local_box[6] - tile_box[neighbor_tile_id, 6] < cutoff_radius:
+                                tile_neighbors[tile_id, cur_neighbor_tile_index] = neighbor_tile_id
+                                cur_neighbor_tile_index += 1
                         cur_tile_index += 1
         tile_num_neighbors[tile_id] = cur_neighbor_tile_index
 
@@ -234,7 +267,7 @@ class TileList:
         # Construct tile list
         self._num_tiles = int(np.ceil(self._num_particles / NUM_PARTICLES_PER_TILE))
         self._tile_list = cp.zeros((self._num_tiles, NUM_PARTICLES_PER_TILE), CUPY_INT) - 1
-        self._tile_box = cp.zeros((self._num_tiles, 6), CUPY_FLOAT)
+        self._tile_box = cp.zeros((self._num_tiles, 7), CUPY_FLOAT)
         block_per_grid = int(np.ceil(self._num_tiles / thread_per_block))
         self._construct_tile_list[block_per_grid, thread_per_block](
             positive_positions,
@@ -251,6 +284,8 @@ class TileList:
         self._tile_num_neighbors = cp.zeros((self._num_tiles), CUPY_INT)
         self._find_tile_neighbors[block_per_grid, thread_per_block](
             self._device_num_cells_vec,
+            self._device_cutoff_radius,
+            self._device_pbc_matrix,
             self._sorted_tile_index,
             self._tile_cell_index,
             self._tile_cell_information,
@@ -372,8 +407,8 @@ if __name__ == '__main__':
     import time
     import mdpy as md
     from cupy.cuda.nvtx import RangePush, RangePop
-    pdb = md.io.PDBParser('/home/zhenyuwei/nutstore/ZhenyuWei/Note_Research/mdpy/mdpy/benchmark/data/str.pdb')
-    psf = md.io.PSFParser('/home/zhenyuwei/nutstore/ZhenyuWei/Note_Research/mdpy/mdpy/benchmark/data/str.psf')
+    pdb = md.io.PDBParser('/home/zhenyuwei/nutstore/ZhenyuWei/Note_Research/mdpy/mdpy/benchmark/str/medium.pdb')
+    psf = md.io.PSFParser('/home/zhenyuwei/nutstore/ZhenyuWei/Note_Research/mdpy/mdpy/benchmark/str/medium.psf')
     positions = cp.array(pdb.positions, CUPY_FLOAT)
     positive_positions = positions + cp.array(np.diagonal(pdb.pbc_matrix)) / 2
 
@@ -382,74 +417,47 @@ if __name__ == '__main__':
 
     tile_list.update(positions)
 
-    if not True: # sort_matrix
-        for tile in range(32):
-            print('# Tile %d, cell_index: %s' %(tile, tile_list.tile_cell_index[tile, :]))
-            print(tile_list.sorted_matrix_mapping_index[tile*NUM_PARTICLES_PER_TILE:(tile+1)*NUM_PARTICLES_PER_TILE])
-            print(tile_list.sort_matrix(positive_positions)[tile*NUM_PARTICLES_PER_TILE:(tile+1)*NUM_PARTICLES_PER_TILE, :])
-    if not True:
-        sorted_positions = tile_list.sort_matrix(positions)
-        unsorted_positions = tile_list.unsort_matrix(sorted_positions)
-        print(cp.hstack([positions, unsorted_positions])[:100, :])
-    if not True:
-        excluded_mask_map = tile_list.generate_exclusion_mask_map(cp.array(psf.topology.excluded_particles, CUPY_INT))
-        print(excluded_mask_map.shape)
-        print(cp.count_nonzero(excluded_mask_map==0))
-        print(cp.count_nonzero(excluded_mask_map!=0))
-        print(cp.count_nonzero(excluded_mask_map==4294967295))
-        num_excluded_particles = 0
-        for particle in psf.topology.particles:
-            num_excluded_particles += particle.num_excluded_particles
-        print(num_excluded_particles)
+    epoch = 30
+    RangePush('Update tile')
+    ts = time.time()
+    for i in range(epoch):
+        tile_list.update(positions)
+    te = time.time()
+    print('Run update for %s s' %((te-ts)/epoch))
+    RangePop()
 
-    # import matplotlib.pyplot as plt
-    # c = plt.imshow(excluded_mask_map.get()[:, :1000])
-    # plt.colorbar(c)
-    # plt.xticks(np.arange(0, 1000, 32))
-    # plt.grid()
-    # plt.show()
+    RangePush('Sort float matrix')
+    ts = time.time()
+    for i in range(epoch):
+        tile_list.sort_matrix(positions)
+    te = time.time()
+    print('Run sort float for %s s' %((te-ts)/epoch))
+    RangePop()
 
-    # epoch = 30
-    # RangePush('Update tile')
-    # ts = time.time()
-    # for i in range(epoch):
-    #     tile_list.update(positions)
-    # te = time.time()
-    # print('Run update for %s s' %((te-ts)/epoch))
-    # RangePop()
-
-    # RangePush('Sort float matrix')
-    # ts = time.time()
-    # for i in range(epoch):
-    #     tile_list.sort_matrix(positions)
-    # te = time.time()
-    # print('Run sort float for %s s' %((te-ts)/epoch))
-    # RangePop()
-
-    # int_data = cp.random.randint(0, 100, size=(positions.shape[0], 15), dtype=CUPY_INT)
-    # RangePush('Sort int matrix')
-    # ts = time.time()
-    # for i in range(epoch):
-    #     tile_list.sort_matrix(int_data)
-    # te = time.time()
-    # print('Run sort int for %s s' %((te-ts)/epoch))
-    # RangePop()
+    int_data = cp.random.randint(0, 100, size=(positions.shape[0], 15), dtype=CUPY_INT)
+    RangePush('Sort int matrix')
+    ts = time.time()
+    for i in range(epoch):
+        tile_list.sort_matrix(int_data)
+    te = time.time()
+    print('Run sort int for %s s' %((te-ts)/epoch))
+    RangePop()
 
 
-    # sorted_positions = tile_list.sort_matrix(positions)
-    # RangePush('Unsort matrix')
-    # ts = time.time()
-    # for i in range(epoch):
-    #     tile_list.unsort_matrix(sorted_positions)
-    # te = time.time()
-    # print('Run unsort for %s s' %((te-ts)/epoch))
-    # RangePop()
+    sorted_positions = tile_list.sort_matrix(positions)
+    RangePush('Unsort matrix')
+    ts = time.time()
+    for i in range(epoch):
+        tile_list.unsort_matrix(sorted_positions)
+    te = time.time()
+    print('Run unsort for %s s' %((te-ts)/epoch))
+    RangePop()
 
-    # excluded_particles = cp.array(psf.topology.excluded_particles, CUPY_INT)
-    # RangePush('Unsort matrix')
-    # ts = time.time()
-    # for i in range(epoch):
-    #     tile_list.generate_exclusion_mask_map(excluded_particles)
-    # te = time.time()
-    # print('Run generate mask for %s s' %((te-ts)/epoch))
-    # RangePop()
+    excluded_particles = cp.array(psf.topology.excluded_particles, CUPY_INT)
+    RangePush('Unsort matrix')
+    ts = time.time()
+    for i in range(epoch):
+        tile_list.generate_exclusion_mask_map(excluded_particles)
+    te = time.time()
+    print('Run generate mask for %s s' %((te-ts)/epoch))
+    RangePop()
