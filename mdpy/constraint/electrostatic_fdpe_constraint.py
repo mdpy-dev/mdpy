@@ -7,8 +7,6 @@ author : Zhenyu Wei
 copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
-from threading import local
-import time
 import math
 import numpy as np
 import numba as nb
