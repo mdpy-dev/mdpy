@@ -78,6 +78,7 @@ class Topology:
             self._num_particles, MAX_NUM_SCALED_PARTICLES
         ], dtype=env.NUMPY_INT) * -1
         for index, particle in enumerate(self._particles):
+            particle.add_excluded_particle(particle.matrix_id)
             self._excluded_particles[index, :particle.num_excluded_particles] = particle.excluded_particles
             self._scaled_particles[index, :particle.num_scaled_particles] = particle.scaled_particles
         self._device_masses = cp.array(self._masses, CUPY_FLOAT)
