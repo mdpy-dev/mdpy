@@ -60,10 +60,6 @@ class Particle:
                 'Particle %d has been added twice to the excluded_particles of Particle %d'
                 %(particle_matrix_id, self._matrix_id)
             )
-        if particle_matrix_id == self._matrix_id:
-            raise ParticleConflictError(
-                'Particle itself can not be added to the excluded_particles list.'
-            )
         self._excluded_particles.append(particle_matrix_id)
         self._num_excluded_particles += 1
 
