@@ -19,7 +19,7 @@ from mdpy.utils import *
 from mdpy.unit import *
 
 THREAD_PER_BLOCK = (NUM_PARTICLES_PER_TILE, 1)
-NUM_TILES_PER_THREAD = 32
+NUM_TILES_PER_THREAD = 8
 class CharmmVDWConstraint(Constraint):
     def __init__(self, parameter_dict: dict, cutoff_radius=Quantity(12, angstrom)) -> None:
         super().__init__()
@@ -35,7 +35,6 @@ class CharmmVDWConstraint(Constraint):
             NUMBA_FLOAT[:, ::1], # sorted_positions
             NUMBA_FLOAT[:, ::1], # sorted_parameters
             NUMBA_BIT[:, ::1], # exclusion_map
-            NUMBA_INT[::1], # sorted_particle_index
             NUMBA_INT[:, ::1], # tile_neighbors
             NUMBA_FLOAT[:, ::1], # sorted_forces
             NUMBA_FLOAT[::1] # potential_energy
@@ -77,7 +76,6 @@ class CharmmVDWConstraint(Constraint):
         sorted_positions,
         sorted_parameters,
         exclusion_map,
-        sorted_particle_index,
         tile_neighbors,
         sorted_forces, potential_energy
     ):
@@ -91,11 +89,11 @@ class CharmmVDWConstraint(Constraint):
         local_thread_x = cuda.threadIdx.x
         global_thread_x = local_thread_x + cuda.blockIdx.x * cuda.blockDim.x
         # shared data
-        shared_pbc_matrix = cuda.shared.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
-        shared_half_pbc_matrix = cuda.shared.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
-        if local_thread_x <= 2:
-            shared_pbc_matrix[local_thread_x] = pbc_matrix[local_thread_x, local_thread_x]
-            shared_half_pbc_matrix[local_thread_x] = shared_pbc_matrix[local_thread_x] * NUMBA_FLOAT(0.5)
+        local_pbc_matrix = cuda.local.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
+        local_half_pbc_matrix = cuda.local.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
+        for i in range(SPATIAL_DIM):
+            local_pbc_matrix[i] = pbc_matrix[i, i]
+            local_half_pbc_matrix[i] = local_pbc_matrix[i] * NUMBA_FLOAT(0.5)
         tile1_positions = cuda.shared.array(shape=(SPATIAL_DIM, NUM_PARTICLES_PER_TILE), dtype=NUMBA_FLOAT)
         tile1_parameters = cuda.shared.array(shape=(2, NUM_PARTICLES_PER_TILE), dtype=NUMBA_FLOAT)
         tile2_positions = cuda.shared.array(shape=(SPATIAL_DIM, NUM_PARTICLES_PER_TILE), dtype=NUMBA_FLOAT)
@@ -109,9 +107,6 @@ class CharmmVDWConstraint(Constraint):
             tile1_parameters[i, local_thread_x] = sorted_parameters[i, tile1_index]
 
         # Local data
-        particle_1 = sorted_particle_index[global_thread_x]
-        if particle_1 == -1:
-            return
         local_forces = cuda.local.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
         vec = cuda.local.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
         energy = NUMBA_FLOAT(0)
@@ -123,6 +118,7 @@ class CharmmVDWConstraint(Constraint):
             if tile_id2 == -1:
                 break
             tile2_index = tile_id2 * NUM_PARTICLES_PER_TILE + local_thread_x
+            cuda.syncthreads()
             for i in range(SPATIAL_DIM):
                 tile2_positions[i, local_thread_x] = sorted_positions[i, tile2_index]
             for i in range(2):
@@ -137,10 +133,10 @@ class CharmmVDWConstraint(Constraint):
                 r = NUMBA_FLOAT(0)
                 for i in range(SPATIAL_DIM):
                     vec[i] = tile2_positions[i, index] - tile1_positions[i, local_thread_x]
-                    if vec[i] < - shared_half_pbc_matrix[i]:
-                        vec[i] += shared_pbc_matrix[i]
-                    elif vec[i] > shared_half_pbc_matrix[i]:
-                        vec[i] -= shared_pbc_matrix[i]
+                    if vec[i] < - local_half_pbc_matrix[i]:
+                        vec[i] += local_pbc_matrix[i]
+                    elif vec[i] > local_half_pbc_matrix[i]:
+                        vec[i] -= local_pbc_matrix[i]
                     r += vec[i]**2
                 r = math.sqrt(r)
                 if r < cutoff_radius:
@@ -247,7 +243,6 @@ class CharmmVDWConstraint(Constraint):
             sorted_positions,
             device_sorted_parameter_list,
             self._parent_ensemble.topology.device_exclusion_map,
-            self._parent_ensemble.tile_list._padded_sorted_particle_index,
             self._parent_ensemble.tile_list.tile_neighbors,
             sorted_forces, self._potential_energy
         )
