@@ -399,7 +399,7 @@ class TileList:
             (unsorted_matrix.shape[1], self._num_tiles*NUM_PARTICLES_PER_TILE),
             dtype=matrix_type
         )
-        thread_per_block = 32
+        thread_per_block = NUM_PARTICLES_PER_TILE
         block_per_grid = self._num_tiles
         if matrix_type == CUPY_INT:
             self._sort_int_matrix[block_per_grid, thread_per_block](
@@ -430,7 +430,7 @@ class TileList:
             (self._num_particles, sorted_matrix.shape[0]),
             dtype=matrix_type
         )
-        thread_per_block = 32
+        thread_per_block = NUM_PARTICLES_PER_TILE
         block_per_grid = self._num_tiles
         if matrix_type == CUPY_INT:
             self._unsort_int_matrix[block_per_grid, thread_per_block](
