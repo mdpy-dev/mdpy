@@ -47,7 +47,7 @@ class TileList:
         self._code_normalize_factor = self._code_range**3
         self._lookup_table = np.load(lookup_file).astype(NUMPY_INT)
         self._device_lookup_table = cp.array(self._lookup_table, CUPY_INT)
-        # Deivice attribute
+        # Device attribute
         self._device_pbc_matrix = cp.array(self._pbc_matrix, CUPY_FLOAT)
         self._device_pbc_diag = cp.array(self._pbc_diag, CUPY_FLOAT)
         self._device_half_pbc_diag = cp.array(self._half_pbc_diag, CUPY_FLOAT)
