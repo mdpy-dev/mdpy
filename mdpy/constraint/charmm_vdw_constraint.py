@@ -86,22 +86,21 @@ class CharmmVDWConstraint(Constraint):
         tile_id1 = cuda.blockIdx.x
         tile1_particle_index = tile_id1 * NUM_PARTICLES_PER_TILE + local_thread_x
         # shared data
-        shared_pbc_matrix = cuda.shared.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
-        shared_half_pbc_matrix = cuda.shared.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
-        if local_thread_x <= 2 and local_thread_y == 0:
-            shared_pbc_matrix[local_thread_x] = pbc_matrix[local_thread_x, local_thread_x]
-            shared_half_pbc_matrix[local_thread_x] = shared_pbc_matrix[local_thread_x] * NUMBA_FLOAT(0.5)
-        tile1_positions = cuda.shared.array(shape=(SPATIAL_DIM, NUM_PARTICLES_PER_TILE), dtype=NUMBA_FLOAT)
-        tile1_parameters = cuda.shared.array(shape=(2, NUM_PARTICLES_PER_TILE), dtype=NUMBA_FLOAT)
+        local_pbc_matrix = cuda.local.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
+        local_half_pbc_matrix = cuda.local.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
+        for i in range(SPATIAL_DIM):
+            local_pbc_matrix[i] = pbc_matrix[i, i]
+            local_half_pbc_matrix[i] = local_pbc_matrix[i] * NUMBA_FLOAT(0.5)
+        tile1_positions = cuda.local.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
+        tile1_parameters = cuda.local.array(shape=(2), dtype=NUMBA_FLOAT)
         tile2_positions = cuda.shared.array(shape=(SPATIAL_DIM, TILES_PER_THREAD, NUM_PARTICLES_PER_TILE), dtype=NUMBA_FLOAT)
         tile2_parameters = cuda.shared.array(shape=(2, TILES_PER_THREAD, NUM_PARTICLES_PER_TILE), dtype=NUMBA_FLOAT)
         cuda.syncthreads()
         # Read data
-        if local_thread_y == 0:
-            for i in range(SPATIAL_DIM):
-                tile1_positions[i, local_thread_x] = sorted_positions[i, tile1_particle_index]
-            for i in range(2):
-                tile1_parameters[i, local_thread_x] = sorted_parameters[i, tile1_particle_index]
+        for i in range(SPATIAL_DIM):
+            tile1_positions[i] = sorted_positions[i, tile1_particle_index]
+        for i in range(2):
+            tile1_parameters[i] = sorted_parameters[i, tile1_particle_index]
         # Local data
         local_forces = cuda.local.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
         vec = cuda.local.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
@@ -120,25 +119,25 @@ class CharmmVDWConstraint(Constraint):
             exclusion_flag = exclusion_map[tile_index, tile1_particle_index]
             cuda.syncthreads()
             if tile_id2 == -1:
-                continue
+                break
             # Computation
             for particle_index in range(NUM_PARTICLES_PER_TILE):
                 if exclusion_flag >> particle_index & 0b1:
                     continue
                 r = NUMBA_FLOAT(0)
                 for i in range(SPATIAL_DIM):
-                    vec[i] = tile2_positions[i, local_thread_y, particle_index] - tile1_positions[i, local_thread_x]
-                    if vec[i] < - shared_half_pbc_matrix[i]:
-                        vec[i] += shared_pbc_matrix[i]
-                    elif vec[i] > shared_half_pbc_matrix[i]:
-                        vec[i] -= shared_pbc_matrix[i]
+                    vec[i] = tile2_positions[i, local_thread_y, particle_index] - tile1_positions[i]
+                    if vec[i] < - local_half_pbc_matrix[i]:
+                        vec[i] += local_pbc_matrix[i]
+                    elif vec[i] > local_half_pbc_matrix[i]:
+                        vec[i] -= local_pbc_matrix[i]
                     r += vec[i]**2
                 r = math.sqrt(r)
                 if r < cutoff_radius:
                     inverse_r = NUMBA_FLOAT(1) / r
                     inverse_r_square = inverse_r**2
-                    epsilon = math.sqrt(tile2_parameters[0, local_thread_y, particle_index] * tile1_parameters[0, local_thread_x])
-                    sigma = (tile2_parameters[1, local_thread_y, particle_index] + tile1_parameters[1, local_thread_x]) * NUMBA_FLOAT(0.5)
+                    epsilon = math.sqrt(tile2_parameters[0, local_thread_y, particle_index] * tile1_parameters[0])
+                    sigma = (tile2_parameters[1, local_thread_y, particle_index] + tile1_parameters[1]) * NUMBA_FLOAT(0.5)
                     scaled_r = sigma * inverse_r
                     scaled_r6 = scaled_r**6
                     scaled_r12 = scaled_r6**2
