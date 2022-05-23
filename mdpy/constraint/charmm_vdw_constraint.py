@@ -18,7 +18,7 @@ from mdpy.constraint import Constraint
 from mdpy.utils import *
 from mdpy.unit import *
 
-THREADS_PER_BLOCK = NUM_PARTICLES_PER_TILE
+TILES_PER_THREAD = 4
 
 class CharmmVDWConstraint(Constraint):
     def __init__(self, parameter_dict: dict, cutoff_radius=Quantity(12, angstrom)) -> None:
@@ -38,7 +38,7 @@ class CharmmVDWConstraint(Constraint):
             NUMBA_INT[:, ::1], # tile_neighbors
             NUMBA_FLOAT[:, ::1], # sorted_forces
             NUMBA_FLOAT[::1] # potential_energy
-        ), fastmath=True)(self._update_charmm_vdw_kernel)
+        ), fastmath=True, max_registers=32)(self._update_charmm_vdw_kernel)
         self._update_scaled_charmm_vdw = cuda.jit(nb.void(
             NUMBA_FLOAT[:, ::1], # positions
             NUMBA_FLOAT[:, ::1], # parameters
@@ -81,25 +81,27 @@ class CharmmVDWConstraint(Constraint):
     ):
         # Particle index information
         local_thread_x = cuda.threadIdx.x
+        local_thread_y = cuda.threadIdx.y
         global_thread_x = local_thread_x + cuda.blockIdx.x * cuda.blockDim.x
         tile_id1 = cuda.blockIdx.x
         tile1_particle_index = tile_id1 * NUM_PARTICLES_PER_TILE + local_thread_x
         # shared data
-        local_pbc_matrix = cuda.local.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
-        local_half_pbc_matrix = cuda.local.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
-        for i in range(SPATIAL_DIM):
-            local_pbc_matrix[i] = pbc_matrix[i, i]
-            local_half_pbc_matrix[i] = local_pbc_matrix[i] * NUMBA_FLOAT(0.5)
-        tile1_positions = cuda.local.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
-        tile1_parameters = cuda.local.array(shape=(2), dtype=NUMBA_FLOAT)
-        tile2_positions = cuda.shared.array(shape=(SPATIAL_DIM, NUM_PARTICLES_PER_TILE), dtype=NUMBA_FLOAT)
-        tile2_parameters = cuda.shared.array(shape=(2, NUM_PARTICLES_PER_TILE), dtype=NUMBA_FLOAT)
+        shared_pbc_matrix = cuda.shared.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
+        shared_half_pbc_matrix = cuda.shared.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
+        if local_thread_x <= 2 and local_thread_y == 0:
+            shared_pbc_matrix[local_thread_x] = pbc_matrix[local_thread_x, local_thread_x]
+            shared_half_pbc_matrix[local_thread_x] = shared_pbc_matrix[local_thread_x] * NUMBA_FLOAT(0.5)
+        tile1_positions = cuda.shared.array(shape=(SPATIAL_DIM, NUM_PARTICLES_PER_TILE), dtype=NUMBA_FLOAT)
+        tile1_parameters = cuda.shared.array(shape=(2, NUM_PARTICLES_PER_TILE), dtype=NUMBA_FLOAT)
+        tile2_positions = cuda.shared.array(shape=(SPATIAL_DIM, TILES_PER_THREAD, NUM_PARTICLES_PER_TILE), dtype=NUMBA_FLOAT)
+        tile2_parameters = cuda.shared.array(shape=(2, TILES_PER_THREAD, NUM_PARTICLES_PER_TILE), dtype=NUMBA_FLOAT)
         cuda.syncthreads()
         # Read data
-        for i in range(SPATIAL_DIM):
-            tile1_positions[i] = sorted_positions[i, tile1_particle_index]
-        for i in range(2):
-            tile1_parameters[i] = sorted_parameters[i, tile1_particle_index]
+        if local_thread_y == 0:
+            for i in range(SPATIAL_DIM):
+                tile1_positions[i, local_thread_x] = sorted_positions[i, tile1_particle_index]
+            for i in range(2):
+                tile1_parameters[i, local_thread_x] = sorted_parameters[i, tile1_particle_index]
         # Local data
         local_forces = cuda.local.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
         vec = cuda.local.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
@@ -107,37 +109,36 @@ class CharmmVDWConstraint(Constraint):
         cutoff_radius = cutoff_radius[0]
         for i in range(SPATIAL_DIM):
             local_forces[i] = 0
-        for tile_index in range(tile_neighbors.shape[1]):
+        for tile_index in range(local_thread_y, tile_neighbors.shape[1], TILES_PER_THREAD):
             tile_id2 = tile_neighbors[tile_id1, tile_index]
-            if tile_id2 == -1:
-                break
             tile2_particle_index = tile_id2 * NUM_PARTICLES_PER_TILE + local_thread_x
             cuda.syncthreads()
             for i in range(SPATIAL_DIM):
-                tile2_positions[i, local_thread_x] = sorted_positions[i, tile2_particle_index]
+                tile2_positions[i, local_thread_y, local_thread_x] = sorted_positions[i, tile2_particle_index]
             for i in range(2):
-                tile2_parameters[i, local_thread_x] = sorted_parameters[i, tile2_particle_index]
+                tile2_parameters[i, local_thread_y, local_thread_x] = sorted_parameters[i, tile2_particle_index]
             exclusion_flag = exclusion_map[tile_index, tile1_particle_index]
             cuda.syncthreads()
-
+            if tile_id2 == -1:
+                continue
             # Computation
             for particle_index in range(NUM_PARTICLES_PER_TILE):
                 if exclusion_flag >> particle_index & 0b1:
                     continue
                 r = NUMBA_FLOAT(0)
                 for i in range(SPATIAL_DIM):
-                    vec[i] = tile2_positions[i, particle_index] - tile1_positions[i]
-                    if vec[i] < - local_half_pbc_matrix[i]:
-                        vec[i] += local_pbc_matrix[i]
-                    elif vec[i] > local_half_pbc_matrix[i]:
-                        vec[i] -= local_pbc_matrix[i]
+                    vec[i] = tile2_positions[i, local_thread_y, particle_index] - tile1_positions[i, local_thread_x]
+                    if vec[i] < - shared_half_pbc_matrix[i]:
+                        vec[i] += shared_pbc_matrix[i]
+                    elif vec[i] > shared_half_pbc_matrix[i]:
+                        vec[i] -= shared_pbc_matrix[i]
                     r += vec[i]**2
                 r = math.sqrt(r)
                 if r < cutoff_radius:
                     inverse_r = NUMBA_FLOAT(1) / r
                     inverse_r_square = inverse_r**2
-                    epsilon = math.sqrt(tile2_parameters[0, particle_index] * tile1_parameters[0])
-                    sigma = (tile2_parameters[1, particle_index] + tile1_parameters[1]) * NUMBA_FLOAT(0.5)
+                    epsilon = math.sqrt(tile2_parameters[0, local_thread_y, particle_index] * tile1_parameters[0, local_thread_x])
+                    sigma = (tile2_parameters[1, local_thread_y, particle_index] + tile1_parameters[1, local_thread_x]) * NUMBA_FLOAT(0.5)
                     scaled_r = sigma * inverse_r
                     scaled_r6 = scaled_r**6
                     scaled_r12 = scaled_r6**2
@@ -226,10 +227,10 @@ class CharmmVDWConstraint(Constraint):
         sorted_positions = self._parent_ensemble.tile_list.sort_matrix(self._parent_ensemble.state.positions)
         device_sorted_parameter_list = self._parent_ensemble.tile_list.sort_matrix(self._device_parameters)
         # update
-        thread_per_block = NUM_PARTICLES_PER_TILE
-        block_per_grid = self._parent_ensemble.tile_list.num_tiles
+        thread_per_block = (NUM_PARTICLES_PER_TILE, TILES_PER_THREAD)
+        block_per_grid = (self._parent_ensemble.tile_list.num_tiles, 1)
         # print(self._parent_ensemble.tile_list.num_tiles, block_per_grid, THREADS_PER_BLOCK)
-        self._update_charmm_vdw[block_per_grid, THREADS_PER_BLOCK](
+        self._update_charmm_vdw[block_per_grid, thread_per_block](
             self._device_cutoff_radius,
             self._parent_ensemble.state.device_pbc_matrix,
             sorted_positions,
