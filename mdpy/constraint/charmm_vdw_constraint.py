@@ -18,8 +18,7 @@ from mdpy.constraint import Constraint
 from mdpy.utils import *
 from mdpy.unit import *
 
-THREAD_PER_BLOCK = (NUM_PARTICLES_PER_TILE, 1)
-NUM_TILES_PER_THREAD = 8
+THREAD_PER_BLOCK = NUM_PARTICLES_PER_TILE
 class CharmmVDWConstraint(Constraint):
     def __init__(self, parameter_dict: dict, cutoff_radius=Quantity(12, angstrom)) -> None:
         super().__init__()
@@ -81,10 +80,6 @@ class CharmmVDWConstraint(Constraint):
     ):
         # tile information
         tile_id1 = cuda.blockIdx.x
-        tile_id2_start = cuda.blockIdx.y * NUM_TILES_PER_THREAD
-        tile_id2_end = tile_id2_start + NUM_TILES_PER_THREAD
-        if tile_id2_end >= tile_neighbors.shape[1]:
-            tile_id2_end = tile_neighbors.shape[1]
         # Particle index information
         local_thread_x = cuda.threadIdx.x
         global_thread_x = local_thread_x + cuda.blockIdx.x * cuda.blockDim.x
@@ -113,7 +108,7 @@ class CharmmVDWConstraint(Constraint):
         cutoff_radius = cutoff_radius[0]
         for i in range(SPATIAL_DIM):
             local_forces[i] = 0
-        for tile_index in range(tile_id2_start, tile_id2_end):
+        for tile_index in range(tile_neighbors.shape[1]):
             tile_id2 = tile_neighbors[tile_id1, tile_index]
             if tile_id2 == -1:
                 break
@@ -232,11 +227,7 @@ class CharmmVDWConstraint(Constraint):
         sorted_positions = self._parent_ensemble.tile_list.sort_matrix(self._parent_ensemble.state.positions)
         device_sorted_parameter_list = self._parent_ensemble.tile_list.sort_matrix(self._device_parameters)
         # update
-        block_per_grid_x = self._parent_ensemble.tile_list.num_tiles
-        block_per_grid_y = int(np.ceil(
-            self._parent_ensemble.tile_list.tile_neighbors.shape[1] / NUM_TILES_PER_THREAD
-        ))
-        block_per_grid = (block_per_grid_x, block_per_grid_y)
+        block_per_grid = self._parent_ensemble.tile_list.num_tiles
         self._update_charmm_vdw[block_per_grid, THREAD_PER_BLOCK](
             self._device_cutoff_radius,
             self._parent_ensemble.state.device_pbc_matrix,
