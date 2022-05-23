@@ -65,7 +65,7 @@ class TileList:
         ))(self._construct_tile_list_kernel)
         self._find_tile_neighbors = cuda.jit(nb.void(
             NUMBA_INT[::1], # num_cells_vec
-            NUMBA_FLOAT[::1], # cutoff_radius
+            NUMBA_FLOAT[::1], # cell_width
             NUMBA_FLOAT[:, ::1], # pbc_matrix
             NUMBA_INT[:, ::1], # tile_cell_index
             NUMBA_INT[:, ::1], # cell_tile_information
@@ -275,7 +275,7 @@ class TileList:
     @staticmethod
     def _find_tile_neighbors_kernel(
         num_cells_vec,
-        cutoff_radius,
+        cell_width,
         pbc_matrix,
         tile_cell_index,
         cell_tile_information,
@@ -306,7 +306,7 @@ class TileList:
         neighbor_cell_index = cuda.local.array(shape=(SPATIAL_DIM), dtype=NUMBA_INT)
         local_box = cuda.local.array(shape=(7), dtype=NUMBA_FLOAT)
         vec = cuda.local.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
-        cutoff_radius = cutoff_radius[0]
+        cutoff_radius = cell_width[0]
         for i in range(7):
             local_box[i] = tile_box[tile_id, i]
         cur_neighbor_tile_index = 0
@@ -383,7 +383,7 @@ class TileList:
         self._tile_num_neighbors = cp.zeros((self._num_tiles), CUPY_INT)
         self._find_tile_neighbors[block_per_grid, thread_per_block](
             self._device_num_cells_vec,
-            self._device_cutoff_radius,
+            self._device_cell_width,
             self._device_pbc_matrix,
             self._tile_cell_index,
             self._cell_tile_information,
