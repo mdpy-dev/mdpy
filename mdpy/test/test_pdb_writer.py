@@ -16,7 +16,7 @@ from mdpy.error import *
 from mdpy.unit import *
 
 cur_dir = os.path.dirname(os.path.abspath(__file__))
-data_dir = os.path.join(cur_dir, 'data')
+data_dir = os.path.join(cur_dir, 'data/simulation')
 out_dir = os.path.join(cur_dir, 'out')
 
 class TestPDBWriter:
