@@ -530,7 +530,7 @@ class TileList:
                 continue
             for particle_index in range(NUM_PARTICLES_PER_TILE):
                 particle2 = tile2_particle_index[particle_index]
-                if particle2 == -1:
+                if particle2 == -1 or particle1 == particle2:
                     exclusion_flag = exclusion_flag ^ (1 << particle_index)
                 else:
                     for information_index in range(MAX_NUM_EXCLUDED_PARTICLES):
