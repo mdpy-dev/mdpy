@@ -45,7 +45,7 @@ class CharmmVDWConstraint(Constraint):
             NUMBA_FLOAT[:, ::1], # pbc_matrix
             NUMBA_FLOAT[::1], # cutoff_radius
             NUMBA_INT[:, ::1], # scaled_particles
-            NUMBA_FLOAT[:, ::1], # positions
+            NUMBA_FLOAT[:, ::1], # forces
             NUMBA_FLOAT[::1] # potential_energy
         ))(self._update_scaled_charmm_vdw_kernel)
 
@@ -120,7 +120,7 @@ class CharmmVDWConstraint(Constraint):
             exclusion_flag = exclusion_map[neighbor_index, tile1_particle_index]
             cuda.syncthreads()
             if tile_id2 == -1:
-                break
+                continue
             # Computation
             for particle_index in range(NUM_PARTICLES_PER_TILE):
                 if exclusion_flag >> particle_index & 0b1:
