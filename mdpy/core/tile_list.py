@@ -102,7 +102,7 @@ class TileList:
             NUMBA_FLOAT[:, ::1], # sorted_positions
             NUMBA_INT[:, ::1], # excluded_particles
             NUMBA_INT[:, ::1], # tile_neighbors
-            NUMBA_INT[::1], # padded_sorted_particle_index
+            NUMBA_INT[::1], # sorted_particle_index
             NUMBA_BIT[:, ::1] # mask_map
         ))(self._generate_exclusion_mask_map_kernel)
 
@@ -176,8 +176,8 @@ class TileList:
             subcell_index[:, 2],
         ] / self._code_normalize_factor
         # particle index
-        particle_index = cell_index + subcell_index
-        self._sorted_particle_index = cp.argsort(particle_index).astype(CUPY_INT)
+        particle_code = cell_index + subcell_index
+        self._sorted_particle_index = cp.argsort(particle_code).astype(CUPY_INT)
 
     @staticmethod
     def _construct_tile_list_kernel(
@@ -482,7 +482,7 @@ class TileList:
         sorted_positions,
         excluded_particles,
         tile_neighbors,
-        padded_sorted_particle_index,
+        sorted_particle_index,
         mask_map
     ):
         tile_id1 = cuda.blockIdx.x
@@ -521,10 +521,10 @@ class TileList:
             tile2_index = tile_id2 * NUM_PARTICLES_PER_TILE + local_thread_x
             for i in range(SPATIAL_DIM):
                 tile2_positions[i, local_thread_x] = sorted_positions[i, tile2_index]
-            tile2_particle_index[local_thread_x] = padded_sorted_particle_index[tile2_index]
+            tile2_particle_index[local_thread_x] = sorted_particle_index[tile2_index]
             cuda.syncthreads()
             exclusion_flag = NUMBA_BIT(0)
-            particle1 = padded_sorted_particle_index[global_thread_x]
+            particle1 = sorted_particle_index[global_thread_x]
             if particle1 == -1:
                 mask_map[tile_index, global_thread_x] = 4294967295 # 2**32 - 1 all 1
                 continue
@@ -582,11 +582,11 @@ class TileList:
         return self._sorted_particle_index
 
     @property
-    def num_cells_vec(self):
+    def num_cells_vec(self) -> np.ndarray:
         return self._num_cells_vec
 
     @property
-    def device_num_cells_vec(self):
+    def device_num_cells_vec(self) -> cp.ndarray:
         return self._device_num_cells_vec
 
 if __name__ == '__main__':
@@ -602,48 +602,3 @@ if __name__ == '__main__':
     tile_list.set_cutoff_radius(8)
 
     tile_list.update(positions)
-
-    # epoch = 30
-    # RangePush('Update tile')
-    # ts = time.time()
-    # for i in range(epoch):
-    #     tile_list.update(positions)
-    # te = time.time()
-    # print('Run update for %s s' %((te-ts)/epoch))
-    # RangePop()
-
-    # RangePush('Sort float matrix')
-    # ts = time.time()
-    # for i in range(epoch):
-    #     tile_list.sort_matrix(positions)
-    # te = time.time()
-    # print('Run sort float for %s s' %((te-ts)/epoch))
-    # RangePop()
-
-    # int_data = cp.random.randint(0, 100, size=(positions.shape[0], 15), dtype=CUPY_INT)
-    # RangePush('Sort int matrix')
-    # ts = time.time()
-    # for i in range(epoch):
-    #     tile_list.sort_matrix(int_data)
-    # te = time.time()
-    # print('Run sort int for %s s' %((te-ts)/epoch))
-    # RangePop()
-
-
-    # sorted_positions = tile_list.sort_matrix(positions)
-    # RangePush('Unsort matrix')
-    # ts = time.time()
-    # for i in range(epoch):
-    #     tile_list.unsort_matrix(sorted_positions)
-    # te = time.time()
-    # print('Run unsort for %s s' %((te-ts)/epoch))
-    # RangePop()
-
-    # excluded_particles = cp.array(psf.topology.excluded_particles, CUPY_INT)
-    # RangePush('Unsort matrix')
-    # ts = time.time()
-    # for i in range(epoch):
-    #     tile_list.generate_exclusion_mask_map(excluded_particles)
-    # te = time.time()
-    # print('Run generate mask for %s s' %((te-ts)/epoch))
-    # RangePop()
