@@ -22,7 +22,7 @@ class State:
         self._num_particles = len(self._topology.particles)
         self._matrix_shape = [self._num_particles, SPATIAL_DIM]
         self._positions = cp.zeros(self._matrix_shape, CUPY_FLOAT)
-        self._sorted_positions = cp.zeros(self._matrix_shape, CUPY_FLOAT)
+        self._sorted_positions = None
         self._velocities = cp.zeros(self._matrix_shape, CUPY_FLOAT)
         self.set_pbc_matrix(pbc_matrix)
 

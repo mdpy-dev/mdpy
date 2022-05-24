@@ -55,6 +55,7 @@ class Ensemble:
     def update(self):
         self._forces = cp.zeros(self._matrix_shape, CUPY_FLOAT)
         self._potential_energy = cp.zeros([1], CUPY_FLOAT)
+        self._state.sorted_positions = self._tile_list.sort_matrix(self._state.positions)
         self._total_energy, self._kinetic_energy = 0, 0
         for constraint in self._constraints:
             constraint.update()
