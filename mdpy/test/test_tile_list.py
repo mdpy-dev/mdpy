@@ -20,6 +20,9 @@ from mdpy.error import *
 
 cur_dir = os.path.dirname(os.path.abspath(__file__))
 data_dir = os.path.join(cur_dir, 'data/simulation')
+out_dir = os.path.join(cur_dir, 'out/tile_list')
+pdb_file = os.path.join(data_dir, 'solvated_6PO6.pdb')
+psf_file = os.path.join(data_dir, 'solvated_6PO6.psf')
 
 class TestTileList:
     def setup(self):
@@ -43,77 +46,74 @@ class TestTileList:
         with pytest.raises(TileListPoorDefinedError):
             self.tile_list.set_cutoff_radius(56)
 
-    def test_update(self):
-        num_particles = 300000
-        positions = ((np.random.rand(num_particles, SPATIAL_DIM) - 0.5) * self.tile_list._pbc_diag * 0.5).astype(np.float32)
-        positive_positions = positions + self.tile_list._half_pbc_diag
-        self.tile_list.update(cp.array(positions, CUPY_FLOAT))
-        tile_list = self.tile_list.tile_list.get()
-
-        # All particles has been assigned to a tile once
-        assert np.count_nonzero(tile_list != -1) == num_particles
-
-        # All particles has been assigned to the right tile
-        for tile_index in range(0, self.tile_list.num_tiles, 100):
-            cell_index = self.tile_list._tile_cell_index[tile_index, :]
-            position_lower = cell_index * self.tile_list._cell_width
-            position_upper = (cell_index + 1) * self.tile_list._cell_width
-            for particle_tile_index in range(NUM_PARTICLES_PER_TILE):
-                particle_index = tile_list[tile_index, particle_tile_index]
-                if particle_index == -1:
-                    break
-                particle_positions = positive_positions[particle_index, :]
-                for i in range(SPATIAL_DIM):
-                    assert particle_positions[i] <= position_upper[i]
-                    assert particle_positions[i] >= position_lower[i]
-
-        # All neighbors has been assigned
-        for tile_index in range(0, self.tile_list.num_tiles, 500):
-            neighbors = self.tile_list.tile_neighbors[tile_index, :]
-            central_cell_index = self.tile_list._tile_cell_index[tile_index, :]
-            for neighhor in neighbors[::10]:
-                if neighhor == -1:
-                    break
-                neighbor_cell_index = self.tile_list._tile_cell_index[neighhor, :]
-                for i in range(SPATIAL_DIM):
-                    diff = neighbor_cell_index[i] - central_cell_index[i]
-                    if diff > self.tile_list.num_cells_vec[i] / 2:
-                        diff -= self.tile_list.num_cells_vec[i]
-                    elif diff < - self.tile_list.num_cells_vec[i] / 2:
-                        diff += self.tile_list.num_cells_vec[i]
-                    assert np.abs(diff) <= 1
-
-    def test_find_neighbors(self):
-        pdb = md.io.PDBParser(os.path.join(data_dir, 'solvated_6PO6.pdb'))
-        topology = md.io.PSFParser(os.path.join(data_dir, 'solvated_6PO6.psf')).topology
+    def view_encode_particles(self):
+        pdb = md.io.PDBParser(pdb_file)
         positions = cp.array(pdb.positions, CUPY_FLOAT)
         tile_list = md.core.TileList(pdb.pbc_matrix)
         tile_list.set_cutoff_radius(Quantity(8, angstrom))
         tile_list.update(positions)
 
-        particle_id = 613
-        tile_id = cp.argwhere(tile_list._sorted_particle_index == particle_id)[0, 0] // 32
-        print(tile_list._tile_list[tile_id, :])
-        print(cp.sort(tile_list._tile_neighbors[tile_id]))
-        neighbor_particles = []
-        for tile in tile_list.tile_neighbors[tile_id]:
-            if tile != -1:
-                neighbor_particles.append(tile_list.tile_list[tile])
-        neighbor_particles = cp.hstack(neighbor_particles)
-        neighbor_particles = list(neighbor_particles[neighbor_particles != -1].flatten().get())
-        diff = (positions - positions[particle_id, :]) / tile_list._device_pbc_diag
-        diff = (cp.round(diff) - diff) * tile_list._device_pbc_diag
-        r = cp.sqrt((diff**2).sum(1))
-        for i in neighbor_particles:
-            print(i, end=' ')
-        for neighbor in cp.argwhere(r < 8).flatten():
-            if r[neighbor] < 5:
-                print(neighbor, r[neighbor], neighbor in neighbor_particles)
-            # assert neighbor in neighbor_particles
+        print(tile_list.num_tiles)
+        with open(os.path.join(out_dir, 'sorted_particle_positions.xyz'), 'w') as f:
+            print('%d' %tile_list._num_particles, file=f)
+            print('test morton code', file=f)
+            for i in range(tile_list.num_tiles):
+                for j in tile_list.tile_list[i, :]:
+                    if j == -1:
+                        break
+                    print('H%d %.2f %.2f %.2f' %(i, positions[j, 0], positions[j, 1], positions[j, 2]), file=f)
+
+    def view_neighbors(self):
+        pdb = md.io.PDBParser(pdb_file)
+        positions = cp.array(pdb.positions, CUPY_FLOAT)
+        tile_list = md.core.TileList(pdb.pbc_matrix)
+        tile_list.set_cutoff_radius(Quantity(8, angstrom))
+        tile_list.update(positions)
+
+        tile_index = 1200
+        tile_neighbors = tile_list.tile_neighbors.get()[tile_index, :]
+        tcl_template = 'mol selection "type H%d"\n'
+        tcl_template += 'mol representation vdw\n'
+        tcl_template += 'mol color colorid %d\n'
+        tcl_template += 'mol addrep top'
+        with open(os.path.join(out_dir, 'view_neighbors.tcl'), 'w') as f:
+            print('mol delete all\nmol load xyz sorted_particle_positions.xyz', file=f)
+            print(tcl_template %(tile_index, 1), file=f)
+            tcl_template = tcl_template.replace('vdw', 'surf')
+            for index, neighbor in enumerate(tile_neighbors):
+                if neighbor != -1:
+                    print(tcl_template %(neighbor, index%32), file=f)
+
+    def test_find_neighbors(self):
+        pdb = md.io.PDBParser(pdb_file)
+        positions = cp.array(pdb.positions, CUPY_FLOAT)
+        tile_list = md.core.TileList(pdb.pbc_matrix)
+        tile_list.set_cutoff_radius(Quantity(8, angstrom))
+        tile_list.update(positions)
+        # print(cp.count_nonzero(tile_list.tile_neighbors != -1))
+        # print(tile_list.tile_neighbors.shape)
+        for particle_id in np.random.randint(0, pdb.num_particles, 5):
+            for tile_id in range(tile_list.num_tiles):
+                if cp.any(tile_list.tile_list[tile_id, :] == particle_id):
+                    break
+            neighbor_particles = []
+            for tile in tile_list.tile_neighbors[tile_id]:
+                if tile != -1:
+                    neighbor_particles.append(tile_list.tile_list[tile])
+            neighbor_particles = cp.hstack(neighbor_particles)
+            neighbor_particles = list(neighbor_particles[neighbor_particles != -1].flatten().get())
+            # print(neighbor_particles)
+            diff = (positions - positions[particle_id, :]) / tile_list._device_pbc_diag
+            diff = (cp.round(diff) - diff) * tile_list._device_pbc_diag
+            r = cp.sqrt((diff**2).sum(1))
+            # print(len(neighbor_particles))
+            # print(cp.count_nonzero(r < 8))
+            for neighbor in cp.argwhere(r < 8).flatten()[::5]:
+                assert neighbor in neighbor_particles
 
     def test_exclusion_map(self):
-        pdb = md.io.PDBParser(os.path.join(data_dir, 'solvated_6PO6.pdb'))
-        topology = md.io.PSFParser(os.path.join(data_dir, 'solvated_6PO6.psf')).topology
+        pdb = md.io.PDBParser(pdb_file)
+        topology = md.io.PSFParser(psf_file).topology
         positions = cp.array(pdb.positions, CUPY_FLOAT)
         device_excluded_particles = cp.array(topology.excluded_particles, CUPY_INT)
 
@@ -150,8 +150,11 @@ class TestTileList:
                     for j in range(NUM_PARTICLES_PER_TILE):
                         target_is_excluded[index] = i >> j &0b1
                         index += 1
-                assert np.all(target_is_excluded == is_excluded)
+                target_is_excluded = list(target_is_excluded)
+                for i in is_excluded[::5]:
+                    assert i in target_is_excluded
 
-test = TestTileList()
-test.setup()
-test.test_find_neighbors()
+if __name__ == '__main__':
+    test = TestTileList()
+    test.view_encode_particles()
+    test.view_neighbors()
