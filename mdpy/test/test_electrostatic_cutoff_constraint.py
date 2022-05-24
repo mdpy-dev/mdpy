@@ -17,7 +17,7 @@ from mdpy.error import *
 from mdpy.unit import *
 
 cur_dir = os.path.dirname(os.path.abspath(__file__))
-data_dir = os.path.join(cur_dir, 'data')
+data_dir = os.path.join(cur_dir, 'data/simulation/')
 
 class TestElectrostaticCutoffConstraint:
     def setup(self):
@@ -48,8 +48,9 @@ class TestElectrostaticCutoffConstraint:
             [0, 0, 0], [0, 10, 0], [0, 21, 0], [0, 11, 0]
         ])
         self.ensemble = Ensemble(t, np.eye(3)*30)
-        self.ensemble.state.neighbor_list.set_cutoff_radius(12)
+        self.ensemble.tile_list.set_cutoff_radius(12)
         self.ensemble.state.set_positions(self.p)
+        self.ensemble.update_tile_list()
         self.constraint = ElectrostaticCutoffConstraint(12)
 
     def teardown(self):
@@ -76,7 +77,7 @@ class TestElectrostaticCutoffConstraint:
         assert forces[2, 0] == 0
         assert forces[3, 1] == 0
         k = Quantity(4 * np.pi) * EPSILON0
-        force_val = - Quantity(1, e) * Quantity(2, e) / k / Quantity(10, angstrom)**2
+        force_val = - Quantity(1, elementary_charge) * Quantity(2, elementary_charge) / k / Quantity(10, angstrom)**2
         force_vec = get_unit_vec(np.array([0, 10, 0], dtype=env.NUMPY_FLOAT))
         force1 = force_val.convert_to(default_force_unit).value * force_vec
         assert forces[0, 0] == pytest.approx(force1[0])
@@ -88,7 +89,7 @@ class TestElectrostaticCutoffConstraint:
 
         potential_energy = self.constraint.potential_energy.get()
         k = Quantity(4 * np.pi) * EPSILON0
-        energy = Quantity(1, e) * Quantity(2, e) / k / Quantity(10, angstrom)
+        energy = Quantity(1, elementary_charge) * Quantity(2, elementary_charge) / k / Quantity(10, angstrom)
         assert potential_energy == pytest.approx(
             energy.convert_to(default_energy_unit).value
         )

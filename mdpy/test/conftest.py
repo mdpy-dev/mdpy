@@ -12,9 +12,10 @@ import pytest
 test_order = [
      'environment',
      'base_dimension', 'unit', 'unit_definition', 'quantity',
-     'check_quantity', 'geometry', 'pbc', 'select'
+     'check_quantity', 'geometry', 'pbc', 'particle_select'
      'particle', 'topology',
-     'state', 'neighbor_list', 'trajectory',
+     'tile_list',
+     'state', 'trajectory',
      'ensemble',
      'charmm_toppar_parser',
      'psf_parser',

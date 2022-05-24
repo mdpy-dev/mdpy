@@ -15,7 +15,7 @@ from mdpy.minimizer import SteepestDescentMinimizer
 from mdpy.unit import *
 
 cur_dir = os.path.dirname(os.path.abspath(__file__))
-data_dir = os.path.join(cur_dir, 'data')
+data_dir = os.path.join(cur_dir, 'data/simulation/')
 out_dir = os.path.join(cur_dir, 'out')
 
 class TestSteepestDescentMinimizer:
@@ -38,9 +38,10 @@ class TestSteepestDescentMinimizer:
         forcefield = CharmmForcefield(topology, np.diag(np.ones(3)*100), long_range_solver='CUTOFF')
         forcefield.set_parameter_files(os.path.join(data_dir, 'par_all36_prot.prm'))
         ensemble = forcefield.create_ensemble()
-        ensemble.state.neighbor_list.set_cutoff_radius(12)
+        ensemble.tile_list.set_cutoff_radius(12)
         ensemble.state.set_positions(pdb.positions)
         ensemble.state.set_velocities_to_temperature(300)
+        ensemble.update_tile_list()
         ensemble.update()
         pre_energy = ensemble.potential_energy
         minimizer = SteepestDescentMinimizer()

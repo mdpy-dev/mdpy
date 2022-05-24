@@ -40,7 +40,7 @@ class PSFParser:
             self._chain_ids.append(chain_ids[segid])
 
         self._masses = list(Quantity(self._parser.masses.values, dalton).convert_to(default_mass_unit).value)
-        self._charges = list(Quantity(self._parser.charges.values, e).convert_to(default_charge_unit).value)
+        self._charges = list(Quantity(self._parser.charges.values, elementary_charge).convert_to(default_charge_unit).value)
         self._bonds = [list(i) for i in self._parser.bonds.values]
         self._num_bonds = len(self._bonds)
         self._angles = [list(i) for i in self._parser.angles.values]

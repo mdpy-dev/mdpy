@@ -13,7 +13,7 @@ from mdpy.unit import *
 from mdpy.error import *
 
 cur_dir = os.path.dirname(os.path.abspath(__file__))
-data_dir = os.path.join(cur_dir, 'data')
+data_dir = os.path.join(cur_dir, 'data/dcd_parser')
 
 class TestDCDParser:
     def setup(self):

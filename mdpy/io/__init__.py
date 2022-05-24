@@ -15,6 +15,7 @@ from mdpy.io.pdb_parser import PDBParser
 from mdpy.io.pdb_writer import PDBWriter
 from mdpy.io.dcd_parser import DCDParser
 from mdpy.io.xyz_parser import XYZParser
+from mdpy.io.xyz_writer import XYZWriter
 
 # Comprehensive file
 ## HDF5
@@ -81,7 +82,7 @@ __all__ = [
     'PSFParser',
     'PDBParser','PDBWriter',
     'DCDParser',
-    'XYZ_Parser',
+    'XYZParser', 'XYZWriter',
     'HDF5Parser', 'HDF5Writer',
     'LogWriter'
 ]

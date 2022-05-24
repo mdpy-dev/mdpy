@@ -56,7 +56,6 @@ class TestState:
 
     def test_set_positions(self):
         self.state.set_pbc_matrix(np.eye(3) * 100)
-        self.state.neighbor_list.set_cutoff_radius(12)
         positions = np.random.randn(self.num_particles, SPATIAL_DIM) * 20
         self.state.set_positions(positions)
         assert self.state.positions.get()[0, 2] == pytest.approx(positions[0, 2])

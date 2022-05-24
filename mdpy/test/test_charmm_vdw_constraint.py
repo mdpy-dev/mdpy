@@ -19,7 +19,7 @@ from mdpy.error import *
 from mdpy.unit import *
 
 cur_dir = os.path.dirname(os.path.abspath(__file__))
-data_dir = os.path.join(cur_dir, 'data')
+data_dir = os.path.join(cur_dir, 'data/simulation/')
 
 class TestCharmmVDWConstraint:
     def setup(self):
@@ -53,7 +53,7 @@ class TestCharmmVDWConstraint:
             [0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 1, 0]
         ]).astype(env.NUMPY_FLOAT)
         self.ensemble = Ensemble(t, np.eye(3)*30)
-        self.ensemble.state.neighbor_list.set_cutoff_radius(5)
+        self.ensemble.tile_list.set_cutoff_radius(5)
         self.ensemble.state.set_positions(self.p)
         self.ensemble.state.set_velocities(velocities)
 
@@ -83,8 +83,8 @@ class TestCharmmVDWConstraint:
         # NY     0.000000  -0.200000     1.850000
         # CPT    0.000000  -0.099000     1.860000
         self.ensemble.state.set_pbc_matrix(self.pbc)
-        assert self.constraint._parameters_list[0][0] == Quantity(0.07, kilocalorie_permol).convert_to(default_energy_unit).value
-        assert self.constraint._parameters_list[1][1] == pytest.approx(env.NUMPY_FLOAT(1.85 * RMIN_TO_SIGMA_FACTOR * 2))
+        assert self.constraint._parameters[0][0] == Quantity(0.07, kilocalorie_permol).convert_to(default_energy_unit).value
+        assert self.constraint._parameters[1][1] == pytest.approx(env.NUMPY_FLOAT(1.85 * RMIN_TO_SIGMA_FACTOR * 2))
 
         # No exception
         self.constraint._check_bound_state()
@@ -93,7 +93,7 @@ class TestCharmmVDWConstraint:
         self.ensemble.state.set_pbc_matrix(self.pbc)
         self.constraint.set_cutoff_radius(Quantity(0.91, nanometer))
         self.ensemble.add_constraints(self.constraint)
-        self.ensemble.state.neighbor_list.update(self.ensemble.state.positions)
+        self.ensemble.update_tile_list()
         # CA     0.000000  -0.070000     1.992400
         # NY     0.000000  -0.200000     1.850000
         # CPT    0.000000  -0.099000     1.860000

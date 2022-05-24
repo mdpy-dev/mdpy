@@ -13,7 +13,7 @@ from mdpy.io import XYZParser
 from mdpy.error import ArrayDimError, FileFormatError, IOPoorDefinedError
 
 cur_dir = os.path.dirname(os.path.abspath(__file__))
-data_dir = os.path.join(cur_dir, 'data')
+data_dir = os.path.join(cur_dir, 'data/xyz_parser')
 
 class TestXYZParser:
     def setup(self):

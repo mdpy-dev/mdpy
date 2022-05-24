@@ -16,7 +16,7 @@ from mdpy.io import CharmmTopparParser
 from mdpy.io.charmm_toppar_parser import RMIN_TO_SIGMA_FACTOR
 
 cur_dir = os.path.dirname(os.path.abspath(__file__))
-data_dir = os.path.join(cur_dir, 'data')
+data_dir = os.path.join(cur_dir, 'data/toppar_parser')
 
 class TestCharmmTopparParser:
     def setup(self):
@@ -86,15 +86,15 @@ class TestCharmmTopparParser:
         charmm = CharmmTopparParser()
         charmm.parse_top_file(os.path.join(data_dir, 'top_all36_na.rtf'))
         # Charge
-        assert charmm.parameters['charge']['GUA-NN2B'] == Quantity(-0.02, e).convert_to(default_charge_unit).value
-        assert charmm.parameters['charge']['3POM-ON3'] == Quantity(-0.78, e).convert_to(default_charge_unit).value
-        assert charmm.parameters['charge']['URA-CN7B'] == Quantity(0.14, e).convert_to(default_charge_unit).value
+        assert charmm.parameters['charge']['GUA-NN2B'] == Quantity(-0.02, elementary_charge).convert_to(default_charge_unit).value
+        assert charmm.parameters['charge']['3POM-ON3'] == Quantity(-0.78, elementary_charge).convert_to(default_charge_unit).value
+        assert charmm.parameters['charge']['URA-CN7B'] == Quantity(0.14, elementary_charge).convert_to(default_charge_unit).value
 
     def test_parse_toppar_file(self):
         charmm = CharmmTopparParser()
         charmm.parse_toppar_file(os.path.join(data_dir, 'toppar_water_ions_namd.str'))
         # Charge
-        assert charmm.parameters['charge']['LIT'] == Quantity(1, e).convert_to(default_charge_unit).value
+        assert charmm.parameters['charge']['LIT'] == Quantity(1, elementary_charge).convert_to(default_charge_unit).value
         # Mass
         assert charmm.parameters['mass']['RUB'] == Quantity(85.46780, dalton).convert_to(default_mass_unit).value
         # Bond
@@ -113,10 +113,10 @@ class TestCharmmTopparParser:
         f3 = os.path.join(data_dir, 'top_all36_na.rtf')
         charmm = CharmmTopparParser(f1, f2, f3)
         # Charge
-        assert charmm.parameters['charge']['GUA-NN2B'] == Quantity(-0.02, e).convert_to(default_charge_unit).value
-        assert charmm.parameters['charge']['3POM-ON3'] == Quantity(-0.78, e).convert_to(default_charge_unit).value
-        assert charmm.parameters['charge']['URA-CN7B'] == Quantity(0.14, e).convert_to(default_charge_unit).value
-        assert charmm.parameters['charge']['LIT'] == Quantity(1, e).convert_to(default_charge_unit).value
+        assert charmm.parameters['charge']['GUA-NN2B'] == Quantity(-0.02, elementary_charge).convert_to(default_charge_unit).value
+        assert charmm.parameters['charge']['3POM-ON3'] == Quantity(-0.78, elementary_charge).convert_to(default_charge_unit).value
+        assert charmm.parameters['charge']['URA-CN7B'] == Quantity(0.14, elementary_charge).convert_to(default_charge_unit).value
+        assert charmm.parameters['charge']['LIT'] == Quantity(1, elementary_charge).convert_to(default_charge_unit).value
         # Mass
         assert charmm.parameters['mass']['RUB'] == Quantity(85.46780, dalton).convert_to(default_mass_unit).value
         assert charmm.parameters['mass']['H'] == Quantity(1.00800, dalton).convert_to(default_mass_unit).value

@@ -20,7 +20,7 @@ from .unit_definition import kilogram, gram, amu, dalton
 from .unit_definition import day, hour, minute
 from .unit_definition import second, millisecond, microsecond, nanosecond, picosecond, femtosecond
 from .unit_definition import kelvin
-from .unit_definition import coulomb, e, ampere, volt, ohm, farad, siemens, hertz
+from .unit_definition import coulomb, elementary_charge, ampere, volt, ohm, farad, siemens, hertz
 from .unit_definition import mol, kilomol
 from .unit_definition import joule, kilojoule, joule_permol, kilojoule_permol, calorie, kilocalorie, calorie_premol, kilocalorie_permol, ev, hartree
 from .unit_definition import newton, kilonewton
@@ -32,7 +32,7 @@ default_length_unit = angstrom
 default_mass_unit = dalton
 default_time_unit = femtosecond
 default_temperature_unit = kelvin
-default_charge_unit = e
+default_charge_unit = elementary_charge
 default_mol_unit = mol
 
 default_frequency_unit = 1 / default_time_unit
@@ -60,10 +60,10 @@ EPSILON0 = Quantity(8.85418e-12, second**2*coulomb**2/meter**3/kilogram).convert
 __all__ = [
     'Quantity',
 
-    'default_length_unit', 'default_mass_unit', 'default_time_unit', 
+    'default_length_unit', 'default_mass_unit', 'default_time_unit',
     'default_temperature_unit', 'default_charge_unit', 'default_mol_unit',
     'default_frequency_unit', 'default_velocity_unit', 'default_accelrated_velocity_unit',
-    'default_energy_unit', 'default_power_unit', 'default_force_unit', 
+    'default_energy_unit', 'default_power_unit', 'default_force_unit',
     'default_current_unit', 'default_voltage_unit', 'default_resistance_unit',
     'default_capacitance_unit', 'default_conductance_unit', 'default_electric_intensity_unit',
 
@@ -72,13 +72,13 @@ __all__ = [
     'day', 'hour', 'minute',
     'second', 'millisecond', 'microsecond', 'nanosecond', 'picosecond', 'femtosecond',
     'kelvin',
-    'coulomb', 'e', 'ampere', 'volt', 'ohm', 'farad', 'siemens', 'hertz',
+    'coulomb', 'elementary_charge', 'ampere', 'volt', 'ohm', 'farad', 'siemens', 'hertz',
     'mol', 'kilomol',
     'joule', 'kilojoule',  'joule_permol', 'kilojoule_permol', 'calorie', 'kilocalorie',  'calorie_premol', 'kilocalorie_permol', 'ev', 'hartree',
     'newton', 'kilonewton',
-    'kilojoule_permol_over_angstrom', 'kilojoule_permol_over_nanometer', 
+    'kilojoule_permol_over_angstrom', 'kilojoule_permol_over_nanometer',
     'kilocalorie_permol_over_angstrom', 'kilocalorie_permol_over_nanometer',
     'watt', 'kilowatt',
-    
+
     'NA', 'KB', 'EPSILON0'
 ]

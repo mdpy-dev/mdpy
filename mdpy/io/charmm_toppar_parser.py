@@ -249,9 +249,9 @@ class CharmmTopparParser:
         for key, val in info_dict.items():
             for line in val:
                 if key != line[2]:
-                    self._parameters['charge']['%s-%s' %(key, line[2])] = Quantity(float(line[3]), e).convert_to(default_charge_unit).value
+                    self._parameters['charge']['%s-%s' %(key, line[2])] = Quantity(float(line[3]), elementary_charge).convert_to(default_charge_unit).value
                 else: # group name is the same as atom name: ion
-                    self._parameters['charge']['%s' %key] = Quantity(float(line[3]), e).convert_to(default_charge_unit).value
+                    self._parameters['charge']['%s' %key] = Quantity(float(line[3]), elementary_charge).convert_to(default_charge_unit).value
 
     def parse_toppar_file(self, file_path):
         with open(file_path, 'r') as f:

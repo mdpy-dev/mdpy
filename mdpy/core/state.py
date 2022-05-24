@@ -9,7 +9,6 @@ copyright : (C)Copyright 2021-present, mdpy organization
 
 import numpy as np
 import cupy as cp
-from mdpy.core.neighbor_list import NeighborList
 from mdpy.core.topology import Topology
 from mdpy import SPATIAL_DIM
 from mdpy.environment import *
@@ -23,11 +22,9 @@ class State:
         self._num_particles = len(self._topology.particles)
         self._matrix_shape = [self._num_particles, SPATIAL_DIM]
         self._positions = cp.zeros(self._matrix_shape, CUPY_FLOAT)
+        self._sorted_positions = None
         self._velocities = cp.zeros(self._matrix_shape, CUPY_FLOAT)
         self.set_pbc_matrix(pbc_matrix)
-        self._neighbor_list = NeighborList(self._pbc_matrix.copy())
-        # Device array
-        self._device_postitions = None
 
     def __repr__(self) -> str:
         return '<mdpy.core.State object with %d particles at %x>' %(
@@ -57,12 +54,11 @@ class State:
         self._device_pbc_diag = cp.array(self._pbc_diag, CUPY_FLOAT)
         self._device_half_pbc_diag = cp.array(self._half_pbc_diag, CUPY_FLOAT)
 
-    def set_positions(self, positions: cp.ndarray, is_update_neighbor_list=True):
+    def set_positions(self, positions: cp.ndarray):
         self._check_matrix_shape(positions)
         if isinstance(positions, np.ndarray):
             positions = cp.array(positions, CUPY_FLOAT)
         self._positions = wrap_positions(positions, self._device_pbc_diag)
-        self._neighbor_list.update(self._positions, is_update_neighbor_list)
 
     def set_velocities(self, velocities: cp.ndarray):
         if isinstance(velocities, np.ndarray):
@@ -79,51 +75,46 @@ class State:
         width = 2 * cp.sqrt(factor / self._topology.device_masses)
         self.set_velocities(velocities * width)
 
-    @staticmethod
-    def generator(masses: cp.ndarray, factor):
-        num_particles = masses.shape[0]
-        velocities = np.random.rand(num_particles, 3).astype(masses.dtype)
-        for particle in range(num_particles):
-            width = np.sqrt(factor/masses[particle])
-            velocities[particle, :] = velocities[particle, :] * 2 * width - width
-        return velocities
-
     @property
-    def positions(self):
+    def positions(self) -> cp.ndarray:
         return self._positions
 
     @property
-    def velocities(self):
+    def sorted_positions(self) -> cp.ndarray:
+        return self._sorted_positions
+
+    @sorted_positions.setter
+    def sorted_positions(self, sorted_positions: cp.ndarray):
+        self._sorted_positions = sorted_positions
+
+    @property
+    def velocities(self) -> cp.ndarray:
         return self._velocities
 
     @property
-    def matrix_shape(self):
+    def matrix_shape(self) -> list:
         return self._matrix_shape
 
     @property
-    def pbc_matrix(self):
+    def pbc_matrix(self) -> np.ndarray:
         return self._pbc_matrix
 
     @property
-    def device_pbc_matrix(self):
+    def device_pbc_matrix(self) -> cp.ndarray:
         return self._device_pbc_matrix
 
     @property
-    def pbc_diag(self):
+    def pbc_diag(self) -> np.ndarray:
         return self._pbc_diag
 
     @property
-    def device_pbc_diag(self):
+    def device_pbc_diag(self) -> cp.ndarray:
         return self._device_pbc_diag
 
     @property
-    def half_pbc_diag(self):
+    def half_pbc_diag(self) -> np.ndarray:
         return self._half_pbc_diag
 
     @property
-    def device_half_pbc_diag(self):
+    def device_half_pbc_diag(self) -> cp.ndarray:
         return self._device_half_pbc_diag
-
-    @property
-    def neighbor_list(self):
-        return self._neighbor_list

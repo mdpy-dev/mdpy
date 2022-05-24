@@ -10,7 +10,6 @@ copyright : (C)Copyright 2021-present, mdpy organization
 import cupy as cp
 import numpy as np
 from mdpy.core import Ensemble
-from mdpy.environment import CUPY_FLOAT
 from mdpy.integrator import Integrator
 from mdpy.unit import *
 from mdpy.utils import *
@@ -61,10 +60,9 @@ class LangevinIntegrator(Integrator):
                 self._b * self._sigma * self._time_step_3_over_2 / 2 * xi_over_sqrt_masses
             ), self._cur_positions
             # Update position
+            ensemble.state.set_positions(self._cur_positions)
             if cur_step % self._neighbor_list_update_freq == 0:
-                ensemble.state.set_positions(self._cur_positions.astype(CUPY_FLOAT), True)
-            else:
-                ensemble.state.set_positions(self._cur_positions.astype(CUPY_FLOAT), False)
+                ensemble.update_tile_list()
             ensemble.update()
             self._cur_acceleration = ensemble.forces / masses
             self._cur_velocities, self._pre_velocities = (

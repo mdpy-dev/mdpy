@@ -11,7 +11,7 @@ import numpy as np
 import cupy as cp
 import numba.cuda as cuda
 from mdpy.environment import *
-from mdpy.core import Topology, State
+from mdpy.core import Topology, State, TileList
 from mdpy.error import *
 from mdpy.unit import *
 
@@ -21,17 +21,15 @@ class Ensemble:
             topology.join()
         # Read input
         self._topology = topology
-        self._state = State(self._topology, pbc_matrix)
+        self._state = State(self._topology, pbc_matrix.copy())
+        self._tile_list = TileList(pbc_matrix.copy())
         self._matrix_shape = self._state.matrix_shape
         self._forces = cp.zeros(self._matrix_shape)
 
         self._total_energy = 0
         self._potential_energy = 0
         self._kinetic_energy = 0
-        self._segments = []
-        self._num_segments = 0
         self._constraints = []
-        self._streams = []
         self._num_constraints = 0
 
     def __repr__(self) -> str:
@@ -50,13 +48,14 @@ class Ensemble:
                 )
             self._constraints.append(constraint)
             constraint.bind_ensemble(self)
-            if constraint.cutoff_radius > self.state.neighbor_list.cutoff_radius:
-                self.state.neighbor_list.set_cutoff_radius(constraint.cutoff_radius)
+            if constraint.cutoff_radius > self._tile_list.cutoff_radius:
+                self._tile_list.set_cutoff_radius(constraint.cutoff_radius)
             self._num_constraints += 1
 
     def update(self):
         self._forces = cp.zeros(self._matrix_shape, CUPY_FLOAT)
         self._potential_energy = cp.zeros([1], CUPY_FLOAT)
+        self._state.sorted_positions = self._tile_list.sort_matrix(self._state.positions)
         self._total_energy, self._kinetic_energy = 0, 0
         for constraint in self._constraints:
             constraint.update()
@@ -66,6 +65,15 @@ class Ensemble:
             self._potential_energy += constraint.potential_energy
         self._update_kinetic_energy()
         self._total_energy = self._potential_energy + self._kinetic_energy
+
+    def update_tile_list(self):
+        self._tile_list.update(self._state.positions)
+        self._topology.device_sorted_charges = self._tile_list.sort_matrix(
+            self._topology.device_charges
+        )
+        self._topology.device_exclusion_map = self._tile_list.generate_exclusion_mask_map(
+            self._topology.device_excluded_particles
+        )
 
     def _update_kinetic_energy(self):
         # Without reshape, the result of the first sum will be a 1d vector
@@ -83,6 +91,18 @@ class Ensemble:
         return self._state
 
     @property
+    def tile_list(self):
+        return self._tile_list
+
+    @property
+    def constraints(self):
+        return self._constraints
+
+    @property
+    def num_constraints(self):
+        return self._num_constraints
+
+    @property
     def forces(self):
         return self._forces
 
@@ -97,11 +117,3 @@ class Ensemble:
     @property
     def kinetic_energy(self):
         return self._kinetic_energy
-
-    @property
-    def constraints(self):
-        return self._constraints
-
-    @property
-    def num_constraints(self):
-        return self._num_constraints
