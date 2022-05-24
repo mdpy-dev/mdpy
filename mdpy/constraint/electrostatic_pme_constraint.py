@@ -98,7 +98,6 @@ class ElectrostaticPMEConstraint(Constraint):
         ))(self._update_charge_map_kernel)
         self._update_electric_potential_map = self._update_reciprocal_electric_potential_map_kernel
         self._update_reciprocal_force = cuda.jit(nb.void(
-            NUMBA_INT[::1], # num_particles
             NUMBA_FLOAT[:, :, ::1], # spline_coefficient
             NUMBA_FLOAT[:, :, ::1], # spline_derivative_coefficient
             NUMBA_INT[:, :, ::1], # grid_map
@@ -533,8 +532,12 @@ class ElectrostaticPMEConstraint(Constraint):
 
     @staticmethod
     def _update_reciprocal_force_kernel(
-        num_particles, spline_coefficient, spline_derivative_coefficient,
-        grid_map, electric_potential_map, charges, forces, potential_energy
+        spline_coefficient,
+        spline_derivative_coefficient,
+        grid_map,
+        electric_potential_map,
+        charges,
+        forces, potential_energy
     ):
         '''
         spline_coefficient: [num_particles, SPATIAL_DIM, PME_ORDER] The spline coefficient of particles
@@ -544,8 +547,7 @@ class ElectrostaticPMEConstraint(Constraint):
         forces: [num_particles, SPATIAL_DIM]
         '''
         particle_id = cuda.grid(1)
-        num_particles = num_particles[0]
-        if particle_id >= num_particles:
+        if particle_id >= charges.shape[0]:
             return None
         charge = charges[particle_id, 0]
         force_x = 0
@@ -591,7 +593,6 @@ class ElectrostaticPMEConstraint(Constraint):
         # Direct part
         self._direct_potential_energy = cp.zeros([1], CUPY_FLOAT)
         sorted_forces = cp.zeros((SPATIAL_DIM, self._parent_ensemble.tile_list.num_tiles * NUM_PARTICLES_PER_TILE), CUPY_FLOAT)
-        sorted_positions = self._parent_ensemble.tile_list.sort_matrix(self._parent_ensemble.state.positions)
         thread_per_block = (NUM_PARTICLES_PER_TILE, TILES_PER_THREAD)
         block_per_grid = (int(np.ceil(self._parent_ensemble.tile_list.num_tiles / TILES_PER_THREAD)))
         self._update_pme_direct_part[block_per_grid, thread_per_block](
@@ -599,7 +600,7 @@ class ElectrostaticPMEConstraint(Constraint):
             self._device_ewald_coefficient,
             self._device_cutoff_radius,
             self._parent_ensemble.state.device_pbc_matrix,
-            sorted_positions,
+            self._parent_ensemble.state.sorted_positions,
             self._parent_ensemble.topology.device_sorted_charges,
             self._parent_ensemble.topology.device_exclusion_map,
             self._parent_ensemble.tile_list.tile_neighbors,
@@ -621,7 +622,7 @@ class ElectrostaticPMEConstraint(Constraint):
             self._direct_forces, self._direct_potential_energy
         )
         # Reciprocal part
-        thread_per_block = (64)
+        thread_per_block = 128
         block_per_grid = int(np.ceil(
             self._parent_ensemble.topology.num_particles / thread_per_block
         ))
@@ -654,7 +655,6 @@ class ElectrostaticPMEConstraint(Constraint):
         self._reciprocal_forces = cp.zeros(self._parent_ensemble.state.matrix_shape, CUPY_FLOAT)
         self._reciprocal_potential_energy = cp.zeros([1], CUPY_FLOAT)
         self._update_reciprocal_force[block_per_grid, thread_per_block](
-            self._device_num_particles,
             spline_coefficient,
             spline_derivative_coefficient,
             grid_map,

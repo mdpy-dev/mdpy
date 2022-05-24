@@ -223,7 +223,6 @@ class CharmmVDWConstraint(Constraint):
         self._check_bound_state()
         sorted_forces = cp.zeros((SPATIAL_DIM, self._parent_ensemble.tile_list.num_tiles * NUM_PARTICLES_PER_TILE), CUPY_FLOAT)
         self._potential_energy = cp.zeros([1], CUPY_FLOAT)
-        sorted_positions = self._parent_ensemble.tile_list.sort_matrix(self._parent_ensemble.state.positions)
         device_sorted_parameter_list = self._parent_ensemble.tile_list.sort_matrix(self._device_parameters)
         # update
         thread_per_block = (NUM_PARTICLES_PER_TILE, TILES_PER_THREAD)
@@ -232,7 +231,7 @@ class CharmmVDWConstraint(Constraint):
         self._update_charmm_vdw[block_per_grid, thread_per_block](
             self._device_cutoff_radius,
             self._parent_ensemble.state.device_pbc_matrix,
-            sorted_positions,
+            self._parent_ensemble.state.sorted_positions,
             device_sorted_parameter_list,
             self._parent_ensemble.topology.device_exclusion_map,
             self._parent_ensemble.tile_list.tile_neighbors,
