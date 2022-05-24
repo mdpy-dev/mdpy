@@ -8,7 +8,6 @@ copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
 import math
-from re import L
 import numpy as np
 import numba as nb
 import cupy as cp
@@ -35,7 +34,7 @@ class CharmmAngleConstraint(Constraint):
             NUMBA_FLOAT[:, ::1], # pbc_matrix
             NUMBA_FLOAT[:, ::1], # forces
             NUMBA_FLOAT[::1] # potential_energy
-        ))(self._update_charmm_angle_kernel)
+        ), fastmath=True)(self._update_charmm_angle_kernel)
 
     def __repr__(self) -> str:
         return '<mdpy.constraint.CharmmAngleConstraint object>'
