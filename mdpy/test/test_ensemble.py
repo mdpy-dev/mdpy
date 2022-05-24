@@ -59,6 +59,7 @@ class TestEnsemble:
         self.ensemble.tile_list.set_cutoff_radius(12)
         self.ensemble.state.set_positions(positions)
         self.ensemble.state.set_velocities(velocities)
+        self.ensemble.update_tile_list()
 
     def teardown(self):
         self.ensemble = None

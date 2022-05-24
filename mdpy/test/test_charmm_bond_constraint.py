@@ -18,7 +18,7 @@ from mdpy.error import *
 from mdpy.unit import *
 
 cur_dir = os.path.dirname(os.path.abspath(__file__))
-data_dir = os.path.join(cur_dir, 'data')
+data_dir = os.path.join(cur_dir, 'data/simulation/')
 
 class TestCharmmBondConstraint:
     def setup(self):
@@ -52,7 +52,7 @@ class TestCharmmBondConstraint:
             [0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]
         ])
         self.ensemble = Ensemble(t, np.eye(3)*30)
-        self.ensemble.state.neighbor_list.set_cutoff_radius(12)
+        self.ensemble.tile_list.set_cutoff_radius(12)
         self.ensemble.state.set_positions(positions)
         self.ensemble.state.set_velocities(velocities)
 

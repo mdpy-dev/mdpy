@@ -35,14 +35,14 @@ class TestLangevinIntegrator:
         pdb = PDBParser(os.path.join(data_dir, '6PO6.pdb'))
         topology = PSFParser(os.path.join(data_dir, '6PO6.psf')).topology
 
-        forcefield = CharmmForcefield(topology, np.diag(np.ones(3)*100), long_range_solver='PME')
+        forcefield = CharmmForcefield(topology, np.diag(np.ones(3)*100), long_range_solver='CUTOFF')
         forcefield.set_parameter_files(os.path.join(data_dir, 'par_all36_prot.prm'))
         ensemble = forcefield.create_ensemble()
         ensemble.tile_list.set_cutoff_radius(12)
         ensemble.state.set_positions(pdb.positions)
-        ensemble.update_tile_list()
         ensemble.state.set_velocities_to_temperature(300)
-        integrator = LangevinIntegrator(1, 300, Quantity(1, 1/picosecond))
+        ensemble.update_tile_list()
+        integrator = LangevinIntegrator(0.1, 300, Quantity(1, 1/picosecond))
         integrator.integrate(ensemble, 1)
 
         # ATOM      1  N   VAL A   1       2.347  -0.970   3.962  1.00  0.00      A    N

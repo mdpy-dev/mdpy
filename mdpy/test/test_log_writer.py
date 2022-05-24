@@ -16,7 +16,7 @@ from mdpy.error import *
 from mdpy.unit import *
 
 cur_dir = os.path.dirname(os.path.abspath(__file__))
-data_dir = os.path.join(cur_dir, 'data')
+data_dir = os.path.join(cur_dir, 'data/simulation/')
 out_dir = os.path.join(cur_dir, 'out')
 
 class TestLogWriter:
@@ -33,7 +33,7 @@ class TestLogWriter:
         with pytest.raises(FileFormatError):
             LogWriter('test.lo', 10)
 
-    def test_dump(self):
+    def test_write(self):
         prot_name = '6PO6'
         psf = PSFParser(os.path.join(data_dir, prot_name + '.psf'))
         pdb = PDBParser(os.path.join(data_dir, prot_name + '.pdb'))
@@ -47,7 +47,7 @@ class TestLogWriter:
         )
 
         ensemble = forcefield.create_ensemble()
-        ensemble.state.neighbor_list.set_cutoff_radius(12)
+        ensemble.tile_list.set_cutoff_radius(12)
         ensemble.state.set_positions(pdb.positions)
         ensemble.state.set_velocities_to_temperature(Quantity(300, kelvin))
         log_writer = LogWriter(

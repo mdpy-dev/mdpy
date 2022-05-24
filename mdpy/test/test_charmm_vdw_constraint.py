@@ -19,7 +19,7 @@ from mdpy.error import *
 from mdpy.unit import *
 
 cur_dir = os.path.dirname(os.path.abspath(__file__))
-data_dir = os.path.join(cur_dir, 'data')
+data_dir = os.path.join(cur_dir, 'data/simulation/')
 
 class TestCharmmVDWConstraint:
     def setup(self):
@@ -83,8 +83,8 @@ class TestCharmmVDWConstraint:
         # NY     0.000000  -0.200000     1.850000
         # CPT    0.000000  -0.099000     1.860000
         self.ensemble.state.set_pbc_matrix(self.pbc)
-        assert self.constraint._parameters_list[0][0] == Quantity(0.07, kilocalorie_permol).convert_to(default_energy_unit).value
-        assert self.constraint._parameters_list[1][1] == pytest.approx(env.NUMPY_FLOAT(1.85 * RMIN_TO_SIGMA_FACTOR * 2))
+        assert self.constraint._parameters[0][0] == Quantity(0.07, kilocalorie_permol).convert_to(default_energy_unit).value
+        assert self.constraint._parameters[1][1] == pytest.approx(env.NUMPY_FLOAT(1.85 * RMIN_TO_SIGMA_FACTOR * 2))
 
         # No exception
         self.constraint._check_bound_state()
