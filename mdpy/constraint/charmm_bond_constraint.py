@@ -18,7 +18,7 @@ from mdpy.core import Ensemble
 from mdpy.constraint import Constraint
 from mdpy.utils import *
 
-THREAD_PER_BLOCK = (32)
+THREAD_PER_BLOCK = (128)
 
 class CharmmBondConstraint(Constraint):
     def __init__(self, parameter_dict: dict) -> None:
@@ -34,7 +34,7 @@ class CharmmBondConstraint(Constraint):
             NUMBA_FLOAT[:, ::1], # pbc_matrix
             NUMBA_FLOAT[:, ::1], # forces
             NUMBA_FLOAT[::1] # potential_energy
-        ))(self._update_charmm_bond_kernel)
+        ), fastmath=True)(self._update_charmm_bond_kernel)
 
     def __repr__(self) -> str:
         return '<mdpy.constraint.CharmmBondConstraint object>'
@@ -79,57 +79,38 @@ class CharmmBondConstraint(Constraint):
             return None
         shared_pbc = cuda.shared.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
         shared_half_pbc = cuda.shared.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
-        if cuda.threadIdx.x == 0:
-            shared_pbc[0] = pbc_matrix[0, 0]
-            shared_pbc[1] = pbc_matrix[1, 1]
-            shared_pbc[2] = pbc_matrix[2, 2]
-            shared_half_pbc[0] = shared_pbc[0] / 2
-            shared_half_pbc[1] = shared_pbc[1] / 2
-            shared_half_pbc[2] = shared_pbc[2] / 2
+        local_thread_x = cuda.threadIdx.x
+        if local_thread_x <= 2:
+            shared_pbc[local_thread_x] = pbc_matrix[local_thread_x, local_thread_x]
+            shared_half_pbc[local_thread_x] = shared_pbc[local_thread_x] * NUMBA_FLOAT(0.5)
         cuda.syncthreads()
         id1, id2, = int_parameters[bond_id, :]
         k, r0 = float_parameters[bond_id, :]
         # Positions
-        position_1_x = positions[id1, 0]
-        position_1_y = positions[id1, 1]
-        position_1_z = positions[id1, 2]
-        position_2_x = positions[id2, 0]
-        position_2_y = positions[id2, 1]
-        position_2_z = positions[id2, 2]
+        positions_1 = cuda.local.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
+        positions_2 = cuda.local.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
+        vec = cuda.local.array(shape=(SPATIAL_DIM), dtype=NUMBA_FLOAT)
+        for i in range(SPATIAL_DIM):
+            positions_1[i] = positions[id1, i]
+            positions_2[i] = positions[id2, i]
         # vec
-        x21 = position_2_x - position_1_x
-        if x21 >= shared_half_pbc[0]:
-            x21 -= shared_pbc[0]
-        elif x21 <= -shared_half_pbc[0]:
-            x21 += shared_pbc[0]
-        y21 = position_2_y - position_1_y
-        if y21 >= shared_half_pbc[1]:
-            y21 -= shared_pbc[1]
-        elif y21 <= -shared_half_pbc[1]:
-            y21 += shared_pbc[1]
-        z21 = position_2_z - position_1_z
-        if z21 >= shared_half_pbc[2]:
-            z21 -= shared_pbc[2]
-        elif z21 <= -shared_half_pbc[2]:
-            z21 += shared_pbc[2]
-        l21 = math.sqrt(x21**2 + y21**2 + z21**2)
-        scaled_x21 = x21 / l21
-        scaled_y21 = y21 / l21
-        scaled_z21 = z21 / l21
+        r = NUMBA_FLOAT(0)
+        for i in range(SPATIAL_DIM):
+            vec[i] = positions_2[i] - positions_1[i]
+            if vec[i] < - shared_half_pbc[i]:
+                vec[i] += shared_pbc[i]
+            elif vec[i] > shared_half_pbc[i]:
+                vec[i] -= shared_pbc[i]
+            r += vec[i]**2
+        r = math.sqrt(r)
         # Energy
-        delta_r = l21 - r0
+        delta_r = r - r0
         energy = k * delta_r**2
-        force_val = 2 * k * delta_r
-        force_x = force_val * scaled_x21
-        force_y = force_val * scaled_y21
-        force_z = force_val * scaled_z21
-        # Summary
-        cuda.atomic.add(forces, (id1, 0), force_x)
-        cuda.atomic.add(forces, (id1, 1), force_y)
-        cuda.atomic.add(forces, (id1, 2), force_z)
-        cuda.atomic.add(forces, (id2, 0), -force_x)
-        cuda.atomic.add(forces, (id2, 1), -force_y)
-        cuda.atomic.add(forces, (id2, 2), -force_z)
+        force_val = NUMBA_FLOAT(2) * k * delta_r / r
+        for i in range(SPATIAL_DIM):
+            temp = force_val * vec[i]
+            cuda.atomic.add(forces, (id1, i), temp)
+            cuda.atomic.add(forces, (id2, i), -temp)
         cuda.atomic.add(potential_energy, 0, energy)
 
     def update(self):
