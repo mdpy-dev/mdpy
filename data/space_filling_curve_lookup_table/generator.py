@@ -98,14 +98,14 @@ class Generator:
 if __name__ == '__main__':
     cur_dir = os.path.dirname(os.path.abspath(__file__))
 
-    num_bits = 6
+    num_bits = 3
     generator = Generator(num_bits)
 
     curve_type = 'hilbert'
     points_index, lookup_table = generator.generate(curve_type)
 
     # output
-    xyz_file = os.path.join(cur_dir, '%s.xyz' %curve_type)
-    generator.write_xyz_file(xyz_file, points_index)
-    # npy_file = os.path.join(cur_dir, 'morton_%d_bits.npy' %num_bits)
-    # generator.write_npy_file(npy_file, lookup_table)
+    # xyz_file = os.path.join(cur_dir, '%s.xyz' %curve_type)
+    # generator.write_xyz_file(xyz_file, points_index)
+    npy_file = os.path.join(cur_dir, '%s_%d_bits.npy' %(curve_type, num_bits))
+    generator.write_npy_file(npy_file, lookup_table)
