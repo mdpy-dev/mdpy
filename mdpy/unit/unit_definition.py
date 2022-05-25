@@ -1,11 +1,11 @@
 #!/usr/bin/env python
 # -*- encoding: utf-8 -*-
-'''
+"""
 file : unitDefinition.py
 created time : 2021/09/28
 author : Zhenyu Wei
 copyright : (C)Copyright 2021-present, mdpy organization
-'''
+"""
 
 from . import BaseDimension, Unit
 
@@ -57,8 +57,8 @@ dalton = Unit(mass, 1.66053904e-27)
 ## Time Unit        ##
 ######################
 
-day = Unit(time, 60*60*24)
-hour = Unit(time, 60*60)
+day = Unit(time, 60 * 60 * 24)
+hour = Unit(time, 60 * 60)
 minute = Unit(time, 60)
 second = Unit(time, 1)
 millisecond = Unit(time, 1e-3)
@@ -108,13 +108,13 @@ kilomol = Unit(mol_dimension, 1e3)
 
 joule = Unit(energy, 1)
 kilojoule = Unit(energy, 1e3)
-joule_permol = Unit(energy, 1/6.0221e23)
-kilojoule_permol = Unit(energy, 1e3/6.0221e23)
+joule_permol = Unit(energy, 1 / 6.0221e23)
+kilojoule_permol = Unit(energy, 1e3 / 6.0221e23)
 
 calorie = Unit(energy, 4.184)
 kilocalorie = Unit(energy, 4.184e3)
-calorie_premol = Unit(energy, 4.184/6.0221e23)
-kilocalorie_permol = Unit(energy, 4.184e3/6.0221e23)
+calorie_premol = Unit(energy, 4.184 / 6.0221e23)
+kilocalorie_permol = Unit(energy, 4.184e3 / 6.0221e23)
 
 ev = Unit(energy, 1.60217662e-19)
 hartree = Unit(energy, 4.3597447222071e-18)
