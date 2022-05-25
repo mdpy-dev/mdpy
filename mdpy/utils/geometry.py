@@ -1,11 +1,11 @@
 #!/usr/bin/env python
 # -*- encoding: utf-8 -*-
-'''
+"""
 file : geometry.py
 created time : 2021/10/09
 author : Zhenyu Wei
 copyright : (C)Copyright 2021-present, mdpy organization
-'''
+"""
 
 import numpy as np
 import numba as nb
@@ -14,10 +14,12 @@ from numpy import sin, cos
 from mdpy import env, SPATIAL_DIM
 from mdpy.utils.pbc import *
 
+
 @nb.njit()
 def get_unit_vec(vec):
     norm = np.linalg.norm(vec)
     return vec / norm if norm != 0 else vec
+
 
 def get_norm_vec(p1, p2, p3):
     p1, p2, p3 = np.array(p1), np.array(p2), np.array(p3)
@@ -26,25 +28,29 @@ def get_norm_vec(p1, p2, p3):
     norm_vec = np.cross(v0, v1).astype(env.NUMPY_FLOAT)
     return get_unit_vec(norm_vec)
 
+
 def get_bond(p1, p2):
     return np.linalg.norm(np.array(p1) - np.array(p2))
+
 
 def get_angle(p1, p2, p3, is_angular=True):
     p1, p2, p3 = np.array(p1), np.array(p2), np.array(p3)
     v0 = p1 - p2
     v1 = p3 - p2
-    cos_phi = np.dot(v0, v1) / (np.linalg.norm(v0)*np.linalg.norm(v1))
+    cos_phi = np.dot(v0, v1) / (np.linalg.norm(v0) * np.linalg.norm(v1))
     if is_angular:
         return arccos(cos_phi)
     else:
         return arccos(cos_phi) / np.pi * 180
 
+
 def get_included_angle(vec1, vec2, is_angular=True):
-    cos_phi = np.dot(vec1, vec2) / (np.linalg.norm(vec1)*np.linalg.norm(vec2))
+    cos_phi = np.dot(vec1, vec2) / (np.linalg.norm(vec1) * np.linalg.norm(vec2))
     if is_angular:
         return arccos(cos_phi)
     else:
         return arccos(cos_phi) / np.pi * 180
+
 
 def get_dihedral(p1, p2, p3, p4, is_angular=True):
     p1, p2 = np.array(p1), np.array(p2)
@@ -63,6 +69,7 @@ def get_dihedral(p1, p2, p3, p4, is_angular=True):
         return np.arctan2(x, y)
     else:
         return np.arctan2(x, y) / np.pi * 180
+
 
 def generate_rotation_matrix(yaw, pitch, roll):
     shape = [SPATIAL_DIM, SPATIAL_DIM]
