@@ -1,11 +1,11 @@
 #!/usr/bin/env python
 # -*- encoding: utf-8 -*-
-'''
+"""
 file : test_check_quantity.py
 created time : 2021/10/10
 author : Zhenyu Wei
 copyright : (C)Copyright 2021-present, mdpy organization
-'''
+"""
 
 import pytest
 import numpy as np
@@ -13,10 +13,14 @@ from mdpy.utils import check_quantity, check_quantity_value
 from mdpy.unit import *
 from mdpy.error import *
 
+
 def test_check_quantity():
     assert check_quantity(1, default_length_unit) == Quantity(1, default_length_unit)
     assert check_quantity(None, default_length_unit) == None
-    assert check_quantity(Quantity(1, meter), default_length_unit).unit == default_length_unit
+    assert (
+        check_quantity(Quantity(1, meter), default_length_unit).unit
+        == default_length_unit
+    )
     assert check_quantity(Quantity(1, meter), default_length_unit).value == 1e10
 
     quantity = Quantity(np.ones([3, 3]), nanometer)
@@ -30,6 +34,7 @@ def test_check_quantity():
 
     with pytest.raises(UnitDimensionDismatchedError):
         check_quantity(Quantity(1, default_charge_unit), default_length_unit)
+
 
 def test_check_quantity_value():
     assert check_quantity_value(1, default_length_unit) == 1

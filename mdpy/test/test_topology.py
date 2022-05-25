@@ -1,17 +1,18 @@
 #!/usr/bin/env python
 # -*-coding:utf-8 -*-
-'''
+"""
 file: test_topology.py
 created time : 2021/09/29
 author : Zhenyu Wei
 copyright : (C)Copyright 2021-present, mdpy organization
-'''
+"""
 
 import pytest
 import numpy as np
 from mdpy.core import Particle, Topology
 from mdpy.error import *
 from mdpy.unit import *
+
 
 class TestTopology:
     def setup(self):
@@ -52,9 +53,9 @@ class TestTopology:
         assert self.topology.charges.shape[1] == 1
 
     def test_add_particles(self):
-        p1 = Particle(0, 'CA')
-        p2 = Particle(0, 'CB')
-        p3 = Particle(0, 'N')
+        p1 = Particle(0, "CA")
+        p2 = Particle(0, "CB")
+        p3 = Particle(0, "N")
         self.topology.add_particles([p1, p2, p3])
         assert self.topology.num_particles == 3
         assert self.topology.particles[0].particle_id == 0
@@ -66,10 +67,10 @@ class TestTopology:
         #     self.topology.add_particles([p1])
 
     def test_del_particles(self):
-        p1 = Particle(0, 'CA', molecule_id=0, molecule_type='ASN')
-        p2 = Particle(1, 'CB', molecule_id=0, molecule_type='ASN')
-        p3 = Particle(2, 'N', molecule_id=0, molecule_type='ASN')
-        p4 = Particle(3, 'H', molecule_id=1, molecule_type='HOH')
+        p1 = Particle(0, "CA", molecule_id=0, molecule_type="ASN")
+        p2 = Particle(1, "CB", molecule_id=0, molecule_type="ASN")
+        p3 = Particle(2, "N", molecule_id=0, molecule_type="ASN")
+        p4 = Particle(3, "H", molecule_id=1, molecule_type="HOH")
         self.topology.add_particles([p1, p2, p3, p4])
         self.topology.del_particles([p1, p2, p3])
         assert self.topology.num_particles == 1
@@ -92,9 +93,9 @@ class TestTopology:
         assert self.topology.num_dihedrals == 0
 
     def test_add_bond(self):
-        p1 = Particle(0, 'CA', molecule_id=0, molecule_type='ASN')
-        p2 = Particle(1, 'CB', molecule_id=0, molecule_type='ASN')
-        p3 = Particle(2, 'N', molecule_id=0, molecule_type='ASN')
+        p1 = Particle(0, "CA", molecule_id=0, molecule_type="ASN")
+        p2 = Particle(1, "CB", molecule_id=0, molecule_type="ASN")
+        p3 = Particle(2, "N", molecule_id=0, molecule_type="ASN")
         self.topology.add_particles([p1, p2, p3])
         self.topology.add_bond([0, 1])
         assert p1.num_excluded_particles == 1
@@ -114,9 +115,9 @@ class TestTopology:
             self.topology.add_bond([1, 4])
 
     def test_del_bond(self):
-        p1 = Particle(0, 'CA', molecule_id=0, molecule_type='ASN')
-        p2 = Particle(1, 'CB', molecule_id=0, molecule_type='ASN')
-        p3 = Particle(2, 'N', molecule_id=0, molecule_type='ASN')
+        p1 = Particle(0, "CA", molecule_id=0, molecule_type="ASN")
+        p2 = Particle(1, "CB", molecule_id=0, molecule_type="ASN")
+        p3 = Particle(2, "N", molecule_id=0, molecule_type="ASN")
         self.topology.add_particles([p1, p2, p3])
         self.topology.add_bond([0, 1])
         assert p1.num_excluded_particles == 1
@@ -145,9 +146,9 @@ class TestTopology:
             self.topology.del_bond([1, 9])
 
     def test_add_angle(self):
-        p1 = Particle(0, 'CA', molecule_id=0, molecule_type='ASN')
-        p2 = Particle(1, 'CB', molecule_id=0, molecule_type='ASN')
-        p3 = Particle(2, 'N', molecule_id=0, molecule_type='ASN')
+        p1 = Particle(0, "CA", molecule_id=0, molecule_type="ASN")
+        p2 = Particle(1, "CB", molecule_id=0, molecule_type="ASN")
+        p3 = Particle(2, "N", molecule_id=0, molecule_type="ASN")
         self.topology.add_particles([p1, p2, p3])
         self.topology.add_angle([0, 1, 2])
         assert self.topology.num_angles == 1
@@ -165,9 +166,9 @@ class TestTopology:
             self.topology.add_angle([2, 1, 9])
 
     def test_del_angle(self):
-        p1 = Particle(0, 'CA', molecule_id=0, molecule_type='ASN')
-        p2 = Particle(1, 'CB', molecule_id=0, molecule_type='ASN')
-        p3 = Particle(2, 'N', molecule_id=0, molecule_type='ASN')
+        p1 = Particle(0, "CA", molecule_id=0, molecule_type="ASN")
+        p2 = Particle(1, "CB", molecule_id=0, molecule_type="ASN")
+        p3 = Particle(2, "N", molecule_id=0, molecule_type="ASN")
         self.topology.add_particles([p1, p2, p3])
         self.topology.add_angle([0, 1, 2])
         assert self.topology.num_angles == 1
@@ -194,10 +195,10 @@ class TestTopology:
             self.topology.del_angle([1, 2, 9])
 
     def test_add_dihedral(self):
-        p1 = Particle(0, 'CA', molecule_id=0, molecule_type='ASN')
-        p2 = Particle(1, 'CB', molecule_id=0, molecule_type='ASN')
-        p3 = Particle(2, 'N', molecule_id=0, molecule_type='ASN')
-        p4 = Particle(3, 'H', molecule_id=0, molecule_type='ASN')
+        p1 = Particle(0, "CA", molecule_id=0, molecule_type="ASN")
+        p2 = Particle(1, "CB", molecule_id=0, molecule_type="ASN")
+        p3 = Particle(2, "N", molecule_id=0, molecule_type="ASN")
+        p4 = Particle(3, "H", molecule_id=0, molecule_type="ASN")
         self.topology.add_particles([p1, p2, p3, p4])
         self.topology.add_dihedral([0, 1, 2, 3])
         assert self.topology.particles[0].scaled_particles[0] == 3
@@ -221,10 +222,10 @@ class TestTopology:
             self.topology.add_dihedral([1, 1, 2, 9])
 
     def test_del_dihedral(self):
-        p1 = Particle(0, 'CA', molecule_id=0, molecule_type='ASN')
-        p2 = Particle(1, 'CB', molecule_id=0, molecule_type='ASN')
-        p3 = Particle(2, 'N', molecule_id=0, molecule_type='ASN')
-        p4 = Particle(3, 'H', molecule_id=0, molecule_type='ASN')
+        p1 = Particle(0, "CA", molecule_id=0, molecule_type="ASN")
+        p2 = Particle(1, "CB", molecule_id=0, molecule_type="ASN")
+        p3 = Particle(2, "N", molecule_id=0, molecule_type="ASN")
+        p4 = Particle(3, "H", molecule_id=0, molecule_type="ASN")
         self.topology.add_particles([p1, p2, p3, p4])
         self.topology.add_dihedral([0, 1, 2, 3])
         assert self.topology.num_dihedrals == 1
@@ -252,10 +253,10 @@ class TestTopology:
             self.topology.del_dihedral([0, 0, 1, 9])
 
     def test_add_improper(self):
-        p1 = Particle(0, 'CA', molecule_id=0, molecule_type='ASN')
-        p2 = Particle(1, 'CB', molecule_id=0, molecule_type='ASN')
-        p3 = Particle(2, 'N', molecule_id=0, molecule_type='ASN')
-        p4 = Particle(3, 'H', molecule_id=0, molecule_type='ASN')
+        p1 = Particle(0, "CA", molecule_id=0, molecule_type="ASN")
+        p2 = Particle(1, "CB", molecule_id=0, molecule_type="ASN")
+        p3 = Particle(2, "N", molecule_id=0, molecule_type="ASN")
+        p4 = Particle(3, "H", molecule_id=0, molecule_type="ASN")
         self.topology.add_particles([p1, p2, p3, p4])
         self.topology.add_improper([0, 1, 2, 3])
         assert self.topology.num_impropers == 1
@@ -273,10 +274,10 @@ class TestTopology:
             self.topology.add_improper([2, 1, 2, 9])
 
     def test_del_improper(self):
-        p1 = Particle(0, 'CA', molecule_id=0, molecule_type='ASN')
-        p2 = Particle(1, 'CB', molecule_id=0, molecule_type='ASN')
-        p3 = Particle(2, 'N', molecule_id=0, molecule_type='ASN')
-        p4 = Particle(3, 'H', molecule_id=0, molecule_type='ASN')
+        p1 = Particle(0, "CA", molecule_id=0, molecule_type="ASN")
+        p2 = Particle(1, "CB", molecule_id=0, molecule_type="ASN")
+        p3 = Particle(2, "N", molecule_id=0, molecule_type="ASN")
+        p4 = Particle(3, "H", molecule_id=0, molecule_type="ASN")
         self.topology.add_particles([p1, p2, p3, p4])
         self.topology.add_improper([0, 1, 2, 3])
         assert self.topology.num_impropers == 1

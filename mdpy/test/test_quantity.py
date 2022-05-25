@@ -1,17 +1,18 @@
 #!/usr/bin/env python
 # -*-coding:utf-8 -*-
-'''
+"""
 file: test_quantity.py
 created time : 2021/09/28
 author : Zhenyu Wei
 copyright : (C)Copyright 2021-present, mdpy organization
-'''
+"""
 
 import pytest
 import numpy as np
 from mdpy import env
 from mdpy.unit import *
 from mdpy.error import UnitDimensionDismatchedError
+
 
 class TestQuantity:
     def setup(self):
@@ -59,8 +60,8 @@ class TestQuantity:
             quantity.convert_to(second)
 
         quantity = Quantity(1) * meter / second
-        quantity_an_per_fs = quantity.convert_to(angstrom/femtosecond)
-        assert quantity_an_per_fs.unit == (angstrom/femtosecond)
+        quantity_an_per_fs = quantity.convert_to(angstrom / femtosecond)
+        assert quantity_an_per_fs.unit == (angstrom / femtosecond)
         assert quantity_an_per_fs.value == env.NUMPY_FLOAT(1e-5)
         with pytest.raises(UnitDimensionDismatchedError):
             quantity.convert_to(second)
@@ -83,7 +84,10 @@ class TestQuantity:
 
     def test_eq(self):
         assert Quantity(1, nanometer) == Quantity(10, angstrom)
-        assert (Quantity([1, 2, 3, 4]) * angstrom == Quantity([.1, .2, .3, .4], nanometer)).all()
+        assert (
+            Quantity([1, 2, 3, 4]) * angstrom
+            == Quantity([0.1, 0.2, 0.3, 0.4], nanometer)
+        ).all()
 
         with pytest.raises(UnitDimensionDismatchedError):
             Quantity(1) * nanometer == Quantity(1) * nanosecond
@@ -93,7 +97,9 @@ class TestQuantity:
         assert Quantity(10) * nanometer != Quantity(10) * angstrom
 
         assert not Quantity(1) * nanometer != Quantity(1) * nanometer
-        assert not (Quantity([1, 2, 3, 4]) * angstrom != Quantity([2, 2, 3, 4], angstrom)).all()
+        assert not (
+            Quantity([1, 2, 3, 4]) * angstrom != Quantity([2, 2, 3, 4], angstrom)
+        ).all()
 
         with pytest.raises(UnitDimensionDismatchedError):
             Quantity(1) * nanometer != Quantity(1) * nanosecond
@@ -127,19 +133,25 @@ class TestQuantity:
         quantity = quantity + Quantity(1, angstrom)
         assert quantity[0] == Quantity(2) * angstrom
         assert quantity[-1] == Quantity(5) * angstrom
-        assert (quantity == Quantity([1, 2, 3, 4]) * angstrom + Quantity(1) * angstrom).all()
+        assert (
+            quantity == Quantity([1, 2, 3, 4]) * angstrom + Quantity(1) * angstrom
+        ).all()
 
         quantity = Quantity([1, 2, 3, 4]) * angstrom
         quantity = Quantity(1, angstrom) + quantity
         assert quantity[0] == Quantity(2) * angstrom
         assert quantity[-1] == Quantity(5) * angstrom
-        assert (quantity == Quantity([1, 2, 3, 4]) * angstrom + Quantity(1) * angstrom).all()
+        assert (
+            quantity == Quantity([1, 2, 3, 4]) * angstrom + Quantity(1) * angstrom
+        ).all()
 
         quantity = Quantity([1, 2, 3, 4]) * angstrom
         quantity = quantity + Quantity(1, nanometer)
         assert quantity[0] == Quantity(11) * angstrom
         assert quantity[-1] == Quantity(14) * angstrom
-        assert (quantity == Quantity([1, 2, 3, 4]) * angstrom + Quantity(1) * nanometer).all()
+        assert (
+            quantity == Quantity([1, 2, 3, 4]) * angstrom + Quantity(1) * nanometer
+        ).all()
 
         with pytest.raises(UnitDimensionDismatchedError):
             Quantity(1) * nanometer + Quantity(1) * nanosecond
@@ -149,19 +161,25 @@ class TestQuantity:
         quantity = quantity - Quantity(1, angstrom)
         assert quantity[0] == Quantity(0) * angstrom
         assert quantity[-1] == Quantity(3) * angstrom
-        assert (quantity == Quantity([1, 2, 3, 4]) * angstrom - Quantity(1) * angstrom).all()
+        assert (
+            quantity == Quantity([1, 2, 3, 4]) * angstrom - Quantity(1) * angstrom
+        ).all()
 
         quantity = Quantity([1, 2, 3, 4]) * angstrom
         quantity = Quantity(1, angstrom) - quantity
         assert quantity[0] == Quantity(0) * angstrom
         assert quantity[-1] == Quantity(-3) * angstrom
-        assert (quantity == Quantity(1) * angstrom - Quantity([1, 2, 3, 4]) * angstrom).all()
+        assert (
+            quantity == Quantity(1) * angstrom - Quantity([1, 2, 3, 4]) * angstrom
+        ).all()
 
         quantity = Quantity([1, 2, 3, 4]) * angstrom
         quantity = quantity - Quantity(1, nanometer)
         assert quantity[0] == Quantity(-9) * angstrom
         assert quantity[-1] == Quantity(-6) * angstrom
-        assert (quantity == Quantity([1, 2, 3, 4]) * angstrom - Quantity(1) * nanometer).all()
+        assert (
+            quantity == Quantity([1, 2, 3, 4]) * angstrom - Quantity(1) * nanometer
+        ).all()
 
         with pytest.raises(UnitDimensionDismatchedError):
             Quantity(1) * nanometer - Quantity(1) * nanosecond

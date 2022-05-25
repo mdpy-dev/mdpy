@@ -1,11 +1,11 @@
 #!/usr/bin/env python
 # -*- encoding: utf-8 -*-
-'''
+"""
 file : test_state.py
 created time : 2021/10/17
 author : Zhenyu Wei
 copyright : (C)Copyright 2021-present, mdpy organization
-'''
+"""
 
 import pytest
 import numpy as np
@@ -14,18 +14,19 @@ from mdpy.core import Particle, Topology, State
 from mdpy.error import *
 from mdpy.unit import *
 
+
 class TestState:
     def setup(self):
         self.particles = []
-        self.particles.append(Particle(particle_type='C', mass=12))
-        self.particles.append(Particle(particle_type='N', mass=14))
-        self.particles.append(Particle(particle_type='C', mass=12))
-        self.particles.append(Particle(particle_type='H', mass=1))
-        self.particles.append(Particle(particle_type='C', mass=12))
-        self.particles.append(Particle(particle_type='H', mass=1))
-        self.particles.append(Particle(particle_type='H', mass=1))
-        self.particles.append(Particle(particle_type='N', mass=14))
-        self.particles.append(Particle(particle_type='C', mass=12))
+        self.particles.append(Particle(particle_type="C", mass=12))
+        self.particles.append(Particle(particle_type="N", mass=14))
+        self.particles.append(Particle(particle_type="C", mass=12))
+        self.particles.append(Particle(particle_type="H", mass=1))
+        self.particles.append(Particle(particle_type="C", mass=12))
+        self.particles.append(Particle(particle_type="H", mass=1))
+        self.particles.append(Particle(particle_type="H", mass=1))
+        self.particles.append(Particle(particle_type="N", mass=14))
+        self.particles.append(Particle(particle_type="C", mass=12))
         _ = [self.particles.extend(self.particles) for i in range(7)]
         self.num_particles = len(self.particles)
         self.topology = Topology()
@@ -70,8 +71,8 @@ class TestState:
         velocities = self.state.velocities.get()
         for particle in range(self.num_particles):
             kinetic_energy += Quantity(0.5) * (
-                Quantity(self.state._topology.masses[particle], default_mass_unit) *
-                (Quantity(velocities[particle, :], default_velocity_unit)**2).sum()
+                Quantity(self.state._topology.masses[particle], default_mass_unit)
+                * (Quantity(velocities[particle, :], default_velocity_unit) ** 2).sum()
             )
         temperature = kinetic_energy * Quantity(2 / 3 / self.num_particles) / KB
         assert temperature < Quantity(315, default_temperature_unit)

@@ -1,16 +1,17 @@
 #!/usr/bin/env python
 # -*- encoding: utf-8 -*-
-'''
+"""
 file : test_particle.py
 created time : 2021/09/28
 author : Zhenyu Wei
 copyright : (C)Copyright 2021-present, mdpy organization
-'''
+"""
 
 import pytest
 from mdpy.core import Particle
 from mdpy.unit import *
 from mdpy.error import *
+
 
 class TestParticle:
     def setup(self):
@@ -20,36 +21,41 @@ class TestParticle:
         pass
 
     def test_attributes(self):
-        particle = Particle(particle_id=1, particle_type='C')
+        particle = Particle(particle_id=1, particle_type="C")
         assert particle.particle_id == 1
-        assert particle.particle_type == 'C'
+        assert particle.particle_type == "C"
         assert particle.mass == None
 
     def test_exceptions(self):
         pass
 
     def test_mass(self):
-        particle = Particle(particle_id=1, particle_type='C', mass=1)
+        particle = Particle(particle_id=1, particle_type="C", mass=1)
         assert particle.mass == 1
 
         particle = Particle(mass=Quantity(1, kilogram))
-        assert particle.mass == Quantity(1, kilogram).convert_to(default_mass_unit).value
+        assert (
+            particle.mass == Quantity(1, kilogram).convert_to(default_mass_unit).value
+        )
 
         with pytest.raises(UnitDimensionDismatchedError):
             Particle(mass=Quantity(1, default_charge_unit))
 
     def test_charge(self):
-        particle = Particle(particle_id=1, particle_type='C', charge=1)
+        particle = Particle(particle_id=1, particle_type="C", charge=1)
         assert particle.charge == 1
 
         particle = Particle(charge=Quantity(1, coulomb))
-        assert particle.charge == Quantity(1, coulomb).convert_to(default_charge_unit).value
+        assert (
+            particle.charge
+            == Quantity(1, coulomb).convert_to(default_charge_unit).value
+        )
 
         with pytest.raises(UnitDimensionDismatchedError):
             Particle(charge=Quantity(1, default_energy_unit))
 
     def test_excluded_particles(self):
-        particle = Particle(particle_id=1, particle_type='C', matrix_id=0)
+        particle = Particle(particle_id=1, particle_type="C", matrix_id=0)
         particle.add_excluded_particle(1)
         assert particle.num_excluded_particles == 1
         assert particle.excluded_particles[0] == 1
@@ -70,7 +76,7 @@ class TestParticle:
         assert particle.num_excluded_particles == 1
 
     def test_scaled_particles(self):
-        particle = Particle(particle_id=1, particle_type='C', matrix_id=0)
+        particle = Particle(particle_id=1, particle_type="C", matrix_id=0)
         particle.add_scaled_particle(1, 0.5)
         assert particle.num_scaled_particles == 1
         assert particle.scaled_particles[0] == 1

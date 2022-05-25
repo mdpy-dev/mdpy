@@ -1,16 +1,17 @@
 #!/usr/bin/env python
 # -*- encoding: utf-8 -*-
-'''
+"""
 file : test_unit_definition.py
 created time : 2021/09/28
 author : Zhenyu Wei
 copyright : (C)Copyright 2021-present, mdpy organization
-'''
+"""
 
 import pytest
 import numpy as np
 from mdpy.unit import energy, force
 from mdpy.unit import *
+
 
 def test_constants():
     # Avogadro Constant
@@ -23,6 +24,7 @@ def test_constants():
     assert Quantity(300) * kelvin * KB / ev == 0.02585199
     assert Quantity(300) * kelvin * KB / hartree == 9.500431e-04
 
+
 def test_length():
     assert Quantity(1) * meter / decimeter == 10
     assert Quantity(1) * meter / centermeter == 100
@@ -31,14 +33,16 @@ def test_length():
     assert Quantity(1) * meter / nanometer == 1e9
     assert Quantity(1) * meter / angstrom == 1e10
 
+
 def test_mass():
     assert Quantity(1) * kilogram / gram == 1e3
-    assert Quantity(1) * kilogram / amu == 1/1.66053904e-27
-    assert Quantity(1) * kilogram / dalton == 1/1.66053904e-27
+    assert Quantity(1) * kilogram / amu == 1 / 1.66053904e-27
+    assert Quantity(1) * kilogram / dalton == 1 / 1.66053904e-27
 
     assert Quantity(1) * gram / kilogram == 1e-3
     assert Quantity(1) * amu / kilogram == 1.66053904e-27
     assert Quantity(1) * dalton / kilogram == 1.66053904e-27
+
 
 def test_time():
     assert Quantity(1) * second / millisecond == 1e3
@@ -47,16 +51,18 @@ def test_time():
     assert Quantity(1) * second / picosecond == 1e12
     assert Quantity(1) * second / femtosecond == 1e15
 
+
 def test_temperature():
     assert Quantity(1) * kelvin / kelvin == 1
 
+
 def test_charge():
-    assert Quantity(1) * coulomb / elementary_charge == 1/1.602176634e-19
+    assert Quantity(1) * coulomb / elementary_charge == 1 / 1.602176634e-19
     q1, q2 = Quantity(1, elementary_charge), Quantity(1, elementary_charge)
     length = Quantity(1, angstrom)
-    energy_val = q1 * q2 / Quantity(4*np.pi) / EPSILON0 / length
+    energy_val = q1 * q2 / Quantity(4 * np.pi) / EPSILON0 / length
     assert energy_val.unit.base_dimension == energy
-    force_val = q1 * q2 / Quantity(4*np.pi) / EPSILON0 / length**2
+    force_val = q1 * q2 / Quantity(4 * np.pi) / EPSILON0 / length**2
     assert force_val.unit.base_dimension == force
 
     factor = 4 * np.pi * EPSILON0.value
@@ -64,38 +70,55 @@ def test_charge():
     q2 = q2.convert_to(default_charge_unit).value
     length = length.convert_to(default_length_unit).value
     force_val_no_unit = q1 * q2 / factor / length**2
-    assert force_val.convert_to(default_force_unit).value == pytest.approx(force_val_no_unit)
+    assert force_val.convert_to(default_force_unit).value == pytest.approx(
+        force_val_no_unit
+    )
 
     force_val_newton = force_val.convert_to(newton)
     assert force_val_newton.value == pytest.approx(2.3e-8, abs=1e-10)
 
     assert Quantity(1, ohm) == Quantity(1, volt / ampere)
-    assert Quantity(1, default_electric_intensity_unit * default_charge_unit) == Quantity(1, default_force_unit)
+    assert Quantity(
+        1, default_electric_intensity_unit * default_charge_unit
+    ) == Quantity(1, default_force_unit)
     assert Quantity(1, volt / meter * coulomb) == Quantity(1, newton)
+
 
 def test_mol():
     assert Quantity(1) * kilomol / mol == 1e3
+
 
 def test_energy():
     assert Quantity(1) * joule / kilojoule == 1e-3
     assert Quantity(1) * joule / joule_permol == 6.0221e23
     assert Quantity(1) * joule / kilojoule_permol == 6.0221e20
 
-    assert Quantity(1) * joule / calorie == 1/4.184
-    assert Quantity(1) * joule / kilocalorie == 1/4.184e3
-    assert Quantity(1) * joule / calorie_premol == 6.0221e23/4.184
-    assert Quantity(1) * joule / kilocalorie_permol == 6.0221e23/4.184e3
+    assert Quantity(1) * joule / calorie == 1 / 4.184
+    assert Quantity(1) * joule / kilocalorie == 1 / 4.184e3
+    assert Quantity(1) * joule / calorie_premol == 6.0221e23 / 4.184
+    assert Quantity(1) * joule / kilocalorie_permol == 6.0221e23 / 4.184e3
 
-    assert Quantity(1) * joule / ev == 1/1.60217662e-19
-    assert Quantity(1) * joule / hartree == 1/4.3597447222071e-18
+    assert Quantity(1) * joule / ev == 1 / 1.60217662e-19
+    assert Quantity(1) * joule / hartree == 1 / 4.3597447222071e-18
+
 
 def test_force():
     assert Quantity(1) * newton / newton == 1
-    assert Quantity(1) * kilocalorie_permol_over_nanometer / kilojoule_permol_over_nanometer == 4.184
-    assert Quantity(1) * kilocalorie_permol_over_nanometer / kilojoule_permol_over_angstrom == 0.4184
+    assert (
+        Quantity(1)
+        * kilocalorie_permol_over_nanometer
+        / kilojoule_permol_over_nanometer
+        == 4.184
+    )
+    assert (
+        Quantity(1) * kilocalorie_permol_over_nanometer / kilojoule_permol_over_angstrom
+        == 0.4184
+    )
+
 
 def test_power():
     assert Quantity(1) * watt / kilowatt == 1e-3
+
 
 def test_mixture():
     assert Quantity(1) * newton * meter == Quantity(1) * joule

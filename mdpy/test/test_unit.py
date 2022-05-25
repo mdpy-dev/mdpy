@@ -1,17 +1,18 @@
 #!/usr/bin/env python
 # -*- encoding: utf-8 -*-
-'''
+"""
 file : test_unit.py
 created time : 2021/09/28
 author : Zhenyu Wei
 copyright : (C)Copyright 2021-present, mdpy organization
-'''
+"""
 
 import pytest
 import numpy as np
 from mdpy import env
 from mdpy.unit import BaseDimension, Unit
 from mdpy.error import UnitDimensionDismatchedError
+
 
 class TestUnit:
     def setup(self):
@@ -21,7 +22,7 @@ class TestUnit:
         self.unit = None
 
     def test_attributes(self):
-        assert self.unit.unit_name == 'm'
+        assert self.unit.unit_name == "m"
         assert self.unit.base_dimension == BaseDimension(length_dimension=1)
         assert self.unit.relative_value == env.UNIT_FLOAT(1e-10)
 
@@ -110,7 +111,7 @@ class TestUnit:
             2 / angstrom
 
         with pytest.raises(NotImplementedError):
-            1. / angstrom
+            1.0 / angstrom
 
         with pytest.raises(NotImplementedError):
             angstrom / 1
@@ -125,13 +126,13 @@ class TestUnit:
         assert angstrom == angstrom**1
         assert constant == angstrom**0
         assert angstrom_reciprocal == angstrom**-1
-        assert angstrom_square**(1/2) == angstrom
-        assert angstrom_reciprocal_square**(-1/2) == angstrom
+        assert angstrom_square ** (1 / 2) == angstrom
+        assert angstrom_reciprocal_square ** (-1 / 2) == angstrom
 
         with pytest.raises(ValueError):
-            constant**[1, 2]
+            constant ** [1, 2]
         with pytest.raises(ValueError):
-            constant**np.array([1, 2])
+            constant ** np.array([1, 2])
 
     def test_sqrt(self):
         angstrom_reciprocal = Unit(BaseDimension(length_dimension=-1), 1e10)

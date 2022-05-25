@@ -1,11 +1,11 @@
 #!/usr/bin/env python
 # -*- encoding: utf-8 -*-
-'''
+"""
 file : test_trajectory.py
 created time : 2022/02/19
 author : Zhenyu Wei
 copyright : (C)Copyright 2021-present, mdpy organization
-'''
+"""
 
 import pytest
 import numpy as np
@@ -14,18 +14,19 @@ from mdpy.core import Particle, Topology, Trajectory
 from mdpy.error import *
 from mdpy.unit import *
 
+
 class TestTrajectory:
     def setup(self):
         self.particles = []
-        self.particles.append(Particle(particle_type='C', mass=12))
-        self.particles.append(Particle(particle_type='N', mass=14))
-        self.particles.append(Particle(particle_type='C', mass=12))
-        self.particles.append(Particle(particle_type='H', mass=1))
-        self.particles.append(Particle(particle_type='C', mass=12))
-        self.particles.append(Particle(particle_type='H', mass=1))
-        self.particles.append(Particle(particle_type='H', mass=1))
-        self.particles.append(Particle(particle_type='N', mass=14))
-        self.particles.append(Particle(particle_type='C', mass=12))
+        self.particles.append(Particle(particle_type="C", mass=12))
+        self.particles.append(Particle(particle_type="N", mass=14))
+        self.particles.append(Particle(particle_type="C", mass=12))
+        self.particles.append(Particle(particle_type="H", mass=1))
+        self.particles.append(Particle(particle_type="C", mass=12))
+        self.particles.append(Particle(particle_type="H", mass=1))
+        self.particles.append(Particle(particle_type="H", mass=1))
+        self.particles.append(Particle(particle_type="N", mass=14))
+        self.particles.append(Particle(particle_type="C", mass=12))
         _ = [self.particles.extend(self.particles) for i in range(7)]
         self.num_particles = len(self.particles)
         self.topology = Topology()
@@ -44,19 +45,29 @@ class TestTrajectory:
 
     def test_exceptions(self):
         with pytest.raises(ArrayDimError):
-            self.trajectory._check_array(np.ones([self.topology.num_particles-1, SPATIAL_DIM]))
+            self.trajectory._check_array(
+                np.ones([self.topology.num_particles - 1, SPATIAL_DIM])
+            )
 
         with pytest.raises(ArrayDimError):
-            self.trajectory._check_array(np.ones([self.topology.num_particles, SPATIAL_DIM+1]))
+            self.trajectory._check_array(
+                np.ones([self.topology.num_particles, SPATIAL_DIM + 1])
+            )
 
         with pytest.raises(ArrayDimError):
-            self.trajectory._check_array(np.ones([1, self.topology.num_particles-1, SPATIAL_DIM]))
+            self.trajectory._check_array(
+                np.ones([1, self.topology.num_particles - 1, SPATIAL_DIM])
+            )
 
         with pytest.raises(ArrayDimError):
-            self.trajectory._check_array(np.ones([1, self.topology.num_particles, SPATIAL_DIM+1]))
+            self.trajectory._check_array(
+                np.ones([1, self.topology.num_particles, SPATIAL_DIM + 1])
+            )
 
         with pytest.raises(ArrayDimError):
-            self.trajectory._check_array(np.ones([1, 1, self.topology.num_particles, SPATIAL_DIM+1]))
+            self.trajectory._check_array(
+                np.ones([1, 1, self.topology.num_particles, SPATIAL_DIM + 1])
+            )
 
         with pytest.raises(TrajectoryPoorDefinedError):
             self.trajectory.velocities
@@ -74,8 +85,18 @@ class TestTrajectory:
             self.trajectory.append(positions=[1])
 
     def test_check_array(self):
-        assert self.trajectory._check_array(np.ones([self.topology.num_particles, SPATIAL_DIM])).shape[0] == 1
-        assert self.trajectory._check_array(np.ones([2, self.topology.num_particles, SPATIAL_DIM])).shape[0] == 2
+        assert (
+            self.trajectory._check_array(
+                np.ones([self.topology.num_particles, SPATIAL_DIM])
+            ).shape[0]
+            == 1
+        )
+        assert (
+            self.trajectory._check_array(
+                np.ones([2, self.topology.num_particles, SPATIAL_DIM])
+            ).shape[0]
+            == 2
+        )
 
     def test_set_time_step(self):
         self.trajectory.set_time_step(Quantity(1, femtosecond) * Quantity(1000))
@@ -88,7 +109,7 @@ class TestTrajectory:
         with pytest.raises(ArrayDimError):
             self.trajectory.set_pbc_matrix(np.ones([4, 3]))
 
-        self.trajectory.set_pbc_matrix(np.diag(np.ones(3)*10))
+        self.trajectory.set_pbc_matrix(np.diag(np.ones(3) * 10))
         assert self.trajectory.pbc_inv[1, 1] == env.NUMPY_FLOAT(0.1)
 
         self.trajectory.set_pbc_matrix(Quantity(np.diag(np.ones(3)), nanometer))
@@ -102,14 +123,22 @@ class TestTrajectory:
             self.trajectory.append(positions=None)
 
         with pytest.raises(ArrayDimError):
-            self.trajectory.append(positions=np.ones([self.topology.num_particles, SPATIAL_DIM+1]))
+            self.trajectory.append(
+                positions=np.ones([self.topology.num_particles, SPATIAL_DIM + 1])
+            )
 
         with pytest.raises(ArrayDimError):
-            self.trajectory.append(positions=np.ones([3, self.topology.num_particles-1, SPATIAL_DIM]))
+            self.trajectory.append(
+                positions=np.ones([3, self.topology.num_particles - 1, SPATIAL_DIM])
+            )
 
-        self.trajectory.append(positions=np.ones([3, self.topology.num_particles, SPATIAL_DIM]))
+        self.trajectory.append(
+            positions=np.ones([3, self.topology.num_particles, SPATIAL_DIM])
+        )
         assert self.trajectory.num_frames == 3
-        self.trajectory.append(positions=np.ones([3, self.topology.num_particles, SPATIAL_DIM]))
+        self.trajectory.append(
+            positions=np.ones([3, self.topology.num_particles, SPATIAL_DIM])
+        )
         assert self.trajectory.num_frames == 6
         assert self.trajectory.positions.shape[0] == 6
 
@@ -117,17 +146,17 @@ class TestTrajectory:
         with pytest.raises(ArrayDimError):
             self.trajectory.append(
                 positions=np.ones([3, self.topology.num_particles, SPATIAL_DIM]),
-                velocities=np.ones([4, self.topology.num_particles, SPATIAL_DIM])
+                velocities=np.ones([4, self.topology.num_particles, SPATIAL_DIM]),
             )
 
         self.trajectory.append(
             positions=np.ones([4, self.topology.num_particles, SPATIAL_DIM]),
-            velocities=np.ones([4, self.topology.num_particles, SPATIAL_DIM])
+            velocities=np.ones([4, self.topology.num_particles, SPATIAL_DIM]),
         )
         assert self.trajectory.num_frames == 4
         self.trajectory.append(
             positions=np.ones([4, self.topology.num_particles, SPATIAL_DIM]),
-            velocities=np.ones([4, self.topology.num_particles, SPATIAL_DIM])
+            velocities=np.ones([4, self.topology.num_particles, SPATIAL_DIM]),
         )
         assert self.trajectory.num_frames == 8
         assert self.trajectory.positions.shape[0] == 8
@@ -136,8 +165,12 @@ class TestTrajectory:
         with pytest.raises(PBCPoorDefinedError):
             self.trajectory.unwrap_positions()
 
-        self.trajectory.set_pbc_matrix(np.diag([11]*3))
-        self.trajectory.append(positions=np.ones([self.topology.num_particles, SPATIAL_DIM]))
-        self.trajectory.append(positions=np.ones([self.topology.num_particles, SPATIAL_DIM])*10)
+        self.trajectory.set_pbc_matrix(np.diag([11] * 3))
+        self.trajectory.append(
+            positions=np.ones([self.topology.num_particles, SPATIAL_DIM])
+        )
+        self.trajectory.append(
+            positions=np.ones([self.topology.num_particles, SPATIAL_DIM]) * 10
+        )
         self.trajectory.unwrap_positions()
         assert np.isclose(self.trajectory.unwrapped_position[1, 0, 0], -1)

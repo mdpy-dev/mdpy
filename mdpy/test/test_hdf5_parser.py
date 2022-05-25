@@ -1,11 +1,11 @@
 #!/usr/bin/env python
 # -*- encoding: utf-8 -*-
-'''
+"""
 file : test_hdf5_parser.py
 created time : 2022/02/24
 author : Zhenyu Wei
 copyright : (C)Copyright 2021-present, mdpy organization
-'''
+"""
 
 import os
 import pytest
@@ -15,9 +15,10 @@ from mdpy.unit import *
 from mdpy.error import *
 
 cur_dir = os.path.dirname(os.path.abspath(__file__))
-data_dir = os.path.join(cur_dir, 'data/hdf5_parser')
-out_dir = os.path.join(cur_dir, 'out')
-file_path = os.path.join(data_dir, 'test_hdf5_parser.hdf5')
+data_dir = os.path.join(cur_dir, "data/hdf5_parser")
+out_dir = os.path.join(cur_dir, "out")
+file_path = os.path.join(data_dir, "test_hdf5_parser.hdf5")
+
 
 class TestHDF5Writer:
     def setup(self):
@@ -39,10 +40,9 @@ class TestHDF5Writer:
         # Trajectory
         assert parser.trajectory.num_frames == 2
 
-
     def test_exceptions(self):
         with pytest.raises(FileFormatError):
-            HDF5Parser('te.hd')
+            HDF5Parser("te.hd")
 
         with pytest.raises(IOPoorDefinedError):
             HDF5Parser(file_path, is_parse_all=False).positions

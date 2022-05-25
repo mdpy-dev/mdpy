@@ -1,15 +1,16 @@
 #!/usr/bin/env python
 # -*- encoding: utf-8 -*-
-'''
+"""
 file : test_base_dimension.py
 created time : 2021/09/28
 author : Zhenyu Wei
 copyright : (C)Copyright 2021-present, mdpy organization
-'''
+"""
 
 import pytest
 import numpy as np
 from mdpy.unit import BaseDimension
+
 
 class TestUnit:
     def setup(self):
@@ -65,7 +66,9 @@ class TestUnit:
         force = BaseDimension(mass_dimension=1, length_dimension=1, time_dimension=-2)
         energy = BaseDimension(mass_dimension=1, length_dimension=2, time_dimension=-2)
         assert energy == force * length
-        assert 1*energy == BaseDimension(mass_dimension=1, length_dimension=2, time_dimension=-2)
+        assert 1 * energy == BaseDimension(
+            mass_dimension=1, length_dimension=2, time_dimension=-2
+        )
         assert energy == energy * constant
 
     def test_div(self):
@@ -74,7 +77,7 @@ class TestUnit:
         force = BaseDimension(mass_dimension=1, length_dimension=1, time_dimension=-2)
         energy = BaseDimension(mass_dimension=1, length_dimension=2, time_dimension=-2)
         assert force == energy / length
-        assert 1/length == BaseDimension(length_dimension=-1)
+        assert 1 / length == BaseDimension(length_dimension=-1)
         assert force == force / constant
 
     def test_pow(self):
@@ -85,9 +88,9 @@ class TestUnit:
         assert volume == length**3
 
         with pytest.raises(ValueError):
-            length**[1, 2]
+            length ** [1, 2]
         with pytest.raises(ValueError):
-            length**np.array([1, 2])
+            length ** np.array([1, 2])
 
     def test_sqrt(self):
         length = BaseDimension(length_dimension=1)
@@ -98,34 +101,34 @@ class TestUnit:
 
     def test_generate_dimension_name(self):
         dimension = BaseDimension()
-        assert dimension.name == ''
+        assert dimension.name == ""
 
         dimension = BaseDimension(length_dimension=1)
-        assert dimension.name == 'm'
+        assert dimension.name == "m"
 
         dimension *= dimension
-        assert dimension.name == 'm^2'
+        assert dimension.name == "m^2"
 
         dimension = BaseDimension(length_dimension=-1)
-        assert dimension.name == '1/m'
+        assert dimension.name == "1/m"
 
         dimension *= dimension
-        assert dimension.name == '1/m^2'
+        assert dimension.name == "1/m^2"
 
         dimension = BaseDimension(time_dimension=1, length_dimension=1)
-        assert dimension.name == 'm*s'
+        assert dimension.name == "m*s"
 
         dimension *= dimension
-        assert dimension.name == 'm^2*s^2'
+        assert dimension.name == "m^2*s^2"
 
         dimension = BaseDimension(time_dimension=1, length_dimension=-1)
-        assert dimension.name == 's/m'
+        assert dimension.name == "s/m"
 
         dimension *= dimension
-        assert dimension.name == 's^2/m^2'
+        assert dimension.name == "s^2/m^2"
 
         dimension = BaseDimension(time_dimension=-1, length_dimension=-1)
-        assert dimension.name == '1/m*s'
+        assert dimension.name == "1/m*s"
 
         dimension *= dimension
-        assert dimension.name == '1/m^2*s^2'
+        assert dimension.name == "1/m^2*s^2"

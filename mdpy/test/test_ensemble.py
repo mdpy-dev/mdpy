@@ -1,11 +1,11 @@
 #!/usr/bin/env python
 # -*- encoding: utf-8 -*-
-'''
+"""
 file : test_ensemble.py
 created time : 2021/10/09
 author : Zhenyu Wei
 copyright : (C)Copyright 2021-present, mdpy organization
-'''
+"""
 
 # *** Note: current test file only contain test for information without constrait
 
@@ -18,29 +18,42 @@ from mdpy.error import *
 from mdpy.unit import *
 
 cur_dir = os.path.dirname(os.path.abspath(__file__))
-data_dir = os.path.join(cur_dir, 'data/simulation')
+data_dir = os.path.join(cur_dir, "data/simulation")
+
 
 class TestEnsemble:
     def setup(self):
         p1 = Particle(
-            particle_id=0, particle_type='C',
-            particle_name='CA', molecule_type='ASN',
-            mass=12, charge=0
+            particle_id=0,
+            particle_type="C",
+            particle_name="CA",
+            molecule_type="ASN",
+            mass=12,
+            charge=0,
         )
         p2 = Particle(
-            particle_id=1, particle_type='N',
-            particle_name='N', molecule_type='ASN',
-            mass=14, charge=0
+            particle_id=1,
+            particle_type="N",
+            particle_name="N",
+            molecule_type="ASN",
+            mass=14,
+            charge=0,
         )
         p3 = Particle(
-            particle_id=2, particle_type='H',
-            particle_name='HA', molecule_type='ASN',
-            mass=1, charge=0
+            particle_id=2,
+            particle_type="H",
+            particle_name="HA",
+            molecule_type="ASN",
+            mass=1,
+            charge=0,
         )
         p4 = Particle(
-            particle_id=3, particle_type='C',
-            particle_name='CB', molecule_type='ASN',
-            mass=12, charge=0
+            particle_id=3,
+            particle_type="C",
+            particle_name="CB",
+            molecule_type="ASN",
+            mass=12,
+            charge=0,
         )
         t = Topology()
         t.add_particles([p1, p2, p3, p4])
@@ -49,13 +62,9 @@ class TestEnsemble:
         t.add_bond([2, 3])
         t.add_angle([0, 1, 2])
         t.add_dihedral([0, 1, 2, 3])
-        positions = np.array([
-            [0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]
-        ])
-        velocities = np.array([
-            [0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]
-        ])
-        self.ensemble = Ensemble(t, np.eye(3)*30)
+        positions = np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]])
+        velocities = np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]])
+        self.ensemble = Ensemble(t, np.eye(3) * 30)
         self.ensemble.tile_list.set_cutoff_radius(12)
         self.ensemble.state.set_positions(positions)
         self.ensemble.state.set_velocities(velocities)
@@ -71,14 +80,14 @@ class TestEnsemble:
         pass
 
     def test_add_constraints(self):
-        f2 = os.path.join(data_dir, 'par_all36_prot.prm')
-        f3 = os.path.join(data_dir, 'toppar_water_ions_namd.str')
-        psf_file_path = os.path.join(data_dir, '1M9Z.psf')
+        f2 = os.path.join(data_dir, "par_all36_prot.prm")
+        f3 = os.path.join(data_dir, "toppar_water_ions_namd.str")
+        psf_file_path = os.path.join(data_dir, "1M9Z.psf")
         charmm_file = CharmmTopparParser(f2, f3)
         parameters = charmm_file.parameters
         topology = PSFParser(psf_file_path).topology
-        ensemble = Ensemble(topology, np.diag(np.ones(3)*30))
-        constraint = CharmmVDWConstraint(parameters['nonbonded'])
+        ensemble = Ensemble(topology, np.diag(np.ones(3) * 30))
+        constraint = CharmmVDWConstraint(parameters["nonbonded"])
         ensemble.add_constraints(constraint)
         assert ensemble.num_constraints == 1
 
@@ -87,9 +96,12 @@ class TestEnsemble:
 
     def test_update_kinetic_energy(self):
         self.ensemble._update_kinetic_energy()
-        assert self.ensemble.kinetic_energy == Quantity(
-            13.5, default_velocity_unit**2*default_mass_unit
-        ).convert_to(default_energy_unit).value
+        assert (
+            self.ensemble.kinetic_energy
+            == Quantity(13.5, default_velocity_unit**2 * default_mass_unit)
+            .convert_to(default_energy_unit)
+            .value
+        )
 
     def test_update_potential_energy(self):
         self.ensemble.update()
@@ -97,6 +109,9 @@ class TestEnsemble:
 
     def test_update_energy(self):
         self.ensemble.update()
-        assert self.ensemble.total_energy == Quantity(
-            13.5, default_velocity_unit**2*default_mass_unit
-        ).convert_to(default_energy_unit).value
+        assert (
+            self.ensemble.total_energy
+            == Quantity(13.5, default_velocity_unit**2 * default_mass_unit)
+            .convert_to(default_energy_unit)
+            .value
+        )

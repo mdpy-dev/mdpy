@@ -1,14 +1,15 @@
 #!/usr/bin/env python
 # -*- encoding: utf-8 -*-
-'''
+"""
 file : test_constraint.py
 created time : 2021/10/09
 author : Zhenyu Wei
 copyright : (C)Copyright 2021-present, mdpy organization
-'''
+"""
 
 import pytest
 from mdpy.constraint import Constraint
+
 
 class TestConstraint:
     def setup(self):

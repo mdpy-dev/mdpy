@@ -1,11 +1,11 @@
 #!/usr/bin/env python
 # -*- encoding: utf-8 -*-
-'''
+"""
 file : test_pbc.py
 created time : 2021/10/22
 author : Zhenyu Wei
 copyright : (C)Copyright 2021-present, mdpy organization
-'''
+"""
 
 import pytest
 import numpy as np
@@ -13,8 +13,9 @@ from mdpy import env
 from mdpy.utils import *
 from mdpy.error import *
 
-pbc_matrix = np.diag(np.ones(3)*10).astype(env.NUMPY_FLOAT)
+pbc_matrix = np.diag(np.ones(3) * 10).astype(env.NUMPY_FLOAT)
 pbc_diag = np.diagonal(pbc_matrix)
+
 
 def test_check_pbc_matrix():
     with pytest.raises(PBCPoorDefinedError):
@@ -23,17 +24,20 @@ def test_check_pbc_matrix():
     with pytest.raises(ArrayDimError):
         check_pbc_matrix(np.ones([4, 3]))
 
+
 def test_wrap_positions():
-    positions = np.array([
-        [0, 0, 0],
-        [4, 5, 1],
-        [-4, -1, -5],
-        [6, 8, 9],
-        [8, 0, 1],
-        [-7, -8, 9],
-        [11, 12, 3],
-        [-3, -12., -14]
-    ])
+    positions = np.array(
+        [
+            [0, 0, 0],
+            [4, 5, 1],
+            [-4, -1, -5],
+            [6, 8, 9],
+            [8, 0, 1],
+            [-7, -8, 9],
+            [11, 12, 3],
+            [-3, -12.0, -14],
+        ]
+    )
     wrapped_positions = wrap_positions(positions, np.diagonal(pbc_matrix))
     assert wrapped_positions[0, 0] == 0
     assert wrapped_positions[3, 0] == -4
@@ -45,6 +49,7 @@ def test_wrap_positions():
 
     # with pytest.raises(ParticleLossError):
     #     wrap_positions(np.array([16, 0, 1]), pbc_matrix, pbc_inv)
+
 
 def test_unwrap_vec():
     vec = np.array([0, 6, 1]).astype(env.NUMPY_FLOAT)
@@ -71,11 +76,11 @@ def test_unwrap_vec():
     assert vec1[2] == pytest.approx(vec2[2])
     assert vec1[2] == pytest.approx(vec3[2])
 
-    vec = unwrap_vec(np.array([
-        [0, 9, 0],
-        [0, 1, 0],
-        [9, -1, 0],
-        [0, 1, -8]
-    ]).astype(env.NUMPY_FLOAT), pbc_diag)
+    vec = unwrap_vec(
+        np.array([[0, 9, 0], [0, 1, 0], [9, -1, 0], [0, 1, -8]]).astype(
+            env.NUMPY_FLOAT
+        ),
+        pbc_diag,
+    )
     assert vec[0, 1] == pytest.approx(-1)
     assert vec[3, 2] == pytest.approx(2)

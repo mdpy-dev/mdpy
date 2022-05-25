@@ -1,15 +1,16 @@
 #!/usr/bin/env python
 # -*- encoding: utf-8 -*-
-'''
+"""
 file : test_forcefield.py
 created time : 2021/10/16
 author : Zhenyu Wei
 copyright : (C)Copyright 2021-present, mdpy organization
-'''
+"""
 
 import pytest
 from mdpy.core import Topology
 from mdpy.forcefield import Forcefield
+
 
 class TestForcefield:
     def setup(self):
