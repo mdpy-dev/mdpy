@@ -1,11 +1,11 @@
 #!/usr/bin/env python
 # -*- encoding: utf-8 -*-
-'''
+"""
 file : psf_file.py
 created time : 2021/10/05
 author : Zhenyu Wei
 copyright : (C)Copyright 2021-present, mdpy organization
-'''
+"""
 
 import warnings
 import numpy as np
@@ -16,10 +16,11 @@ from mdpy.core import Particle, Topology
 from mdpy.unit import *
 from mdpy.error import *
 
+
 class PSFParser:
     def __init__(self, file_path: str) -> None:
-        if not file_path.endswith('.psf'):
-            raise FileFormatError('The file should end with .psf suffix')
+        if not file_path.endswith(".psf"):
+            raise FileFormatError("The file should end with .psf suffix")
         with warnings.catch_warnings():
             self._parser = mda.topology.PSFParser.PSFParser(file_path).parse()
         self._num_particles = self._parser.n_atoms
@@ -27,8 +28,15 @@ class PSFParser:
         # The definition of type in PSFParser corresponding to name in Particle class
         self._particle_types = list(self._parser.types.values)
         self._particle_names = list(self._parser.names.values)
-        self._matrix_ids = list(np.linspace(0, self._num_particles-1, self._num_particles, dtype=env.NUMPY_INT))
-        molecule_ids, molecule_types = self._parser.resids.values, self._parser.resnames.values
+        self._matrix_ids = list(
+            np.linspace(
+                0, self._num_particles - 1, self._num_particles, dtype=env.NUMPY_INT
+            )
+        )
+        molecule_ids, molecule_types = (
+            self._parser.resids.values,
+            self._parser.resnames.values,
+        )
         chain_ids = self._parser.segids.values
         self._molecule_ids, self._molecule_types = [], []
         self._chain_ids = []
@@ -39,8 +47,16 @@ class PSFParser:
             self._molecule_types.append(molecule_types[resid])
             self._chain_ids.append(chain_ids[segid])
 
-        self._masses = list(Quantity(self._parser.masses.values, dalton).convert_to(default_mass_unit).value)
-        self._charges = list(Quantity(self._parser.charges.values, elementary_charge).convert_to(default_charge_unit).value)
+        self._masses = list(
+            Quantity(self._parser.masses.values, dalton)
+            .convert_to(default_mass_unit)
+            .value
+        )
+        self._charges = list(
+            Quantity(self._parser.charges.values, elementary_charge)
+            .convert_to(default_charge_unit)
+            .value
+        )
         self._bonds = [list(i) for i in self._parser.bonds.values]
         self._num_bonds = len(self._bonds)
         self._angles = [list(i) for i in self._parser.angles.values]
@@ -65,7 +81,8 @@ class PSFParser:
                     molecule_id=self._molecule_ids[i],
                     molecule_type=self._molecule_types[i],
                     chain_id=self._chain_ids[i],
-                    mass=self._masses[i], charge=self._charges[i]
+                    mass=self._masses[i],
+                    charge=self._charges[i],
                 )
             )
         topology.add_particles(particles)
@@ -82,14 +99,14 @@ class PSFParser:
     def get_particle_info(self, particle_id):
         matrix_id = self.get_matrix_id(particle_id)
         return {
-            'particle_id': self._particle_ids[matrix_id],
-            'particle_type': self._particle_types[matrix_id],
-            'particle_name': self._particle_names[matrix_id],
-            'molecule_id': self._molecule_ids[matrix_id],
-            'molecule_type': self._molecule_types[matrix_id],
-            'chain_id': self._chain_ids[matrix_id],
-            'matrix_id': matrix_id,
-            'position': self._positions[matrix_id, :]
+            "particle_id": self._particle_ids[matrix_id],
+            "particle_type": self._particle_types[matrix_id],
+            "particle_name": self._particle_names[matrix_id],
+            "molecule_id": self._molecule_ids[matrix_id],
+            "molecule_type": self._molecule_types[matrix_id],
+            "chain_id": self._chain_ids[matrix_id],
+            "matrix_id": matrix_id,
+            "position": self._positions[matrix_id, :],
         }
 
     @property

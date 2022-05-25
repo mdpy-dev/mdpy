@@ -19,7 +19,7 @@ from mdpy.io.xyz_writer import XYZWriter
 
 # Comprehensive file
 ## HDF5
-HDF5_FILE_HIERARCHY = '''Hierarchy of HDF5 file created by mdpy
+HDF5_FILE_HIERARCHY = """Hierarchy of HDF5 file created by mdpy
 +-- '/'
 |   +--	group "topology"
 |   |   +-- group "particles"
@@ -70,7 +70,7 @@ HDF5_FILE_HIERARCHY = '''Hierarchy of HDF5 file created by mdpy
 |   |
 |   +-- dataset "pbc_matrix"
 |
-'''
+"""
 from mdpy.io.hdf5_parser import HDF5Parser
 from mdpy.io.hdf5_writer import HDF5Writer
 
@@ -78,11 +78,14 @@ from mdpy.io.hdf5_writer import HDF5Writer
 from mdpy.io.log_writer import LogWriter
 
 __all__ = [
-    'CharmmTopparParser',
-    'PSFParser',
-    'PDBParser','PDBWriter',
-    'DCDParser',
-    'XYZParser', 'XYZWriter',
-    'HDF5Parser', 'HDF5Writer',
-    'LogWriter'
+    "CharmmTopparParser",
+    "PSFParser",
+    "PDBParser",
+    "PDBWriter",
+    "DCDParser",
+    "XYZParser",
+    "XYZWriter",
+    "HDF5Parser",
+    "HDF5Writer",
+    "LogWriter",
 ]
