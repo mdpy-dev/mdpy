@@ -7,6 +7,4 @@ from .forcefield import Forcefield
 
 from .charmm_forcefield import CharmmForcefield
 
-__all__ = [
-    'CharmmForcefield'
-]
+__all__ = ["CharmmForcefield"]
