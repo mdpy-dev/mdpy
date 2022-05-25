@@ -1,11 +1,11 @@
 #!/usr/bin/env python
 # -*- encoding: utf-8 -*-
-'''
+"""
 file : ensemble.py
 created time : 2021/09/28
 author : Zhenyu Wei
 copyright : (C)Copyright 2021-present, mdpy organization
-'''
+"""
 
 import numpy as np
 import cupy as cp
@@ -14,6 +14,7 @@ from mdpy.environment import *
 from mdpy.core import Topology, State, TileList
 from mdpy.error import *
 from mdpy.unit import *
+
 
 class Ensemble:
     def __init__(self, topology: Topology, pbc_matrix: np.ndarray) -> None:
@@ -33,8 +34,9 @@ class Ensemble:
         self._num_constraints = 0
 
     def __repr__(self) -> str:
-        return '<mdpy.Ensemble object: %d constraints at %x>' %(
-            self._num_constraints, id(self)
+        return "<mdpy.Ensemble object: %d constraints at %x>" % (
+            self._num_constraints,
+            id(self),
         )
 
     __str__ = __repr__
@@ -43,8 +45,7 @@ class Ensemble:
         for constraint in constraints:
             if constraint in self._constraints:
                 raise ConstraintConflictError(
-                    '%s has added twice to %s'
-                    %(constraint, self)
+                    "%s has added twice to %s" % (constraint, self)
                 )
             self._constraints.append(constraint)
             constraint.bind_ensemble(self)
@@ -55,7 +56,9 @@ class Ensemble:
     def update(self):
         self._forces = cp.zeros(self._matrix_shape, CUPY_FLOAT)
         self._potential_energy = cp.zeros([1], CUPY_FLOAT)
-        self._state.sorted_positions = self._tile_list.sort_matrix(self._state.positions)
+        self._state.sorted_positions = self._tile_list.sort_matrix(
+            self._state.positions
+        )
         self._total_energy, self._kinetic_energy = 0, 0
         for constraint in self._constraints:
             constraint.update()
@@ -71,16 +74,18 @@ class Ensemble:
         self._topology.device_sorted_charges = self._tile_list.sort_matrix(
             self._topology.device_charges
         )
-        self._topology.device_exclusion_map = self._tile_list.generate_exclusion_mask_map(
-            self._topology.device_excluded_particles
+        self._topology.device_exclusion_map = (
+            self._tile_list.generate_exclusion_mask_map(
+                self._topology.device_excluded_particles
+            )
         )
 
     def _update_kinetic_energy(self):
         # Without reshape, the result of the first sum will be a 1d vector
         # , which will be a matrix after multiple with a 2d vector
-        self._kinetic_energy = ((
+        self._kinetic_energy = (
             (self._state.velocities**2).sum(1) * self._topology.device_masses[:, 0]
-        ).sum() / 2)
+        ).sum() / 2
 
     @property
     def topology(self):

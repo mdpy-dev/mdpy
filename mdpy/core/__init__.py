@@ -25,11 +25,4 @@ from mdpy.core.state import State
 from mdpy.core.trajectory import Trajectory
 from mdpy.core.ensemble import Ensemble
 
-__all__ = [
-    'Particle',
-    'Topology',
-    'TileList',
-    'State',
-    'Trajectory',
-    'Ensemble'
-]
+__all__ = ["Particle", "Topology", "TileList", "State", "Trajectory", "Ensemble"]

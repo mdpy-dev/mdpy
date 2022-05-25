@@ -1,21 +1,29 @@
 #!/usr/bin/env python
 # -*- encoding: utf-8 -*-
-'''
+"""
 file : particle.py
 created time : 2021/09/28
 author : Zhenyu Wei
 copyright : (C)Copyright 2021-present, mdpy organization
-'''
+"""
 
 from mdpy.utils import check_quantity_value
 from mdpy.unit import *
 from mdpy.error import *
 
+
 class Particle:
     def __init__(
-        self, particle_id=None, particle_type=None, particle_name=None,
-        matrix_id=None, molecule_id=None, molecule_type=None,
-        chain_id=None, mass=None, charge=None
+        self,
+        particle_id=None,
+        particle_type=None,
+        particle_name=None,
+        matrix_id=None,
+        molecule_id=None,
+        molecule_type=None,
+        chain_id=None,
+        mass=None,
+        charge=None,
     ) -> None:
         # Compulsory attributes
         self._particle_id = particle_id
@@ -36,13 +44,18 @@ class Particle:
         self._num_scaled_particles = 0
 
     def __repr__(self) -> str:
-        return '<mdpy.core.Particle object: %s-%s-%d at %x>' %(
-            self._molecule_type, self._particle_type, self._particle_id, id(self)
+        return "<mdpy.core.Particle object: %s-%s-%d at %x>" % (
+            self._molecule_type,
+            self._particle_type,
+            self._particle_id,
+            id(self),
         )
 
     def __str__(self) -> str:
-        return '%s-%s-%d' %(
-            self._molecule_type, self._particle_type, self._particle_id
+        return "%s-%s-%d" % (
+            self._molecule_type,
+            self._particle_type,
+            self._particle_id,
         )
 
     def __eq__(self, o) -> bool:
@@ -57,12 +70,12 @@ class Particle:
     def add_excluded_particle(self, particle_matrix_id):
         if particle_matrix_id in self._excluded_particles:
             raise ParticleConflictError(
-                'Particle %d has been added twice to the excluded_particles of Particle %d'
-                %(particle_matrix_id, self._matrix_id)
+                "Particle %d has been added twice to the excluded_particles of Particle %d"
+                % (particle_matrix_id, self._matrix_id)
             )
         if particle_matrix_id == self._matrix_id:
             raise ParticleConflictError(
-                'Particle itself can not be added to the excluded_particles list.'
+                "Particle itself can not be added to the excluded_particles list."
             )
         self._excluded_particles.append(particle_matrix_id)
         self._num_excluded_particles += 1
@@ -76,7 +89,7 @@ class Particle:
         # Benzene give two dihedral with same 1 4 particles
         if particle_matrix_id == self._matrix_id:
             raise ParticleConflictError(
-                'Particle itself can not be added to the scaled_particles list.'
+                "Particle itself can not be added to the scaled_particles list."
             )
         elif not particle_matrix_id in self._scaled_particles:
             self._scaled_particles.append(particle_matrix_id)
