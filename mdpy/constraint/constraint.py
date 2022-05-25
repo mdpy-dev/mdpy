@@ -1,17 +1,18 @@
 #!/usr/bin/env python
 # -*- encoding: utf-8 -*-
-'''
+"""
 file : constraint.py
 created time : 2021/10/09
 author : Zhenyu Wei
 copyright : (C)Copyright 2021-present, mdpy organization
-'''
+"""
 
 from mdpy import env
 from mdpy.core import Ensemble
 from mdpy.utils import check_quantity_value
 from mdpy.error import *
 from mdpy.unit import *
+
 
 class Constraint:
     def __init__(self) -> None:
@@ -22,7 +23,7 @@ class Constraint:
         self._cutoff_radius = env.NUMPY_FLOAT(0)
 
     def __repr__(self) -> str:
-        return '<mdpy.constraint.Constraint class>'
+        return "<mdpy.constraint.Constraint class>"
 
     __str__ = __repr__
 
@@ -32,16 +33,20 @@ class Constraint:
         return False
 
     def bind_ensemble(self, ensemble: Ensemble):
-        raise NotImplementedError('The subclass of mdpy.constraint.Constarint class should overload bind_ensemble method')
+        raise NotImplementedError(
+            "The subclass of mdpy.constraint.Constarint class should overload bind_ensemble method"
+        )
 
     def _check_bound_state(self):
         if self._parent_ensemble == None:
             raise NonBoundedError(
-                '%s has not been bounded to any Ensemble instance' %self
+                "%s has not been bounded to any Ensemble instance" % self
             )
 
     def update(self):
-        raise NotImplementedError('The subclass of mdpy.constraint.Constarint class should overload update method')
+        raise NotImplementedError(
+            "The subclass of mdpy.constraint.Constarint class should overload update method"
+        )
 
     @property
     def constraint_id(self):
