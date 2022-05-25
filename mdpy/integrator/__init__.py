@@ -8,6 +8,4 @@ from mdpy.integrator.integrator import Integrator
 from mdpy.integrator.verlet_integrator import VerletIntegrator
 from mdpy.integrator.langevin_integrator import LangevinIntegrator
 
-__all__ = [
-    'VerletIntegrator'
-]
+__all__ = ["VerletIntegrator"]

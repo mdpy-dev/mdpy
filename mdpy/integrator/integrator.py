@@ -1,15 +1,16 @@
 #!/usr/bin/env python
 # -*- encoding: utf-8 -*-
-'''
+"""
 file : integrator.py
 created time : 2021/10/18
 author : Zhenyu Wei
 copyright : (C)Copyright 2021-present, mdpy organization
-'''
+"""
 
 from mdpy.core import Ensemble
 from mdpy.utils import *
 from mdpy.unit import *
+
 
 class Integrator:
     def __init__(self, time_step, neighbor_list_update_freq) -> None:
@@ -22,9 +23,9 @@ class Integrator:
         self._cur_positions = None
         self._pre_positions = None
 
-    def integrate(self, ensemble: Ensemble, num_steps: int=1):
+    def integrate(self, ensemble: Ensemble, num_steps: int = 1):
         raise NotImplementedError(
-            'The subclass of mdpy.integrator.Integrator class should overload integrate method'
+            "The subclass of mdpy.integrator.Integrator class should overload integrate method"
         )
 
     @property
