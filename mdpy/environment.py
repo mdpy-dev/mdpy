@@ -1,24 +1,24 @@
 #!/usr/bin/env python
 # -*- encoding: utf-8 -*-
-'''
+"""
 file : environment.py
 created time : 2021/11/05
 author : Zhenyu Wei
 copyright : (C)Copyright 2021-present, mdpy organization
-'''
+"""
 
 import cupy as cp
 import numpy as np
 import numba as nb
 from mdpy.error import *
 
-precision = 'single'
+precision = "single"
 
 CUPY_BIT = cp.uint32
 NUMBA_BIT = nb.uint32
 NUMPY_BIT = np.uint32
 
-if precision == 'single':
+if precision == "single":
     CUPY_FLOAT = cp.float32
     NUMBA_FLOAT = nb.float32
     NUMPY_FLOAT = np.float32
@@ -28,7 +28,7 @@ if precision == 'single':
     CUPY_UINT = cp.uint32
     NUMBA_UINT = nb.uint32
     NUMPY_UINT = np.uint32
-elif precision == 'double':
+elif precision == "double":
     CUPY_FLOAT = cp.float64
     NUMBA_FLOAT = nb.float64
     NUMPY_FLOAT = np.float64
@@ -39,12 +39,13 @@ elif precision == 'double':
     NUMBA_UINT = nb.uint64
     NUMPY_UINT = np.uint64
 
+
 class MDPYEnvironment:
     def __init__(self) -> None:
-        self._supported_precisions = ['SINGLE', 'DOUBLE']
-        self._default_precisions = 'SINGLE'
-        self._supproted_platforms = ['CPU', 'CUDA']
-        self._default_platforms = 'CUDA'
+        self._supported_precisions = ["SINGLE", "DOUBLE"]
+        self._default_precisions = "SINGLE"
+        self._supproted_platforms = ["CPU", "CUDA"]
+        self._default_platforms = "CUDA"
         self.set_precision(self._default_precisions)
         self.set_platform(self._default_platforms)
 
@@ -52,21 +53,21 @@ class MDPYEnvironment:
         precision = precision.upper()
         if precision in self._supported_precisions:
             self._precision = precision
-            if precision == 'SINGLE':
+            if precision == "SINGLE":
                 self.NUMPY_FLOAT = np.float32
-                self.NUMBA_FLOAT= nb.float32
+                self.NUMBA_FLOAT = nb.float32
                 self.NUMPY_INT = np.int32
                 self.NUMBA_INT = nb.int32
-            elif precision == 'DOUBLE':
+            elif precision == "DOUBLE":
                 self.NUMPY_FLOAT = np.float64
-                self.NUMBA_FLOAT= nb.float64
+                self.NUMBA_FLOAT = nb.float64
                 self.NUMPY_INT = np.int64
                 self.NUMBA_INT = nb.int64
             self.UNIT_FLOAT = np.float128
         else:
             raise EnvironmentVariableError(
-                'Precision %s is not supported. ' %precision +
-                'Check supported precision with `mdpy.env.supported_precisions`'
+                "Precision %s is not supported. " % precision
+                + "Check supported precision with `mdpy.env.supported_precisions`"
             )
 
     def set_platform(self, platform: str):
@@ -75,8 +76,8 @@ class MDPYEnvironment:
             self._platform = platform
         else:
             raise EnvironmentVariableError(
-                'Platform %s is not supported. ' %platform +
-                'Check supported platform with `mdpy.env.supported_platforms`'
+                "Platform %s is not supported. " % platform
+                + "Check supported platform with `mdpy.env.supported_platforms`"
             )
 
     def set_default(self):
@@ -106,5 +107,6 @@ class MDPYEnvironment:
     @property
     def platform(self):
         return self._platform
+
 
 env = MDPYEnvironment()

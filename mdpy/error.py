@@ -1,41 +1,48 @@
 #!/usr/bin/env python
 # -*- encoding: utf-8 -*-
-'''
+"""
 file : error.py
 created time : 2021/09/28
 author : Zhenyu Wei
 copyright : (C)Copyright 2021-present, mdpy organization
-'''
+"""
+
 
 class EnvironmentVariableError(Exception):
-    '''This error occurs when:
+    """This error occurs when:
     - The environment variable is not supported
 
     Used in:
     - mdpy.environment
-    '''
+    """
+
     pass
 
+
 class UnitDimensionDismatchedError(Exception):
-    '''This error occurs when:
+    """This error occurs when:
     - The base dimension of two quantities is dismatched for a specific operation.
 
     Used in:
     - mdpy.unit.base_dimension
-    '''
+    """
+
     pass
 
+
 class GeomtryDimError(Exception):
-    '''This error occurs when:
+    """This error occurs when:
     - The dimension of geometry, like bond, angle, is mismatched
 
     Used in:
     - mdpy.core.topology
-    '''
+    """
+
     pass
 
+
 class ArrayDimError(Exception):
-    '''This error occurs when:
+    """This error occurs when:
     - The dimension of argument does not meet the requirement
 
     Used in:
@@ -46,11 +53,13 @@ class ArrayDimError(Exception):
     - mdpy.io.dcd_parser
     - mdpy.utils.pbc
     - mdpy.analyser.mobility_analyser
-    '''
+    """
+
     pass
 
+
 class ParticleConflictError(Exception):
-    '''This error occurs when:
+    """This error occurs when:
     - Particle is twice bounded to a Particle instance
     - Particle is bounded to itself
     - Particle is twice bounded to a Toplogy instance
@@ -63,38 +72,46 @@ class ParticleConflictError(Exception):
     - mdpy.core.state
     - mdpy.core.trajectory
     - mdpy.ensemble
-    '''
+    """
+
     pass
 
+
 class ConstraintConflictError(Exception):
-    '''This error occurs when:
+    """This error occurs when:
     - Constraint is twice bounded to a Ensemble instance
 
     Used in:
     - mdpy.ensemble
-    '''
+    """
+
     pass
 
+
 class ModifyJoinedTopologyError(Exception):
-    '''This error occurs when:
+    """This error occurs when:
     - Adding particle or topology geometry to a joined Topology object
 
     Used in:
     - mdpy.core.topology
-    '''
+    """
+
     pass
 
+
 class NonBoundedError(Exception):
-    '''This error occurs when:
+    """This error occurs when:
     - Parent object is not bounded
 
     Used in:
     - mdpy.constraint.constraint
-    '''
+    """
+
     pass
 
+
 class FileFormatError(Exception):
-    '''This error occurs when:
+    """This error occurs when:
     - file suffix or prefix appears in an unexpected way
 
     Used in:
@@ -107,57 +124,69 @@ class FileFormatError(Exception):
     - mdpy.io.dcd_parser
     - mdpy.analyser.analyser_result
     - mdpy.dumper.dumper
-    '''
+    """
+
     pass
 
+
 class PBCPoorDefinedError(Exception):
-    '''This error occurs when:
+    """This error occurs when:
     - Two or more column vector in pbc_matrix is linear corellated
 
     Used in:
     - mdpy.utils.pbc
     - mdpy.core.trajectory
-    '''
+    """
+
     pass
 
+
 class TileListPoorDefinedError(Exception):
-    '''This error occurs when:
+    """This error occurs when:
     - The cutoff_radius of cell list is not defined well
 
     Used in:
     - mdpy.core.tile_list
-    '''
+    """
+
     pass
 
+
 class TrajectoryPoorDefinedError(Exception):
-    '''This error occurs when:
+    """This error occurs when:
     - Extrating information that have not been contained
 
     Used in:
     -mdpy.core.trajectory
-    '''
+    """
+
     pass
 
+
 class ParameterPoorDefinedError(Exception):
-    '''This error occurs when:
+    """This error occurs when:
     - Topology connections' parameter is not defined in selected parameter file
 
     Used in:
     - mdpy.forcefield.charmm_forcefield
-    '''
+    """
+
     pass
 
+
 class HDF5FilePoorDefinedError(Exception):
-    '''This error occurs when:
+    """This error occurs when:
     - Use hdf5 file that does not meet the requirement of mdpy
 
     Used in:
     - mdpy.io.hdf5_parser
-    '''
+    """
+
     pass
 
+
 class IOPoorDefinedError(Exception):
-    '''This error occurs when:
+    """This error occurs when:
     - A complementary property is required while parser init with keywords `is_parse_all=False`
     - Rest time is required when create md.io.LogWriter while `total_step` is not specified
 
@@ -166,44 +195,53 @@ class IOPoorDefinedError(Exception):
     - mdpy.io.pdb_parser
     - mdpy.io.dcd_parser
     - mdpy.io.log_writer
-    '''
+    """
+
     pass
 
+
 class EnsemblePoorDefinedError(Exception):
-    '''This error occurs when:
+    """This error occurs when:
     - A PME constraint is bound to a non-neutralized ensemble
     - A unsupported long range solver is specified in forcefield object
 
     Used in:
     - mdpy.constraint.electrostatic_pme_constraint
     - mdpy.forcefield.charmm_forcefield
-    '''
+    """
+
     pass
 
+
 class SelectionConditionPoorDefinedError(Exception):
-    '''This error occurs when:
+    """This error occurs when:
     - Unsupported selection condition has been used
 
     Used in:
     - mdpy.utils.select_particle
-    '''
+    """
+
     pass
 
+
 class AnalyserPoorDefinedError(Exception):
-    '''This error occurs when:
+    """This error occurs when:
     - Analyser's input data does not meet analyser's initial setting
 
     Used in:
     - mdpy.analyser.analyser_result
     - mdpy.analyser.rmsd_analyser
-    '''
+    """
+
     pass
 
+
 class ParticleLossError(Exception):
-    '''This error occurs when:
+    """This error occurs when:
     - The particle go beyond the range of two PBC images
 
     Used in:
     - mdpy.utils.pbc
-    '''
+    """
+
     pass
