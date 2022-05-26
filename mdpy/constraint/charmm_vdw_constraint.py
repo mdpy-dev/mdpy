@@ -158,27 +158,27 @@ class CharmmVDWConstraint(Constraint):
                 r = math.sqrt(r)
                 if r < cutoff_radius:
                     inverse_r = NUMBA_FLOAT(1) / r
-                    inverse_r_square = inverse_r**2
-                    epsilon = math.sqrt(
-                        tile2_parameters[0, local_thread_y, particle_index]
-                        * tile1_parameters[0]
-                    )
-                    sigma = (
-                        tile2_parameters[1, local_thread_y, particle_index]
-                        + tile1_parameters[1]
-                    ) * NUMBA_FLOAT(0.5)
-                    scaled_r = sigma * inverse_r
+                    scaled_r = (
+                        (
+                            tile2_parameters[1, local_thread_y, particle_index]
+                            + tile1_parameters[1]
+                        )
+                        * NUMBA_FLOAT(0.5)
+                        * inverse_r
+                    )  # sigma / r
                     scaled_r6 = scaled_r**6
                     scaled_r12 = scaled_r6**2
-                    energy += NUMBA_FLOAT(2) * epsilon * (scaled_r12 - scaled_r6)
+                    diff = scaled_r12 - scaled_r6
+                    factor = NUMBA_FLOAT(2) * math.sqrt(
+                        tile2_parameters[0, local_thread_y, particle_index]
+                        * tile1_parameters[0]
+                    )  # 2 * epsilon
+                    energy += factor * diff
                     force_val = (
-                        -(NUMBA_FLOAT(2) * scaled_r12 - scaled_r6)
-                        * inverse_r_square
-                        * epsilon
-                        * NUMBA_FLOAT(24)
+                        (diff + scaled_r12) * NUMBA_FLOAT(12) * inverse_r**2 * factor
                     )
                     for i in range(SPATIAL_DIM):
-                        local_forces[i] += force_val * vec[i]
+                        local_forces[i] -= force_val * vec[i]
         for i in range(SPATIAL_DIM):
             cuda.atomic.add(sorted_forces, (i, tile1_particle_index), local_forces[i])
         cuda.atomic.add(potential_energy, 0, energy)
