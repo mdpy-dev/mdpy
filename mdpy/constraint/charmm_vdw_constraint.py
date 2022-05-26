@@ -18,7 +18,7 @@ from mdpy.constraint import Constraint
 from mdpy.utils import *
 from mdpy.unit import *
 
-TILES_PER_THREAD = 8
+TILES_PER_THREAD = 4
 
 
 class CharmmVDWConstraint(Constraint):
@@ -97,11 +97,15 @@ class CharmmVDWConstraint(Constraint):
             return
         tile1_particle_index = tile_id1 * NUM_PARTICLES_PER_TILE + local_thread_x
         # shared data
-        local_pbc_matrix = cuda.local.array((SPATIAL_DIM), NUMBA_FLOAT)
-        local_half_pbc_matrix = cuda.local.array((SPATIAL_DIM), NUMBA_FLOAT)
-        for i in range(SPATIAL_DIM):
-            local_pbc_matrix[i] = pbc_matrix[i, i]
-            local_half_pbc_matrix[i] = local_pbc_matrix[i] * NUMBA_FLOAT(0.5)
+        shared_pbc_matrix = cuda.shared.array((SPATIAL_DIM), NUMBA_FLOAT)
+        shared_half_pbc_matrix = cuda.shared.array((SPATIAL_DIM), NUMBA_FLOAT)
+        if local_thread_x <= 2 and local_thread_y == 0:
+            shared_pbc_matrix[local_thread_x] = pbc_matrix[
+                local_thread_x, local_thread_x
+            ]
+            shared_half_pbc_matrix[local_thread_x] = shared_pbc_matrix[
+                local_thread_x
+            ] * NUMBA_FLOAT(0.5)
         tile1_positions = cuda.local.array((SPATIAL_DIM), NUMBA_FLOAT)
         tile1_parameters = cuda.local.array((2), NUMBA_FLOAT)
         tile2_positions = cuda.shared.array(
@@ -150,10 +154,10 @@ class CharmmVDWConstraint(Constraint):
                         tile2_positions[i, local_thread_y, particle_index]
                         - tile1_positions[i]
                     )
-                    if vec[i] < -local_half_pbc_matrix[i]:
-                        vec[i] += local_pbc_matrix[i]
-                    elif vec[i] > local_half_pbc_matrix[i]:
-                        vec[i] -= local_pbc_matrix[i]
+                    if vec[i] < -shared_half_pbc_matrix[i]:
+                        vec[i] += shared_pbc_matrix[i]
+                    elif vec[i] > shared_half_pbc_matrix[i]:
+                        vec[i] -= shared_pbc_matrix[i]
                     r += vec[i] ** 2
                 r = math.sqrt(r)
                 if r < cutoff_radius:
