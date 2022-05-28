@@ -34,7 +34,7 @@ class SteepestDescentMinimizer(Minimizer):
     def minimize(
         self, ensemble: Ensemble, energy_tolerance=0.001, max_iterations: int = 1000
     ):
-        ensemble.update()
+        ensemble.update_constraints()
         cur_iteration = 0
         cur_energy = ensemble.potential_energy
         pre_energy = cur_energy
@@ -49,7 +49,7 @@ class SteepestDescentMinimizer(Minimizer):
                     / np.linalg.norm(ensemble.forces, axis=1).reshape([-1, 1])
                 )
             )
-            ensemble.update()
+            ensemble.update_constraints()
             cur_energy = ensemble.potential_energy
             energy_error = np.abs((cur_energy - pre_energy) / pre_energy)
             cur_iteration += 1
