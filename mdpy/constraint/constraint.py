@@ -37,6 +37,9 @@ class Constraint:
             "The subclass of mdpy.constraint.Constarint class should overload bind_ensemble method"
         )
 
+    def sort_attributes(self):
+        pass
+
     def _check_bound_state(self):
         if self._parent_ensemble == None:
             raise NonBoundedError(
