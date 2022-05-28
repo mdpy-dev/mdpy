@@ -268,6 +268,12 @@ class CharmmVDWConstraint(Constraint):
                 cuda.atomic.add(forces, (particle1, i), local_forces[i])
             cuda.atomic.add(potential_energy, 0, energy)
 
+    def sort_attributes(self):
+        self._check_bound_state()
+        self._device_sorted_parameters = self._parent_ensemble.tile_list.sort_matrix(
+            self._device_parameters
+        )
+
     def update(self):
         self._check_bound_state()
         sorted_forces = cp.zeros(
@@ -281,9 +287,6 @@ class CharmmVDWConstraint(Constraint):
             (self._parent_ensemble.tile_list.num_tiles * NUM_PARTICLES_PER_TILE),
             CUPY_FLOAT,
         )
-        device_sorted_parameter_list = self._parent_ensemble.tile_list.sort_matrix(
-            self._device_parameters
-        )
         # update
         thread_per_block = (NUM_PARTICLES_PER_TILE, TILES_PER_THREAD)
         block_per_grid = int(
@@ -294,7 +297,7 @@ class CharmmVDWConstraint(Constraint):
             self._device_cutoff_radius,
             self._parent_ensemble.state.device_pbc_matrix,
             self._parent_ensemble.state.sorted_positions,
-            device_sorted_parameter_list,
+            self._device_sorted_parameters,
             self._parent_ensemble.topology.device_exclusion_map,
             self._parent_ensemble.tile_list.tile_neighbors,
             sorted_forces,
