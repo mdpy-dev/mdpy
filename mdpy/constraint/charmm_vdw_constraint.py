@@ -44,7 +44,7 @@ class CharmmVDWConstraint(Constraint):
                 NUMBA_FLOAT[::1],  # potential_energy
             ),
             fastmath=True,
-            max_registers=32,
+            max_registers=64,
         )(self._update_charmm_vdw_kernel)
         self._update_scaled_charmm_vdw = cuda.jit(
             nb.void(
