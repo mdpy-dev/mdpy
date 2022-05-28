@@ -54,7 +54,7 @@ class Ensemble:
                 self._tile_list.set_cutoff_radius(constraint.cutoff_radius)
             self._num_constraints += 1
 
-    def update(self):
+    def update_constraints(self):
         self._forces = cp.zeros(self._matrix_shape, CUPY_FLOAT)
         self._potential_energy = cp.zeros([1], CUPY_FLOAT)
         self._state.sorted_positions = self._tile_list.sort_matrix(
