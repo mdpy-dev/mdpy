@@ -45,7 +45,7 @@ class TestSteepestDescentMinimizer:
         ensemble.state.set_positions(pdb.positions)
         ensemble.state.set_velocities_to_temperature(300)
         ensemble.update_tile_list()
-        ensemble.update()
+        ensemble.update_constraints()
         pre_energy = ensemble.potential_energy
         minimizer = SteepestDescentMinimizer()
         minimizer.minimize(ensemble, 0.01, 10)
