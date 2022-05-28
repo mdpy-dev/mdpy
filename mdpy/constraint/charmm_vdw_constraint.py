@@ -18,7 +18,7 @@ from mdpy.constraint import Constraint
 from mdpy.utils import *
 from mdpy.unit import *
 
-TILES_PER_THREAD = 8
+TILES_PER_THREAD = 4
 
 
 class CharmmVDWConstraint(Constraint):
@@ -44,7 +44,7 @@ class CharmmVDWConstraint(Constraint):
                 NUMBA_FLOAT[::1],  # potential_energy
             ),
             fastmath=True,
-            max_registers=32,
+            max_registers=64,
         )(self._update_charmm_vdw_kernel)
         self._update_scaled_charmm_vdw = cuda.jit(
             nb.void(
@@ -139,7 +139,7 @@ class CharmmVDWConstraint(Constraint):
             exclusion_flag = exclusion_map[neighbor_index, tile1_particle_index]
             cuda.syncwarp()
             if tile_id2 == -1:
-                continue
+                break
             # Computation
             for particle_index in range(NUM_PARTICLES_PER_TILE):
                 if exclusion_flag >> particle_index & 0b1:
@@ -158,7 +158,6 @@ class CharmmVDWConstraint(Constraint):
                 r = math.sqrt(r)
                 if r < cutoff_radius:
                     inverse_r = NUMBA_FLOAT(1) / r
-                    inverse_r_square = inverse_r**2
                     epsilon = math.sqrt(
                         tile2_parameters[0, local_thread_y, particle_index]
                         * tile1_parameters[0]
@@ -167,21 +166,19 @@ class CharmmVDWConstraint(Constraint):
                         tile2_parameters[1, local_thread_y, particle_index]
                         + tile1_parameters[1]
                     ) * NUMBA_FLOAT(0.5)
-                    scaled_r = sigma * inverse_r
-                    scaled_r6 = scaled_r**6
+                    scaled_r6 = (sigma * inverse_r) ** 6
                     scaled_r12 = scaled_r6**2
-                    energy += NUMBA_FLOAT(2) * epsilon * (scaled_r12 - scaled_r6)
+                    diff = scaled_r12 - scaled_r6
+                    factor = NUMBA_FLOAT(2) * epsilon
+                    energy += factor * diff
                     force_val = (
-                        -(NUMBA_FLOAT(2) * scaled_r12 - scaled_r6)
-                        * inverse_r_square
-                        * epsilon
-                        * NUMBA_FLOAT(24)
+                        (diff + scaled_r12) * NUMBA_FLOAT(12) * inverse_r**2 * factor
                     )
                     for i in range(SPATIAL_DIM):
-                        local_forces[i] += force_val * vec[i]
+                        local_forces[i] -= force_val * vec[i]
         for i in range(SPATIAL_DIM):
             cuda.atomic.add(sorted_forces, (i, tile1_particle_index), local_forces[i])
-        cuda.atomic.add(potential_energy, 0, energy)
+        cuda.atomic.add(potential_energy, (tile1_particle_index), energy)
 
     @staticmethod
     def _update_scaled_charmm_vdw_kernel(
@@ -271,6 +268,12 @@ class CharmmVDWConstraint(Constraint):
                 cuda.atomic.add(forces, (particle1, i), local_forces[i])
             cuda.atomic.add(potential_energy, 0, energy)
 
+    def sort_attributes(self):
+        self._check_bound_state()
+        self._device_sorted_parameters = self._parent_ensemble.tile_list.sort_matrix(
+            self._device_parameters
+        )
+
     def update(self):
         self._check_bound_state()
         sorted_forces = cp.zeros(
@@ -280,9 +283,9 @@ class CharmmVDWConstraint(Constraint):
             ),
             CUPY_FLOAT,
         )
-        self._potential_energy = cp.zeros([1], CUPY_FLOAT)
-        device_sorted_parameter_list = self._parent_ensemble.tile_list.sort_matrix(
-            self._device_parameters
+        potential_energy = cp.zeros(
+            (self._parent_ensemble.tile_list.num_tiles * NUM_PARTICLES_PER_TILE),
+            CUPY_FLOAT,
         )
         # update
         thread_per_block = (NUM_PARTICLES_PER_TILE, TILES_PER_THREAD)
@@ -294,13 +297,14 @@ class CharmmVDWConstraint(Constraint):
             self._device_cutoff_radius,
             self._parent_ensemble.state.device_pbc_matrix,
             self._parent_ensemble.state.sorted_positions,
-            device_sorted_parameter_list,
+            self._device_sorted_parameters,
             self._parent_ensemble.topology.device_exclusion_map,
             self._parent_ensemble.tile_list.tile_neighbors,
             sorted_forces,
-            self._potential_energy,
+            potential_energy,
         )
         self._forces = self._parent_ensemble.tile_list.unsort_matrix(sorted_forces)
+        self._potential_energy = cp.array([cp.sum(potential_energy)], CUPY_FLOAT)
 
         thread_per_block = 64
         block_per_grid = int(

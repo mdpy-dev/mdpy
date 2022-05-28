@@ -104,11 +104,11 @@ class TestEnsemble:
         )
 
     def test_update_potential_energy(self):
-        self.ensemble.update()
+        self.ensemble.update_constraints()
         assert self.ensemble.potential_energy == 0
 
     def test_update_energy(self):
-        self.ensemble.update()
+        self.ensemble.update_constraints()
         assert (
             self.ensemble.total_energy
             == Quantity(13.5, default_velocity_unit**2 * default_mass_unit)

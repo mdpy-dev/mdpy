@@ -41,7 +41,7 @@ class ConjugateGradientMinimizer(Minimizer):
     def minimize(
         self, ensemble: Ensemble, energy_tolerance=0.001, max_iterations: int = 1000
     ):
-        ensemble.update()
+        ensemble.update_constraints()
         cur_iteration = 0
         cur_energy = ensemble.potential_energy
         print("Start energy minimization with steepest decent method")
@@ -59,7 +59,7 @@ class ConjugateGradientMinimizer(Minimizer):
                 ensemble.state.set_positions(
                     ensemble.state.positions + self._theta * t.reshape([-1, 3])
                 )
-                ensemble.update()
+                ensemble.update_constraints()
                 omega = -(ensemble.forces.reshape([-1, 1]) - cur_f) / self._theta
                 alpha = cp.matmul(cur_f.T, cur_f) / (cp.matmul(omega.T, t))
                 d += alpha * t
@@ -72,7 +72,7 @@ class ConjugateGradientMinimizer(Minimizer):
             ensemble.state.set_positions(
                 cur_positions + d.reshape([-1, 3]).astype(CUPY_FLOAT)
             )
-            ensemble.update()
+            ensemble.update_constraints()
             cur_energy = ensemble.potential_energy
             energy_error = cp.abs((cur_energy - pre_energy) / pre_energy)
             cur_iteration += 1

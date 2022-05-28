@@ -10,6 +10,7 @@ copyright : (C)Copyright 2021-present, mdpy organization
 import numpy as np
 import cupy as cp
 import numba.cuda as cuda
+import mdpy as md
 from mdpy.environment import *
 from mdpy.core import Topology, State, TileList
 from mdpy.error import *
@@ -53,7 +54,7 @@ class Ensemble:
                 self._tile_list.set_cutoff_radius(constraint.cutoff_radius)
             self._num_constraints += 1
 
-    def update(self):
+    def update_constraints(self):
         self._forces = cp.zeros(self._matrix_shape, CUPY_FLOAT)
         self._potential_energy = cp.zeros([1], CUPY_FLOAT)
         self._state.sorted_positions = self._tile_list.sort_matrix(
@@ -71,6 +72,7 @@ class Ensemble:
 
     def update_tile_list(self):
         self._tile_list.update(self._state.positions)
+        # sort topology attribute
         self._topology.device_sorted_charges = self._tile_list.sort_matrix(
             self._topology.device_charges
         )
@@ -79,6 +81,9 @@ class Ensemble:
                 self._topology.device_excluded_particles
             )
         )
+        # sort constraint attribute
+        for constraint in self._constraints:
+            constraint.sort_attributes()
 
     def _update_kinetic_energy(self):
         # Without reshape, the result of the first sum will be a 1d vector
@@ -88,15 +93,15 @@ class Ensemble:
         ).sum() / 2
 
     @property
-    def topology(self):
+    def topology(self) -> Topology:
         return self._topology
 
     @property
-    def state(self):
+    def state(self) -> State:
         return self._state
 
     @property
-    def tile_list(self):
+    def tile_list(self) -> TileList:
         return self._tile_list
 
     @property
@@ -104,21 +109,21 @@ class Ensemble:
         return self._constraints
 
     @property
-    def num_constraints(self):
+    def num_constraints(self) -> int:
         return self._num_constraints
 
     @property
-    def forces(self):
+    def forces(self) -> cp.ndarray:
         return self._forces
 
     @property
-    def total_energy(self):
+    def total_energy(self) -> float:
         return self._total_energy
 
     @property
-    def potential_energy(self):
+    def potential_energy(self) -> float:
         return self._potential_energy
 
     @property
-    def kinetic_energy(self):
+    def kinetic_energy(self) -> float:
         return self._kinetic_energy
