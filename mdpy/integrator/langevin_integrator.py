@@ -55,8 +55,8 @@ class LangevinIntegrator(Integrator):
         while cur_step < num_steps:
             # Iterate position
             if cur_step != 0:
-                ensemble.update()
-            ensemble.update()
+                ensemble.update_constraints()
+            ensemble.update_constraints()
             xi_over_sqrt_masses = cp.random.randn(*self._matrix_shape) / sqrt_masses
             self._pre_acceleration = self._cur_acceleration
             self._cur_positions, self._pre_positions = (
@@ -73,7 +73,7 @@ class LangevinIntegrator(Integrator):
             ensemble.state.set_positions(self._cur_positions)
             if cur_step % self._neighbor_list_update_freq == 0:
                 ensemble.update_tile_list()
-            ensemble.update()
+            ensemble.update_constraints()
             self._cur_acceleration = ensemble.forces / masses
             self._cur_velocities, self._pre_velocities = (
                 self._a * self._pre_velocities
