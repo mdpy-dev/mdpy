@@ -12,13 +12,13 @@ from .unit import Unit
 
 # BaseDimension
 from .unit_definition import length, mass, time, temperature, charge, mol_dimension
-from .unit_definition import force, energy, power, velocity, accelration
+from .unit_definition import force, energy, power, velocity, acceleration
 
 # Unit
 from .unit_definition import (
     meter,
     decimeter,
-    centermeter,
+    centimeter,
     millimeter,
     micrometer,
     nanometer,
@@ -77,7 +77,7 @@ default_mol_unit = mol
 
 default_frequency_unit = 1 / default_time_unit
 default_velocity_unit = default_length_unit / default_time_unit
-default_accelrated_velocity_unit = default_velocity_unit / default_time_unit
+default_accelerated_velocity_unit = default_velocity_unit / default_time_unit
 default_energy_unit = (
     default_mass_unit * default_length_unit**2 / default_time_unit**2
 )
@@ -115,7 +115,7 @@ __all__ = [
     "default_mol_unit",
     "default_frequency_unit",
     "default_velocity_unit",
-    "default_accelrated_velocity_unit",
+    "default_accelerated_velocity_unit",
     "default_energy_unit",
     "default_power_unit",
     "default_force_unit",
@@ -127,7 +127,7 @@ __all__ = [
     "default_electric_intensity_unit",
     "meter",
     "decimeter",
-    "centermeter",
+    "centimeter",
     "millimeter",
     "micrometer",
     "nanometer",
