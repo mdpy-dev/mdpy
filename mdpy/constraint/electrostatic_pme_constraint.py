@@ -20,7 +20,6 @@ from mdpy.constraint import Constraint
 from mdpy.utils import *
 from mdpy.unit import *
 from mdpy.error import *
-from cupy.cuda.nvtx import RangePush, RangePop
 
 PME_ORDER = 4
 THREAD_PER_BLOCK = 64
@@ -703,8 +702,6 @@ class ElectrostaticPMEConstraint(Constraint):
     def update(self):
         self._check_bound_state()
         # Direct part
-        RangePush("direct part")
-        RangePush("direct part before")
         self._direct_potential_energy = cp.zeros([1], CUPY_FLOAT)
         sorted_forces = cp.zeros(
             (
@@ -717,7 +714,6 @@ class ElectrostaticPMEConstraint(Constraint):
         block_per_grid = int(
             np.ceil(self._parent_ensemble.tile_list.num_tiles / TILES_PER_THREAD)
         )
-        RangePop()
         self._update_pme_direct_part[block_per_grid, thread_per_block](
             self._device_inverse_k,
             self._device_ewald_coefficient,
@@ -730,12 +726,9 @@ class ElectrostaticPMEConstraint(Constraint):
             sorted_forces,
             self._direct_potential_energy,
         )
-        RangePush("direct part after")
         self._direct_forces = self._parent_ensemble.tile_list.unsort_matrix(
             sorted_forces
         )
-        RangePop()
-        RangePop()
         thread_per_block = 64
         block_per_grid = int(
             np.ceil(self._parent_ensemble.topology.num_particles / thread_per_block)
