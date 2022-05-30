@@ -17,9 +17,9 @@ from mdpy.utils import *
 
 class LangevinIntegrator(Integrator):
     def __init__(
-        self, time_step, temperature, friction_rate, neighbor_list_update_freq=10
+        self, time_step, temperature, friction_rate, update_tile_list_frequency=10
     ) -> None:
-        super().__init__(time_step, neighbor_list_update_freq)
+        super().__init__(time_step, update_tile_list_frequency)
         self._temperature = check_quantity_value(temperature, default_temperature_unit)
         self._gamma = check_quantity_value(friction_rate, 1 / default_time_unit)
         self._kbt = (
@@ -71,7 +71,7 @@ class LangevinIntegrator(Integrator):
             ), self._cur_positions
             # Update position
             ensemble.state.set_positions(self._cur_positions)
-            if cur_step % self._neighbor_list_update_freq == 0:
+            if cur_step % self._update_tile_list_frequency == 0:
                 ensemble.update_tile_list()
             ensemble.update_constraints()
             self._cur_acceleration = ensemble.forces / masses
