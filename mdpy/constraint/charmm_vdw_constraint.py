@@ -206,9 +206,9 @@ class CharmmVDWConstraint(Constraint):
             ] * NUMBA_FLOAT(0.5)
 
         local_parameters = cuda.local.array((4), NUMBA_FLOAT)
-        local_positions = cuda.local.array((3), NUMBA_FLOAT)
-        local_forces = cuda.local.array((3), NUMBA_FLOAT)
-        vec = cuda.local.array((3), NUMBA_FLOAT)
+        local_positions = cuda.local.array((SPATIAL_DIM), NUMBA_FLOAT)
+        local_forces = cuda.local.array((SPATIAL_DIM), NUMBA_FLOAT)
+        vec = cuda.local.array((SPATIAL_DIM), NUMBA_FLOAT)
         for i in range(SPATIAL_DIM):
             local_positions[i] = positions[particle1, i]
             local_forces[i] = 0
@@ -262,7 +262,7 @@ class CharmmVDWConstraint(Constraint):
                     * NUMBA_FLOAT(24)
                 )
                 for i in range(SPATIAL_DIM):
-                    local_forces[i] += force_val * vec[i] * inverse_r
+                    local_forces[i] -= force_val * vec[i] * inverse_r
         if is_scaled:
             for i in range(SPATIAL_DIM):
                 cuda.atomic.add(forces, (particle1, i), local_forces[i])
