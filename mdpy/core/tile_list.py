@@ -35,10 +35,7 @@ class TileList:
     def __init__(
         self, pbc_matrix: np.ndarray, skin_width=SKIN_WIDTH, num_bits=7
     ) -> None:
-        pbc_matrix = check_quantity_value(pbc_matrix, default_length_unit)
-        self._pbc_matrix = check_pbc_matrix(pbc_matrix)
-        self._pbc_diag = np.ascontiguousarray(self._pbc_matrix.diagonal(), NUMPY_FLOAT)
-        self._half_pbc_diag = self._pbc_diag / 2
+        self.set_pbc_matrix(pbc_matrix)
         self._skin_width = check_quantity_value(skin_width, default_length_unit)
         self._num_bits = num_bits
         # Attribute
@@ -163,14 +160,12 @@ class TileList:
         self._device_cutoff_radius = cp.array([self._cutoff_radius], CUPY_FLOAT)
         self._device_cell_width = cp.array([self._cell_width], CUPY_FLOAT)
         self._device_num_cells_vec = cp.array(self._num_cells_vec, CUPY_INT)
+        self._device_cell_scale_factor = (
+            self._device_num_cells_vec / self._device_pbc_diag
+        ).astype(CUPY_FLOAT)
 
     def _encode_particles(self, positive_positions: cp.ndarray):
-        # Prevent particle at boundary
-        scaled_positions = (
-            positive_positions
-            / (self._device_pbc_diag + 0.01)
-            * self._device_num_cells_vec
-        )
+        scaled_positions = positive_positions * self._device_cell_scale_factor
         scaled_int_part = cp.floor(scaled_positions)
         scaled_fraction_part = scaled_positions - scaled_int_part
         scaled_int_part = scaled_int_part.astype(CUPY_INT)
@@ -181,6 +176,11 @@ class TileList:
             + scaled_int_part[:, 0] * self._num_cells_vec[2] * self._num_cells_vec[1]
         )
         # cell particle information
+        if cp.count_nonzero(cell_index < 0):
+            label = cell_index < 0
+            print(cell_index[label])
+            print(positive_positions[label])
+            print(positions[label])
         num_particles_each_cell = cp.bincount(
             cell_index, minlength=np.prod(self._num_cells_vec)
         )
