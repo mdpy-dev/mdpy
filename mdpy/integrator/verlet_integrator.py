@@ -7,14 +7,15 @@ author : Zhenyu Wei
 copyright : (C)Copyright 2021-present, mdpy organization
 """
 
+import cupy as cp
 from mdpy.core import Ensemble
 from mdpy.integrator import Integrator
 from mdpy.utils import *
 
 
 class VerletIntegrator(Integrator):
-    def __init__(self, time_step, neighbor_list_update_freq=10) -> None:
-        super().__init__(time_step, neighbor_list_update_freq)
+    def __init__(self, time_step, update_tile_list_frequency=10) -> None:
+        super().__init__(time_step, update_tile_list_frequency)
         self._time_step_square = self._time_step**2
 
     def integrate(self, ensemble: Ensemble, num_steps: int = 1):
@@ -43,8 +44,16 @@ class VerletIntegrator(Integrator):
                 - self._pre_positions
                 + accelration * self._time_step_square
             ), self._cur_positions
+
+            if cp.max(accelration) > 10:
+                label = cp.argmax(accelration) // 3
+                print(label)
+                for constraint in ensemble.constraints:
+                    print(constraint.forces[label, :])
+                print()
             ensemble.state.set_positions(self._cur_positions)
-            if cur_step % self._neighbor_list_update_freq == 0:
+
+            if cur_step % self._update_tile_list_frequency == 0:
                 ensemble.update_tile_list()
             # Update step
             cur_step += 1

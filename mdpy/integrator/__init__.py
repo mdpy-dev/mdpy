@@ -6,6 +6,7 @@ __license__ = "BSD"
 from mdpy.integrator.integrator import Integrator
 
 from mdpy.integrator.verlet_integrator import VerletIntegrator
+from mdpy.integrator.velocity_verlet_integrator import VelocityVerletIntegrator
 from mdpy.integrator.langevin_integrator import LangevinIntegrator
 
-__all__ = ["VerletIntegrator"]
+__all__ = ["VerletIntegrator", "VelocityVerletIntegrator"]

@@ -27,7 +27,7 @@ def test_constants():
 
 def test_length():
     assert Quantity(1) * meter / decimeter == 10
-    assert Quantity(1) * meter / centermeter == 100
+    assert Quantity(1) * meter / centimeter == 100
     assert Quantity(1) * meter / millimeter == 1000
     assert Quantity(1) * meter / micrometer == 1e6
     assert Quantity(1) * meter / nanometer == 1e9

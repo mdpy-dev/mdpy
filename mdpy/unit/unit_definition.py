@@ -24,7 +24,7 @@ force = mass * length / time**2
 energy = force * length
 power = energy / time
 velocity = length / time
-accelration = length / time**2
+acceleration = length / time**2
 
 ######################
 ## Constant Unit    ##
@@ -38,7 +38,7 @@ no_unit = Unit(constant, 1)
 
 meter = Unit(length, 1)
 decimeter = Unit(length, 1e-1)
-centermeter = Unit(length, 1e-2)
+centimeter = Unit(length, 1e-2)
 millimeter = Unit(length, 1e-3)
 micrometer = Unit(length, 1e-6)
 nanometer = Unit(length, 1e-9)
