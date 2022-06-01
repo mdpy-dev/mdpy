@@ -8,7 +8,6 @@ copyright : (C)Copyright 2021-present, mdpy organization
 """
 
 import cupy as cp
-import numpy as np
 from mdpy import SPATIAL_DIM
 from mdpy.core import Ensemble
 from mdpy.environment import CUPY_FLOAT
