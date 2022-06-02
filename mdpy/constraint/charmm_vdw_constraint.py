@@ -144,35 +144,34 @@ class CharmmVDWConstraint(Constraint):
             for particle_index in range(NUM_PARTICLES_PER_TILE):
                 if exclusion_flag >> particle_index & 0b1:
                     continue
-                r = NUMBA_FLOAT(0)
+                r_square = NUMBA_FLOAT(0)
                 for i in range(SPATIAL_DIM):
                     vec[i] = (
                         tile2_positions[i, local_thread_y, particle_index]
                         - tile1_positions[i]
                     )
-                    if vec[i] < -local_half_pbc_matrix[i]:
-                        vec[i] += local_pbc_matrix[i]
-                    elif vec[i] > local_half_pbc_matrix[i]:
-                        vec[i] -= local_pbc_matrix[i]
-                    r += vec[i] ** 2
-                r = math.sqrt(r)
+                    vec[i] += (
+                        NUMBA_FLOAT(vec[i] < -local_half_pbc_matrix[i])
+                        - NUMBA_FLOAT(vec[i] > local_half_pbc_matrix[i])
+                    ) * local_pbc_matrix[i]
+                    r_square += vec[i] * vec[i]
+                r = math.sqrt(r_square)
                 if r < cutoff_radius:
-                    inverse_r = NUMBA_FLOAT(1) / r
                     epsilon = math.sqrt(
-                        tile2_parameters[0, local_thread_y, particle_index]
-                        * tile1_parameters[0]
+                        tile1_parameters[0]
+                        * tile2_parameters[0, local_thread_y, particle_index]
                     )
                     sigma = (
-                        tile2_parameters[1, local_thread_y, particle_index]
-                        + tile1_parameters[1]
+                        tile1_parameters[1]
+                        + tile2_parameters[1, local_thread_y, particle_index]
                     ) * NUMBA_FLOAT(0.5)
-                    scaled_r6 = (sigma * inverse_r) ** 6
-                    scaled_r12 = scaled_r6**2
+                    scaled_r6 = (sigma / r) ** 6
+                    scaled_r12 = scaled_r6 * scaled_r6
                     diff = scaled_r12 - scaled_r6
                     factor = NUMBA_FLOAT(2) * epsilon
                     energy += factor * diff
                     force_val = (
-                        (diff + scaled_r12) * NUMBA_FLOAT(12) * inverse_r**2 * factor
+                        (diff + scaled_r12) * NUMBA_FLOAT(12) * factor / r_square
                     )
                     for i in range(SPATIAL_DIM):
                         local_forces[i] -= force_val * vec[i]
@@ -222,47 +221,44 @@ class CharmmVDWConstraint(Constraint):
             if particle2 == -1:
                 break
             is_scaled = True
-            r = NUMBA_FLOAT(0)
+            r_square = NUMBA_FLOAT(0)
             for i in range(SPATIAL_DIM):
                 vec[i] = positions[particle2, i] - local_positions[i]
-                if vec[i] < -shared_half_pbc_matrix[i]:
-                    vec[i] += shared_pbc_matrix[i]
-                elif vec[i] > shared_half_pbc_matrix[i]:
-                    vec[i] -= shared_pbc_matrix[i]
-                r += vec[i] ** 2
-            r = math.sqrt(r)
+                vec[i] += (
+                    NUMBA_FLOAT(vec[i] < -shared_half_pbc_matrix[i])
+                    - NUMBA_FLOAT(vec[i] > shared_half_pbc_matrix[i])
+                ) * shared_pbc_matrix[i]
+                r_square += vec[i] * vec[i]
+            r = math.sqrt(r_square)
             if r < cutoff_radius:
-                inverse_r = NUMBA_FLOAT(1) / r
                 epsilon1 = math.sqrt(local_parameters[0] * parameters[particle2, 0])
                 sigma1 = (local_parameters[1] + parameters[particle2, 1]) * NUMBA_FLOAT(
                     0.5
                 )
-                scaled_r = sigma1 * inverse_r
-                scaled_r6 = scaled_r**6
+                scaled_r6 = (sigma1 / r) ** 6
                 scaled_r12 = scaled_r6**2
                 energy -= NUMBA_FLOAT(2) * epsilon1 * (scaled_r12 - scaled_r6)
                 force_val = (
                     (NUMBA_FLOAT(2) * scaled_r12 - scaled_r6)
-                    * inverse_r
                     * epsilon1
                     * NUMBA_FLOAT(24)
+                    / r_square
                 )
                 epsilon2 = math.sqrt(local_parameters[2] * parameters[particle2, 2])
                 sigma2 = (local_parameters[3] + parameters[particle2, 3]) * NUMBA_FLOAT(
                     0.5
                 )
-                scaled_r = sigma2 * inverse_r
-                scaled_r6 = scaled_r**6
+                scaled_r6 = (sigma2 / r) ** 6
                 scaled_r12 = scaled_r6**2
                 energy += NUMBA_FLOAT(2) * epsilon2 * (scaled_r12 - scaled_r6)
                 force_val -= (
                     (NUMBA_FLOAT(2) * scaled_r12 - scaled_r6)
-                    * inverse_r
                     * epsilon2
                     * NUMBA_FLOAT(24)
+                    / r_square
                 )
                 for i in range(SPATIAL_DIM):
-                    local_forces[i] -= force_val * vec[i] * inverse_r
+                    local_forces[i] -= force_val * vec[i]
         if is_scaled:
             for i in range(SPATIAL_DIM):
                 cuda.atomic.add(forces, (particle1, i), local_forces[i])
