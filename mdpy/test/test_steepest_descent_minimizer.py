@@ -10,7 +10,7 @@ copyright : (C)Copyright 2021-present, mdpy organization
 import pytest, os
 import numpy as np
 from mdpy.io import PDBParser, PSFParser
-from mdpy.forcefield import CharmmForcefield
+from mdpy.recipe import CharmmRecipe
 from mdpy.minimizer import SteepestDescentMinimizer
 from mdpy.unit import *
 
@@ -36,11 +36,11 @@ class TestSteepestDescentMinimizer:
         pdb = PDBParser(os.path.join(data_dir, "6PO6.pdb"))
         topology = PSFParser(os.path.join(data_dir, "6PO6.psf")).topology
 
-        forcefield = CharmmForcefield(
+        recipe = CharmmRecipe(
             topology, np.diag(np.ones(3) * 100), long_range_solver="CUTOFF"
         )
-        forcefield.set_parameter_files(os.path.join(data_dir, "par_all36_prot.prm"))
-        ensemble = forcefield.create_ensemble()
+        recipe.set_parameter_files(os.path.join(data_dir, "par_all36_prot.prm"))
+        ensemble = recipe.create_ensemble()
         ensemble.tile_list.set_cutoff_radius(12)
         ensemble.state.set_positions(pdb.positions)
         ensemble.state.set_velocities_to_temperature(300)
