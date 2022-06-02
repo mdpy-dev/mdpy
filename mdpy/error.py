@@ -168,7 +168,7 @@ class ParameterPoorDefinedError(Exception):
     - Topology connections' parameter is not defined in selected parameter file
 
     Used in:
-    - mdpy.forcefield.charmm_forcefield
+    - mdpy.recipe.charmm_recipe
     """
 
     pass
@@ -203,11 +203,11 @@ class IOPoorDefinedError(Exception):
 class EnsemblePoorDefinedError(Exception):
     """This error occurs when:
     - A PME constraint is bound to a non-neutralized ensemble
-    - A unsupported long range solver is specified in forcefield object
+    - A unsupported long range solver is specified in recipe object
 
     Used in:
     - mdpy.constraint.electrostatic_pme_constraint
-    - mdpy.forcefield.charmm_forcefield
+    - mdpy.recipe.charmm_recipe
     """
 
     pass
