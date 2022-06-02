@@ -7,7 +7,7 @@ author : Zhenyu Wei
 copyright : (C)Copyright 2021-present, mdpy organization
 """
 
-import numpy as np
+import cupy as cp
 from mdpy.core import Ensemble
 from mdpy.minimizer import Minimizer
 from mdpy.unit import *
@@ -46,12 +46,12 @@ class SteepestDescentMinimizer(Minimizer):
                     ensemble.state.positions
                     + self._alpha
                     * ensemble.forces
-                    / np.linalg.norm(ensemble.forces, axis=1).reshape([-1, 1])
+                    / cp.linalg.norm(ensemble.forces, axis=1).reshape([-1, 1])
                 )
             )
             ensemble.update_constraints()
             cur_energy = ensemble.potential_energy
-            energy_error = np.abs((cur_energy - pre_energy) / pre_energy)
+            energy_error = cp.abs((cur_energy - pre_energy) / pre_energy)
             cur_iteration += 1
             if self._is_verbose and cur_iteration % self._log_freq == 0:
                 print(

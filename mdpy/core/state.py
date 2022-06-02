@@ -54,7 +54,9 @@ class State:
             np.diagonal(self._pbc_matrix), NUMPY_FLOAT
         )
         self._half_pbc_diag = self._pbc_diag / 2
+        self._pbc_inv = np.linalg.inv(self._pbc_matrix)
         self._device_pbc_matrix = cp.array(self._pbc_matrix, CUPY_FLOAT)
+        self._device_pbc_inv = cp.array(self._pbc_inv, CUPY_FLOAT)
         self._device_pbc_diag = cp.array(self._pbc_diag, CUPY_FLOAT)
         self._device_half_pbc_diag = cp.array(self._half_pbc_diag, CUPY_FLOAT)
 
@@ -62,7 +64,9 @@ class State:
         self._check_matrix_shape(positions)
         if isinstance(positions, np.ndarray):
             positions = cp.array(positions, CUPY_FLOAT)
-        self._positions = wrap_positions(positions, self._device_pbc_diag)
+        self._positions = wrap_positions(
+            positions, self._device_pbc_matrix, self._device_pbc_inv
+        )
 
     def set_velocities(self, velocities: cp.ndarray):
         if isinstance(velocities, np.ndarray):

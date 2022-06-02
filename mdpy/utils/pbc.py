@@ -8,6 +8,7 @@ copyright : (C)Copyright 2021-present, mdpy organization
 """
 
 import numpy as np
+import cupy as cp
 import numba as nb
 from mdpy import SPATIAL_DIM
 from mdpy.error import *
@@ -27,7 +28,15 @@ def check_pbc_matrix(pbc_matrix):
     return pbc_matrix
 
 
-def wrap_positions(positions, pbc_diag):
+def wrap_positions(positions, pbc_matrix, pbc_inv):
+    move_vec = -cp.round(cp.dot(positions, pbc_inv))
+    if cp.max(cp.abs(move_vec)) >= 2:
+        particle_id = cp.unique([i[0] for i in cp.argwhere(cp.abs(move_vec) >= 2)])
+        raise ParticleLossError(
+            "Particle(s) with matrix id: %s moved beyond 2 PBC image." % (particle_id)
+        )
+    move_vec = cp.dot(move_vec, pbc_matrix)
+    return positions + move_vec
     half_pbc_diag = pbc_diag / 2
     move_vec = (positions < -half_pbc_diag) * pbc_diag
     move_vec -= (positions > half_pbc_diag) * pbc_diag

@@ -10,7 +10,7 @@ copyright : (C)Copyright 2021-present, mdpy organization
 import pytest, os
 import numpy as np
 from mdpy.io import PSFParser, PDBParser
-from mdpy.forcefield import CharmmForcefield
+from mdpy.recipe import CharmmRecipe
 from mdpy.io import LogWriter
 from mdpy.error import *
 from mdpy.unit import *
@@ -41,15 +41,13 @@ class TestLogWriter:
 
         topology = psf.topology
 
-        forcefield = CharmmForcefield(
-            topology, np.eye(3) * 100, long_range_solver="CUTOFF"
-        )
-        forcefield.set_parameter_files(
+        recipe = CharmmRecipe(topology, np.eye(3) * 100, long_range_solver="CUTOFF")
+        recipe.set_parameter_files(
             os.path.join(data_dir, "par_all36_prot.prm"),
             os.path.join(data_dir, "toppar_water_ions_namd.str"),
         )
 
-        ensemble = forcefield.create_ensemble()
+        ensemble = recipe.create_ensemble()
         ensemble.tile_list.set_cutoff_radius(12)
         ensemble.state.set_positions(pdb.positions)
         ensemble.state.set_velocities_to_temperature(Quantity(300, kelvin))
