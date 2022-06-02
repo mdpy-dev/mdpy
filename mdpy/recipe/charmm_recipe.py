@@ -1,14 +1,14 @@
 #!/usr/bin/env python
 # -*- encoding: utf-8 -*-
 """
-file : charmm_forcefield.py
+file : charmm_recipe.py
 created time : 2021/10/05
 author : Zhenyu Wei
 copyright : (C)Copyright 2021-present, mdpy organization
 """
 
 import numpy as np
-from mdpy.forcefield import Forcefield
+from mdpy.recipe import Recipe
 from mdpy.core import Ensemble
 from mdpy.core import Topology
 from mdpy.io import CharmmTopparParser
@@ -18,7 +18,7 @@ from mdpy.unit import *
 from mdpy.error import *
 
 
-class CharmmForcefield(Forcefield):
+class CharmmRecipe(Recipe):
     def __init__(
         self,
         topology: Topology,

@@ -3,8 +3,8 @@ __maintainer__ = "Zhenyu Wei"
 __copyright__ = "(C)Copyright 2021-present, mdpy organization"
 __license__ = "BSD"
 
-from .forcefield import Forcefield
+from mdpy.recipe.recipe import Recipe
 
-from .charmm_forcefield import CharmmForcefield
+from mdpy.recipe.charmm_recipe import CharmmRecipe
 
-__all__ = ["CharmmForcefield"]
+__all__ = ["CharmmRecipe"]
