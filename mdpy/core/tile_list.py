@@ -176,11 +176,6 @@ class TileList:
             + scaled_int_part[:, 0] * self._num_cells_vec[2] * self._num_cells_vec[1]
         )
         # cell particle information
-        if cp.count_nonzero(cell_index < 0):
-            label = cell_index < 0
-            print(cell_index[label])
-            print(positive_positions[label])
-            print(positions[label])
         num_particles_each_cell = cp.bincount(
             cell_index, minlength=np.prod(self._num_cells_vec)
         )
