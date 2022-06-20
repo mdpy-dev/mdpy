@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- encoding: utf-8 -*-
 """
-file : electrostatic_fdpbe_constraint.py
+file : electrostatic_fdpe_constraint.py
 created time : 2022/04/11
 author : Zhenyu Wei
 copyright : (C)Copyright 2021-present, mdpy organization
@@ -21,11 +21,14 @@ from mdpy.unit import *
 from mdpy.error import *
 
 THREAD_PER_BLOCK = (16, 16)
+BOUNDARY_CONDITION_LIST = ["periodic", "coulombic"]
 
 
 class ElectrostaticFDPEConstraint(Constraint):
     def __init__(
-        self, grid_width=Quantity(0.5, angstrom), cavity_relative_permittivity=2
+        self,
+        grid_width=Quantity(0.5, angstrom),
+        cavity_relative_permittivity: float = 2,
     ) -> None:
         super().__init__()
         # Input
@@ -132,34 +135,35 @@ class ElectrostaticFDPEConstraint(Constraint):
         charges,
         k,
         grid_width,
-        total_grid_size,
+        inner_grid_size,
         cavity_relative_permittivity,
         coulombic_electric_potential_map,
     ):
         grid_x, grid_y = cuda.grid(2)
-        if grid_x >= total_grid_size[0]:
+        if grid_x >= inner_grid_size[0]:
             return
-        if grid_y >= total_grid_size[1]:
+        if grid_y >= inner_grid_size[1]:
             return
         num_particles = positions.shape[0]
-        k = k[0]
-        cavity_relative_permittivity = cavity_relative_permittivity[0]
+        denominator = NUMBA_FLOAT(1) / k[0] / cavity_relative_permittivity[0]
         grid_width = grid_width[0]
+        inverse_grid_width = NUMBA_FLOAT(1) / grid_width
         for particle_id in range(num_particles):
             # positions[particle_id, x] / grid_width is the grid id of total grid
-            particle_grid_x = positions[particle_id, 0] / grid_width
-            particle_grid_y = positions[particle_id, 1] / grid_width
-            particle_grid_z = positions[particle_id, 2] / grid_width
+            charge = charges[particle_id, 0]
+            particle_grid_x = positions[particle_id, 0] * inverse_grid_width - 1
+            particle_grid_y = positions[particle_id, 1] * inverse_grid_width - 1
+            particle_grid_z = positions[particle_id, 2] * inverse_grid_width - 1
             dist_x = abs(particle_grid_x - grid_x) * grid_width
             dist_y = abs(particle_grid_y - grid_y) * grid_width
             dist_xy2 = dist_x**2 + dist_y**2
-            for grid_z in range(total_grid_size[2]):
+            for grid_z in range(inner_grid_size[2]):
                 dist_z = abs(particle_grid_z - grid_z) * grid_width
                 dist = math.sqrt(dist_xy2 + dist_z**2)
-                if dist < 1e-3:
-                    dist = grid_width
-                electric_potential = charges[particle_id, 0] / k / dist
-                electric_potential /= cavity_relative_permittivity
+                if dist < 0.01:
+                    dist = NUMBA_FLOAT(0.01)
+                electric_potential = charge / dist
+                electric_potential *= denominator
                 cuda.atomic.add(
                     coulombic_electric_potential_map,
                     (grid_x, grid_y, grid_z),
@@ -179,123 +183,94 @@ class ElectrostaticFDPEConstraint(Constraint):
             return None
         if grid_y >= inner_grid_size[1]:
             return None
-        local_grid_size = cuda.local.array((SPATIAL_DIM), NUMBA_INT)
-        local_grid_index = cuda.local.array((SPATIAL_DIM), NUMBA_INT)
-        neighbor_grid_index = cuda.local.array((SPATIAL_DIM), NUMBA_INT)
+        grid_size = cuda.local.array((SPATIAL_DIM), NUMBA_INT)
         for i in range(SPATIAL_DIM):
-            local_grid_size[i] = inner_grid_size[i]
-        local_grid_index[0] = grid_x
-        local_grid_index[1] = grid_y
+            grid_size[i] = inner_grid_size[i]
+        self_grid_index = cuda.local.array((SPATIAL_DIM), NUMBA_INT)
+        self_grid_index[0] = grid_x
+        self_grid_index[1] = grid_y
+        neighbor_grid_index = cuda.local.array((SPATIAL_DIM), NUMBA_INT)
+        neighbor_grid_index[0] = grid_x
+        neighbor_grid_index[1] = grid_y
         cavity_relative_permittivity = cavity_relative_permittivity[0]
-        for grid_z in range(local_grid_size[2]):
+        for grid_z in range(grid_size[2]):
+            self_grid_index[2] = grid_z
+            neighbor_grid_index[2] = grid_z
             new_val = NUMBA_FLOAT(0)
             denominator = NUMBA_FLOAT(0)
-            local_grid_index[2] = grid_z
             self_relative_permittivity = relative_permittivity_map[
-                local_grid_index[0], local_grid_index[1], local_grid_index[2]
+                grid_x, grid_y, grid_z
             ]
+            self_coulombic_electric_potential = coulombic_electric_potential_map[
+                grid_x, grid_y, grid_z
+            ]
+            # Neighbor term
             for i in range(SPATIAL_DIM):
-                for j in range(SPATIAL_DIM):
-                    neighbor_grid_index[j] = local_grid_index[j]
-                if local_grid_index[i] == 0:  # Boundary condition
-                    neighbor_grid_index[i] -= 1
-                    new_val += (
-                        NUMBA_FLOAT(2) * self_relative_permittivity
-                        - cavity_relative_permittivity
-                    ) * coulombic_electric_potential_map[
-                        neighbor_grid_index[0] + 1,
-                        neighbor_grid_index[1] + 1,
-                        neighbor_grid_index[2] + 1,
+                # self - 1
+                neighbor_grid_index[i] = self_grid_index[i] - NUMBA_INT(1)
+                relative_permittivity = NUMBA_FLOAT(0.5) * (
+                    self_relative_permittivity
+                    + relative_permittivity_map[
+                        neighbor_grid_index[0],
+                        neighbor_grid_index[1],
+                        neighbor_grid_index[2],
                     ]
-                    denominator += self_relative_permittivity
-                    neighbor_grid_index[i] += 1
-                else:
-                    neighbor_grid_index[i] -= 1
-                    relative_permittivity = NUMBA_FLOAT(0.5) * (
-                        relative_permittivity_map[
-                            neighbor_grid_index[0],
-                            neighbor_grid_index[1],
-                            neighbor_grid_index[2],
-                        ]
-                        + self_relative_permittivity
-                    )
-                    new_val += (
-                        relative_permittivity
-                        * reaction_field_electric_potential_map[
-                            neighbor_grid_index[0],
-                            neighbor_grid_index[1],
-                            neighbor_grid_index[2],
-                        ]
-                    )
-                    new_val += (
-                        relative_permittivity - cavity_relative_permittivity
-                    ) * coulombic_electric_potential_map[
-                        neighbor_grid_index[0] + 1,
-                        neighbor_grid_index[1] + 1,
-                        neighbor_grid_index[2] + 1,
+                )
+                new_val += (
+                    relative_permittivity
+                    * reaction_field_electric_potential_map[
+                        neighbor_grid_index[0],
+                        neighbor_grid_index[1],
+                        neighbor_grid_index[2],
                     ]
-                    denominator += relative_permittivity
-                    neighbor_grid_index[i] += 1
-                if local_grid_index[i] == local_grid_size[i] - 1:  # Boundary condition
-                    neighbor_grid_index[i] += 1
-                    new_val += (
-                        NUMBA_FLOAT(2) * self_relative_permittivity
-                        - cavity_relative_permittivity
-                    ) * coulombic_electric_potential_map[
-                        neighbor_grid_index[0] + 1,
-                        neighbor_grid_index[1] + 1,
-                        neighbor_grid_index[2] + 1,
+                )
+                new_val += coulombic_electric_potential_map[
+                    neighbor_grid_index[0],
+                    neighbor_grid_index[1],
+                    neighbor_grid_index[2],
+                ] * (relative_permittivity - cavity_relative_permittivity)
+                denominator += relative_permittivity
+                # self + 1 consider boundary
+                neighbor_grid_index[i] = self_grid_index[i] + NUMBA_INT(1)
+                neighbor_grid_index[i] *= NUMBA_INT(
+                    neighbor_grid_index[i] != grid_size[i]
+                )
+                relative_permittivity = NUMBA_FLOAT(0.5) * (
+                    self_relative_permittivity
+                    + relative_permittivity_map[
+                        neighbor_grid_index[0],
+                        neighbor_grid_index[1],
+                        neighbor_grid_index[2],
                     ]
-                    denominator += self_relative_permittivity
-                    neighbor_grid_index[i] -= 1
-                else:
-                    neighbor_grid_index[i] += 1
-                    relative_permittivity = NUMBA_FLOAT(0.5) * (
-                        relative_permittivity_map[
-                            neighbor_grid_index[0],
-                            neighbor_grid_index[1],
-                            neighbor_grid_index[2],
-                        ]
-                        + self_relative_permittivity
-                    )
-                    new_val += (
-                        relative_permittivity
-                        * reaction_field_electric_potential_map[
-                            neighbor_grid_index[0],
-                            neighbor_grid_index[1],
-                            neighbor_grid_index[2],
-                        ]
-                    )
-                    new_val += (
-                        relative_permittivity - cavity_relative_permittivity
-                    ) * coulombic_electric_potential_map[
-                        neighbor_grid_index[0] + 1,
-                        neighbor_grid_index[1] + 1,
-                        neighbor_grid_index[2] + 1,
+                )
+                new_val += (
+                    relative_permittivity
+                    * reaction_field_electric_potential_map[
+                        neighbor_grid_index[0],
+                        neighbor_grid_index[1],
+                        neighbor_grid_index[2],
                     ]
-                    denominator += relative_permittivity
-                    neighbor_grid_index[i] -= 1
-            # Other term
-            new_val += NUMBA_FLOAT(6) * (
-                cavity_relative_permittivity
-                * coulombic_electric_potential_map[
-                    neighbor_grid_index[0] + 1,
-                    neighbor_grid_index[1] + 1,
-                    neighbor_grid_index[2] + 1,
-                ]
+                )
+                new_val += coulombic_electric_potential_map[
+                    neighbor_grid_index[0],
+                    neighbor_grid_index[1],
+                    neighbor_grid_index[2],
+                ] * (relative_permittivity - cavity_relative_permittivity)
+                denominator += relative_permittivity
+                neighbor_grid_index[i] = self_grid_index[i]
+            # Self term
+            new_val += (
+                NUMBA_FLOAT(6)
+                * cavity_relative_permittivity
+                * self_coulombic_electric_potential
             )
             new_val /= denominator
-            new_val -= coulombic_electric_potential_map[
-                neighbor_grid_index[0] + 1,
-                neighbor_grid_index[1] + 1,
-                neighbor_grid_index[2] + 1,
-            ]
-            old_val = reaction_field_electric_potential_map[
-                local_grid_index[0], local_grid_index[1], local_grid_index[2]
-            ]
+            new_val -= self_coulombic_electric_potential
+            # Update
+            old_val = reaction_field_electric_potential_map[grid_x, grid_y, grid_z]
             cuda.atomic.add(
                 reaction_field_electric_potential_map,
-                (local_grid_index[0], local_grid_index[1], local_grid_index[2]),
+                (grid_x, grid_y, grid_z),
                 NUMBA_FLOAT(0.9) * new_val - NUMBA_FLOAT(0.9) * old_val,
             )
 
@@ -396,27 +371,26 @@ class ElectrostaticFDPEConstraint(Constraint):
             + self._parent_ensemble.state.device_half_pbc_diag
         )
         # Columbic electric potential map
-        thread_per_block = (THREAD_PER_BLOCK[0], THREAD_PER_BLOCK[1])
         block_per_grid = (
-            int(np.ceil(self._total_grid_size[0] / thread_per_block[0])),
-            int(np.ceil(self._total_grid_size[1] / thread_per_block[1])),
+            int(np.ceil(self._inner_grid_size[0] / THREAD_PER_BLOCK[0])),
+            int(np.ceil(self._inner_grid_size[1] / THREAD_PER_BLOCK[1])),
         )
         self._device_coulombic_electric_potential_map = cp.zeros(
-            self._total_grid_size, CUPY_FLOAT
+            self._inner_grid_size, CUPY_FLOAT
         )
-        self._update_coulombic_electric_potential_map[block_per_grid, thread_per_block](
+        self._update_coulombic_electric_potential_map[block_per_grid, THREAD_PER_BLOCK](
             positive_positions,
             self._parent_ensemble.topology.device_charges,
             self._device_k0,
             self._device_grid_width,
-            self._device_total_grid_size,
+            self._device_inner_grid_size,
             self._device_cavity_relative_permittivity,
             self._device_coulombic_electric_potential_map,
         )
         # Reaction field potential map
         for _ in range(500):
             self._update_reaction_field_electric_potential_map[
-                block_per_grid, thread_per_block
+                block_per_grid, THREAD_PER_BLOCK
             ](
                 self._device_relative_permittivity_map,
                 self._device_coulombic_electric_potential_map,
@@ -430,21 +404,20 @@ class ElectrostaticFDPEConstraint(Constraint):
             (self._parent_ensemble.topology.num_particles, SPATIAL_DIM), CUPY_FLOAT
         )
         self._columbic_potential_energy = cp.zeros((1), CUPY_FLOAT)
-        thread_per_block = (8, 8)
         block_per_grid = (
             int(
                 np.ceil(
-                    self._parent_ensemble.topology.num_particles / thread_per_block[0]
+                    self._parent_ensemble.topology.num_particles / THREAD_PER_BLOCK[0]
                 )
             ),
             int(
                 np.ceil(
-                    self._parent_ensemble.topology.num_particles / thread_per_block[1]
+                    self._parent_ensemble.topology.num_particles / THREAD_PER_BLOCK[1]
                 )
             ),
         )
         self._update_coulombic_force_and_potential_energy[
-            block_per_grid, thread_per_block
+            block_per_grid, THREAD_PER_BLOCK
         ](
             positive_positions,
             self._parent_ensemble.topology.device_charges,
