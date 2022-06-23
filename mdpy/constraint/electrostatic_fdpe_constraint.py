@@ -182,6 +182,7 @@ class ElectrostaticFDPEConstraint(Constraint):
         r = NUMBA_FLOAT(0)
         electric_potential = NUMBA_FLOAT(0)
         float_grid_index[2] = NUMBA_FLOAT(grid_z + 1)
+        cuda.syncthreads()
         for particle_id in range(num_particles):
             r = NUMBA_FLOAT(0)
             for i in range(SPATIAL_DIM):
@@ -201,7 +202,6 @@ class ElectrostaticFDPEConstraint(Constraint):
             (grid_x, grid_y, grid_z),
             electric_potential,
         )
-        # print(inner_grid_size[particle_grid_z - NUMBA_FLOAT(grid_z)])
 
     @staticmethod
     def _update_reaction_field_electric_potential_map_kernel(
@@ -537,7 +537,7 @@ class ElectrostaticFDPEConstraint(Constraint):
             int(np.ceil(self._inner_grid_size[1] / GRID_POINTS_PER_BLOCK)),
             int(np.ceil(self._inner_grid_size[2] / GRID_POINTS_PER_BLOCK)),
         )
-        for _ in range(500):
+        for _ in range(100):
             self._update_reaction_field_electric_potential_map[
                 block_per_grid, thread_per_block
             ](
@@ -547,7 +547,6 @@ class ElectrostaticFDPEConstraint(Constraint):
                 self._device_inner_grid_size,
                 self._device_reaction_filed_electric_potential_map,
             )
-            cuda.synchronize()
         # Coulombic force and potential energy
         self._columbic_forces = cp.zeros(
             (self._parent_ensemble.topology.num_particles, SPATIAL_DIM), CUPY_FLOAT
