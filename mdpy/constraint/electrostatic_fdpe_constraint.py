@@ -20,9 +20,11 @@ from mdpy.utils import *
 from mdpy.unit import *
 from mdpy.error import *
 
+
+MAX_NUM_PARTICLES = 250
 GRID_POINTS_PER_BLOCK = 8  # 8*8*8 grids point will be solved in one block
 TOTAL_POINTS_PER_BLOCK = GRID_POINTS_PER_BLOCK + 2  # 10*10*10 neighbors are needed
-THREAD_PER_BLOCK = (16, 16)
+THREAD_PER_BLOCK = (8, 8)
 
 
 class ElectrostaticFDPEConstraint(Constraint):
@@ -55,6 +57,7 @@ class ElectrostaticFDPEConstraint(Constraint):
                 NUMBA_FLOAT[::1],  # k0
                 NUMBA_FLOAT[::1],  # grid_width
                 NUMBA_INT[::1],  # inner_grid_size,
+                NUMBA_INT[::1],  # shared_array_allocation_parameters,
                 NUMBA_FLOAT[::1],  # cavity_relative_permittivity
                 NUMBA_FLOAT[:, :, ::1],  # coulombic_electric_potential_map
             )
@@ -136,39 +139,70 @@ class ElectrostaticFDPEConstraint(Constraint):
         k,
         grid_width,
         inner_grid_size,
+        shared_array_allocation_parameters,
         cavity_relative_permittivity,
         coulombic_electric_potential_map,
     ):
         grid_x, grid_y = cuda.grid(2)
+        num_particles = positions.shape[0]
+        grid_width = grid_width[0]
+        inverse_grid_width = NUMBA_FLOAT(1) / grid_width
+        # Shared array
+        shared_particle_grid_index = cuda.shared.array(
+            (MAX_NUM_PARTICLES, SPATIAL_DIM), NUMBA_FLOAT
+        )
+        shared_particle_charges = cuda.shared.array((MAX_NUM_PARTICLES), NUMBA_FLOAT)
+        # Load data before skipping threads
+        thread_hashing_index = cuda.threadIdx.x * cuda.blockDim.y + cuda.threadIdx.y
+        num_target_particles_each_thread = shared_array_allocation_parameters[0]
+        num_threads_per_block = shared_array_allocation_parameters[1]
+        for i in range(num_target_particles_each_thread):
+            particle_index = i * num_threads_per_block + thread_hashing_index
+            if particle_index < num_particles:
+                for j in range(SPATIAL_DIM):
+                    # positions[particle_id, x] / grid_width is the grid id of total grid
+                    shared_particle_grid_index[particle_index, j] = (
+                        positions[particle_index, j] * inverse_grid_width
+                    )
+                shared_particle_charges[particle_index] = charges[particle_index, 0]
         if grid_x >= inner_grid_size[0]:
             return
         if grid_y >= inner_grid_size[1]:
             return
-        num_particles = positions.shape[0]
         denominator = NUMBA_FLOAT(1) / k[0] / cavity_relative_permittivity[0]
-        grid_width = grid_width[0]
-        inverse_grid_width = NUMBA_FLOAT(1) / grid_width
-        for particle_id in range(num_particles):
-            # positions[particle_id, x] / grid_width is the grid id of total grid
-            charge = charges[particle_id, 0]
-            particle_grid_x = positions[particle_id, 0] * inverse_grid_width - 1
-            particle_grid_y = positions[particle_id, 1] * inverse_grid_width - 1
-            particle_grid_z = positions[particle_id, 2] * inverse_grid_width - 1
-            dist_x = abs(particle_grid_x - grid_x) * grid_width
-            dist_y = abs(particle_grid_y - grid_y) * grid_width
-            dist_xy2 = dist_x**2 + dist_y**2
-            for grid_z in range(inner_grid_size[2]):
-                dist_z = abs(particle_grid_z - grid_z) * grid_width
-                dist = math.sqrt(dist_xy2 + dist_z**2)
-                if dist < 0.01:
-                    dist = NUMBA_FLOAT(0.01)
-                electric_potential = charge / dist
-                electric_potential *= denominator
-                cuda.atomic.add(
-                    coulombic_electric_potential_map,
-                    (grid_x, grid_y, grid_z),
-                    electric_potential,
+        float_grid_x = NUMBA_FLOAT(grid_x + 1)
+        float_grid_y = NUMBA_FLOAT(grid_y + 1)
+        cuda.syncthreads()
+        for grid_z in range(inner_grid_size[2]):
+            electric_potential = NUMBA_FLOAT(0)
+            for particle_id in range(num_particles):
+                dist_x = (
+                    abs(shared_particle_grid_index[particle_id, 0] - float_grid_x)
+                    * grid_width
                 )
+                dist_y = (
+                    abs(shared_particle_grid_index[particle_id, 1] - float_grid_y)
+                    * grid_width
+                )
+                dist_z = (
+                    abs(
+                        shared_particle_grid_index[particle_id, 2]
+                        - NUMBA_FLOAT(grid_z + 1)
+                    )
+                    * grid_width
+                )
+                dist = math.sqrt(dist_x**2 + dist_y**2 + dist_z**2)
+                if dist < NUMBA_FLOAT(0.01):
+                    dist = NUMBA_FLOAT(0.01)
+                electric_potential += (
+                    shared_particle_charges[particle_id] / dist * denominator
+                )
+            cuda.atomic.add(
+                coulombic_electric_potential_map,
+                (grid_x, grid_y, grid_z),
+                electric_potential,
+            )
+            # print(inner_grid_size[particle_grid_z - NUMBA_FLOAT(grid_z)])
 
     @staticmethod
     def _update_reaction_field_electric_potential_map_kernel(
@@ -468,12 +502,24 @@ class ElectrostaticFDPEConstraint(Constraint):
         self._device_coulombic_electric_potential_map = cp.zeros(
             self._inner_grid_size, CUPY_FLOAT
         )
+        shared_array_allocation_parameters = cp.array(
+            [
+                np.ceil(
+                    self._parent_ensemble.topology.num_particles
+                    / THREAD_PER_BLOCK[0]
+                    / THREAD_PER_BLOCK[1]
+                ),
+                THREAD_PER_BLOCK[0] * THREAD_PER_BLOCK[1],
+            ],
+            CUPY_INT,
+        )
         self._update_coulombic_electric_potential_map[block_per_grid, THREAD_PER_BLOCK](
             positive_positions,
             self._parent_ensemble.topology.device_charges,
             self._device_k0,
             self._device_grid_width,
             self._device_inner_grid_size,
+            shared_array_allocation_parameters,
             self._device_cavity_relative_permittivity,
             self._device_coulombic_electric_potential_map,
         )
