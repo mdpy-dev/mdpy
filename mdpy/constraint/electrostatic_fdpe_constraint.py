@@ -25,7 +25,6 @@ from mdpy.error import *
 MAX_NUM_PARTICLES = 250
 GRID_POINTS_PER_BLOCK = 8  # 8*8*8 grids point will be solved in one block
 TOTAL_POINTS_PER_BLOCK = GRID_POINTS_PER_BLOCK + 2  # 10*10*10 neighbors are needed
-THREAD_PER_BLOCK = (8, 8)
 
 
 class ElectrostaticFDPEConstraint(Constraint):
@@ -554,20 +553,21 @@ class ElectrostaticFDPEConstraint(Constraint):
             (self._parent_ensemble.topology.num_particles, SPATIAL_DIM), CUPY_FLOAT
         )
         self._columbic_potential_energy = cp.zeros((1), CUPY_FLOAT)
+        thread_per_block = (8, 8)
         block_per_grid = (
             int(
                 np.ceil(
-                    self._parent_ensemble.topology.num_particles / THREAD_PER_BLOCK[0]
+                    self._parent_ensemble.topology.num_particles / thread_per_block[0]
                 )
             ),
             int(
                 np.ceil(
-                    self._parent_ensemble.topology.num_particles / THREAD_PER_BLOCK[1]
+                    self._parent_ensemble.topology.num_particles / thread_per_block[1]
                 )
             ),
         )
         self._update_coulombic_force_and_potential_energy[
-            block_per_grid, THREAD_PER_BLOCK
+            block_per_grid, thread_per_block
         ](
             positive_positions,
             self._parent_ensemble.topology.device_charges,
