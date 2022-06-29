@@ -537,7 +537,10 @@ class ElectrostaticFDPEConstraint(Constraint):
             int(np.ceil(self._inner_grid_size[1] / GRID_POINTS_PER_BLOCK)),
             int(np.ceil(self._inner_grid_size[2] / GRID_POINTS_PER_BLOCK)),
         )
-        for _ in range(100):
+        configured = self._update_reaction_field_electric_potential_map[
+            block_per_grid, thread_per_block
+        ]
+        for _ in range(500):
             self._update_reaction_field_electric_potential_map[
                 block_per_grid, thread_per_block
             ](
