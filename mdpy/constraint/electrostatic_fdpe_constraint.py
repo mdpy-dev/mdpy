@@ -7,7 +7,6 @@ author : Zhenyu Wei
 copyright : (C)Copyright 2021-present, mdpy organization
 """
 
-from concurrent.futures import thread
 import math
 import numpy as np
 import numba as nb
@@ -213,19 +212,20 @@ class ElectrostaticFDPEConstraint(Constraint):
     ):
         # Local index
         local_thread_index = cuda.local.array((SPATIAL_DIM), NUMBA_INT)
-        local_thread_index[0] = cuda.threadIdx.x
+        # First dimension of thread corresponding to z for the fastest changed axis
+        local_thread_index[2] = cuda.threadIdx.x
         local_thread_index[1] = cuda.threadIdx.y
-        local_thread_index[2] = cuda.threadIdx.z
+        local_thread_index[0] = cuda.threadIdx.z
         # Global index
         global_thread_index = cuda.local.array((SPATIAL_DIM), NUMBA_INT)
-        global_thread_index[0] = (
-            local_thread_index[0] + cuda.blockIdx.x * cuda.blockDim.x
+        global_thread_index[2] = (
+            local_thread_index[2] + cuda.blockIdx.x * cuda.blockDim.x
         )
         global_thread_index[1] = (
             local_thread_index[1] + cuda.blockIdx.y * cuda.blockDim.y
         )
-        global_thread_index[2] = (
-            local_thread_index[2] + cuda.blockIdx.z * cuda.blockDim.z
+        global_thread_index[0] = (
+            local_thread_index[0] + cuda.blockIdx.z * cuda.blockDim.z
         )
         # Grid size
         grid_size = cuda.local.array((SPATIAL_DIM), NUMBA_INT)
@@ -533,9 +533,9 @@ class ElectrostaticFDPEConstraint(Constraint):
             GRID_POINTS_PER_BLOCK,
         )
         block_per_grid = (
-            int(np.ceil(self._inner_grid_size[0] / GRID_POINTS_PER_BLOCK)),
-            int(np.ceil(self._inner_grid_size[1] / GRID_POINTS_PER_BLOCK)),
             int(np.ceil(self._inner_grid_size[2] / GRID_POINTS_PER_BLOCK)),
+            int(np.ceil(self._inner_grid_size[1] / GRID_POINTS_PER_BLOCK)),
+            int(np.ceil(self._inner_grid_size[0] / GRID_POINTS_PER_BLOCK)),
         )
         configured = self._update_reaction_field_electric_potential_map[
             block_per_grid, thread_per_block
