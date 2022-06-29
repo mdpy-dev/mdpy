@@ -12,6 +12,7 @@ import numpy as np
 import numba as nb
 from mdpy.error import *
 
+nb.config.CUDA_ARRAY_INTERFACE_SYNC = False
 precision = "single"
 
 CUPY_BIT = cp.uint32
