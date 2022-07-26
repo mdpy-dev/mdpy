@@ -236,6 +236,17 @@ class AnalyserPoorDefinedError(Exception):
     pass
 
 
+class GridPoorDefinedError(Exception):
+    """This error occurs when:
+    - Grid's requirement has not been satisfied
+
+    Used in:
+    - mdpy.core.grid
+    """
+
+    pass
+
+
 class ParticleLossError(Exception):
     """This error occurs when:
     - The particle go beyond the range of two PBC images
