@@ -18,9 +18,12 @@ from mdpy.unit import *
 
 
 class Ensemble:
-    def __init__(self, topology: Topology, pbc_matrix: np.ndarray) -> None:
+    def __init__(
+        self, topology: Topology, pbc_matrix: np.ndarray, is_use_tile_list=True
+    ) -> None:
         if not topology.is_joined:
             topology.join()
+        self._is_use_tile_list = is_use_tile_list
         # Read input
         self._topology = topology
         self._state = State(self._topology, pbc_matrix.copy())
@@ -57,9 +60,10 @@ class Ensemble:
     def update_constraints(self):
         self._forces = cp.zeros(self._matrix_shape, CUPY_FLOAT)
         self._potential_energy = cp.zeros([1], CUPY_FLOAT)
-        self._state.sorted_positions = self._tile_list.sort_matrix(
-            self._state.positions
-        )
+        if self._is_use_tile_list:
+            self._state.sorted_positions = self._tile_list.sort_matrix(
+                self._state.positions
+            )
         self._total_energy, self._kinetic_energy = 0, 0
         for constraint in self._constraints:
             constraint.update()
