@@ -24,6 +24,7 @@ from mdpy.error import *
 MAX_NUM_PARTICLES = 250
 GRID_POINTS_PER_BLOCK = 8  # 8*8*8 grids point will be solved in one block
 TOTAL_POINTS_PER_BLOCK = GRID_POINTS_PER_BLOCK + 2  # 10*10*10 neighbors are needed
+ITERATION_TOLERANCE = 5e-4
 
 
 class ElectrostaticFDPEConstraint(Constraint):
@@ -54,6 +55,7 @@ class ElectrostaticFDPEConstraint(Constraint):
                 NUMBA_FLOAT[:, ::1],  # positions
                 NUMBA_FLOAT[:, ::1],  # charges
                 NUMBA_FLOAT[::1],  # k0
+                NUMBA_FLOAT[::1],  # pbc_diag
                 NUMBA_FLOAT[::1],  # grid_width
                 NUMBA_INT[::1],  # inner_grid_size,
                 NUMBA_INT[::1],  # shared_array_allocation_parameters,
@@ -136,6 +138,7 @@ class ElectrostaticFDPEConstraint(Constraint):
         positions,
         charges,
         k,
+        pbc_diag,
         grid_width,
         inner_grid_size,
         shared_array_allocation_parameters,
@@ -145,6 +148,8 @@ class ElectrostaticFDPEConstraint(Constraint):
         grid_x, grid_y, grid_z = cuda.grid(3)
         num_particles = positions.shape[0]
         grid_width = grid_width[0]
+        # Prevent infinite large potential when charge on grid
+        cutoff_width = NUMBA_FLOAT(0.01)
         inverse_grid_width = NUMBA_FLOAT(1) / grid_width
         # Shared array
         shared_particle_grid_index = cuda.shared.array(
@@ -173,6 +178,11 @@ class ElectrostaticFDPEConstraint(Constraint):
             return
         if grid_z >= inner_grid_size[2]:
             return
+        local_pbc_matrix = cuda.local.array((SPATIAL_DIM), NUMBA_FLOAT)
+        local_half_pbc_matrix = cuda.local.array((SPATIAL_DIM), NUMBA_FLOAT)
+        for i in range(SPATIAL_DIM):
+            local_pbc_matrix[i] = pbc_diag[i]
+            local_half_pbc_matrix[i] = local_pbc_matrix[i] * NUMBA_FLOAT(0.5)
         denominator = NUMBA_FLOAT(1) / k[0] / cavity_relative_permittivity[0]
         float_grid_index = cuda.local.array((SPATIAL_DIM), NUMBA_FLOAT)
         float_grid_index[0] = NUMBA_FLOAT(grid_x + 1)
@@ -191,10 +201,14 @@ class ElectrostaticFDPEConstraint(Constraint):
                     )
                     * grid_width
                 )
+                # vec[i] += (
+                #     NUMBA_INT(vec[i] < -local_half_pbc_matrix[i])
+                #     - NUMBA_INT(vec[i] > local_half_pbc_matrix[i])
+                # ) * local_pbc_matrix[i]
                 r += vec[i] ** 2
             r = math.sqrt(r)
-            if r < NUMBA_FLOAT(0.01):
-                r = NUMBA_FLOAT(0.01)
+            if r < cutoff_width:
+                r = cutoff_width
             electric_potential += shared_particle_charges[particle_id] / r * denominator
         cuda.atomic.add(
             coulombic_electric_potential_map,
@@ -227,6 +241,7 @@ class ElectrostaticFDPEConstraint(Constraint):
         global_thread_index[0] = (
             local_thread_index[0] + cuda.blockIdx.z * cuda.blockDim.z
         )
+        inner_grid_size[local_thread_index[2] + cuda.blockIdx.x * cuda.blockDim.x]
         # Grid size
         grid_size = cuda.local.array((SPATIAL_DIM), NUMBA_INT)
         for i in range(SPATIAL_DIM):
@@ -251,6 +266,7 @@ class ElectrostaticFDPEConstraint(Constraint):
             NUMBA_FLOAT,
         )
         # Load self point data
+        cuda.syncwarp()
         shared_relative_permittivity_map[
             local_array_index[0], local_array_index[1], local_array_index[2]
         ] = relative_permittivity_map[
@@ -298,7 +314,7 @@ class ElectrostaticFDPEConstraint(Constraint):
                 global_thread_index[i] = tmp_global_thread_index
             elif local_array_index[i] == GRID_POINTS_PER_BLOCK or global_thread_index[
                 i
-            ] == (grid_size[i] - NUMBA_FLOAT(1)):
+            ] == (grid_size[i] - NUMBA_INT(1)):
                 # Equivalent to local_thread_index[i] == GRID_POINTS_PER_BLOCK - 1
                 tmp_local_array_index = local_array_index[i]
                 tmp_global_thread_index = global_thread_index[i]
@@ -520,6 +536,7 @@ class ElectrostaticFDPEConstraint(Constraint):
             positive_positions,
             self._parent_ensemble.topology.device_charges,
             self._device_k0,
+            self._parent_ensemble.state.device_pbc_diag,
             self._device_grid_width,
             self._device_inner_grid_size,
             shared_array_allocation_parameters,
@@ -537,19 +554,27 @@ class ElectrostaticFDPEConstraint(Constraint):
             int(np.ceil(self._inner_grid_size[1] / GRID_POINTS_PER_BLOCK)),
             int(np.ceil(self._inner_grid_size[0] / GRID_POINTS_PER_BLOCK)),
         )
-        configured = self._update_reaction_field_electric_potential_map[
+        configured_kernel = self._update_reaction_field_electric_potential_map[
             block_per_grid, thread_per_block
         ]
-        for _ in range(500):
-            self._update_reaction_field_electric_potential_map[
-                block_per_grid, thread_per_block
-            ](
-                self._device_relative_permittivity_map,
-                self._device_coulombic_electric_potential_map,
-                self._device_cavity_relative_permittivity,
-                self._device_inner_grid_size,
-                self._device_reaction_filed_electric_potential_map,
+        iteration, num_iterations_per_epoch = 0, 10
+        while True:
+            origin = self._device_reaction_filed_electric_potential_map.copy()
+            for _ in range(num_iterations_per_epoch):
+                configured_kernel(
+                    self._device_relative_permittivity_map,
+                    self._device_coulombic_electric_potential_map,
+                    self._device_cavity_relative_permittivity,
+                    self._device_inner_grid_size,
+                    self._device_reaction_filed_electric_potential_map,
+                )
+            iteration += num_iterations_per_epoch
+            max_error = cp.max(
+                cp.abs(origin - self._device_reaction_filed_electric_potential_map)
             )
+            if max_error < ITERATION_TOLERANCE:
+                break
+        print(iteration)
         # Coulombic force and potential energy
         self._columbic_forces = cp.zeros(
             (self._parent_ensemble.topology.num_particles, SPATIAL_DIM), CUPY_FLOAT
