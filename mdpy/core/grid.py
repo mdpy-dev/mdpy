@@ -13,47 +13,47 @@ from mdpy.environment import *
 from mdpy.error import *
 
 
+class SubGrid:
+    def __init__(self, name: str) -> None:
+        self.__name = name
+
+    def __getattribute__(self, __name: str):
+        try:
+            return object.__getattribute__(self, __name)
+        except:
+            raise AttributeError(
+                "Grid.%s.%s has not been defined, please check Grid.requirement"
+                % (self.__name, __name)
+            )
+
+
 class Grid:
-    def __init__(self, **kwargs) -> None:
-        # Set grid information
-        self._keys = list(kwargs.keys())
-        self._num_dimensions = len(self._keys)
-        self._shape = [value[2] + 2 for value in kwargs.values()]
-        self._inner_shape = [value[2] for value in kwargs.values()]
+    def __init__(self, **coordinate) -> None:
+        # Initialize attributes
+        self._coordinate = SubGrid("coordinate")
+        self._field = SubGrid("field")
+        self._gradient = SubGrid("gradient")
+        self._curvature = SubGrid("curvature")
+        # Set grid information and coordinate
+        keys = list(coordinate.keys())
+        self._num_dimensions = len(keys)
+        self._shape = [value[2] + 2 for value in coordinate.values()]
+        self._inner_shape = [value[2] for value in coordinate.values()]
         grid = [
             cp.linspace(start=value[0], stop=value[1], num=value[2] + 2, endpoint=True)
-            for value in kwargs.values()
+            for value in coordinate.values()
         ]
         self._device_grid_width = cp.array([i[1] - i[0] for i in grid], NUMPY_FLOAT)
         self._grid_width = self._device_grid_width.get()
         grid = cp.meshgrid(*grid, indexing="ij")
-        for index, key in enumerate(self._keys):
+        for index, key in enumerate(keys):
             setattr(
-                self,
+                self._coordinate,
                 key,
                 grid[index],
             )
-
         # Initialize requirement
         self._requirement = {}
-
-        # Initialize attributes
-        class SubGrid:
-            def __init__(self, name: str) -> None:
-                self.__name = name
-
-            def __getattribute__(self, __name: str):
-                try:
-                    return object.__getattribute__(self, __name)
-                except:
-                    raise AttributeError(
-                        "Grid.%s.%s has not been defined, please check Grid.requirement"
-                        % (self.__name, __name)
-                    )
-
-        self._field = SubGrid("field")
-        self._gradient = SubGrid("gradient")
-        self._curvature = SubGrid("curvature")
 
     def set_requirement(self, requirement: dict):
         for key, value in requirement.items():
@@ -79,6 +79,10 @@ class Grid:
         is_all_set = True
         for key, value in self._requirement.items():
             is_all_set &= hasattr(self._field, key)
+            if value["require_gradient"]:
+                is_all_set &= hasattr(self._gradient, key)
+            if value["require_curvature"]:
+                is_all_set &= hasattr(self._curvature, key)
         if not is_all_set:
             exception = "Gird is not all set:\n"
             for key in self._requirement.keys():
@@ -194,6 +198,10 @@ class Grid:
     @property
     def device_grid_width(self) -> cp.ndarray:
         return self._device_grid_width
+
+    @property
+    def coordinate(self) -> object:
+        return self._coordinate
 
     @property
     def field(self) -> object:
