@@ -76,6 +76,8 @@ from mdpy.io.hdf5_writer import HDF5Writer
 
 # Other file
 from mdpy.io.log_writer import LogWriter
+from mdpy.io.grid_parser import GridParser
+from mdpy.io.grid_writer import GridWriter
 
 __all__ = [
     "CharmmTopparParser",
@@ -88,4 +90,6 @@ __all__ = [
     "HDF5Parser",
     "HDF5Writer",
     "LogWriter",
+    "GridParser",
+    "GridWriter",
 ]
