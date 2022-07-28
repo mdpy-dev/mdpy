@@ -38,12 +38,11 @@ class GridParser:
             self._parse_attribute(h5f, grid, "coordinate")
             # Field
             self._parse_attribute(h5f, grid, "field")
-            grid.check_requirement()
             # Gradient
             self._parse_attribute(h5f, grid, "gradient")
             # Curvature
             self._parse_attribute(h5f, grid, "curvature")
-            grid.check_requirement()
+        grid.check_requirement()
         return grid
 
     def _parse_attribute(self, handle: h5py.File, grid: Grid, attribute: str):
