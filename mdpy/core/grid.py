@@ -85,8 +85,13 @@ class Grid:
                 is_all_set &= hasattr(self._curvature, key)
         if not is_all_set:
             exception = "Gird is not all set:\n"
-            for key in self._requirement.keys():
-                exception += "- %s: %s\n" % (key, hasattr(self._field, key))
+            for key, value in self._requirement.items():
+                exception += "- %s: %s; " % (key, hasattr(self._field, key))
+                if value["require_gradient"]:
+                    exception += "gradient: %s; " % (hasattr(self._gradient, key),)
+                if value["require_curvature"]:
+                    exception += "curvature: %s; " % (hasattr(self._curvature, key),)
+                exception += "\n"
             raise GridPoorDefinedError(exception[:-1])
 
     def _check_shape(self, value: cp.ndarray, target_shape: list[int]):
