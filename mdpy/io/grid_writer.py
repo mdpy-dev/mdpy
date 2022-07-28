@@ -48,6 +48,6 @@ class GridWriter:
             del h5f[attribute]
             h5f.create_group(attribute)
             sub_grid = getattr(grid, attribute)
-            for key in sub_grid.__dict__:
+            for key in sub_grid.__dict__.keys():
                 if not key.startswith("_SubGrid"):
                     h5f["%s/%s" % (attribute, key)] = getattr(sub_grid, key).get()
