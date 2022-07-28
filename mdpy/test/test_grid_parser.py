@@ -14,8 +14,8 @@ from mdpy.error import FileFormatError
 from mdpy.io import GridParser
 
 cur_dir = os.path.dirname(os.path.abspath(__file__))
-out_dir = os.path.join(cur_dir, "out")
-file_path = os.path.join(out_dir, "test_grid_writer.grid")
+data_dir = os.path.join(cur_dir, "data/grid_parser/")
+file_path = os.path.join(data_dir, "test_grid_writer.grid")
 
 
 class TestGridParser:

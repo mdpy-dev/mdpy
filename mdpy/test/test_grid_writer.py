@@ -20,7 +20,7 @@ file_path = os.path.join(out_dir, "test_grid_writer.grid")
 
 class TestGridWriter:
     def setup(self):
-        self._grid = Grid(x=[-2, 2, 128], y=[-2, 2, 128], z=[-2, 2, 64])
+        self._grid = Grid(x=[-2, 2, 8], y=[-2, 2, 8], z=[-2, 2, 8])
 
         self._grid.set_requirement(
             {
