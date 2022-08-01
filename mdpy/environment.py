@@ -10,6 +10,7 @@ copyright : (C)Copyright 2021-present, mdpy organization
 import cupy as cp
 import numpy as np
 import numba as nb
+import numba.cuda as cuda
 from mdpy.error import *
 
 nb.config.CUDA_ARRAY_INTERFACE_SYNC = False
@@ -39,3 +40,23 @@ elif precision == "double":
     CUPY_UINT = cp.uint64
     NUMBA_UINT = nb.uint64
     NUMPY_UINT = np.uint64
+
+
+class Device:
+    def __init__(self, device_index: int = 0) -> None:
+        self._device_index = device_index
+
+    def __enter__(self):
+        self._cupy_device = cp.cuda.Device(self._device_index)
+        cuda.select_device(self._device_index)
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        del self._cupy_device
+        cuda.close()
+
+
+if __name__ == "__main__":
+    with Device(0) as d:
+        a = cp.zeros([2000, 2])
+        print(a.device)
