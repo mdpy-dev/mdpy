@@ -9,13 +9,13 @@ copyright : (C)Copyright 2021-present, mdpy organization
 
 import pytest, os
 import numpy as np
-from mdpy import env
 from mdpy.constraint import CharmmBondConstraint
 from mdpy.core import Particle, Topology, Ensemble
 from mdpy.io import CharmmTopparParser
 from mdpy.utils import get_bond
 from mdpy.error import *
 from mdpy.unit import *
+from mdpy.environment import *
 
 cur_dir = os.path.dirname(os.path.abspath(__file__))
 data_dir = os.path.join(cur_dir, "data/simulation/")
@@ -123,4 +123,4 @@ class TestCharmmBondConstraint:
         energy = self.constraint.potential_energy.get()
         bond_length = get_bond([0, 0, 0], [0, 0, 1])
         k, r0 = self.parameters["bond"]["CA-CA"]
-        assert energy == pytest.approx(env.NUMPY_FLOAT(k * (bond_length - r0) ** 2))
+        assert energy == pytest.approx(NUMPY_FLOAT(k * (bond_length - r0) ** 2))

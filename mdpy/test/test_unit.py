@@ -9,9 +9,9 @@ copyright : (C)Copyright 2021-present, mdpy organization
 
 import pytest
 import numpy as np
-from mdpy import env
 from mdpy.unit import BaseDimension, Unit
-from mdpy.error import UnitDimensionDismatchedError
+from mdpy.error import *
+from mdpy.environment import *
 
 
 class TestUnit:
@@ -24,7 +24,7 @@ class TestUnit:
     def test_attributes(self):
         assert self.unit.unit_name == "m"
         assert self.unit.base_dimension == BaseDimension(length_dimension=1)
-        assert self.unit.relative_value == env.UNIT_FLOAT(1e-10)
+        assert self.unit.relative_value == UNIT_FLOAT(1e-10)
 
     def test_exceptions(self):
         with pytest.raises(AttributeError):

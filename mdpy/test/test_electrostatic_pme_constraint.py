@@ -9,7 +9,6 @@ copyright : (C)Copyright 2021-present, mdpy organization
 
 import pytest, os
 import numpy as np
-from mdpy import env
 from mdpy.constraint import ElectrostaticPMEConstraint
 from mdpy.core import Particle, Topology, Ensemble
 from mdpy.error import *

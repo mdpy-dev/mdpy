@@ -9,9 +9,9 @@ copyright : (C)Copyright 2021-present, mdpy organization
 
 import pytest
 import numpy as np
-from mdpy import env
 from mdpy.unit import *
-from mdpy.error import UnitDimensionDismatchedError
+from mdpy.error import *
+from mdpy.environment import *
 
 
 class TestQuantity:
@@ -38,8 +38,8 @@ class TestQuantity:
 
         quantity = Quantity(quantity, meter)
         assert quantity.unit == meter
-        assert quantity[0].value == env.NUMPY_FLOAT(1e-10)
-        assert quantity.value[0] == env.NUMPY_FLOAT(1e-10)
+        assert quantity[0].value == NUMPY_FLOAT(1e-10)
+        assert quantity.value[0] == NUMPY_FLOAT(1e-10)
 
     def test_exceptions(self):
         pass
@@ -54,7 +54,7 @@ class TestQuantity:
         quantity = Quantity(1) * angstrom
         quantity_m = quantity.convert_to(meter)
         assert quantity_m.unit == meter
-        assert quantity_m.value == env.NUMPY_FLOAT(1e-10)
+        assert quantity_m.value == NUMPY_FLOAT(1e-10)
 
         with pytest.raises(UnitDimensionDismatchedError):
             quantity.convert_to(second)
@@ -62,7 +62,7 @@ class TestQuantity:
         quantity = Quantity(1) * meter / second
         quantity_an_per_fs = quantity.convert_to(angstrom / femtosecond)
         assert quantity_an_per_fs.unit == (angstrom / femtosecond)
-        assert quantity_an_per_fs.value == env.NUMPY_FLOAT(1e-5)
+        assert quantity_an_per_fs.value == NUMPY_FLOAT(1e-5)
         with pytest.raises(UnitDimensionDismatchedError):
             quantity.convert_to(second)
 

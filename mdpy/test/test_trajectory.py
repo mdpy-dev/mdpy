@@ -9,10 +9,11 @@ copyright : (C)Copyright 2021-present, mdpy organization
 
 import pytest
 import numpy as np
-from mdpy import SPATIAL_DIM, env
+from mdpy import SPATIAL_DIM
 from mdpy.core import Particle, Topology, Trajectory
 from mdpy.error import *
 from mdpy.unit import *
+from mdpy.environment import *
 
 
 class TestTrajectory:
@@ -110,10 +111,10 @@ class TestTrajectory:
             self.trajectory.set_pbc_matrix(np.ones([4, 3]))
 
         self.trajectory.set_pbc_matrix(np.diag(np.ones(3) * 10))
-        assert self.trajectory.pbc_inv[1, 1] == env.NUMPY_FLOAT(0.1)
+        assert self.trajectory.pbc_inv[1, 1] == NUMPY_FLOAT(0.1)
 
         self.trajectory.set_pbc_matrix(Quantity(np.diag(np.ones(3)), nanometer))
-        assert self.trajectory.pbc_inv[2, 2] == env.NUMPY_FLOAT(0.1)
+        assert self.trajectory.pbc_inv[2, 2] == NUMPY_FLOAT(0.1)
 
     def test_append(self):
         with pytest.raises(TrajectoryPoorDefinedError):
