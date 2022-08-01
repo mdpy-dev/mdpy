@@ -7,7 +7,6 @@ __license__ = "BSD"
 SPATIAL_DIM = 3
 
 # Import
-from mdpy.environment import env
 import mdpy.unit as unit
 import mdpy.utils as utils
 import mdpy.core as core
