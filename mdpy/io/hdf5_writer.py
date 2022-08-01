@@ -9,11 +9,11 @@ copyright : (C)Copyright 2021-present, mdpy organization
 
 import h5py
 import numpy as np
-from mdpy import env
 from mdpy.core import Topology
 from mdpy.utils import check_pbc_matrix, check_quantity_value
 from mdpy.unit import *
 from mdpy.error import *
+from mdpy.environment import *
 
 NONE_LABEL = 10000
 
@@ -24,7 +24,7 @@ class HDF5Writer:
         file_path: str,
         mode: str = "w",
         topology: Topology = Topology(),
-        pbc_matrix=np.diag([1] * 3).astype(env.NUMPY_FLOAT),
+        pbc_matrix=np.diag([1] * 3).astype(NUMPY_FLOAT),
     ) -> None:
         if not file_path.endswith(".hdf5"):
             raise FileFormatError("The file should end with .hdf5 suffix")
@@ -83,29 +83,25 @@ class HDF5Writer:
             h5f.create_group("topology")
             h5f.create_group("topology/particles")
             # Assign data
-            particle_id = np.empty([self._topology.num_particles], dtype=env.NUMPY_INT)
+            particle_id = np.empty([self._topology.num_particles], dtype=NUMPY_INT)
             particle_type = []
             particle_name = []
-            matrix_id = np.empty([self._topology.num_particles], dtype=env.NUMPY_INT)
-            molecule_id = np.empty([self._topology.num_particles], dtype=env.NUMPY_INT)
+            matrix_id = np.empty([self._topology.num_particles], dtype=NUMPY_INT)
+            molecule_id = np.empty([self._topology.num_particles], dtype=NUMPY_INT)
             molecule_type = []
             chain_id = []
-            mass = np.empty([self._topology.num_particles], dtype=env.NUMPY_FLOAT)
-            charge = np.empty([self._topology.num_particles], dtype=env.NUMPY_FLOAT)
+            mass = np.empty([self._topology.num_particles], dtype=NUMPY_FLOAT)
+            charge = np.empty([self._topology.num_particles], dtype=NUMPY_FLOAT)
             for index, particle in enumerate(self._topology.particles):
-                particle_id[index] = self._check_none(
-                    particle.particle_id, env.NUMPY_INT
-                )
+                particle_id[index] = self._check_none(particle.particle_id, NUMPY_INT)
                 particle_type.append(self._check_none(particle.particle_type, str))
                 particle_name.append(self._check_none(particle.particle_name, str))
-                matrix_id[index] = self._check_none(particle.matrix_id, env.NUMPY_INT)
-                molecule_id[index] = self._check_none(
-                    particle.molecule_id, env.NUMPY_INT
-                )
+                matrix_id[index] = self._check_none(particle.matrix_id, NUMPY_INT)
+                molecule_id[index] = self._check_none(particle.molecule_id, NUMPY_INT)
                 molecule_type.append(self._check_none(particle.molecule_type, str))
                 chain_id.append(self._check_none(particle.chain_id, str))
-                mass[index] = self._check_none(particle.mass, env.NUMPY_FLOAT)
-                charge[index] = self._check_none(particle.charge, env.NUMPY_FLOAT)
+                mass[index] = self._check_none(particle.mass, NUMPY_FLOAT)
+                charge[index] = self._check_none(particle.charge, NUMPY_FLOAT)
             h5f["topology/particles/particle_id"] = particle_id
             h5f["topology/particles/particle_type"] = particle_type
             h5f["topology/particles/particle_name"] = particle_name
@@ -115,21 +111,19 @@ class HDF5Writer:
             h5f["topology/particles/chain_id"] = chain_id
             h5f["topology/particles/mass"] = mass
             h5f["topology/particles/charge"] = charge
-            h5f["topology/num_particles"] = env.NUMPY_INT(self._topology.num_particles)
-            h5f["topology/bonds"] = np.array(self._topology.bonds).astype(env.NUMPY_INT)
-            h5f["topology/num_bonds"] = env.NUMPY_INT(self._topology.num_bonds)
-            h5f["topology/angles"] = np.array(self._topology.angles).astype(
-                env.NUMPY_INT
-            )
-            h5f["topology/num_angles"] = env.NUMPY_INT(self._topology.num_angles)
+            h5f["topology/num_particles"] = NUMPY_INT(self._topology.num_particles)
+            h5f["topology/bonds"] = np.array(self._topology.bonds).astype(NUMPY_INT)
+            h5f["topology/num_bonds"] = NUMPY_INT(self._topology.num_bonds)
+            h5f["topology/angles"] = np.array(self._topology.angles).astype(NUMPY_INT)
+            h5f["topology/num_angles"] = NUMPY_INT(self._topology.num_angles)
             h5f["topology/dihedrals"] = np.array(self._topology.dihedrals).astype(
-                env.NUMPY_INT
+                NUMPY_INT
             )
-            h5f["topology/num_dihedrals"] = env.NUMPY_INT(self._topology.num_dihedrals)
+            h5f["topology/num_dihedrals"] = NUMPY_INT(self._topology.num_dihedrals)
             h5f["topology/impropers"] = np.array(self._topology.impropers).astype(
-                env.NUMPY_INT
+                NUMPY_INT
             )
-            h5f["topology/num_impropers"] = env.NUMPY_INT(self._topology.num_impropers)
+            h5f["topology/num_impropers"] = NUMPY_INT(self._topology.num_impropers)
 
     @staticmethod
     def _check_none(val, target_type):

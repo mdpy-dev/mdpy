@@ -9,11 +9,11 @@ copyright : (C)Copyright 2021-present, mdpy organization
 
 import itertools
 import numpy as np
-from mdpy import env
 from mdpy.error import *
 from mdpy.unit import *
+from mdpy.environment import *
 
-RMIN_TO_SIGMA_FACTOR = env.NUMPY_FLOAT(2 ** (-1 / 6))
+RMIN_TO_SIGMA_FACTOR = NUMPY_FLOAT(2 ** (-1 / 6))
 USED_BLOCK_LABELS = ["ATOMS", "BONDS", "ANGLES", "DIHEDRALS", "IMPROPER", "NONBONDED"]
 UNUSED_BLOCK_LABELS = ["CMAP", "NBFIX", "HBOND", "END"]
 BLOCK_LABELS = USED_BLOCK_LABELS + UNUSED_BLOCK_LABELS

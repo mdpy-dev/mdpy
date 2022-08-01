@@ -11,8 +11,9 @@ import warnings
 import numpy as np
 import MDAnalysis as mda
 from MDAnalysis.topology.guessers import guess_atom_type
-from mdpy import env, SPATIAL_DIM
+from mdpy import SPATIAL_DIM
 from mdpy.error import *
+from mdpy.environment import *
 
 
 class PDBParser:
@@ -33,7 +34,7 @@ class PDBParser:
         self._particle_names = list(self._parser.names.values)
         self._matrix_ids = list(
             np.linspace(
-                0, self._num_particles - 1, self._num_particles, dtype=env.NUMPY_INT
+                0, self._num_particles - 1, self._num_particles, dtype=NUMPY_INT
             )
         )
         molecule_ids, molecule_types = (
@@ -49,11 +50,10 @@ class PDBParser:
         self._num_frames = self._reader.trajectory.n_frames
         if self._is_parse_all:
             if self._num_frames == 1:
-                self._positions = self._reader.ts.positions.astype(env.NUMPY_FLOAT)
+                self._positions = self._reader.ts.positions.astype(NUMPY_FLOAT)
             else:
                 self._positions = [
-                    ts.positions.astype(env.NUMPY_FLOAT)
-                    for ts in self._reader.trajectory
+                    ts.positions.astype(NUMPY_FLOAT) for ts in self._reader.trajectory
                 ]
                 self._positions = np.stack(self._positions)
         self._pbc_matrix = self._reader.ts.triclinic_dimensions
@@ -83,9 +83,7 @@ class PDBParser:
                     % (frames[0], self._num_frames)
                 )
             result = (
-                self._reader.trajectory[frames[0]]
-                .positions.copy()
-                .astype(env.NUMPY_FLOAT)
+                self._reader.trajectory[frames[0]].positions.copy().astype(NUMPY_FLOAT)
             )
         else:
             result = np.zeros([num_target_frames, self._num_particles, SPATIAL_DIM])
@@ -96,7 +94,7 @@ class PDBParser:
                         % (frame, self._num_frames)
                     )
                 result[index, :, :] = self._reader.trajectory[frame].positions.astype(
-                    env.NUMPY_FLOAT
+                    NUMPY_FLOAT
                 )
         return result
 

@@ -9,8 +9,9 @@ copyright : (C)Copyright 2021-present, mdpy organization
 
 import numpy as np
 import MDAnalysis as mda
-from mdpy import env, SPATIAL_DIM
+from mdpy import SPATIAL_DIM
 from mdpy.error import *
+from mdpy.environment import *
 
 
 class DCDParser:
@@ -25,11 +26,10 @@ class DCDParser:
         self._num_particles = self._reader.trajectory.n_atoms
         if self._is_parse_all:
             if self._reader.n_frames == 1:
-                self._positions = self._reader.ts.positions.astype(env.NUMPY_FLOAT)
+                self._positions = self._reader.ts.positions.astype(NUMPY_FLOAT)
             else:
                 self._positions = [
-                    ts.positions.astype(env.NUMPY_FLOAT)
-                    for ts in self._reader.trajectory
+                    ts.positions.astype(NUMPY_FLOAT) for ts in self._reader.trajectory
                 ]
                 self._positions = np.stack(self._positions)
         self._pbc_matrix = self._reader.ts.triclinic_dimensions
@@ -43,9 +43,7 @@ class DCDParser:
                     % (frames[0], self._num_frames)
                 )
             result = (
-                self._reader.trajectory[frames[0]]
-                .positions.copy()
-                .astype(env.NUMPY_FLOAT)
+                self._reader.trajectory[frames[0]].positions.copy().astype(NUMPY_FLOAT)
             )
         else:
             result = np.zeros([num_target_frames, self._num_particles, SPATIAL_DIM])
@@ -56,7 +54,7 @@ class DCDParser:
                         % (frame, self._num_frames)
                     )
                 result[index, :, :] = self._reader.trajectory[frame].positions.astype(
-                    env.NUMPY_FLOAT
+                    NUMPY_FLOAT
                 )
         return result
 
