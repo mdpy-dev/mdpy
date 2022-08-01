@@ -30,7 +30,7 @@ class UnitDimensionMismatchedError(Exception):
     pass
 
 
-class GeomtryDimError(Exception):
+class GeometryDimError(Exception):
     """This error occurs when:
     - The dimension of geometry, like bond, angle, is mismatched
 

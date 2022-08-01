@@ -191,7 +191,7 @@ class Topology:
         self._check_joined()
         num_particles = len(bond)
         if num_particles != 2:
-            raise GeomtryDimError(
+            raise GeometryDimError(
                 "Bond should be a matrix id list of 2 Particles, instead of %d"
                 % num_particles
             )
@@ -208,7 +208,7 @@ class Topology:
         self._check_joined()
         num_particles = len(bond)
         if num_particles != 2:
-            raise GeomtryDimError(
+            raise GeometryDimError(
                 "Bond should be a matrix id list of 2 Particles, instead of %d"
                 % num_particles
             )
@@ -230,7 +230,7 @@ class Topology:
         self._check_joined()
         num_particles = len(angle)
         if num_particles != 3:
-            raise GeomtryDimError(
+            raise GeometryDimError(
                 "Angle should be a matrix id list of 3 Particles, instead of %d"
                 % num_particles
             )
@@ -247,7 +247,7 @@ class Topology:
         self._check_joined()
         num_particles = len(angle)
         if num_particles != 3:
-            raise GeomtryDimError(
+            raise GeometryDimError(
                 "Angle should be a matrix id list of 3 Particles, instead of %d"
                 % num_particles
             )
@@ -269,7 +269,7 @@ class Topology:
         self._check_joined()
         num_particles = len(dihedral)
         if num_particles != 4:
-            raise GeomtryDimError(
+            raise GeometryDimError(
                 "Dihedral should be a matrix id list of 4 Particles, instead of %d"
                 % num_particles
             )
@@ -286,7 +286,7 @@ class Topology:
         self._check_joined()
         num_particles = len(dihedral)
         if num_particles != 4:
-            raise GeomtryDimError(
+            raise GeometryDimError(
                 "Dihedral should be a matrix id list of 4 Particles, instead of %d"
                 % num_particles
             )
@@ -308,7 +308,7 @@ class Topology:
         self._check_joined()
         num_particles = len(improper)
         if num_particles != 4:
-            raise GeomtryDimError(
+            raise GeometryDimError(
                 "Improper should be a matrix id list of 4 Particles, instead of %d"
                 % num_particles
             )
@@ -322,7 +322,7 @@ class Topology:
         self._check_joined()
         num_particles = len(improper)
         if num_particles != 4:
-            raise GeomtryDimError(
+            raise GeometryDimError(
                 "Improper should be a matrix id list of 4 Particles, instead of %d"
                 % num_particles
             )
