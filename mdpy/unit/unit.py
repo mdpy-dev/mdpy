@@ -77,7 +77,7 @@ class Unit:
             if self._base_dimension == other.base_dimension:
                 return deepcopy(self)
             else:
-                raise UnitDimensionDismatchedError(
+                raise UnitDimensionMismatchedError(
                     "%s and %s can't be added together"
                     % (self._base_dimension, other.base_dimension)
                 )
@@ -93,7 +93,7 @@ class Unit:
             if self._base_dimension == other.base_dimension:
                 return deepcopy(other)
             else:
-                raise UnitDimensionDismatchedError(
+                raise UnitDimensionMismatchedError(
                     "%s and %s can not be added"
                     % (other.base_dimension, self._base_dimension)
                 )
@@ -107,7 +107,7 @@ class Unit:
             if self._base_dimension == other.base_dimension:
                 return deepcopy(self)
             else:
-                raise UnitDimensionDismatchedError(
+                raise UnitDimensionMismatchedError(
                     "%s and %s can not be subbed"
                     % (self._base_dimension, other.base_dimension)
                 )
@@ -123,7 +123,7 @@ class Unit:
             if self._base_dimension == other.base_dimension:
                 return deepcopy(other)
             else:
-                raise UnitDimensionDismatchedError(
+                raise UnitDimensionMismatchedError(
                     "%s and %s can not be subbed"
                     % (other.base_dimension, self._base_dimension)
                 )

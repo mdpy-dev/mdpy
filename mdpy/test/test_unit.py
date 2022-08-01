@@ -57,7 +57,7 @@ class TestUnit:
         gram = Unit(BaseDimension(mass_dimension=1), 1e-3)
         assert angstrom + angstrom == angstrom
 
-        with pytest.raises(UnitDimensionDismatchedError):
+        with pytest.raises(UnitDimensionMismatchedError):
             gram + angstrom
 
         with pytest.raises(NotImplementedError):

@@ -38,7 +38,7 @@ class TestParticle:
             particle.mass == Quantity(1, kilogram).convert_to(default_mass_unit).value
         )
 
-        with pytest.raises(UnitDimensionDismatchedError):
+        with pytest.raises(UnitDimensionMismatchedError):
             Particle(mass=Quantity(1, default_charge_unit))
 
     def test_charge(self):
@@ -51,7 +51,7 @@ class TestParticle:
             == Quantity(1, coulomb).convert_to(default_charge_unit).value
         )
 
-        with pytest.raises(UnitDimensionDismatchedError):
+        with pytest.raises(UnitDimensionMismatchedError):
             Particle(charge=Quantity(1, default_energy_unit))
 
     def test_excluded_particles(self):

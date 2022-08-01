@@ -38,7 +38,7 @@ class TestTileList:
         assert self.tile_list.pbc_matrix[0, 0] == 80
 
     def test_exceptions(self):
-        with pytest.raises(UnitDimensionDismatchedError):
+        with pytest.raises(UnitDimensionMismatchedError):
             self.tile_list.set_cutoff_radius(Quantity(1, second))
 
         with pytest.raises(TileListPoorDefinedError):

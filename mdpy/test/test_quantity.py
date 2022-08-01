@@ -56,14 +56,14 @@ class TestQuantity:
         assert quantity_m.unit == meter
         assert quantity_m.value == NUMPY_FLOAT(1e-10)
 
-        with pytest.raises(UnitDimensionDismatchedError):
+        with pytest.raises(UnitDimensionMismatchedError):
             quantity.convert_to(second)
 
         quantity = Quantity(1) * meter / second
         quantity_an_per_fs = quantity.convert_to(angstrom / femtosecond)
         assert quantity_an_per_fs.unit == (angstrom / femtosecond)
         assert quantity_an_per_fs.value == NUMPY_FLOAT(1e-5)
-        with pytest.raises(UnitDimensionDismatchedError):
+        with pytest.raises(UnitDimensionMismatchedError):
             quantity.convert_to(second)
 
         del quantity
@@ -89,7 +89,7 @@ class TestQuantity:
             == Quantity([0.1, 0.2, 0.3, 0.4], nanometer)
         ).all()
 
-        with pytest.raises(UnitDimensionDismatchedError):
+        with pytest.raises(UnitDimensionMismatchedError):
             Quantity(1) * nanometer == Quantity(1) * nanosecond
 
     def test_ne(self):
@@ -101,31 +101,31 @@ class TestQuantity:
             Quantity([1, 2, 3, 4]) * angstrom != Quantity([2, 2, 3, 4], angstrom)
         ).all()
 
-        with pytest.raises(UnitDimensionDismatchedError):
+        with pytest.raises(UnitDimensionMismatchedError):
             Quantity(1) * nanometer != Quantity(1) * nanosecond
 
     def test_lt(self):
         assert Quantity(1) * nanometer < Quantity(10) * nanometer
         assert not Quantity(12) * nanometer < Quantity(10) * nanometer
-        with pytest.raises(UnitDimensionDismatchedError):
+        with pytest.raises(UnitDimensionMismatchedError):
             Quantity(1) * nanometer < Quantity(1) * nanosecond
 
     def test_le(self):
         assert Quantity(1) * nanometer <= Quantity(10) * nanometer
         assert not Quantity(11) * nanometer <= Quantity(10) * nanometer
-        with pytest.raises(UnitDimensionDismatchedError):
+        with pytest.raises(UnitDimensionMismatchedError):
             Quantity(1) * nanometer <= Quantity(1) * nanosecond
 
     def test_gt(self):
         assert Quantity(10) * nanometer > Quantity(1) * nanometer
         assert not Quantity(1, angstrom) > Quantity(1) * nanometer
-        with pytest.raises(UnitDimensionDismatchedError):
+        with pytest.raises(UnitDimensionMismatchedError):
             Quantity(1) * nanometer > Quantity(1) * nanosecond
 
     def test_ge(self):
         assert Quantity(10) * nanometer >= Quantity(1) * angstrom
         assert not Quantity(1, angstrom) > Quantity(1) * nanometer
-        with pytest.raises(UnitDimensionDismatchedError):
+        with pytest.raises(UnitDimensionMismatchedError):
             Quantity(1) * nanometer > Quantity(1) * nanosecond
 
     def test_add(self):
@@ -153,7 +153,7 @@ class TestQuantity:
             quantity == Quantity([1, 2, 3, 4]) * angstrom + Quantity(1) * nanometer
         ).all()
 
-        with pytest.raises(UnitDimensionDismatchedError):
+        with pytest.raises(UnitDimensionMismatchedError):
             Quantity(1) * nanometer + Quantity(1) * nanosecond
 
     def test_sub(self):
@@ -181,7 +181,7 @@ class TestQuantity:
             quantity == Quantity([1, 2, 3, 4]) * angstrom - Quantity(1) * nanometer
         ).all()
 
-        with pytest.raises(UnitDimensionDismatchedError):
+        with pytest.raises(UnitDimensionMismatchedError):
             Quantity(1) * nanometer - Quantity(1) * nanosecond
 
     def test_mul(self):

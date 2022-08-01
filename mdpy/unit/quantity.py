@@ -94,7 +94,7 @@ class Quantity:
             If ``self._unit.base_dimension != target_unit.unit.base_dimension``. E.g ``(10*meter).convert_to(second)``
         """
         if self._unit.base_dimension != target_unit.base_dimension:
-            raise UnitDimensionDismatchedError(
+            raise UnitDimensionMismatchedError(
                 "Quantity in %s can not be converted to %s"
                 % (self._unit.base_dimension, target_unit.base_dimension)
             )
@@ -121,7 +121,7 @@ class Quantity:
                 diff = np.abs(diff / self.value)
                 return diff < QUANTITY_PRECISION
             else:
-                raise UnitDimensionDismatchedError(
+                raise UnitDimensionMismatchedError(
                     "Quantity in %s can not be compared with quantity in %s"
                     % (self._unit.base_dimension, other.unit.base_dimension)
                 )
@@ -149,7 +149,7 @@ class Quantity:
                     * other.value
                 )
             else:
-                raise UnitDimensionDismatchedError(
+                raise UnitDimensionMismatchedError(
                     "Quantity in %s can not be compared with quantity in %s"
                     % (self._unit.base_dimension, other.unit.base_dimension)
                 )
@@ -170,7 +170,7 @@ class Quantity:
                     * other.value
                 )
             else:
-                raise UnitDimensionDismatchedError(
+                raise UnitDimensionMismatchedError(
                     "Quantity in %s can not be compared with quantity in %s"
                     % (self._unit.base_dimension, other.unit.base_dimension)
                 )
@@ -192,7 +192,7 @@ class Quantity:
                     * other.value
                 )
             else:
-                raise UnitDimensionDismatchedError(
+                raise UnitDimensionMismatchedError(
                     "Quantity in %s can not be compared with quantity in %s"
                     % (self._unit.base_dimension, other.unit.base_dimension)
                 )
@@ -213,7 +213,7 @@ class Quantity:
                     * other.value
                 )
             else:
-                raise UnitDimensionDismatchedError(
+                raise UnitDimensionMismatchedError(
                     "Quantity in %s can not be compared with quantity in %s"
                     % (self._unit.base_dimension, other.unit.base_dimension)
                 )

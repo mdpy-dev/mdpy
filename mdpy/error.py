@@ -19,9 +19,9 @@ class EnvironmentVariableError(Exception):
     pass
 
 
-class UnitDimensionDismatchedError(Exception):
+class UnitDimensionMismatchedError(Exception):
     """This error occurs when:
-    - The base dimension of two quantities is dismatched for a specific operation.
+    - The base dimension of two quantities is mismatched for a specific operation.
 
     Used in:
     - mdpy.unit.base_dimension
