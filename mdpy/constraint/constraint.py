@@ -7,11 +7,11 @@ author : Zhenyu Wei
 copyright : (C)Copyright 2021-present, mdpy organization
 """
 
-from mdpy import env
 from mdpy.core import Ensemble
 from mdpy.utils import check_quantity_value
 from mdpy.error import *
 from mdpy.unit import *
+from mdpy.environment import *
 
 
 class Constraint:
@@ -20,7 +20,7 @@ class Constraint:
         self._parent_ensemble = None
         self._forces = None
         self._potential_energy = None
-        self._cutoff_radius = env.NUMPY_FLOAT(0)
+        self._cutoff_radius = NUMPY_FLOAT(0)
 
     def __repr__(self) -> str:
         return "<mdpy.constraint.Constraint class>"
