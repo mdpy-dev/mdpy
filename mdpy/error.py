@@ -131,7 +131,7 @@ class FileFormatError(Exception):
 
 class PBCPoorDefinedError(Exception):
     """This error occurs when:
-    - Two or more column vector in pbc_matrix is linear corellated
+    - Two or more column vector in pbc_matrix is linear correlated
 
     Used in:
     - mdpy.utils.pbc
@@ -154,7 +154,7 @@ class TileListPoorDefinedError(Exception):
 
 class TrajectoryPoorDefinedError(Exception):
     """This error occurs when:
-    - Extrating information that have not been contained
+    - Extracting information that have not been contained
 
     Used in:
     -mdpy.core.trajectory
@@ -242,6 +242,17 @@ class GridPoorDefinedError(Exception):
 
     Used in:
     - mdpy.core.grid
+    """
+
+    pass
+
+
+class DevicePoorDefinedError(Exception):
+    """This error occurs when:
+    The device_index exceed the number of available device
+
+    Used in:
+    - mdpy.environment
     """
 
     pass
