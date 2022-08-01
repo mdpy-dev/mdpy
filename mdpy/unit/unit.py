@@ -9,9 +9,9 @@ copyright : (C)Copyright 2021-present, mdpy organization
 
 import numpy as np
 from copy import deepcopy
-from . import BaseDimension, UNIT_PRECISION
-from ..error import UnitDimensionDismatchedError
-from .. import env
+from mdpy.unit import BaseDimension, UNIT_PRECISION
+from mdpy.error import *
+from mdpy.environment import *
 
 
 class Unit:
@@ -25,7 +25,7 @@ class Unit:
             the relative value of ``self`` to the basic unit of ``base_dimension``
         """
         self._base_dimension = base_dimension
-        self._relative_value = env.UNIT_FLOAT(
+        self._relative_value = UNIT_FLOAT(
             relative_value
         )  # The relative value to the normal unit like angstrom in Length
 
