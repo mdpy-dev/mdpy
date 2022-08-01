@@ -8,13 +8,14 @@ copyright : (C)Copyright 2021-present, mdpy organization
 """
 
 import numpy as np
-from mdpy import SPATIAL_DIM, env
+from mdpy import SPATIAL_DIM
 from mdpy.core import Topology
 from mdpy.utils import check_quantity_value
 from mdpy.error import *
 from mdpy.unit import *
 from mdpy.utils import *
 from mdpy.utils.particle_select import *
+from mdpy.environment import *
 
 
 class Trajectory:
@@ -33,24 +34,24 @@ class Trajectory:
         self._num_frames = 0
         self._positions = np.zeros(
             [self._num_frames, self._topology.num_particles, SPATIAL_DIM],
-            env.NUMPY_FLOAT,
+            NUMPY_FLOAT,
         )
         self._unwrapped_positions = np.zeros(
             [self._num_frames, self._topology.num_particles, SPATIAL_DIM],
-            env.NUMPY_FLOAT,
+            NUMPY_FLOAT,
         )
         self._velocities = np.zeros(
             [self._num_frames, self._topology.num_particles, SPATIAL_DIM],
-            env.NUMPY_FLOAT,
+            NUMPY_FLOAT,
         )
         self._forces = np.zeros(
             [self._num_frames, self._topology.num_particles, SPATIAL_DIM],
-            env.NUMPY_FLOAT,
+            NUMPY_FLOAT,
         )
 
-        self._pbc_matrix = np.zeros([SPATIAL_DIM, SPATIAL_DIM], env.NUMPY_FLOAT)
-        self._pbc_inv = np.zeros([SPATIAL_DIM, SPATIAL_DIM], env.NUMPY_FLOAT)
-        self._pbc_diag = np.zeros([SPATIAL_DIM], env.NUMPY_FLOAT)
+        self._pbc_matrix = np.zeros([SPATIAL_DIM, SPATIAL_DIM], NUMPY_FLOAT)
+        self._pbc_inv = np.zeros([SPATIAL_DIM, SPATIAL_DIM], NUMPY_FLOAT)
+        self._pbc_diag = np.zeros([SPATIAL_DIM], NUMPY_FLOAT)
         self._is_pbc_specified = False
         self._time_step = None
 
@@ -72,12 +73,12 @@ class Trajectory:
         # The origin define of pbc_matrix is the stack of 3 column vector
         # While in MDPy the position is in shape of n x 3
         # So the scaled position will be Position * PBC instead of PBC * Position as usual
-        self._pbc_matrix = np.ascontiguousarray(pbc_matrix, env.NUMPY_FLOAT)
+        self._pbc_matrix = np.ascontiguousarray(pbc_matrix, NUMPY_FLOAT)
         self._pbc_inv = np.ascontiguousarray(
-            np.linalg.inv(self._pbc_matrix), env.NUMPY_FLOAT
+            np.linalg.inv(self._pbc_matrix), NUMPY_FLOAT
         )
         self._pbc_diag = np.ascontiguousarray(
-            np.diagonal(self._pbc_matrix), env.NUMPY_FLOAT
+            np.diagonal(self._pbc_matrix), NUMPY_FLOAT
         )
         self._is_pbc_specified = True
 
@@ -106,8 +107,8 @@ class Trajectory:
             )
 
         if num_dims == 2:
-            return array.reshape([1, shape[0], shape[1]]).astype(env.NUMPY_FLOAT)
-        return array.astype(env.NUMPY_FLOAT)
+            return array.reshape([1, shape[0], shape[1]]).astype(NUMPY_FLOAT)
+        return array.astype(NUMPY_FLOAT)
 
     def append(self, positions=None, velocities=None, forces=None):
         # Check input
@@ -183,7 +184,7 @@ class Trajectory:
         scaled_diff = scaled_positions[1:, :, :] - scaled_positions[0:-1, :, :]
         scaled_diff -= np.round(scaled_diff)
         diff = np.dot(scaled_diff, self._pbc_matrix)
-        self._unwrapped_positions = np.zeros_like(self._positions, env.NUMPY_FLOAT)
+        self._unwrapped_positions = np.zeros_like(self._positions, NUMPY_FLOAT)
         self._unwrapped_positions[0, :, :] = self._positions[0, :, :]
         for frame in range(1, self._num_frames):
             self._unwrapped_positions[frame, :, :] = (
@@ -208,9 +209,7 @@ class Trajectory:
             raise TrajectoryPoorDefinedError(
                 "time_step has not been specified, please call mdpy.core.Trajectory.set_time_step()"
             )
-        return (np.arange(0, self._num_frames) * self._time_step).astype(
-            env.NUMPY_FLOAT
-        )
+        return (np.arange(0, self._num_frames) * self._time_step).astype(NUMPY_FLOAT)
 
     @property
     def pbc_matrix(self):

@@ -9,10 +9,9 @@ copyright : (C)Copyright 2021-present, mdpy organization
 
 import numpy as np
 import cupy as cp
-from mdpy import env
 from mdpy.core import MAX_NUM_EXCLUDED_PARTICLES, MAX_NUM_SCALED_PARTICLES
 from mdpy.core import Particle
-from mdpy.environment import CUPY_FLOAT, CUPY_INT
+from mdpy.environment import *
 from mdpy.error import *
 from mdpy.unit import *
 
@@ -78,17 +77,16 @@ class Topology:
             )
 
     def join(self):
-        self._masses = np.zeros([self._num_particles, 1], env.NUMPY_FLOAT)
-        self._charges = np.zeros([self._num_particles, 1], env.NUMPY_FLOAT)
+        self._masses = np.zeros([self._num_particles, 1], NUMPY_FLOAT)
+        self._charges = np.zeros([self._num_particles, 1], NUMPY_FLOAT)
         for index, particle in enumerate(self._particles):
             self._masses[index, 0] = particle.mass
             self._charges[index, 0] = particle.charge
         self._excluded_particles = (
-            np.ones([self._num_particles, MAX_NUM_EXCLUDED_PARTICLES], env.NUMPY_INT)
-            * -1
+            np.ones([self._num_particles, MAX_NUM_EXCLUDED_PARTICLES], NUMPY_INT) * -1
         )
         self._scaled_particles = (
-            np.ones([self._num_particles, MAX_NUM_SCALED_PARTICLES], env.NUMPY_INT) * -1
+            np.ones([self._num_particles, MAX_NUM_SCALED_PARTICLES], NUMPY_INT) * -1
         )
         for index, particle in enumerate(self._particles):
             self._excluded_particles[
