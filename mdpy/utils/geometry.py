@@ -11,8 +11,9 @@ import numpy as np
 import numba as nb
 from numpy import arccos
 from numpy import sin, cos
-from mdpy import env, SPATIAL_DIM
+from mdpy import SPATIAL_DIM
 from mdpy.utils.pbc import *
+from mdpy.environment import *
 
 
 @nb.njit()
@@ -25,7 +26,7 @@ def get_norm_vec(p1, p2, p3):
     p1, p2, p3 = np.array(p1), np.array(p2), np.array(p3)
     v0 = p2 - p1
     v1 = p3 - p1
-    norm_vec = np.cross(v0, v1).astype(env.NUMPY_FLOAT)
+    norm_vec = np.cross(v0, v1).astype(NUMPY_FLOAT)
     return get_unit_vec(norm_vec)
 
 
