@@ -9,7 +9,6 @@ copyright : (C)Copyright 2021-present, mdpy organization
 
 import pytest, os
 import numpy as np
-from mdpy import env
 from mdpy.constraint import CharmmVDWConstraint
 from mdpy.core import Particle, Topology, Ensemble
 from mdpy.io import CharmmTopparParser
@@ -17,6 +16,7 @@ from mdpy.io.charmm_toppar_parser import RMIN_TO_SIGMA_FACTOR
 from mdpy.utils import get_unit_vec
 from mdpy.error import *
 from mdpy.unit import *
+from mdpy.environment import *
 
 cur_dir = os.path.dirname(os.path.abspath(__file__))
 data_dir = os.path.join(cur_dir, "data/simulation/")
@@ -56,14 +56,14 @@ class TestCharmmVDWConstraint:
             mass=12,
             charge=0,
         )
-        self.pbc = np.diag(np.ones(3) * 30).astype(env.NUMPY_FLOAT)
+        self.pbc = np.diag(np.ones(3) * 30).astype(NUMPY_FLOAT)
         t = Topology()
         t.add_particles([p1, p2, p3, p4])
         self.p = np.array([[0, 0, 0], [0, 10, 0], [0, 27, 0], [0, 11, 0]]).astype(
-            env.NUMPY_FLOAT
+            NUMPY_FLOAT
         )
         velocities = np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 1, 0]]).astype(
-            env.NUMPY_FLOAT
+            NUMPY_FLOAT
         )
         self.ensemble = Ensemble(t, np.eye(3) * 30)
         self.ensemble.tile_list.set_cutoff_radius(5)
@@ -101,7 +101,7 @@ class TestCharmmVDWConstraint:
             == Quantity(0.07, kilocalorie_permol).convert_to(default_energy_unit).value
         )
         assert self.constraint._parameters[1][1] == pytest.approx(
-            env.NUMPY_FLOAT(1.85 * RMIN_TO_SIGMA_FACTOR * 2)
+            NUMPY_FLOAT(1.85 * RMIN_TO_SIGMA_FACTOR * 2)
         )
 
         # No exception
@@ -149,4 +149,4 @@ class TestCharmmVDWConstraint:
         sigma = (1.9924 + 1.85) * RMIN_TO_SIGMA_FACTOR
         scaled_r = sigma / 1
         energy_ref = 4 * epsilon * (scaled_r**12 - scaled_r**6)
-        assert energy == pytest.approx(env.NUMPY_FLOAT(energy_ref), abs=1e-3)
+        assert energy == pytest.approx(NUMPY_FLOAT(energy_ref), abs=1e-3)

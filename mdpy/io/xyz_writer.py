@@ -9,11 +9,11 @@ copyright : (C)Copyright 2021-present, mdpy organization
 
 import datetime
 import numpy as np
-from mdpy import env
 from mdpy.core import Topology
 from mdpy.utils import check_quantity_value
 from mdpy.unit import *
 from mdpy.error import *
+from mdpy.environment import *
 
 
 class XYZWriter:
@@ -22,7 +22,7 @@ class XYZWriter:
         file_path: str,
         mode: str = "w",
         topology: Topology = Topology(),
-        pbc_matrix=np.diag([0] * 3).astype(env.NUMPY_FLOAT),
+        pbc_matrix=np.diag([0] * 3).astype(NUMPY_FLOAT),
     ) -> None:
         if not file_path.endswith(".xyz"):
             raise FileFormatError("The file should end with .xyz suffix")

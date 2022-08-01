@@ -105,7 +105,7 @@ class TestTopology:
         assert p2.num_excluded_particles == 2
         assert self.topology.num_bonds == 2
 
-        with pytest.raises(GeomtryDimError):
+        with pytest.raises(GeometryDimError):
             self.topology.add_bond([0, 1, 2])
 
         with pytest.raises(ParticleConflictError):
@@ -136,7 +136,7 @@ class TestTopology:
         self.topology.del_bond([0, 1])
         assert self.topology.num_bonds == 1
 
-        with pytest.raises(GeomtryDimError):
+        with pytest.raises(GeometryDimError):
             self.topology.del_bond([1, 2, 3])
 
         with pytest.raises(ParticleConflictError):
@@ -156,7 +156,7 @@ class TestTopology:
         self.topology.add_angle([2, 0, 1])
         assert self.topology.num_angles == 2
 
-        with pytest.raises(GeomtryDimError):
+        with pytest.raises(GeometryDimError):
             self.topology.add_angle([1, 1, 2, 3])
 
         with pytest.raises(ParticleConflictError):
@@ -185,7 +185,7 @@ class TestTopology:
         self.topology.del_angle([0, 2, 1])
         assert self.topology.num_angles == 1
 
-        with pytest.raises(GeomtryDimError):
+        with pytest.raises(GeometryDimError):
             self.topology.del_angle([1, 2, 3, 4])
 
         with pytest.raises(ParticleConflictError):
@@ -212,7 +212,7 @@ class TestTopology:
         self.topology.add_dihedral([0, 2, 1, 3])
         assert self.topology.num_dihedrals == 3
 
-        with pytest.raises(GeomtryDimError):
+        with pytest.raises(GeometryDimError):
             self.topology.add_dihedral([0, 1])
 
         with pytest.raises(ParticleConflictError):
@@ -243,7 +243,7 @@ class TestTopology:
         self.topology.del_dihedral([1, 2, 3, 0])
         assert self.topology.num_dihedrals == 1
 
-        with pytest.raises(GeomtryDimError):
+        with pytest.raises(GeometryDimError):
             self.topology.del_dihedral([1, 2, 3])
 
         with pytest.raises(ParticleConflictError):
@@ -264,7 +264,7 @@ class TestTopology:
         self.topology.add_improper([3, 2, 1, 0])
         assert self.topology.num_impropers == 2
 
-        with pytest.raises(GeomtryDimError):
+        with pytest.raises(GeometryDimError):
             self.topology.add_improper([1, 2, 3])
 
         with pytest.raises(ParticleConflictError):
@@ -289,7 +289,7 @@ class TestTopology:
         self.topology.del_improper([3, 2, 1, 0])
         assert self.topology.num_impropers == 1
 
-        with pytest.raises(GeomtryDimError):
+        with pytest.raises(GeometryDimError):
             self.topology.del_improper([0, 1, 2])
 
         with pytest.raises(ParticleConflictError):

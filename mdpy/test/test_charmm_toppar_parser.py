@@ -9,11 +9,11 @@ copyright : (C)Copyright 2021-present, mdpy organization
 
 import pytest, os
 import numpy as np
-from mdpy import env
-from mdpy.unit import *
-from mdpy.error import *
 from mdpy.io import CharmmTopparParser
 from mdpy.io.charmm_toppar_parser import RMIN_TO_SIGMA_FACTOR
+from mdpy.unit import *
+from mdpy.error import *
+from mdpy.environment import *
 
 cur_dir = os.path.dirname(os.path.abspath(__file__))
 data_dir = os.path.join(cur_dir, "data/toppar_parser")
@@ -78,7 +78,7 @@ class TestCharmmTopparParser:
             charmm.parameters["angle"]["NH2-CT1-HB1"][0]
             == Quantity(38, kilocalorie_permol).convert_to(default_energy_unit).value
         )
-        assert charmm.parameters["angle"]["CPH1-CPH1-CT2"][1] == env.NUMPY_FLOAT(
+        assert charmm.parameters["angle"]["CPH1-CPH1-CT2"][1] == NUMPY_FLOAT(
             np.deg2rad(130)
         )
         assert (

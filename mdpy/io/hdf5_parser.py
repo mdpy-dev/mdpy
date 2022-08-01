@@ -10,10 +10,11 @@ copyright : (C)Copyright 2021-present, mdpy organization
 import h5py
 import numpy as np
 from copy import copy
-from mdpy import env, SPATIAL_DIM
+from mdpy import SPATIAL_DIM
 from mdpy.core import Particle, Topology, Trajectory
 from mdpy.error import *
 from mdpy.io.hdf5_writer import NONE_LABEL
+from mdpy.environment import *
 
 ROOT_KEYS = ["topology", "positions", "pbc_matrix"]
 TOPOLOGY_KEYS = [
@@ -103,19 +104,15 @@ class HDF5Parser:
     def _parse_topology(self):
         topology = Topology()
         # Particle
-        particle_id = self._file["topology/particles/particle_id"][()].astype(
-            env.NUMPY_INT
-        )
+        particle_id = self._file["topology/particles/particle_id"][()].astype(NUMPY_INT)
         particle_type = self._file["topology/particles/particle_type"][()]
         particle_name = self._file["topology/particles/particle_name"][()]
-        matrix_id = self._file["topology/particles/matrix_id"][()].astype(env.NUMPY_INT)
-        molecule_id = self._file["topology/particles/molecule_id"][()].astype(
-            env.NUMPY_INT
-        )
+        matrix_id = self._file["topology/particles/matrix_id"][()].astype(NUMPY_INT)
+        molecule_id = self._file["topology/particles/molecule_id"][()].astype(NUMPY_INT)
         molecule_type = self._file["topology/particles/molecule_type"][()]
         chain_id = self._file["topology/particles/chain_id"][()]
-        mass = self._file["topology/particles/mass"][()].astype(env.NUMPY_FLOAT)
-        charge = self._file["topology/particles/charge"][()].astype(env.NUMPY_FLOAT)
+        mass = self._file["topology/particles/mass"][()].astype(NUMPY_FLOAT)
+        charge = self._file["topology/particles/charge"][()].astype(NUMPY_FLOAT)
         num_particles = self._file["topology/num_particles"][()]
         particles = []
         for index in range(num_particles):
@@ -168,7 +165,7 @@ class HDF5Parser:
         postions = np.empty([self._num_frames, self._num_particles, SPATIAL_DIM])
         for frame in range(self._num_frames):
             postions[frame, :, :] = self._file["positions/frame-%d" % frame][()].astype(
-                env.NUMPY_FLOAT
+                NUMPY_FLOAT
             )
         return postions if self._num_frames != 1 else postions[0, :, :]
 
@@ -184,7 +181,7 @@ class HDF5Parser:
             result = (
                 self._file["positions/frame-%d" % frames[0]][()]
                 .copy()
-                .astype(env.NUMPY_FLOAT)
+                .astype(NUMPY_FLOAT)
             )
         else:
             result = np.zeros([num_target_frames, self._num_particles, SPATIAL_DIM])
@@ -196,12 +193,12 @@ class HDF5Parser:
                     )
                 result[index, :, :] = self._file["positions/frame-%d" % frame][
                     ()
-                ].astype(env.NUMPY_FLOAT)
+                ].astype(NUMPY_FLOAT)
         self._file.close()
         return result
 
     def _parse_pbc_matrix(self):
-        return self._file["pbc_matrix"][()].astype(env.NUMPY_FLOAT)
+        return self._file["pbc_matrix"][()].astype(NUMPY_FLOAT)
 
     @property
     def num_frames(self):

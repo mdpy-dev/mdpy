@@ -9,11 +9,11 @@ copyright : (C)Copyright 2021-present, mdpy organization
 
 import pytest
 import numpy as np
-from mdpy import env
 from mdpy.utils import *
 from mdpy.error import *
+from mdpy.environment import *
 
-pbc_matrix = np.diag(np.ones(3) * 10).astype(env.NUMPY_FLOAT)
+pbc_matrix = np.diag(np.ones(3) * 10).astype(NUMPY_FLOAT)
 pbc_diag = np.diagonal(pbc_matrix)
 
 
@@ -52,20 +52,20 @@ def test_wrap_positions():
 
 
 def test_unwrap_vec():
-    vec = np.array([0, 6, 1]).astype(env.NUMPY_FLOAT)
+    vec = np.array([0, 6, 1]).astype(NUMPY_FLOAT)
     unwrapped_vec = unwrap_vec(vec, pbc_diag)
     assert unwrapped_vec[0] == 0
     assert unwrapped_vec[1] == pytest.approx(-4)
     assert unwrapped_vec[2] == 1
 
-    vec = np.array([-5, -6, 9]).astype(env.NUMPY_FLOAT)
+    vec = np.array([-5, -6, 9]).astype(NUMPY_FLOAT)
     unwrapped_vec = unwrap_vec(vec, pbc_diag)
     assert unwrapped_vec[0] == -5
     assert unwrapped_vec[1] == pytest.approx(4)
     assert unwrapped_vec[2] == pytest.approx(-1)
 
-    p1 = np.array([0, 0, 0]).astype(env.NUMPY_FLOAT)
-    p2 = np.array([0, 1, 0]).astype(env.NUMPY_FLOAT)
+    p1 = np.array([0, 0, 0]).astype(NUMPY_FLOAT)
+    p2 = np.array([0, 1, 0]).astype(NUMPY_FLOAT)
     vec1 = p1 - p2
     vec2 = unwrap_vec(p1 + 10 - p2, pbc_diag)
     vec3 = unwrap_vec(p1 - 10 - p2, pbc_diag)
@@ -77,9 +77,7 @@ def test_unwrap_vec():
     assert vec1[2] == pytest.approx(vec3[2])
 
     vec = unwrap_vec(
-        np.array([[0, 9, 0], [0, 1, 0], [9, -1, 0], [0, 1, -8]]).astype(
-            env.NUMPY_FLOAT
-        ),
+        np.array([[0, 9, 0], [0, 1, 0], [9, -1, 0], [0, 1, -8]]).astype(NUMPY_FLOAT),
         pbc_diag,
     )
     assert vec[0, 1] == pytest.approx(-1)

@@ -9,12 +9,12 @@ copyright : (C)Copyright 2021-present, mdpy organization
 
 import pytest
 import numpy as np
-from mdpy import env
 from mdpy.utils import *
+from mdpy.environment import *
 
 
 def test_get_unit_vec():
-    vec = np.array([1, 1], dtype=env.NUMPY_FLOAT)
+    vec = np.array([1, 1], dtype=NUMPY_FLOAT)
     unit_vec = get_unit_vec(vec)
     assert unit_vec[0] == pytest.approx(np.sqrt(2) / 2)
     assert unit_vec[1] == pytest.approx(np.sqrt(2) / 2)

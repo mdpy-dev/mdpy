@@ -9,13 +9,13 @@ copyright : (C)Copyright 2021-present, mdpy organization
 
 import pytest, os
 import numpy as np
-from mdpy import env
 from mdpy.constraint import CharmmAngleConstraint
 from mdpy.core import Particle, Topology, Ensemble
 from mdpy.io import CharmmTopparParser
 from mdpy.utils import get_angle, get_unit_vec
 from mdpy.error import *
 from mdpy.unit import *
+from mdpy.environment import *
 
 cur_dir = os.path.dirname(os.path.abspath(__file__))
 data_dir = os.path.join(cur_dir, "data/simulation/")
@@ -110,7 +110,7 @@ class TestCharmmAngleConstraint:
         theta = get_angle([0, 0, 0], [1, 0, 0], [0, 0, 1])
         force_val = 2 * k * (np.deg2rad(45) - theta0) / np.abs(np.sin(theta))
         vec0, vec1 = np.array([-1, 0, 0]), get_unit_vec(
-            np.array([-1, 0, 1], dtype=env.NUMPY_FLOAT)
+            np.array([-1, 0, 1], dtype=NUMPY_FLOAT)
         )
         force_vec0 = (vec1 - vec0 * np.cos(theta)) / 1
         force_vec2 = (vec0 - vec1 * np.cos(theta)) / np.sqrt(2)
@@ -138,5 +138,5 @@ class TestCharmmAngleConstraint:
         k, theta0, ku, u0 = self.parameters["angle"]["CA-CA-CA"]
         theta = get_angle([0, 0, 0], [1, 0, 0], [0, 0, 1])
         assert energy == pytest.approx(
-            env.NUMPY_FLOAT(k * (theta - theta0) ** 2 + ku * (1 - u0) ** 2)
+            NUMPY_FLOAT(k * (theta - theta0) ** 2 + ku * (1 - u0) ** 2)
         )

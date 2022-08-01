@@ -10,10 +10,10 @@ copyright : (C)Copyright 2021-present, mdpy organization
 import numpy as np
 import cupy as cp
 from copy import deepcopy
-from mdpy import env
 from mdpy.unit import Unit, QUANTITY_PRECISION
 from mdpy.unit.unit_definition import *
 from mdpy.error import *
+from mdpy.environment import *
 
 
 class Quantity:
@@ -32,13 +32,13 @@ class Quantity:
             self._unit = value.unit
         else:
             if isinstance(value, np.ndarray):
-                self._value = value.astype(env.NUMPY_FLOAT)
+                self._value = value.astype(NUMPY_FLOAT)
             elif isinstance(value, cp.ndarray):
-                self._value = value.get().astype(env.NUMPY_FLOAT)
+                self._value = value.get().astype(NUMPY_FLOAT)
             else:
-                self._value = np.array(value).astype(env.NUMPY_FLOAT)
+                self._value = np.array(value).astype(NUMPY_FLOAT)
                 if self._value.shape == ():
-                    self._value = np.array([self._value.item()]).astype(env.NUMPY_FLOAT)
+                    self._value = np.array([self._value.item()]).astype(NUMPY_FLOAT)
 
             if unit.is_dimension_less():
                 self._value *= unit.relative_value
@@ -94,7 +94,7 @@ class Quantity:
             If ``self._unit.base_dimension != target_unit.unit.base_dimension``. E.g ``(10*meter).convert_to(second)``
         """
         if self._unit.base_dimension != target_unit.base_dimension:
-            raise UnitDimensionDismatchedError(
+            raise UnitDimensionMismatchedError(
                 "Quantity in %s can not be converted to %s"
                 % (self._unit.base_dimension, target_unit.base_dimension)
             )
@@ -121,7 +121,7 @@ class Quantity:
                 diff = np.abs(diff / self.value)
                 return diff < QUANTITY_PRECISION
             else:
-                raise UnitDimensionDismatchedError(
+                raise UnitDimensionMismatchedError(
                     "Quantity in %s can not be compared with quantity in %s"
                     % (self._unit.base_dimension, other.unit.base_dimension)
                 )
@@ -149,7 +149,7 @@ class Quantity:
                     * other.value
                 )
             else:
-                raise UnitDimensionDismatchedError(
+                raise UnitDimensionMismatchedError(
                     "Quantity in %s can not be compared with quantity in %s"
                     % (self._unit.base_dimension, other.unit.base_dimension)
                 )
@@ -170,7 +170,7 @@ class Quantity:
                     * other.value
                 )
             else:
-                raise UnitDimensionDismatchedError(
+                raise UnitDimensionMismatchedError(
                     "Quantity in %s can not be compared with quantity in %s"
                     % (self._unit.base_dimension, other.unit.base_dimension)
                 )
@@ -192,7 +192,7 @@ class Quantity:
                     * other.value
                 )
             else:
-                raise UnitDimensionDismatchedError(
+                raise UnitDimensionMismatchedError(
                     "Quantity in %s can not be compared with quantity in %s"
                     % (self._unit.base_dimension, other.unit.base_dimension)
                 )
@@ -213,7 +213,7 @@ class Quantity:
                     * other.value
                 )
             else:
-                raise UnitDimensionDismatchedError(
+                raise UnitDimensionMismatchedError(
                     "Quantity in %s can not be compared with quantity in %s"
                     % (self._unit.base_dimension, other.unit.base_dimension)
                 )
@@ -330,7 +330,7 @@ class Quantity:
 
     @property
     def value(self):
-        self._value = self._value.astype(env.NUMPY_FLOAT)
+        self._value = self._value.astype(NUMPY_FLOAT)
         if self._value.size == 1:
             return self._value.flatten()[0]
         return self._value
@@ -341,4 +341,4 @@ class Quantity:
 
     @value.setter
     def value(self, val):
-        self._value = np.array(val).astype(env.NUMPY_FLOAT)
+        self._value = np.array(val).astype(NUMPY_FLOAT)

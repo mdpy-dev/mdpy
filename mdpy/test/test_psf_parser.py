@@ -8,8 +8,8 @@ copyright : (C)Copyright 2021-present, mdpy organization
 """
 
 import pytest, os
-from mdpy import env
 from mdpy.io import PSFParser
+from mdpy.environment import *
 
 cur_dir = os.path.dirname(os.path.abspath(__file__))
 data_dir = os.path.join(cur_dir, "data/psf_parser")
@@ -32,7 +32,7 @@ class TestPSFParser:
         assert psf.molecule_types[21] == "LEU"
         assert psf.chain_ids[1616] == "WT1"
         assert psf._charges[2] == pytest.approx(0.33)
-        assert psf._masses[5] == env.NUMPY_FLOAT(1.008)
+        assert psf._masses[5] == NUMPY_FLOAT(1.008)
 
     def test_topology(self):
         psf = PSFParser(self.file_path)

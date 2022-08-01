@@ -19,9 +19,9 @@ class EnvironmentVariableError(Exception):
     pass
 
 
-class UnitDimensionDismatchedError(Exception):
+class UnitDimensionMismatchedError(Exception):
     """This error occurs when:
-    - The base dimension of two quantities is dismatched for a specific operation.
+    - The base dimension of two quantities is mismatched for a specific operation.
 
     Used in:
     - mdpy.unit.base_dimension
@@ -30,7 +30,7 @@ class UnitDimensionDismatchedError(Exception):
     pass
 
 
-class GeomtryDimError(Exception):
+class GeometryDimError(Exception):
     """This error occurs when:
     - The dimension of geometry, like bond, angle, is mismatched
 
@@ -131,7 +131,7 @@ class FileFormatError(Exception):
 
 class PBCPoorDefinedError(Exception):
     """This error occurs when:
-    - Two or more column vector in pbc_matrix is linear corellated
+    - Two or more column vector in pbc_matrix is linear correlated
 
     Used in:
     - mdpy.utils.pbc
@@ -154,7 +154,7 @@ class TileListPoorDefinedError(Exception):
 
 class TrajectoryPoorDefinedError(Exception):
     """This error occurs when:
-    - Extrating information that have not been contained
+    - Extracting information that have not been contained
 
     Used in:
     -mdpy.core.trajectory
@@ -242,6 +242,17 @@ class GridPoorDefinedError(Exception):
 
     Used in:
     - mdpy.core.grid
+    """
+
+    pass
+
+
+class DevicePoorDefinedError(Exception):
+    """This error occurs when:
+    The device_index exceed the number of available device
+
+    Used in:
+    - mdpy.environment
     """
 
     pass

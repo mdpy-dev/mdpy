@@ -32,7 +32,7 @@ def test_check_quantity():
     assert quantity[0, 0].value == 1
     assert quantity[0, 1].unit == default_length_unit
 
-    with pytest.raises(UnitDimensionDismatchedError):
+    with pytest.raises(UnitDimensionMismatchedError):
         check_quantity(Quantity(1, default_charge_unit), default_length_unit)
 
 
@@ -48,5 +48,5 @@ def test_check_quantity_value():
     quantity = check_quantity_value(np.ones([3, 3]), default_length_unit)
     assert quantity[0, 0] == 1
 
-    with pytest.raises(UnitDimensionDismatchedError):
+    with pytest.raises(UnitDimensionMismatchedError):
         check_quantity_value(Quantity(1, default_length_unit), default_mass_unit)

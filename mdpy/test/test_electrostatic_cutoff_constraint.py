@@ -9,12 +9,12 @@ copyright : (C)Copyright 2021-present, mdpy organization
 
 import pytest, os
 import numpy as np
-from mdpy import env
 from mdpy.constraint import ElectrostaticCutoffConstraint
 from mdpy.core import Particle, Topology, Ensemble
 from mdpy.utils import get_unit_vec
 from mdpy.error import *
 from mdpy.unit import *
+from mdpy.environment import *
 
 cur_dir = os.path.dirname(os.path.abspath(__file__))
 data_dir = os.path.join(cur_dir, "data/simulation/")
@@ -94,7 +94,7 @@ class TestElectrostaticCutoffConstraint:
             / k
             / Quantity(10, angstrom) ** 2
         )
-        force_vec = get_unit_vec(np.array([0, 10, 0], dtype=env.NUMPY_FLOAT))
+        force_vec = get_unit_vec(np.array([0, 10, 0], dtype=NUMPY_FLOAT))
         force1 = force_val.convert_to(default_force_unit).value * force_vec
         assert forces[0, 0] == pytest.approx(force1[0])
         assert forces[0, 1] == pytest.approx(force1[1])

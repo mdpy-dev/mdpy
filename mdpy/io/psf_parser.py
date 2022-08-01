@@ -11,10 +11,10 @@ import warnings
 import numpy as np
 import MDAnalysis as mda
 from copy import copy
-from mdpy import env
 from mdpy.core import Particle, Topology
 from mdpy.unit import *
 from mdpy.error import *
+from mdpy.environment import *
 
 
 class PSFParser:
@@ -30,7 +30,7 @@ class PSFParser:
         self._particle_names = list(self._parser.names.values)
         self._matrix_ids = list(
             np.linspace(
-                0, self._num_particles - 1, self._num_particles, dtype=env.NUMPY_INT
+                0, self._num_particles - 1, self._num_particles, dtype=NUMPY_INT
             )
         )
         molecule_ids, molecule_types = (
