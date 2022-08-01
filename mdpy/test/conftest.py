@@ -49,6 +49,7 @@ test_order = [
     "verlet_integrator",
     "langevin_integrator",
     "analyser_result",
+    "device",
 ]
 
 
