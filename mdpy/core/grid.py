@@ -37,10 +37,10 @@ class Grid:
         # Set grid information and coordinate
         keys = list(coordinate.keys())
         self._num_dimensions = len(keys)
-        self._shape = [value[2] + 2 for value in coordinate.values()]
-        self._inner_shape = [value[2] for value in coordinate.values()]
+        self._shape = [value[2] for value in coordinate.values()]
+        self._inner_shape = [value[2] - 2 for value in coordinate.values()]
         grid = [
-            cp.linspace(start=value[0], stop=value[1], num=value[2] + 2, endpoint=True)
+            cp.linspace(start=value[0], stop=value[1], num=value[2], endpoint=True)
             for value in coordinate.values()
         ]
         self._device_grid_width = cp.array([i[1] - i[0] for i in grid], NUMPY_FLOAT)
@@ -48,9 +48,7 @@ class Grid:
         grid = cp.meshgrid(*grid, indexing="ij")
         for index, key in enumerate(keys):
             setattr(
-                self._coordinate,
-                key,
-                grid[index],
+                self._coordinate, key, grid[index],
             )
         # Initialize requirement
         self._requirement = {}
@@ -128,15 +126,11 @@ class Grid:
         self._requirement[name]["require_curvature"] |= require_curvature
         if self._requirement[name]["require_gradient"]:
             setattr(
-                self._gradient,
-                name,
-                self.get_gradient(getattr(self._field, name)),
+                self._gradient, name, self.get_gradient(getattr(self._field, name)),
             )
         if self._requirement[name]["require_curvature"]:
             setattr(
-                self._curvature,
-                name,
-                self.get_curvature(getattr(self._field, name)),
+                self._curvature, name, self.get_curvature(getattr(self._field, name)),
             )
 
     def zeros_field(self, dtype=CUPY_FLOAT):
