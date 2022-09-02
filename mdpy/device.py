@@ -40,4 +40,3 @@ class Device:
 
     def __exit__(self, *arg):
         del self._cupy_device
-        cuda.close()
