@@ -20,7 +20,7 @@ file_path = os.path.join(out_dir, "test_grid_writer.grid")
 
 class TestGridWriter:
     def setup(self):
-        self.grid = Grid(grid_width=0.1, x=[-2, 2], y=[-2, 2], z=[-2, 2])
+        self.grid = Grid(grid_width=0.5, x=[-2, 2], y=[-2, 2], z=[-2, 2])
         self.grid.set_requirement(
             field_name_list=["phi", "epsilon"], constant_name_list=["epsilon0"]
         )

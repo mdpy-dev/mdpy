@@ -21,7 +21,7 @@ file_path = os.path.join(data_dir, "test_grid_writer.grid")
 
 class TestGridParser:
     def setup(self):
-        self.grid = Grid(grid_width=0.1, x=[-2.0, 2.0], y=[-2.0, 2.0], z=[-2.0, 2.0])
+        self.grid = Grid(grid_width=0.5, x=[-2.0, 2.0], y=[-2.0, 2.0], z=[-2.0, 2.0])
         self.grid.set_requirement(
             field_name_list=["phi", "epsilon"], constant_name_list=["epsilon0"]
         )
@@ -55,6 +55,7 @@ class TestGridParser:
             assert cp.all(cp.isclose(grid.field.epsilon, self.grid.field.epsilon))
         assert grid.constant.epsilon0 == self.grid.constant.epsilon0
         assert isinstance(grid.constant.epsilon0, type(self.grid.constant.epsilon0))
+
 
 if __name__ == "__main__":
     test = TestGridParser()
