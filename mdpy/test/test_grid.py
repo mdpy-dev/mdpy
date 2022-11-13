@@ -43,7 +43,7 @@ class TestGrid:
     def test_add_constant(self):
         self.grid.add_constant("epsilon0", 10)
         assert hasattr(self.grid.constant, "epsilon0")
-        assert isinstance(self.grid.constant.epsilon0, CUPY_FLOAT)
+        assert isinstance(self.grid.constant.epsilon0, NUMPY_FLOAT)
 
     def test_check_requirement(self):
         self.grid.add_field("phi", self.grid.ones_field())
@@ -51,5 +51,5 @@ class TestGrid:
         with pytest.raises(GridPoorDefinedError):
             self.grid.check_requirement()
 
-        self.grid.add_constant('epsilon0', 10)
+        self.grid.add_constant("epsilon0", 10)
         self.grid.check_requirement()
