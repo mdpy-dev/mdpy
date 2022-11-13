@@ -8,6 +8,7 @@ copyright : (C)Copyright 2021-present, mdpy organization
 """
 
 import pytest
+import cupy as cp
 from mdpy.core import Grid
 from mdpy.environment import *
 from mdpy.error import *
@@ -15,13 +16,9 @@ from mdpy.error import *
 
 class TestGrid:
     def setup(self):
-        self.grid = Grid(x=[-2, 2, 128], y=[-2, 2, 128], z=[-2, 2, 64])
-
+        self.grid = Grid(grid_width=0.1, x=[-2, 2], y=[-2, 2], z=[-2, 2])
         self.grid.set_requirement(
-            {
-                "phi": {"require_gradient": False, "require_curvature": False},
-                "epsilon": {"require_gradient": True, "require_curvature": True},
-            },
+            field_name_list=["phi", "epsilon"], constant_name_list=["epsilon0"]
         )
 
     def teardown(self):
@@ -39,19 +36,20 @@ class TestGrid:
     def test_add_field(self):
         self.grid.add_field("phi", self.grid.ones_field())
         assert hasattr(self.grid.field, "phi")
-        assert not hasattr(self.grid.gradient, "phi")
-        assert not hasattr(self.grid.curvature, "phi")
 
         self.grid.add_field("epsilon", self.grid.ones_field())
         assert hasattr(self.grid.field, "epsilon")
-        assert hasattr(self.grid.gradient, "epsilon")
-        assert hasattr(self.grid.curvature, "epsilon")
+
+    def test_add_constant(self):
+        self.grid.add_constant("epsilon0", 10)
+        assert hasattr(self.grid.constant, "epsilon0")
+        assert isinstance(self.grid.constant.epsilon0, CUPY_FLOAT)
 
     def test_check_requirement(self):
         self.grid.add_field("phi", self.grid.ones_field())
         self.grid.add_field("epsilon", self.grid.ones_field())
-        self.grid.check_requirement()
-
-        del self.grid.curvature.epsilon
         with pytest.raises(GridPoorDefinedError):
             self.grid.check_requirement()
+
+        self.grid.add_constant('epsilon0', 10)
+        self.grid.check_requirement()
