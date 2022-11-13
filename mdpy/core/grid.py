@@ -31,27 +31,32 @@ class Grid:
     def __init__(self, grid_width: float, **coordinate_range) -> None:
         # Input
         self._grid_width = NUMPY_FLOAT(grid_width)
-        self._device_grid_width = CUPY_FLOAT(grid_width)
         # Initialize attributes
         self._coordinate = SubGrid("coordinate")
         self._field = SubGrid("field")
         self._constant = SubGrid("constant")
         # Set grid information and coordinate
-        keys = list(coordinate_range.keys())
+        self._coordinate_label = list(coordinate_range.keys())
+        self._coordinate_range = np.array(list(coordinate_range.values()), NUMPY_FLOAT)
         grid = [
-            cp.arange(start=value[0], stop=value[1] + grid_width, step=grid_width)
+            cp.arange(
+                start=value[0],
+                stop=value[1] + grid_width,
+                step=grid_width,
+                dtype=CUPY_FLOAT,
+            )
             for value in coordinate_range.values()
         ]
         grid = cp.meshgrid(*grid, indexing="ij")
         self._shape = list(grid[0].shape)
         self._inner_shape = [i - 2 for i in self._shape]
-        for index, key in enumerate(keys):
+        for index, key in enumerate(self._coordinate_label):
             setattr(
                 self._coordinate,
                 key,
                 grid[index],
             )
-        self._num_dimensions = len(keys)
+        self._num_dimensions = len(self._coordinate_label)
         # Initialize requirement
         self._requirement = {"field": [], "constant": []}
 
@@ -97,13 +102,21 @@ class Grid:
         setattr(self._field, name, value)
 
     def add_constant(self, name: str, value: float):
-        setattr(self._constant, name, CUPY_FLOAT(value))
+        setattr(self._constant, name, NUMPY_FLOAT(value))
 
     def zeros_field(self, dtype=CUPY_FLOAT):
         return cp.zeros(self._shape, dtype)
 
     def ones_field(self, dtype=CUPY_FLOAT):
         return cp.ones(self._shape, dtype)
+
+    @property
+    def coordinate_label(self) -> list[str]:
+        return self._coordinate_label
+
+    @property
+    def coordinate_range(self) -> np.ndarray:
+        return self._coordinate_range
 
     @property
     def requirement(self) -> dict:
@@ -134,10 +147,6 @@ class Grid:
         return self._grid_width
 
     @property
-    def device_grid_width(self) -> cp.ndarray:
-        return self._device_grid_width
-
-    @property
     def coordinate(self) -> object:
         return self._coordinate
 
@@ -161,7 +170,8 @@ if __name__ == "__main__":
 
     phi[0, :, :] = 20
     phi[-1, :, :] = 0
-    grid.add_field("phi", phi[1:-1, :, 1])
+    grid.add_field("phi", phi)
     grid.add_field("epsilon", epsilon)
+    grid.add_constant("epsilon0", 10)
     grid.check_requirement()
-    print(grid.field.phi)
+    print(grid.coordinate_range)
