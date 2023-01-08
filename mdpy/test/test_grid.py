@@ -18,7 +18,9 @@ class TestGrid:
     def setup(self):
         self.grid = Grid(grid_width=0.1, x=[-2, 2], y=[-2, 2], z=[-2, 2])
         self.grid.set_requirement(
-            field_name_list=["phi", "epsilon"], constant_name_list=["epsilon0"]
+            variable_name_list=["phi"],
+            field_name_list=["epsilon"],
+            constant_name_list=["epsilon0"],
         )
 
     def teardown(self):
@@ -33,10 +35,19 @@ class TestGrid:
         with pytest.raises(GridPoorDefinedError):
             self.grid.check_requirement()
 
-    def test_add_field(self):
-        self.grid.add_field("phi", self.grid.ones_field())
-        assert hasattr(self.grid.field, "phi")
+        with pytest.raises(ArrayDimError):
+            self.grid.add_field("a", self.grid.zeros_field()[:-1, :, :])
 
+        with pytest.raises(ArrayDimError):
+            variable = self.grid.empty_variable()
+            variable.value = variable.value[:-1, :, :]
+            self.grid.add_variable("b", variable)
+
+    def test_add_variable(self):
+        self.grid.add_variable("phi", self.grid.empty_variable())
+        assert hasattr(self.grid.variable, "phi")
+
+    def test_add_field(self):
         self.grid.add_field("epsilon", self.grid.ones_field())
         assert hasattr(self.grid.field, "epsilon")
 
@@ -46,7 +57,7 @@ class TestGrid:
         assert isinstance(self.grid.constant.epsilon0, NUMPY_FLOAT)
 
     def test_check_requirement(self):
-        self.grid.add_field("phi", self.grid.ones_field())
+        self.grid.add_variable("phi", self.grid.empty_variable())
         self.grid.add_field("epsilon", self.grid.ones_field())
         with pytest.raises(GridPoorDefinedError):
             self.grid.check_requirement()
