@@ -10,7 +10,7 @@ copyright : (C)Copyright 2021-present, mdpy organization
 import h5py
 import ast
 import cupy as cp
-from mdpy.core import Grid
+from mdpy.core.grid import Grid, Variable
 from mdpy.environment import *
 from mdpy.error import *
 
@@ -38,15 +38,39 @@ class GridParser:
                 bytes.decode(h5f["information/requirement"][()])
             )
             grid.set_requirement(
+                variable_name_list=requirement["variable"],
                 field_name_list=requirement["field"],
                 constant_name_list=requirement["constant"],
             )
+            # Variable
+            self._parse_variable(h5f, grid)
             # Field
             self._parse_field(h5f, grid)
             # Constant
             self._parse_constant(h5f, grid)
         grid.check_requirement()
         return grid
+
+    def _parse_variable(self, handle: h5py.File, grid: Grid):
+        sub_grid = getattr(grid, "variable")
+        for key in handle["variable"].keys():
+            group_name = "variable/%s/" % (key)
+            variable = grid.empty_variable()
+            variable.value = cp.array(handle[group_name + "value"][()], CUPY_FLOAT)
+            variable.boundary_index = cp.array(
+                handle[group_name + "boundary_index"][()], CUPY_INT
+            )
+            variable.boundary_type = cp.array(
+                handle[group_name + "boundary_type"][()], CUPY_INT
+            )
+            variable.boundary_value = cp.array(
+                handle[group_name + "boundary_value"][()], CUPY_FLOAT
+            )
+            setattr(
+                sub_grid,
+                key,
+                variable,
+            )
 
     def _parse_field(self, handle: h5py.File, grid: Grid):
         attribute = "field"

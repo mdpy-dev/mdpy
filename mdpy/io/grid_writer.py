@@ -20,12 +20,14 @@ class GridWriter:
         self._mode = mode
         with h5py.File(self._file_path, self._mode) as f:
             f.create_group("information")
+            f.create_group("variable")
             f.create_group("field")
             f.create_group("constant")
 
     def write(self, grid: Grid):
         grid.check_requirement()
         self._write_information(grid)
+        self._write_variable(grid)
         self._write_field(grid)
         self._write_constant(grid)
 
@@ -37,6 +39,20 @@ class GridWriter:
             h5f["information/grid_width"] = grid.grid_width
             h5f["information/coordinate_label"] = grid.coordinate_label
             h5f["information/coordinate_range"] = grid.coordinate_range
+
+    def _write_variable(self, grid: Grid):
+        with h5py.File(self._file_path, "a") as h5f:
+            del h5f["variable"]
+            h5f.create_group("variable")
+            for key in grid.variable.__dict__.keys():
+                if not key.startswith("_SubGrid"):
+                    variable = getattr(grid.variable, key)
+                    h5f.create_group(key)
+                    group_name = "variable/%s/" % (key)
+                    h5f[group_name + "value"] = variable.value.get()
+                    h5f[group_name + "boundary_index"] = variable.boundary_index.get()
+                    h5f[group_name + "boundary_type"] = variable.boundary_type.get()
+                    h5f[group_name + "boundary_value"] = variable.boundary_value.get()
 
     def _write_field(self, grid: Grid):
         attribute = "field"
