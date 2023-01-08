@@ -43,6 +43,13 @@ class TestGrid:
             variable.value = variable.value[:-1, :, :]
             self.grid.add_variable("b", variable)
 
+    def test_add_requirement(self):
+        self.grid.add_requirement("field", "a")
+        assert self.grid.requirement["field"][1] == "a"
+        assert len(self.grid.requirement["field"]) == 2
+        self.grid.add_requirement("field", "a")
+        assert len(self.grid.requirement["field"]) == 2
+
     def test_add_variable(self):
         self.grid.add_variable("phi", self.grid.empty_variable())
         assert hasattr(self.grid.variable, "phi")
@@ -64,3 +71,7 @@ class TestGrid:
 
         self.grid.add_constant("epsilon0", 10)
         self.grid.check_requirement()
+
+        with pytest.raises(GridPoorDefinedError):
+            self.grid.add_requirement("field", "a")
+            self.grid.check_requirement()
