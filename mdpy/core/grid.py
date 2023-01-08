@@ -27,12 +27,77 @@ class SubGrid:
             )
 
 
+class Variable:
+    def __init__(self) -> None:
+        self._value: cp.ndarray = 0
+        self._boundary_index: cp.ndarray = 0
+        self._boundary_type: cp.ndarray = 0
+        self._boundary_value: cp.ndarray = 0
+
+    @property
+    def value(self) -> cp.ndarray:
+        return self._value
+
+    @value.setter
+    def value(self, value: cp.ndarray):
+        try:
+            self._value = cp.array(value, CUPY_FLOAT)
+        except:
+            raise TypeError(
+                "numpy.ndarray or cupy.ndarray required, while %s provided"
+                % type(value)
+            )
+
+    @property
+    def boundary_index(self) -> cp.ndarray:
+        return self._boundary_index
+
+    @boundary_index.setter
+    def boundary_index(self, value):
+        try:
+            self._boundary_index = cp.array(value, CUPY_INT)
+        except:
+            raise TypeError(
+                "numpy.ndarray or cupy.ndarray required, while %s provided"
+                % type(value)
+            )
+
+    @property
+    def boundary_type(self) -> cp.ndarray:
+        return self._boundary_type
+
+    @boundary_type.setter
+    def boundary_type(self, value):
+        try:
+            self._boundary_type = cp.array(value, CUPY_INT)
+        except:
+            raise TypeError(
+                "numpy.ndarray or cupy.ndarray required, while %s provided"
+                % type(value)
+            )
+
+    @property
+    def boundary_value(self) -> cp.ndarray:
+        return self._boundary_value
+
+    @boundary_value.setter
+    def boundary_value(self, value):
+        try:
+            self._boundary_value = cp.array(value, CUPY_FLOAT)
+        except:
+            raise TypeError(
+                "numpy.ndarray or cupy.ndarray required, while %s provided"
+                % type(value)
+            )
+
+
 class Grid:
     def __init__(self, grid_width: float, **coordinate_range) -> None:
         # Input
         self._grid_width = NUMPY_FLOAT(grid_width)
         # Initialize attributes
         self._coordinate = SubGrid("coordinate")
+        self._variable = SubGrid("variable")
         self._field = SubGrid("field")
         self._constant = SubGrid("constant")
         # Set grid information and coordinate
@@ -58,23 +123,36 @@ class Grid:
             )
         self._num_dimensions = len(self._coordinate_label)
         # Initialize requirement
-        self._requirement = {"field": [], "constant": []}
+        self._requirement = {"variable": [], "field": [], "constant": []}
 
     def set_requirement(
-        self, field_name_list: list[str], constant_name_list: list[str]
+        self,
+        variable_name_list: list[str],
+        field_name_list: list[str],
+        constant_name_list: list[str],
     ):
+        self._requirement["variable"] = variable_name_list
         self._requirement["field"] = field_name_list
         self._requirement["constant"] = constant_name_list
 
     def check_requirement(self):
         is_all_set = True
         exception = "Gird is not all set:\n"
+        exception += "variable:\n"
+        for key in self._requirement["variable"]:
+            is_all_set &= hasattr(self._variable, key)
+            exception += "- grid.variable.%s: %s;\n" % (
+                key,
+                hasattr(self._variable, key),
+            )
+        exception += "\nconstant:\n"
         for key in self._requirement["constant"]:
             is_all_set &= hasattr(self._constant, key)
             exception += "- grid.constant.%s: %s;\n" % (
                 key,
                 hasattr(self._constant, key),
             )
+        exception += "\nfield:\n"
         for key in self._requirement["field"]:
             is_all_set &= hasattr(self._field, key)
             exception += "- grid.field.%s: %s;\n" % (key, hasattr(self._field, key))
@@ -96,19 +174,32 @@ class Grid:
             if dim1 != dim2:
                 raise ArrayDimError(exception)
 
+    def add_variable(self, name: str, value: Variable):
+        # Set variable
+        self._check_shape(value.value, self._shape)
+        setattr(self._variable, name, value)
+
+    def empty_variable(self) -> Variable:
+        variable = Variable()
+        variable.value = self.zeros_field()
+        variable.boundary_index = cp.zeros([1, 3], CUPY_INT)
+        variable.boundary_type = cp.zeros([1], CUPY_INT)
+        variable.boundary_value = cp.zeros([1], CUPY_FLOAT)
+        return variable
+
     def add_field(self, name: str, value: cp.ndarray):
         # Set field
         self._check_shape(value, self._shape)
         setattr(self._field, name, value)
-
-    def add_constant(self, name: str, value: float):
-        setattr(self._constant, name, NUMPY_FLOAT(value))
 
     def zeros_field(self, dtype=CUPY_FLOAT):
         return cp.zeros(self._shape, dtype)
 
     def ones_field(self, dtype=CUPY_FLOAT):
         return cp.ones(self._shape, dtype)
+
+    def add_constant(self, name: str, value: float):
+        setattr(self._constant, name, NUMPY_FLOAT(value))
 
     @property
     def coordinate_label(self) -> list[str]:
@@ -147,30 +238,34 @@ class Grid:
         return self._grid_width
 
     @property
-    def coordinate(self) -> object:
+    def coordinate(self) -> SubGrid:
         return self._coordinate
 
     @property
-    def field(self) -> object:
+    def variable(self) -> SubGrid:
+        return self._variable
+
+    @property
+    def field(self) -> SubGrid:
         return self._field
 
     @property
-    def constant(self) -> object:
+    def constant(self) -> SubGrid:
         return self._constant
 
 
 if __name__ == "__main__":
     grid = Grid(grid_width=0.1, x=[-2, 2], y=[-2, 2], z=[-2, 2])
     grid.set_requirement(
-        field_name_list=["phi", "epsilon"], constant_name_list=["epsilon0"]
+        variable_name_list=["phi"],
+        field_name_list=["epsilon"],
+        constant_name_list=["epsilon0"],
     )
     print(grid.requirement)
-    phi = grid.zeros_field()
+    phi = grid.empty_variable()
     epsilon = grid.zeros_field() + 1
 
-    phi[0, :, :] = 20
-    phi[-1, :, :] = 0
-    grid.add_field("phi", phi)
+    grid.add_variable("phi", phi)
     grid.add_field("epsilon", epsilon)
     grid.add_constant("epsilon0", 10)
     grid.check_requirement()
