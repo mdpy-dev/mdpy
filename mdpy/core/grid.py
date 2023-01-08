@@ -135,6 +135,11 @@ class Grid:
         self._requirement["field"] = field_name_list
         self._requirement["constant"] = constant_name_list
 
+    def add_requirement(self, attribute_name: str, requirement_name: str):
+        requirements = self._requirement[attribute_name]
+        if not requirement_name in requirements:
+            self._requirement[attribute_name] = requirements + [requirement_name]
+
     def check_requirement(self):
         is_all_set = True
         exception = "Gird is not all set:\n"
