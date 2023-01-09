@@ -30,9 +30,16 @@ class SubGrid:
 class Variable:
     def __init__(self) -> None:
         self._value: cp.ndarray = 0
-        self._boundary_index: cp.ndarray = 0
-        self._boundary_type: cp.ndarray = 0
-        self._boundary_value: cp.ndarray = 0
+        self._boundary = {}
+
+    def add_boundary(self, boundary_type: str, boundary_data: dict):
+        if boundary_type in self._boundary.keys():
+            for key, val in boundary_data.items():
+                self._boundary[boundary_type][key] = cp.vstack(
+                    [self._boundary[boundary_type][key], cp.array(val)]
+                )
+        else:
+            self._boundary[boundary_type] = boundary_data
 
     @property
     def value(self) -> cp.ndarray:
@@ -49,46 +56,8 @@ class Variable:
             )
 
     @property
-    def boundary_index(self) -> cp.ndarray:
-        return self._boundary_index
-
-    @boundary_index.setter
-    def boundary_index(self, value):
-        try:
-            self._boundary_index = cp.array(value, CUPY_INT)
-        except:
-            raise TypeError(
-                "numpy.ndarray or cupy.ndarray required, while %s provided"
-                % type(value)
-            )
-
-    @property
-    def boundary_type(self) -> cp.ndarray:
-        return self._boundary_type
-
-    @boundary_type.setter
-    def boundary_type(self, value):
-        try:
-            self._boundary_type = cp.array(value, CUPY_INT)
-        except:
-            raise TypeError(
-                "numpy.ndarray or cupy.ndarray required, while %s provided"
-                % type(value)
-            )
-
-    @property
-    def boundary_value(self) -> cp.ndarray:
-        return self._boundary_value
-
-    @boundary_value.setter
-    def boundary_value(self, value):
-        try:
-            self._boundary_value = cp.array(value, CUPY_FLOAT)
-        except:
-            raise TypeError(
-                "numpy.ndarray or cupy.ndarray required, while %s provided"
-                % type(value)
-            )
+    def boundary(self) -> dict:
+        return self._boundary
 
 
 class Grid:
@@ -187,9 +156,6 @@ class Grid:
     def empty_variable(self) -> Variable:
         variable = Variable()
         variable.value = self.zeros_field()
-        variable.boundary_index = cp.zeros([1, 3], CUPY_INT)
-        variable.boundary_type = cp.zeros([1], CUPY_INT)
-        variable.boundary_value = cp.zeros([1], CUPY_FLOAT)
         return variable
 
     def add_field(self, name: str, value: cp.ndarray):
