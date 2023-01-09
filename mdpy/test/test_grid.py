@@ -12,6 +12,39 @@ import cupy as cp
 from mdpy.core import Grid
 from mdpy.environment import *
 from mdpy.error import *
+from mdpy.core.grid import Variable
+
+
+class TestVariable:
+    def setup(self):
+        self.variable = Variable()
+
+    def teardown(self):
+        del self.variable
+
+    def test_attribute(self):
+        assert not self.variable.value is None
+        assert not self.variable.boundary is None
+
+    def test_exception(self):
+        pass
+
+    def test_add_boundary(self):
+        boundary_type = "d"
+        boundary_data = {
+            "index": cp.array([[1, 2, 3]], CUPY_INT),
+            "value": cp.array([1], CUPY_FLOAT),
+        }
+        self.variable.add_boundary(
+            boundary_type=boundary_type, boundary_data=boundary_data
+        )
+        assert self.variable.boundary["d"]["index"][0, 0] == 1
+        self.variable.add_boundary(
+            boundary_type=boundary_type, boundary_data=boundary_data
+        )
+        assert self.variable.boundary["d"]["index"][1, 0] == 1
+        assert self.variable.boundary["d"]["index"].shape[0] == 2
+        assert self.variable.boundary["d"]["value"].shape[0] == 2
 
 
 class TestGrid:
