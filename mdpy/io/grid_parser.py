@@ -59,7 +59,7 @@ class GridParser:
             # Value
             variable.value = cp.array(handle[group_name + "value"][()], CUPY_FLOAT)
             # Boundary
-            group_name += "boundary/" # /variable
+            group_name += "boundary/"  # /variable/name/boundary/
             for boundary_type in handle[group_name].keys():
                 boundary_data = {}
                 boundary_group_name = group_name + boundary_type + "/"
