@@ -53,22 +53,25 @@ class GridParser:
 
     def _parse_variable(self, handle: h5py.File, grid: Grid):
         sub_grid = getattr(grid, "variable")
-        for key in handle["variable"].keys():
-            group_name = "variable/%s/" % (key)
+        for name in handle["variable"].keys():
+            group_name = "variable/%s/" % (name)
             variable = grid.empty_variable()
+            # Value
             variable.value = cp.array(handle[group_name + "value"][()], CUPY_FLOAT)
-            variable.boundary_index = cp.array(
-                handle[group_name + "boundary_index"][()], CUPY_INT
-            )
-            variable.boundary_type = cp.array(
-                handle[group_name + "boundary_type"][()], CUPY_INT
-            )
-            variable.boundary_value = cp.array(
-                handle[group_name + "boundary_value"][()], CUPY_FLOAT
-            )
+            # Boundary
+            group_name += "boundary/" # /variable
+            for boundary_type in handle[group_name].keys():
+                boundary_data = {}
+                boundary_group_name = group_name + boundary_type + "/"
+                for key in handle[boundary_group_name].keys():
+                    val = handle[boundary_group_name + key][()]
+                    boundary_data[key] = cp.array(val, val.dtype)
+                variable.add_boundary(
+                    boundary_type=boundary_type, boundary_data=boundary_data
+                )
             setattr(
                 sub_grid,
-                key,
+                name,
                 variable,
             )
 
