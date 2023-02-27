@@ -24,7 +24,6 @@ from mdpy.core.tile_list import TileList
 from mdpy.core.state import State
 from mdpy.core.trajectory import Trajectory
 from mdpy.core.ensemble import Ensemble
-from mdpy.core.grid import Grid
 
 __all__ = [
     "Particle",
@@ -33,5 +32,4 @@ __all__ = [
     "State",
     "Trajectory",
     "Ensemble",
-    "Grid",
 ]
