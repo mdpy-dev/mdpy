@@ -152,17 +152,6 @@ class TileListPoorDefinedError(Exception):
     pass
 
 
-class TrajectoryPoorDefinedError(Exception):
-    """This error occurs when:
-    - Extracting information that have not been contained
-
-    Used in:
-    -mdpy.core.trajectory
-    """
-
-    pass
-
-
 class ParameterPoorDefinedError(Exception):
     """This error occurs when:
     - Topology connections' parameter is not defined in selected parameter file
@@ -174,12 +163,25 @@ class ParameterPoorDefinedError(Exception):
     pass
 
 
-class HDF5FilePoorDefinedError(Exception):
+class EnsemblePoorDefinedError(Exception):
     """This error occurs when:
-    - Use hdf5 file that does not meet the requirement of mdpy
+    - A PME constraint is bound to a non-neutralized ensemble
+    - A unsupported long range solver is specified in recipe object
 
     Used in:
-    - mdpy.io.hdf5_parser
+    - mdpy.constraint.electrostatic_pme_constraint
+    - mdpy.recipe.charmm_recipe
+    """
+
+    pass
+
+
+class TrajectoryPoorDefinedError(Exception):
+    """This error occurs when:
+    - Extracting information that have not been contained
+
+    Used in:
+    -mdpy.core.trajectory
     """
 
     pass
@@ -194,20 +196,8 @@ class IOPoorDefinedError(Exception):
     - mdpy.io.hdf5_parser
     - mdpy.io.pdb_parser
     - mdpy.io.dcd_parser
+    - mdpy.io.hdf5_parser
     - mdpy.io.log_writer
-    """
-
-    pass
-
-
-class EnsemblePoorDefinedError(Exception):
-    """This error occurs when:
-    - A PME constraint is bound to a non-neutralized ensemble
-    - A unsupported long range solver is specified in recipe object
-
-    Used in:
-    - mdpy.constraint.electrostatic_pme_constraint
-    - mdpy.recipe.charmm_recipe
     """
 
     pass
@@ -231,17 +221,6 @@ class AnalyserPoorDefinedError(Exception):
     Used in:
     - mdpy.analyser.analyser_result
     - mdpy.analyser.rmsd_analyser
-    """
-
-    pass
-
-
-class GridPoorDefinedError(Exception):
-    """This error occurs when:
-    - Grid's requirement has not been satisfied
-
-    Used in:
-    - mdpy.core.grid
     """
 
     pass

@@ -82,7 +82,7 @@ class HDF5Parser:
             is_hdf5_file_poor_defined = True
         # Output
         if is_hdf5_file_poor_defined:
-            raise HDF5FilePoorDefinedError(
+            raise IOPoorDefinedError(
                 "%s does not meet the hierarchy of mdpy created HDF5, "
                 "please check mdpy.io.HDF5_FILE_HIERARCHY" % self._file_path
             )
