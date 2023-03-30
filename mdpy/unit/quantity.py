@@ -47,16 +47,16 @@ class Quantity:
                 self._unit = deepcopy(unit)
 
     def __repr__(self) -> str:
-        return "<Quantity object: %s %s at 0x%x>" % (
-            self._value * self._unit.relative_value,
-            self._unit.base_dimension,
+        return "<Quantity object: %s (%s) at 0x%x>" % (
+            self._value,
+            self._unit,
             id(self),
         )
 
     def __str__(self) -> str:
-        return "%s %s" % (
-            self._value * self._unit.relative_value,
-            self._unit.base_dimension,
+        return "%s (%s)" % (
+            self._value,
+            self._unit,
         )
 
     def is_dimension_less(self):
