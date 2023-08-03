@@ -13,9 +13,6 @@ from mdpy.utils import *
 from mdpy.error import *
 from mdpy.environment import *
 
-pbc_matrix = np.diag(np.ones(3) * 10).astype(NUMPY_FLOAT)
-pbc_diag = np.diagonal(pbc_matrix)
-
 
 def test_check_pbc_matrix():
     with pytest.raises(PBCPoorDefinedError):
@@ -26,7 +23,7 @@ def test_check_pbc_matrix():
 
 
 def test_wrap_positions():
-    positions = np.array(
+    positions = cp.array(
         [
             [0, 0, 0],
             [4, 5, 1],
@@ -37,8 +34,10 @@ def test_wrap_positions():
             [11, 12, 3],
             [-3, -12.0, -14],
         ]
-    )
-    wrapped_positions = wrap_positions(positions, np.diagonal(pbc_matrix))
+    ).astype(CUPY_FLOAT)
+    pbc_matrix = cp.diag(cp.ones(3) * 10).astype(CUPY_FLOAT)
+    pbc_inv = cp.linalg.inv(pbc_matrix)
+    wrapped_positions = wrap_positions(positions, pbc_matrix, pbc_inv).get()
     assert wrapped_positions[0, 0] == 0
     assert wrapped_positions[3, 0] == -4
     assert wrapped_positions[1, 1] == 5
@@ -53,6 +52,8 @@ def test_wrap_positions():
 
 def test_unwrap_vec():
     vec = np.array([0, 6, 1]).astype(NUMPY_FLOAT)
+    pbc_matrix = np.diag(np.ones(3) * 10).astype(NUMPY_FLOAT)
+    pbc_diag = np.diagonal(pbc_matrix)
     unwrapped_vec = unwrap_vec(vec, pbc_diag)
     assert unwrapped_vec[0] == 0
     assert unwrapped_vec[1] == pytest.approx(-4)
