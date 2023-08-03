@@ -143,3 +143,8 @@ class TestCharmmImproperConstraint:
         k, psi0 = self.parameters["improper"]["HE2-HE2-CE2-CE2"]
         psi = get_dihedral([0, 0, 0], [1, 0, 0], [0, 1, 0], [0.5, 0.5, 1])
         assert energy == pytest.approx(NUMPY_FLOAT(k * (np.deg2rad(90) - psi0) ** 2))
+
+
+if __name__ == "__main__":
+    test = TestCharmmImproperConstraint()
+    test.setup()

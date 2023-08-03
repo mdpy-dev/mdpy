@@ -51,3 +51,8 @@ class TestLangevinIntegrator:
         # ATOM      1  N   VAL A   1       2.347  -0.970   3.962  1.00  0.00      A    N
         assert ensemble.state.positions.get()[0, 1] == pytest.approx(-0.970, abs=0.01)
         assert ensemble.state.positions.get()[0, 0] == pytest.approx(2.347, abs=0.01)
+
+
+if __name__ == "__main__":
+    test = TestLangevinIntegrator()
+    test.test_integrate()
