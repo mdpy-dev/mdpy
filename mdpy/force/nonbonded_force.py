@@ -232,7 +232,7 @@ class NonbondedExpression:
         if '_result_energy_1' not in fragment:
             fragment += '\nfloat energy_val = _result_energy;'
             fragment += '\nfloat force_magnitude = _result_force;'
-        return _assemble_self_tile_kernel(self.parameter_names, fragment)
+        return _assemble_self_tile_kernel_v2(self.parameter_names, fragment)
 
     def assemble_cross_tile_kernel(self):
         fragment = self.cuda_fragment
@@ -465,6 +465,116 @@ void cross_tile_kernel(
             atomicAdd(&forces[gj * 3 + 1], shfl_fy);
             atomicAdd(&forces[gj * 3 + 2], shfl_fz);
         }}
+    }}
+
+    for (int offset = 16; offset > 0; offset >>= 1) {{
+        energy += __shfl_down_sync(0xffffffff, energy, offset);
+    }}
+    if (tgx == 0) atomicAdd(energy_buffer, energy);
+}}'''
+    return kernel
+
+
+def _assemble_self_tile_kernel_v2(parameter_names, expression_fragment):
+    param_decls = _generate_param_decls(parameter_names)
+    param_load_i_lines = []
+    broadcast_j_lines = []
+    select_lines = []
+    restore_lines = []
+    for name in parameter_names:
+        param_load_i_lines.append(f'float {name}_i = 0.0f, {name}_i_14 = 0.0f;')
+        param_load_i_lines.append(f'if (gi >= 0) {{ {name}_i = {name}[gi]; {name}_i_14 = {name}_14[gi]; }}')
+        broadcast_j_lines.append(
+            f'float {name}_j = __shfl_sync(0xffffffff, {name}_i, j);'
+        )
+        broadcast_j_lines.append(
+            f'float {name}_j_14 = __shfl_sync(0xffffffff, {name}_i_14, j);'
+        )
+        select_lines.append(f'float {name}_i_saved = {name}_i;')
+        select_lines.append(f'if (is_14) {name}_i = {name}_i_14;')
+        select_lines.append(f'float {name}_j_saved = {name}_j;')
+        select_lines.append(f'if (is_14) {name}_j = {name}_j_14;')
+        restore_lines.append(f'if (is_14) {name}_i = {name}_i_saved;')
+        restore_lines.append(f'if (is_14) {name}_j = {name}_j_saved;')
+
+    param_load_i = '\n    '.join(param_load_i_lines)
+    broadcast_j = '\n            '.join(broadcast_j_lines)
+    param_select = '\n            '.join(select_lines)
+    param_restore = '\n            '.join(restore_lines)
+
+    kernel = f'''extern "C" __global__
+void self_tile_kernel(
+    const float* positions,
+    float* forces,
+    float* energy_buffer,
+    const int* block_atoms,
+    const int* self_tile_indices,
+    const unsigned int* self_exclusion_masks,
+    const unsigned int* self_scaling_masks,
+    float cutoff_sq{param_decls}
+) {{
+    int tile_idx = blockIdx.x;
+    int tgx = threadIdx.x & 31;
+    if (threadIdx.x >= 32) return;
+
+    int block_k = self_tile_indices[tile_idx];
+    float energy = 0.0f;
+
+    int gi = block_atoms[block_k * 32 + tgx];
+    float px_i = 0.0f, py_i = 0.0f, pz_i = 0.0f;
+    if (gi >= 0) {{
+        px_i = positions[gi * 3 + 0];
+        py_i = positions[gi * 3 + 1];
+        pz_i = positions[gi * 3 + 2];
+    }}
+    {param_load_i}
+
+    float force_x = 0.0f, force_y = 0.0f, force_z = 0.0f;
+
+    unsigned int excl = self_exclusion_masks[tile_idx * 32 + tgx];
+    unsigned int scale = self_scaling_masks[tile_idx * 32 + tgx];
+
+    for (int j = 0; j < 32; j++) {{
+        int gj = block_atoms[block_k * 32 + j];
+        float px_j = __shfl_sync(0xffffffff, px_i, j);
+        float py_j = __shfl_sync(0xffffffff, py_i, j);
+        float pz_j = __shfl_sync(0xffffffff, pz_i, j);
+
+        float dx = px_j - px_i;
+        float dy = py_j - py_i;
+        float dz = pz_j - pz_i;
+        float dist_sq = dx * dx + dy * dy + dz * dz;
+
+        bool excluded = (excl & 0x1) != 0;
+        bool is_14 = (scale & 0x1) != 0;
+
+        if (!excluded && dist_sq <= cutoff_sq && dist_sq > 1.0e-12f
+            && gi >= 0 && gj >= 0 && j != tgx) {{
+            float inv_dist = rsqrtf(dist_sq);
+            float r = dist_sq * inv_dist;
+
+            {broadcast_j}
+            {param_select}
+
+            {expression_fragment}
+
+            float inv_dist_force = force_magnitude * inv_dist;
+            force_x -= dx * inv_dist_force;
+            force_y -= dy * inv_dist_force;
+            force_z -= dz * inv_dist_force;
+            energy += 0.5f * energy_val;
+
+            {param_restore}
+        }}
+
+        excl >>= 1;
+        scale >>= 1;
+    }}
+
+    if (gi >= 0) {{
+        atomicAdd(&forces[gi * 3 + 0], force_x);
+        atomicAdd(&forces[gi * 3 + 1], force_y);
+        atomicAdd(&forces[gi * 3 + 2], force_z);
     }}
 
     for (int offset = 16; offset > 0; offset >>= 1) {{

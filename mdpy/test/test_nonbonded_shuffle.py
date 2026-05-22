@@ -115,3 +115,62 @@ class TestCrossTileKernelV2:
     def test_kernel_valid_braces(self, combined_expr):
         source = combined_expr.assemble_cross_tile_kernel()
         assert source.count('{') == source.count('}')
+
+
+class TestSelfTileKernelV2:
+    @pytest.fixture
+    def combined_expr(self):
+        return lennard_jones + coulomb
+
+    def test_self_kernel_has_32_step_loop(self, combined_expr):
+        source = combined_expr.assemble_self_tile_kernel()
+        assert 'j < 32' in source
+
+    def test_self_kernel_has_broadcast(self, combined_expr):
+        source = combined_expr.assemble_self_tile_kernel()
+        assert '__shfl_sync(0xffffffff, px_i, j)' in source
+
+    def test_self_kernel_no_naive_pair_loop(self, combined_expr):
+        source = combined_expr.assemble_self_tile_kernel()
+        assert 'linear = tid * 2 + iter' not in source
+        assert 'linear >= 496' not in source
+
+    def test_self_kernel_no_upper_triangle(self, combined_expr):
+        source = combined_expr.assemble_self_tile_kernel()
+        assert 'j > tgx' not in source
+
+    def test_self_kernel_has_j_neq_tgx(self, combined_expr):
+        source = combined_expr.assemble_self_tile_kernel()
+        assert 'j != tgx' in source
+
+    def test_self_kernel_has_half_energy(self, combined_expr):
+        source = combined_expr.assemble_self_tile_kernel()
+        assert '0.5f * energy_val' in source
+
+    def test_self_kernel_no_shared_mem_positions(self, combined_expr):
+        source = combined_expr.assemble_self_tile_kernel()
+        assert 'smem_pos' not in source
+
+    def test_self_kernel_has_exclusion_shift(self, combined_expr):
+        source = combined_expr.assemble_self_tile_kernel()
+        assert 'excl >>= 1' in source
+
+    def test_self_kernel_has_only_i_force(self, combined_expr):
+        source = combined_expr.assemble_self_tile_kernel()
+        assert 'force_x' in source
+        lines = source.split('\n')
+        shfl_force_lines = [l for l in lines if 'shfl_f' in l and '__shfl_sync' not in l]
+        assert len(shfl_force_lines) == 0
+
+    def test_self_kernel_has_warp_energy_reduce(self, combined_expr):
+        source = combined_expr.assemble_self_tile_kernel()
+        assert '__shfl_down_sync' in source
+
+    def test_self_kernel_has_param_broadcast(self, combined_expr):
+        source = combined_expr.assemble_self_tile_kernel()
+        assert '__shfl_sync(0xffffffff, sigma_i, j)' in source
+        assert '__shfl_sync(0xffffffff, sigma_i_14, j)' in source
+
+    def test_self_kernel_valid_braces(self, combined_expr):
+        source = combined_expr.assemble_self_tile_kernel()
+        assert source.count('{') == source.count('}')
