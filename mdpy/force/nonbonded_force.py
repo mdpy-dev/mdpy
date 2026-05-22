@@ -239,7 +239,7 @@ class NonbondedExpression:
         if '_result_energy_1' not in fragment:
             fragment += '\nfloat energy_val = _result_energy;'
             fragment += '\nfloat force_magnitude = _result_force;'
-        return _assemble_cross_tile_kernel(self.parameter_names, fragment)
+        return _assemble_cross_tile_kernel_v2(self.parameter_names, fragment)
 
 
 def _rename_output_vars(cuda_fragment, tag):
@@ -349,6 +349,130 @@ def _generate_param_restore(parameter_names):
         lines.append(f'if (is_14) {name}_i = {name}_i_saved;')
         lines.append(f'if (is_14) {name}_j = {name}_j_saved;')
     return '\n            '.join(lines)
+
+
+def _assemble_cross_tile_kernel_v2(parameter_names, expression_fragment):
+    param_decls = _generate_param_decls(parameter_names)
+    param_load_i = _generate_param_load_i(parameter_names)
+    param_load_j = _generate_param_load_j_init(parameter_names)
+    shuffle_code = _generate_shuffle_warp_data(parameter_names)
+    param_select = _generate_param_select(parameter_names)
+    param_restore = _generate_param_restore(parameter_names)
+
+    kernel = f'''extern "C" __global__
+void cross_tile_kernel(
+    const float* positions,
+    float* forces,
+    float* energy_buffer,
+    const int* block_atoms,
+    const int* cross_tiles_i,
+    const int* cross_tiles_j,
+    const float* cross_tiles_shift,
+    const unsigned int* cross_exclusion_masks,
+    const unsigned int* cross_scaling_masks,
+    float cutoff_sq,
+    int num_cross{param_decls}
+) {{
+    int total_warps = (blockDim.x * gridDim.x) / 32;
+    int warp_id = (blockIdx.x * blockDim.x + threadIdx.x) / 32;
+    int tgx = threadIdx.x & 31;
+
+    int pos = warp_id * num_cross / total_warps;
+    int end = (warp_id + 1) * num_cross / total_warps;
+
+    float energy = 0.0f;
+
+    for (; pos < end; pos++) {{
+        int bi = cross_tiles_i[pos];
+        int bj = cross_tiles_j[pos];
+        float shift_x = cross_tiles_shift[pos * 3 + 0];
+        float shift_y = cross_tiles_shift[pos * 3 + 1];
+        float shift_z = cross_tiles_shift[pos * 3 + 2];
+
+        int gi = block_atoms[bi * 32 + tgx];
+        float px_i = 0.0f, py_i = 0.0f, pz_i = 0.0f;
+        if (gi >= 0) {{
+            px_i = positions[gi * 3 + 0];
+            py_i = positions[gi * 3 + 1];
+            pz_i = positions[gi * 3 + 2];
+        }}
+        {param_load_i}
+
+        int gj_init = block_atoms[bj * 32 + tgx];
+        float shfl_px = 0.0f, shfl_py = 0.0f, shfl_pz = 0.0f;
+        if (gj_init >= 0) {{
+            shfl_px = positions[gj_init * 3 + 0] + shift_x;
+            shfl_py = positions[gj_init * 3 + 1] + shift_y;
+            shfl_pz = positions[gj_init * 3 + 2] + shift_z;
+        }}
+        {param_load_j}
+
+        float force_x = 0.0f, force_y = 0.0f, force_z = 0.0f;
+        float shfl_fx = 0.0f, shfl_fy = 0.0f, shfl_fz = 0.0f;
+
+        unsigned int excl = cross_exclusion_masks[pos * 32 + tgx];
+        excl = (excl >> tgx) | (excl << (32 - tgx));
+        unsigned int scale = cross_scaling_masks[pos * 32 + tgx];
+        scale = (scale >> tgx) | (scale << (32 - tgx));
+
+        for (int j = 0; j < 32; j++) {{
+            float dx = shfl_px - px_i;
+            float dy = shfl_py - py_i;
+            float dz = shfl_pz - pz_i;
+            float dist_sq = dx * dx + dy * dy + dz * dz;
+
+            bool excluded = (excl & 0x1) != 0;
+            bool is_14 = (scale & 0x1) != 0;
+
+            if (!excluded && dist_sq <= cutoff_sq && dist_sq > 1.0e-12f && gi >= 0) {{
+                float inv_dist = rsqrtf(dist_sq);
+                float r = dist_sq * inv_dist;
+
+                {param_select}
+
+                {expression_fragment}
+
+                float inv_dist_force = force_magnitude * inv_dist;
+                float fx = dx * inv_dist_force;
+                float fy = dy * inv_dist_force;
+                float fz = dz * inv_dist_force;
+
+                force_x -= fx;
+                force_y -= fy;
+                force_z -= fz;
+                shfl_fx += fx;
+                shfl_fy += fy;
+                shfl_fz += fz;
+                energy += energy_val;
+
+                {param_restore}
+            }}
+
+            {shuffle_code}
+
+            excl >>= 1;
+            scale >>= 1;
+        }}
+
+        if (gi >= 0) {{
+            atomicAdd(&forces[gi * 3 + 0], force_x);
+            atomicAdd(&forces[gi * 3 + 1], force_y);
+            atomicAdd(&forces[gi * 3 + 2], force_z);
+        }}
+        int gj = block_atoms[bj * 32 + tgx];
+        if (gj >= 0) {{
+            atomicAdd(&forces[gj * 3 + 0], shfl_fx);
+            atomicAdd(&forces[gj * 3 + 1], shfl_fy);
+            atomicAdd(&forces[gj * 3 + 2], shfl_fz);
+        }}
+    }}
+
+    for (int offset = 16; offset > 0; offset >>= 1) {{
+        energy += __shfl_down_sync(0xffffffff, energy, offset);
+    }}
+    if (tgx == 0) atomicAdd(energy_buffer, energy);
+}}'''
+    return kernel
 
 
 _FORCE_ACCUMULATE = '''

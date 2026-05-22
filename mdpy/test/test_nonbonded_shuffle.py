@@ -47,3 +47,71 @@ class TestCodeGenerators:
         assert 'if (is_14) sigma_j = sigma_j_saved' in code
         assert 'if (is_14) epsilon_i = epsilon_i_saved' in code
         assert 'if (is_14) charge_j = charge_j_saved' in code
+
+
+from mdpy.force.expressions.lennard_jones import lennard_jones
+from mdpy.force.expressions.coulomb import coulomb
+
+
+class TestCrossTileKernelV2:
+    @pytest.fixture
+    def combined_expr(self):
+        return lennard_jones + coulomb
+
+    def test_kernel_has_static_dispatch(self, combined_expr):
+        source = combined_expr.assemble_cross_tile_kernel()
+        assert 'total_warps' in source
+        assert 'warp_id * num_cross / total_warps' in source
+
+    def test_kernel_has_shfl_sync(self, combined_expr):
+        source = combined_expr.assemble_cross_tile_kernel()
+        assert '__shfl_sync' in source
+
+    def test_kernel_has_rotate_right(self, combined_expr):
+        source = combined_expr.assemble_cross_tile_kernel()
+        assert '(tgx + 1) & 31' in source
+
+    def test_kernel_has_forces_register(self, combined_expr):
+        source = combined_expr.assemble_cross_tile_kernel()
+        assert 'shfl_fx' in source
+        assert 'force_x' in source
+
+    def test_kernel_has_32_step_loop(self, combined_expr):
+        source = combined_expr.assemble_cross_tile_kernel()
+        assert 'j < 32' in source
+
+    def test_kernel_no_dynamic_counter(self, combined_expr):
+        source = combined_expr.assemble_cross_tile_kernel()
+        assert 'tile_counter' not in source
+
+    def test_kernel_no_shared_memory(self, combined_expr):
+        source = combined_expr.assemble_cross_tile_kernel()
+        assert '__shared__' not in source
+
+    def test_kernel_has_exclusion_prerotate(self, combined_expr):
+        source = combined_expr.assemble_cross_tile_kernel()
+        assert 'excl >> tgx' in source
+        assert 'excl << (32 - tgx)' in source
+
+    def test_kernel_exclusion_convention(self, combined_expr):
+        source = combined_expr.assemble_cross_tile_kernel()
+        assert '(excl & 0x1) != 0' in source
+
+    def test_kernel_has_atomicAdd_force(self, combined_expr):
+        source = combined_expr.assemble_cross_tile_kernel()
+        assert 'atomicAdd(&forces[gi * 3' in source
+        assert 'atomicAdd(&forces[gj * 3' in source
+
+    def test_kernel_has_warp_energy_reduce(self, combined_expr):
+        source = combined_expr.assemble_cross_tile_kernel()
+        assert '__shfl_down_sync' in source
+        assert 'atomicAdd(energy_buffer, energy)' in source
+
+    def test_kernel_has_param_select_both(self, combined_expr):
+        source = combined_expr.assemble_cross_tile_kernel()
+        assert 'sigma_i_saved' in source
+        assert 'if (is_14) sigma_i = sigma_i_14' in source
+
+    def test_kernel_valid_braces(self, combined_expr):
+        source = combined_expr.assemble_cross_tile_kernel()
+        assert source.count('{') == source.count('}')
