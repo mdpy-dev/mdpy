@@ -881,7 +881,6 @@ class NonbondedForce(ForceTerm):
         self._parameter_arrays = {}
         self._cutoff = None
         self._cutoff_sq = None
-        self._d_tile_counter = None
 
     def bind(self, topology, parameter_table, cutoff):
         self._cutoff = cutoff
@@ -912,7 +911,6 @@ class NonbondedForce(ForceTerm):
             self._d_parameter_arrays[param_name] = cp.asarray(
                 self._parameter_arrays[param_name]
             )
-        self._d_tile_counter = cp.zeros(2, dtype=cp.int32)
 
     def _param_args(self):
         args = []
@@ -938,10 +936,12 @@ class NonbondedForce(ForceTerm):
                 tile_list.d_self_scaling_masks,
                 np.float32(self._cutoff_sq),
             ] + self._param_args()
-            self._self_kernel((tile_list.num_self,), (256,), tuple(self_args))
+            self._self_kernel(
+                (tile_list.num_self,), (256,),
+                tuple(self_args),
+            )
 
         if tile_list.num_cross > 0:
-            self._d_tile_counter[0] = 0
             cross_args = [
                 gpu_context.d_positions,
                 gpu_context.d_forces,
@@ -954,11 +954,13 @@ class NonbondedForce(ForceTerm):
                 tile_list.d_cross_scaling_masks,
                 np.float32(self._cutoff_sq),
                 np.int32(tile_list.num_cross),
-                self._d_tile_counter,
             ] + self._param_args()
             num_sm = self._num_sm
             cross_grid = 4 * num_sm
-            self._cross_kernel((cross_grid,), (256,), tuple(cross_args))
+            self._cross_kernel(
+                (cross_grid,), (256,),
+                tuple(cross_args),
+            )
 
         if tile_list.num_interactions == 0:
             return 0.0

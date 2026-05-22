@@ -174,3 +174,10 @@ class TestSelfTileKernelV2:
     def test_self_kernel_valid_braces(self, combined_expr):
         source = combined_expr.assemble_self_tile_kernel()
         assert source.count('{') == source.count('}')
+
+
+class TestNonbondedForceCompute:
+    def test_compute_no_tile_counter(self):
+        from mdpy.force.nonbonded_force import NonbondedForce
+        nf = NonbondedForce(lennard_jones + coulomb)
+        assert not hasattr(nf, '_d_tile_counter') or nf._d_tile_counter is None
