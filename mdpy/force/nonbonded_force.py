@@ -288,8 +288,8 @@ def _is_parameter_call(node):
 def _generate_param_decls(parameter_names):
     param_decls = ''
     for param_name in parameter_names:
-        param_decls += f',\n    const float* {param_name}'
-        param_decls += f',\n    const float* {param_name}_14'
+        param_decls += f',\n    const float* __restrict__ {param_name}'
+        param_decls += f',\n    const float* __restrict__ {param_name}_14'
     return param_decls
 
 
@@ -376,14 +376,14 @@ def _assemble_tile_kernel(parameter_names, expression_fragment):
 
     kernel = f'''extern "C" __global__
 void tile_kernel(
-    const float* positions,
-    float* forces,
-    float* energy_buffer,
-    const int* block_atoms,
-    const int* tiles,
-    const int* interacting_atoms,
-    const unsigned int* exclusion_masks,
-    const unsigned int* scaling_masks,
+    const float* __restrict__ positions,
+    float* __restrict__ forces,
+    float* __restrict__ energy_buffer,
+    const int* __restrict__ block_atoms,
+    const int* __restrict__ tiles,
+    const int* __restrict__ interacting_atoms,
+    const unsigned int* __restrict__ exclusion_masks,
+    const unsigned int* __restrict__ scaling_masks,
     float cutoff_sq,
     int num_tiles,
     int num_particles,
@@ -499,15 +499,15 @@ def _assemble_cross_tile_kernel_v2(parameter_names, expression_fragment):
 
     kernel = f'''extern "C" __global__
 void cross_tile_kernel(
-    const float* positions,
-    float* forces,
-    float* energy_buffer,
-    const int* block_atoms,
-    const int* cross_tiles_i,
-    const int* cross_tiles_j,
-    const float* cross_tiles_shift,
-    const unsigned int* cross_exclusion_masks,
-    const unsigned int* cross_scaling_masks,
+    const float* __restrict__ positions,
+    float* __restrict__ forces,
+    float* __restrict__ energy_buffer,
+    const int* __restrict__ block_atoms,
+    const int* __restrict__ cross_tiles_i,
+    const int* __restrict__ cross_tiles_j,
+    const float* __restrict__ cross_tiles_shift,
+    const unsigned int* __restrict__ cross_exclusion_masks,
+    const unsigned int* __restrict__ cross_scaling_masks,
     float cutoff_sq,
     int num_cross{param_decls}
 ) {{
@@ -642,13 +642,13 @@ def _assemble_self_tile_kernel_v2(parameter_names, expression_fragment):
 
     kernel = f'''extern "C" __global__
 void self_tile_kernel(
-    const float* positions,
-    float* forces,
-    float* energy_buffer,
-    const int* block_atoms,
-    const int* self_tile_indices,
-    const unsigned int* self_exclusion_masks,
-    const unsigned int* self_scaling_masks,
+    const float* __restrict__ positions,
+    float* __restrict__ forces,
+    float* __restrict__ energy_buffer,
+    const int* __restrict__ block_atoms,
+    const int* __restrict__ self_tile_indices,
+    const unsigned int* __restrict__ self_exclusion_masks,
+    const unsigned int* __restrict__ self_scaling_masks,
     float cutoff_sq{param_decls}
 ) {{
     int tile_idx = blockIdx.x;
@@ -746,13 +746,13 @@ def _assemble_self_tile_kernel(parameter_names, expression_fragment):
 
     kernel = f'''extern "C" __global__
 void self_tile_kernel(
-    const float* positions,
-    float* forces,
-    float* energy_buffer,
-    const int* block_atoms,
-    const int* self_tile_indices,
-    const unsigned int* self_exclusion_masks,
-    const unsigned int* self_scaling_masks,
+    const float* __restrict__ positions,
+    float* __restrict__ forces,
+    float* __restrict__ energy_buffer,
+    const int* __restrict__ block_atoms,
+    const int* __restrict__ self_tile_indices,
+    const unsigned int* __restrict__ self_exclusion_masks,
+    const unsigned int* __restrict__ self_scaling_masks,
     float cutoff_sq{param_decls}
 ) {{
     __shared__ float smem_pos[32*3];
@@ -822,18 +822,18 @@ def _assemble_cross_tile_kernel(parameter_names, expression_fragment):
 
     kernel = f'''extern "C" __global__
 void cross_tile_kernel(
-    const float* positions,
-    float* forces,
-    float* energy_buffer,
-    const int* block_atoms,
-    const int* cross_tiles_i,
-    const int* cross_tiles_j,
-    const float* cross_tiles_shift,
-    const unsigned int* cross_exclusion_masks,
-    const unsigned int* cross_scaling_masks,
+    const float* __restrict__ positions,
+    float* __restrict__ forces,
+    float* __restrict__ energy_buffer,
+    const int* __restrict__ block_atoms,
+    const int* __restrict__ cross_tiles_i,
+    const int* __restrict__ cross_tiles_j,
+    const float* __restrict__ cross_tiles_shift,
+    const unsigned int* __restrict__ cross_exclusion_masks,
+    const unsigned int* __restrict__ cross_scaling_masks,
     float cutoff_sq,
     int num_cross,
-    int* tile_counter{param_decls}
+    int* __restrict__ tile_counter{param_decls}
 ) {{
     constexpr int W = 32;
     constexpr int NUM_WARPS = 8;
