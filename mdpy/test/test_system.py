@@ -69,10 +69,12 @@ class TestGPUContext:
         ctx.initialize(topology, pbc_matrix.flatten())
 
         assert ctx.number_particles == 4
-        assert ctx.d_positions.shape == (12,)
-        assert ctx.d_velocities.shape == (12,)
-        assert ctx.d_forces.shape == (12,)
-        assert ctx.d_prev_positions.shape == (12,)
+        assert ctx.d_positions_x.shape == (4,)
+        assert ctx.d_positions_y.shape == (4,)
+        assert ctx.d_positions_z.shape == (4,)
+        assert ctx.d_velocities_x.shape == (4,)
+        assert ctx.d_forces_x.shape == (4,)
+        assert ctx.d_prev_positions_x.shape == (4,)
         assert ctx.d_masses.shape == (4,)
         assert ctx.d_energy.shape == (1,)
         assert ctx.d_pbc_matrix.shape == (9,)
@@ -109,13 +111,17 @@ class TestGPUContext:
         ctx = GPUContext()
         ctx.initialize(topology, pbc_matrix.flatten())
 
-        ctx.d_forces[:] = 1.0
+        ctx.d_forces_x[:] = 1.0
+        ctx.d_forces_y[:] = 1.0
+        ctx.d_forces_z[:] = 1.0
         ctx.d_energy[:] = 42.0
 
         ctx.zero_forces()
         ctx.zero_energy()
 
-        assert np.all(ctx.d_forces == 0)
+        assert np.all(ctx.d_forces_x.get() == 0)
+        assert np.all(ctx.d_forces_y.get() == 0)
+        assert np.all(ctx.d_forces_z.get() == 0)
         assert ctx.d_energy[0] == 0
 
 
@@ -251,17 +257,29 @@ class TestVerletIntegrator:
         ctx.initialize(topology, pbc_matrix.flatten())
 
         import cupy as cp
-        ctx.d_positions[:] = cp.asarray(np.array([10.0, 10.0, 10.0, 11.5, 10.0, 10.0], dtype=np.float32))
-        ctx.d_velocities[:] = cp.asarray(np.array([0.01, 0.0, 0.0, -0.01, 0.0, 0.0], dtype=np.float32))
-        ctx.d_forces[:] = 0.0
+        ctx.d_positions_x[:] = cp.asarray(np.array([10.0, 11.5], dtype=np.float32))
+        ctx.d_positions_y[:] = cp.asarray(np.array([10.0, 10.0], dtype=np.float32))
+        ctx.d_positions_z[:] = cp.asarray(np.array([10.0, 10.0], dtype=np.float32))
+        ctx.d_velocities_x[:] = cp.asarray(np.array([0.01, -0.01], dtype=np.float32))
+        ctx.d_velocities_y[:] = cp.asarray(np.array([0.0, 0.0], dtype=np.float32))
+        ctx.d_velocities_z[:] = cp.asarray(np.array([0.0, 0.0], dtype=np.float32))
+        ctx.d_forces_x[:] = 0.0
+        ctx.d_forces_y[:] = 0.0
+        ctx.d_forces_z[:] = 0.0
 
         integrator = VerletIntegrator(time_step=1.0)
         integrator.step(ctx)
 
-        positions = ctx.d_positions.reshape(-1, 3).copy()
+        pos_x = ctx.d_positions_x.get()
+        pos_y = ctx.d_positions_y.get()
+        pos_z = ctx.d_positions_z.get()
+        positions = np.stack([pos_x, pos_y, pos_z], axis=1)
         assert np.all(np.isfinite(positions))
 
-        velocities = ctx.d_velocities.reshape(-1, 3).copy()
+        vel_x = ctx.d_velocities_x.get()
+        vel_y = ctx.d_velocities_y.get()
+        vel_z = ctx.d_velocities_z.get()
+        velocities = np.stack([vel_x, vel_y, vel_z], axis=1)
         assert np.allclose(velocities[0], [0.01, 0.0, 0.0], atol=1e-4)
         assert np.allclose(velocities[1], [-0.01, 0.0, 0.0], atol=1e-4)
 
