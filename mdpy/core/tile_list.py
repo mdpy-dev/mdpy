@@ -897,9 +897,9 @@ class TileList:
             data = cp.asarray(
                 np.ascontiguousarray(positions.ravel(), dtype=env.NUMPY_FLOAT)
             )
-            pos_x = data[0::3]
-            pos_y = data[1::3]
-            pos_z = data[2::3]
+            pos_x = cp.ascontiguousarray(data[0::3])
+            pos_y = cp.ascontiguousarray(data[1::3])
+            pos_z = cp.ascontiguousarray(data[2::3])
 
         self.d_rebuild_flag[0] = 0
         threshold_sq = (self.skin * 0.5) ** 2

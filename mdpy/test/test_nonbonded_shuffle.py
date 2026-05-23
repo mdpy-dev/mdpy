@@ -99,8 +99,8 @@ class TestCrossTileKernelV2:
 
     def test_kernel_has_atomicAdd_force(self, combined_expr):
         source = combined_expr.assemble_cross_tile_kernel()
-        assert 'atomicAdd(&forces[gi * 3' in source
-        assert 'atomicAdd(&forces[gj * 3' in source
+        assert 'atomicAdd(&f_x[gi]' in source
+        assert 'atomicAdd(&f_x[gj]' in source
 
     def test_kernel_has_warp_energy_reduce(self, combined_expr):
         source = combined_expr.assemble_cross_tile_kernel()

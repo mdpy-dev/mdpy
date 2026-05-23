@@ -21,8 +21,14 @@ def _make_parameter_table(term_params):
 class MockGPUContext:
     def __init__(self, positions, pbc_matrix):
         import cupy as cp
-        self.d_positions = cp.asarray(positions.astype(np.float32).ravel())
-        self.d_forces = cp.zeros(positions.size, dtype=np.float32)
+        pos = positions.astype(np.float32)
+        self.d_positions_x = cp.asarray(pos[:, 0])
+        self.d_positions_y = cp.asarray(pos[:, 1])
+        self.d_positions_z = cp.asarray(pos[:, 2])
+        N = positions.shape[0]
+        self.d_forces_x = cp.zeros(N, dtype=np.float32)
+        self.d_forces_y = cp.zeros(N, dtype=np.float32)
+        self.d_forces_z = cp.zeros(N, dtype=np.float32)
         self.d_energy = cp.zeros(1, dtype=np.float32)
         bx = float(pbc_matrix[0, 0])
         by = float(pbc_matrix[1, 1])
@@ -30,6 +36,11 @@ class MockGPUContext:
         self.d_box_dims = cp.array([
             bx, by, bz, 1.0/bx, 1.0/by, 1.0/bz
         ], dtype=np.float32)
+
+    @property
+    def d_forces(self):
+        import cupy as cp
+        return cp.stack([self.d_forces_x, self.d_forces_y, self.d_forces_z], axis=1).ravel()
 
 
 def _build_two_particle():

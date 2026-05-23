@@ -137,9 +137,9 @@ class TestExpressionCombination:
         kernel = combined.assemble_cross_tile_kernel()
         assert 'extern "C" __global__' in kernel
         assert 'cross_tile_kernel' in kernel
-        assert 'const float* sigma' in kernel
-        assert 'const float* epsilon' in kernel
-        assert 'const float* charge' in kernel
+        assert '__restrict__ sigma' in kernel
+        assert '__restrict__ epsilon' in kernel
+        assert '__restrict__ charge' in kernel
         assert 'sigma_14' in kernel
         assert 'epsilon_14' in kernel
         assert 'charge_14' in kernel
@@ -166,17 +166,17 @@ class TestKernelAssembly:
 
     def test_coulomb_kernel_has_charge_arrays(self):
         kernel = coulomb.assemble_cross_tile_kernel()
-        assert 'const float* charge' in kernel
-        assert 'const float* charge_14' in kernel
+        assert '__restrict__ charge' in kernel
+        assert 'charge_14' in kernel
         assert 'charge_i' in kernel
         assert 'charge_j' in kernel
 
     def test_combined_kernel_has_all_params(self):
         combined = lennard_jones + coulomb
         kernel = combined.assemble_cross_tile_kernel()
-        assert 'const float* sigma' in kernel
-        assert 'const float* epsilon' in kernel
-        assert 'const float* charge' in kernel
+        assert '__restrict__ sigma' in kernel
+        assert '__restrict__ epsilon' in kernel
+        assert '__restrict__ charge' in kernel
         assert 'sigma_i' in kernel
         assert 'epsilon_i' in kernel
         assert 'charge_i' in kernel
@@ -281,12 +281,12 @@ class TestCombinedKernelSource:
         assert 'extern "C" __global__' in kernel
         assert 'void cross_tile_kernel' in kernel
 
-        assert 'const float* sigma' in kernel
-        assert 'const float* sigma_14' in kernel
-        assert 'const float* epsilon' in kernel
-        assert 'const float* epsilon_14' in kernel
-        assert 'const float* charge' in kernel
-        assert 'const float* charge_14' in kernel
+        assert '__restrict__ sigma' in kernel
+        assert '__restrict__ sigma_14' in kernel
+        assert '__restrict__ epsilon' in kernel
+        assert '__restrict__ epsilon_14' in kernel
+        assert '__restrict__ charge' in kernel
+        assert '__restrict__ charge_14' in kernel
 
         assert 'sigma_i = sigma[gi]' in kernel
         assert 'sigma_i_14 = sigma_14[gi]' in kernel
