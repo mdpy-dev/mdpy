@@ -1,60 +1,85 @@
 from __future__ import annotations
 
-import math
-
+import cupy as cp
 import numpy as np
-from numba import cuda
 
-from mdpy.core.gpu_kernels import minimum_image
+_VERLET_INIT_KERNEL = r"""
+extern "C" __global__
+void verlet_init_kernel(
+    const float* __restrict__ positions,
+    const float* __restrict__ velocities,
+    const float* __restrict__ forces,
+    const float* __restrict__ masses,
+    float* __restrict__ prev_positions,
+    float dt, float dt_sq, int number_particles
+) {
+    int index = blockIdx.x * blockDim.x + threadIdx.x;
+    if (index >= number_particles) return;
+    float m = masses[index];
+    if (m <= 0.0f) return;
+    float inv_mass = 1.0f / m;
+    prev_positions[index * 3 + 0] = positions[index * 3 + 0] - velocities[index * 3 + 0] * dt + 0.5f * forces[index * 3 + 0] * inv_mass * dt_sq;
+    prev_positions[index * 3 + 1] = positions[index * 3 + 1] - velocities[index * 3 + 1] * dt + 0.5f * forces[index * 3 + 1] * inv_mass * dt_sq;
+    prev_positions[index * 3 + 2] = positions[index * 3 + 2] - velocities[index * 3 + 2] * dt + 0.5f * forces[index * 3 + 2] * inv_mass * dt_sq;
+}
+"""
 
+_VERLET_KERNEL = r"""
+extern "C" __global__
+void verlet_kernel(
+    float* __restrict__ positions,
+    float* __restrict__ prev_positions,
+    const float* __restrict__ forces,
+    const float* __restrict__ masses,
+    float* __restrict__ velocities,
+    const float* __restrict__ pbc_matrix,
+    const float* __restrict__ pbc_inv,
+    float dt, float dt_sq, int number_particles
+) {
+    int index = blockIdx.x * blockDim.x + threadIdx.x;
+    if (index >= number_particles) return;
+    float m = masses[index];
+    if (m <= 0.0f) return;
+    float inv_mass = 1.0f / m;
+    float ax = forces[index * 3 + 0] * inv_mass;
+    float ay = forces[index * 3 + 1] * inv_mass;
+    float az = forces[index * 3 + 2] * inv_mass;
 
-@cuda.jit
-def verlet_init_kernel(positions, velocities, forces, masses,
-                       prev_positions, dt, dt_sq, number_particles):
-    index = cuda.grid(1)
-    if index >= number_particles:
-        return
-    if masses[index] <= 0.0:
-        return
-    inv_mass = 1.0 / masses[index]
-    prev_positions[index * 3] = positions[index * 3] - velocities[index * 3] * dt + 0.5 * forces[index * 3] * inv_mass * dt_sq
-    prev_positions[index * 3 + 1] = positions[index * 3 + 1] - velocities[index * 3 + 1] * dt + 0.5 * forces[index * 3 + 1] * inv_mass * dt_sq
-    prev_positions[index * 3 + 2] = positions[index * 3 + 2] - velocities[index * 3 + 2] * dt + 0.5 * forces[index * 3 + 2] * inv_mass * dt_sq
+    float cx = positions[index * 3 + 0];
+    float cy = positions[index * 3 + 1];
+    float cz = positions[index * 3 + 2];
 
+    float nx = 2.0f * cx - prev_positions[index * 3 + 0] + ax * dt_sq;
+    float ny = 2.0f * cy - prev_positions[index * 3 + 1] + ay * dt_sq;
+    float nz = 2.0f * cz - prev_positions[index * 3 + 2] + az * dt_sq;
 
-@cuda.jit
-def verlet_kernel(positions, prev_positions, forces, masses,
-                  velocities, pbc_matrix, pbc_inv, dt, dt_sq, number_particles):
-    index = cuda.grid(1)
-    if index >= number_particles:
-        return
-    if masses[index] <= 0.0:
-        return
-    inv_mass = 1.0 / masses[index]
-    acceleration_x = forces[index * 3] * inv_mass
-    acceleration_y = forces[index * 3 + 1] * inv_mass
-    acceleration_z = forces[index * 3 + 2] * inv_mass
+    velocities[index * 3 + 0] = (nx - prev_positions[index * 3 + 0]) / (2.0f * dt);
+    velocities[index * 3 + 1] = (ny - prev_positions[index * 3 + 1]) / (2.0f * dt);
+    velocities[index * 3 + 2] = (nz - prev_positions[index * 3 + 2]) / (2.0f * dt);
 
-    current_x = positions[index * 3]
-    current_y = positions[index * 3 + 1]
-    current_z = positions[index * 3 + 2]
+    float sx = nx * pbc_inv[0] + ny * pbc_inv[3] + nz * pbc_inv[6];
+    float sy = nx * pbc_inv[1] + ny * pbc_inv[4] + nz * pbc_inv[7];
+    float sz = nx * pbc_inv[2] + ny * pbc_inv[5] + nz * pbc_inv[8];
+    sx -= roundf(sx);
+    sy -= roundf(sy);
+    sz -= roundf(sz);
+    nx = sx * pbc_matrix[0] + sy * pbc_matrix[3] + sz * pbc_matrix[6];
+    ny = sx * pbc_matrix[1] + sy * pbc_matrix[4] + sz * pbc_matrix[7];
+    nz = sx * pbc_matrix[2] + sy * pbc_matrix[5] + sz * pbc_matrix[8];
 
-    new_x = 2.0 * current_x - prev_positions[index * 3] + acceleration_x * dt_sq
-    new_y = 2.0 * current_y - prev_positions[index * 3 + 1] + acceleration_y * dt_sq
-    new_z = 2.0 * current_z - prev_positions[index * 3 + 2] + acceleration_z * dt_sq
+    prev_positions[index * 3 + 0] = cx;
+    prev_positions[index * 3 + 1] = cy;
+    prev_positions[index * 3 + 2] = cz;
+    positions[index * 3 + 0] = nx;
+    positions[index * 3 + 1] = ny;
+    positions[index * 3 + 2] = nz;
+}
+"""
 
-    velocities[index * 3] = (new_x - prev_positions[index * 3]) / (2.0 * dt)
-    velocities[index * 3 + 1] = (new_y - prev_positions[index * 3 + 1]) / (2.0 * dt)
-    velocities[index * 3 + 2] = (new_z - prev_positions[index * 3 + 2]) / (2.0 * dt)
-
-    new_x, new_y, new_z = minimum_image(new_x, new_y, new_z, pbc_matrix, pbc_inv)
-
-    prev_positions[index * 3] = current_x
-    prev_positions[index * 3 + 1] = current_y
-    prev_positions[index * 3 + 2] = current_z
-    positions[index * 3] = new_x
-    positions[index * 3 + 1] = new_y
-    positions[index * 3 + 2] = new_z
+_kernels = {
+    'init': cp.RawKernel(_VERLET_INIT_KERNEL, 'verlet_init_kernel'),
+    'step': cp.RawKernel(_VERLET_KERNEL, 'verlet_kernel'),
+}
 
 
 class VerletIntegrator:
@@ -70,7 +95,7 @@ class VerletIntegrator:
         grid = (number + block - 1) // block
 
         if not self._initialized:
-            verlet_init_kernel[grid, block](
+            _kernels['init']((grid,), (block,), (
                 gpu_context.d_positions,
                 gpu_context.d_velocities,
                 gpu_context.d_forces,
@@ -78,11 +103,11 @@ class VerletIntegrator:
                 gpu_context.d_prev_positions,
                 np.float32(self.dt),
                 np.float32(self.dt_sq),
-                number,
-            )
+                np.int32(number),
+            ))
             self._initialized = True
 
-        verlet_kernel[grid, block](
+        _kernels['step']((grid,), (block,), (
             gpu_context.d_positions,
             gpu_context.d_prev_positions,
             gpu_context.d_forces,
@@ -92,5 +117,5 @@ class VerletIntegrator:
             gpu_context.d_pbc_inv,
             np.float32(self.dt),
             np.float32(self.dt_sq),
-            number,
-        )
+            np.int32(number),
+        ))
