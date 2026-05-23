@@ -376,8 +376,12 @@ def _assemble_tile_kernel(parameter_names, expression_fragment):
 
     kernel = f'''extern "C" __global__
 void tile_kernel(
-    const float* __restrict__ positions,
-    float* __restrict__ forces,
+    const float* __restrict__ pos_x,
+    const float* __restrict__ pos_y,
+    const float* __restrict__ pos_z,
+    float* __restrict__ f_x,
+    float* __restrict__ f_y,
+    float* __restrict__ f_z,
     float* __restrict__ energy_buffer,
     const int* __restrict__ block_atoms,
     const int* __restrict__ tiles,
@@ -410,18 +414,18 @@ void tile_kernel(
         int gi = block_atoms[block_x * 32 + tgx];
         float px_i = 0.0f, py_i = 0.0f, pz_i = 0.0f;
         if (gi >= 0 && gi < num_particles) {{
-            px_i = positions[gi * 3 + 0];
-            py_i = positions[gi * 3 + 1];
-            pz_i = positions[gi * 3 + 2];
+            px_i = pos_x[gi];
+            py_i = pos_y[gi];
+            pz_i = pos_z[gi];
         }}
         {param_load_i}
 
         int gj = interacting_atoms[pos * 32 + tgx];
         float shfl_px = 0.0f, shfl_py = 0.0f, shfl_pz = 0.0f;
         if (gj >= 0 && gj < num_particles) {{
-            shfl_px = positions[gj * 3 + 0];
-            shfl_py = positions[gj * 3 + 1];
-            shfl_pz = positions[gj * 3 + 2];
+            shfl_px = pos_x[gj];
+            shfl_py = pos_y[gj];
+            shfl_pz = pos_z[gj];
         }}
         {param_load_j}
 
@@ -469,15 +473,15 @@ void tile_kernel(
         }}
 
         if (gi >= 0 && gi < num_particles) {{
-            atomicAdd(&forces[gi * 3 + 0], force_x);
-            atomicAdd(&forces[gi * 3 + 1], force_y);
-            atomicAdd(&forces[gi * 3 + 2], force_z);
+            atomicAdd(&f_x[gi], force_x);
+            atomicAdd(&f_y[gi], force_y);
+            atomicAdd(&f_z[gi], force_z);
         }}
         int gj_out = atom_indices_shared[threadIdx.x];
         if (gj_out >= 0 && gj_out < num_particles) {{
-            atomicAdd(&forces[gj_out * 3 + 0], shfl_fx);
-            atomicAdd(&forces[gj_out * 3 + 1], shfl_fy);
-            atomicAdd(&forces[gj_out * 3 + 2], shfl_fz);
+            atomicAdd(&f_x[gj_out], shfl_fx);
+            atomicAdd(&f_y[gj_out], shfl_fy);
+            atomicAdd(&f_z[gj_out], shfl_fz);
         }}
     }}
 
@@ -499,8 +503,12 @@ def _assemble_cross_tile_kernel_v2(parameter_names, expression_fragment):
 
     kernel = f'''extern "C" __global__
 void cross_tile_kernel(
-    const float* __restrict__ positions,
-    float* __restrict__ forces,
+    const float* __restrict__ pos_x,
+    const float* __restrict__ pos_y,
+    const float* __restrict__ pos_z,
+    float* __restrict__ f_x,
+    float* __restrict__ f_y,
+    float* __restrict__ f_z,
     float* __restrict__ energy_buffer,
     const int* __restrict__ block_atoms,
     const int* __restrict__ cross_tiles_i,
@@ -530,18 +538,18 @@ void cross_tile_kernel(
         int gi = block_atoms[bi * 32 + tgx];
         float px_i = 0.0f, py_i = 0.0f, pz_i = 0.0f;
         if (gi >= 0) {{
-            px_i = positions[gi * 3 + 0];
-            py_i = positions[gi * 3 + 1];
-            pz_i = positions[gi * 3 + 2];
+            px_i = pos_x[gi];
+            py_i = pos_y[gi];
+            pz_i = pos_z[gi];
         }}
         {param_load_i}
 
         int gj_init = block_atoms[bj * 32 + tgx];
         float shfl_px = 0.0f, shfl_py = 0.0f, shfl_pz = 0.0f;
         if (gj_init >= 0) {{
-            shfl_px = positions[gj_init * 3 + 0] + shift_x;
-            shfl_py = positions[gj_init * 3 + 1] + shift_y;
-            shfl_pz = positions[gj_init * 3 + 2] + shift_z;
+            shfl_px = pos_x[gj_init] + shift_x;
+            shfl_py = pos_y[gj_init] + shift_y;
+            shfl_pz = pos_z[gj_init] + shift_z;
         }}
         {param_load_j}
 
@@ -593,15 +601,15 @@ void cross_tile_kernel(
         }}
 
         if (gi >= 0) {{
-            atomicAdd(&forces[gi * 3 + 0], force_x);
-            atomicAdd(&forces[gi * 3 + 1], force_y);
-            atomicAdd(&forces[gi * 3 + 2], force_z);
+            atomicAdd(&f_x[gi], force_x);
+            atomicAdd(&f_y[gi], force_y);
+            atomicAdd(&f_z[gi], force_z);
         }}
         int gj = block_atoms[bj * 32 + tgx];
         if (gj >= 0) {{
-            atomicAdd(&forces[gj * 3 + 0], shfl_fx);
-            atomicAdd(&forces[gj * 3 + 1], shfl_fy);
-            atomicAdd(&forces[gj * 3 + 2], shfl_fz);
+            atomicAdd(&f_x[gj], shfl_fx);
+            atomicAdd(&f_y[gj], shfl_fy);
+            atomicAdd(&f_z[gj], shfl_fz);
         }}
     }}
 
@@ -642,8 +650,12 @@ def _assemble_self_tile_kernel_v2(parameter_names, expression_fragment):
 
     kernel = f'''extern "C" __global__
 void self_tile_kernel(
-    const float* __restrict__ positions,
-    float* __restrict__ forces,
+    const float* __restrict__ pos_x,
+    const float* __restrict__ pos_y,
+    const float* __restrict__ pos_z,
+    float* __restrict__ f_x,
+    float* __restrict__ f_y,
+    float* __restrict__ f_z,
     float* __restrict__ energy_buffer,
     const int* __restrict__ block_atoms,
     const int* __restrict__ self_tile_indices,
@@ -661,9 +673,9 @@ void self_tile_kernel(
     int gi = block_atoms[block_k * 32 + tgx];
     float px_i = 0.0f, py_i = 0.0f, pz_i = 0.0f;
     if (gi >= 0) {{
-        px_i = positions[gi * 3 + 0];
-        py_i = positions[gi * 3 + 1];
-        pz_i = positions[gi * 3 + 2];
+        px_i = pos_x[gi];
+        py_i = pos_y[gi];
+        pz_i = pos_z[gi];
     }}
     {param_load_i}
 
@@ -711,9 +723,9 @@ void self_tile_kernel(
     }}
 
     if (gi >= 0) {{
-        atomicAdd(&forces[gi * 3 + 0], force_x);
-        atomicAdd(&forces[gi * 3 + 1], force_y);
-        atomicAdd(&forces[gi * 3 + 2], force_z);
+        atomicAdd(&f_x[gi], force_x);
+        atomicAdd(&f_y[gi], force_y);
+        atomicAdd(&f_z[gi], force_z);
     }}
 
     for (int offset = 16; offset > 0; offset >>= 1) {{
@@ -730,12 +742,12 @@ _FORCE_ACCUMULATE = '''
         float fy = dy * inv_dist_force;
         float fz = dz * inv_dist_force;
 
-        atomicAdd(&forces[gi*3+0],  fx);
-        atomicAdd(&forces[gi*3+1],  fy);
-        atomicAdd(&forces[gi*3+2],  fz);
-        atomicAdd(&forces[gj*3+0], -fx);
-        atomicAdd(&forces[gj*3+1], -fy);
-        atomicAdd(&forces[gj*3+2], -fz);
+        atomicAdd(&f_x[gi],  fx);
+        atomicAdd(&f_y[gi],  fy);
+        atomicAdd(&f_z[gi],  fz);
+        atomicAdd(&f_x[gj], -fx);
+        atomicAdd(&f_y[gj], -fy);
+        atomicAdd(&f_z[gj], -fz);
         atomicAdd(energy_buffer, energy_val);
 '''
 
@@ -746,8 +758,12 @@ def _assemble_self_tile_kernel(parameter_names, expression_fragment):
 
     kernel = f'''extern "C" __global__
 void self_tile_kernel(
-    const float* __restrict__ positions,
-    float* __restrict__ forces,
+    const float* __restrict__ pos_x,
+    const float* __restrict__ pos_y,
+    const float* __restrict__ pos_z,
+    float* __restrict__ f_x,
+    float* __restrict__ f_y,
+    float* __restrict__ f_z,
     float* __restrict__ energy_buffer,
     const int* __restrict__ block_atoms,
     const int* __restrict__ self_tile_indices,
@@ -764,9 +780,9 @@ void self_tile_kernel(
     if (tid < 32) {{
         int gi_load = block_atoms[block_k * 32 + tid];
         if (gi_load >= 0) {{
-            smem_pos[tid*3+0] = positions[gi_load*3+0];
-            smem_pos[tid*3+1] = positions[gi_load*3+1];
-            smem_pos[tid*3+2] = positions[gi_load*3+2];
+            smem_pos[tid*3+0] = pos_x[gi_load];
+            smem_pos[tid*3+1] = pos_y[gi_load];
+            smem_pos[tid*3+2] = pos_z[gi_load];
         }} else {{
             smem_pos[tid*3+0] = 0.0f;
             smem_pos[tid*3+1] = 0.0f;
@@ -822,8 +838,12 @@ def _assemble_cross_tile_kernel(parameter_names, expression_fragment):
 
     kernel = f'''extern "C" __global__
 void cross_tile_kernel(
-    const float* __restrict__ positions,
-    float* __restrict__ forces,
+    const float* __restrict__ pos_x,
+    const float* __restrict__ pos_y,
+    const float* __restrict__ pos_z,
+    float* __restrict__ f_x,
+    float* __restrict__ f_y,
+    float* __restrict__ f_z,
     float* __restrict__ energy_buffer,
     const int* __restrict__ block_atoms,
     const int* __restrict__ cross_tiles_i,
@@ -869,9 +889,9 @@ void cross_tile_kernel(
         if (tid < W) {{
             int gi_load = block_atoms[bi * W + tid];
             if (gi_load >= 0) {{
-                smem_pos_i[tid * 3 + 0] = positions[gi_load * 3 + 0];
-                smem_pos_i[tid * 3 + 1] = positions[gi_load * 3 + 1];
-                smem_pos_i[tid * 3 + 2] = positions[gi_load * 3 + 2];
+                smem_pos_i[tid * 3 + 0] = pos_x[gi_load];
+                smem_pos_i[tid * 3 + 1] = pos_y[gi_load];
+                smem_pos_i[tid * 3 + 2] = pos_z[gi_load];
             }} else {{
                 smem_pos_i[tid * 3 + 0] = 0.0f;
                 smem_pos_i[tid * 3 + 1] = 0.0f;
@@ -881,9 +901,9 @@ void cross_tile_kernel(
             int local = tid - W;
             int gj_load = block_atoms[bj * W + local];
             if (gj_load >= 0) {{
-                smem_pos_j[local * 3 + 0] = positions[gj_load * 3 + 0] + shift_x;
-                smem_pos_j[local * 3 + 1] = positions[gj_load * 3 + 1] + shift_y;
-                smem_pos_j[local * 3 + 2] = positions[gj_load * 3 + 2] + shift_z;
+                smem_pos_j[local * 3 + 0] = pos_x[gj_load] + shift_x;
+                smem_pos_j[local * 3 + 1] = pos_y[gj_load] + shift_y;
+                smem_pos_j[local * 3 + 2] = pos_z[gj_load] + shift_z;
             }} else {{
                 smem_pos_j[local * 3 + 0] = 0.0f;
                 smem_pos_j[local * 3 + 1] = 0.0f;
@@ -926,12 +946,12 @@ void cross_tile_kernel(
             float fy = dy * inv_dist_force;
             float fz = dz * inv_dist_force;
 
-            atomicAdd(&forces[gi * 3 + 0],  fx);
-            atomicAdd(&forces[gi * 3 + 1],  fy);
-            atomicAdd(&forces[gi * 3 + 2],  fz);
-            atomicAdd(&forces[gj * 3 + 0], -fx);
-            atomicAdd(&forces[gj * 3 + 1], -fy);
-            atomicAdd(&forces[gj * 3 + 2], -fz);
+            atomicAdd(&f_x[gi],  fx);
+            atomicAdd(&f_y[gi],  fy);
+            atomicAdd(&f_z[gi],  fz);
+            atomicAdd(&f_x[gj], -fx);
+            atomicAdd(&f_y[gj], -fy);
+            atomicAdd(&f_z[gj], -fz);
             atomicAdd(&smem_energy, energy_val);
         }}
         __syncthreads();
@@ -1061,8 +1081,12 @@ class NonbondedForce(ForceTerm):
             return
 
         args = [
-            gpu_context.d_positions,
-            gpu_context.d_forces,
+            gpu_context.d_positions_x,
+            gpu_context.d_positions_y,
+            gpu_context.d_positions_z,
+            gpu_context.d_forces_x,
+            gpu_context.d_forces_y,
+            gpu_context.d_forces_z,
             gpu_context.d_energy,
             tile_list.d_block_atoms,
             tile_list.d_tiles,
