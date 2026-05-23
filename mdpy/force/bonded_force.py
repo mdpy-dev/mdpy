@@ -38,10 +38,10 @@ __device__ __forceinline__ float3 pbc_ortho(float3 d, const float* box) {
         d.z - box[2]*roundf(d.z*box[5])
     );
 }
-__device__ __forceinline__ float3 load_pos(const float* p, int i) {
+__device__ __forceinline__ float3 load_pos(const float* __restrict__ p, int i) {
     return make_float3(p[i*3], p[i*3+1], p[i*3+2]);
 }
-__device__ __forceinline__ void add_force(float* f, int i, float3 v) {
+__device__ __forceinline__ void add_force(float* __restrict__ f, int i, float3 v) {
     atomicAdd(&f[i*3],   v.x);
     atomicAdd(&f[i*3+1], v.y);
     atomicAdd(&f[i*3+2], v.z);
@@ -163,8 +163,8 @@ _FOUR_BODY_TEMPLATE = r'''
 _MAIN_TEMPLATE = r'''
 extern "C" __global__
 void compute_bonded(
-    const float* pos, float* f, float* energy_buf,
-    const float* box,
+    const float* __restrict__ pos, float* __restrict__ f, float* __restrict__ energy_buf,
+    const float* __restrict__ box,
     {kernel_params}
 ) {{
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
@@ -203,7 +203,7 @@ def _assemble_kernel(term_specs):
         params_per_term = len(expr.param_names)
 
         kernel_param_lines.append(
-            f'const int* {name}_idx, const float* {name}_prm, int num_{name}'
+            f'const int* __restrict__ {name}_idx, const float* __restrict__ {name}_prm, int num_{name}'
         )
 
         param_loads = _generate_param_loads(name, expr.param_names, params_per_term)
