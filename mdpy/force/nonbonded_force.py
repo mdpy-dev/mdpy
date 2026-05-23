@@ -115,9 +115,9 @@ class _Transpiler(ast.NodeVisitor):
             raise NotImplementedError('Parameter index must be a variable name')
         index_name = node.slice.id
         if index_name == self.index_names[0]:
-            return f'{param_name}_i'
+            return f'{param_name}_i_use'
         elif index_name == self.index_names[1]:
-            return f'{param_name}_j'
+            return f'{param_name}_j_use'
         raise ValueError(f'Index variable {index_name} is not a recognized particle index')
 
     def _translate_call(self, node):
@@ -293,6 +293,14 @@ def _generate_param_decls(parameter_names):
     return param_decls
 
 
+def _generate_sorted_param_decls(parameter_names):
+    decls = ''
+    for name in parameter_names:
+        decls += f',\n    const float* __restrict__ sorted_{name}'
+        decls += f',\n    const float* __restrict__ sorted_{name}_14'
+    return decls
+
+
 def _generate_pre_fetch(parameter_names):
     pre_fetch_lines = []
     for param_name in parameter_names:
@@ -310,6 +318,14 @@ def _generate_param_load_i(parameter_names):
     for name in parameter_names:
         lines.append(f'float {name}_i = 0.0f, {name}_i_14 = 0.0f;')
         lines.append(f'if (gi >= 0) {{ {name}_i = {name}[gi]; {name}_i_14 = {name}_14[gi]; }}')
+    return '\n        '.join(lines)
+
+
+def _generate_sorted_param_load_i(parameter_names):
+    lines = []
+    for name in parameter_names:
+        lines.append(f'float {name}_i = sorted_{name}[block_x * 32 + tgx];')
+        lines.append(f'float {name}_i_14 = sorted_{name}_14[block_x * 32 + tgx];')
     return '\n        '.join(lines)
 
 
@@ -366,16 +382,27 @@ def _generate_param_restore(parameter_names):
     return '\n            '.join(lines)
 
 
+def _generate_param_use(parameter_names):
+    lines = []
+    for name in parameter_names:
+        lines.append(f'float {name}_i_use = is_14 ? {name}_i_14 : {name}_i;')
+        lines.append(f'float {name}_j_use = is_14 ? {name}_j_14 : {name}_j;')
+    return '\n                '.join(lines)
+
+
 def _assemble_tile_kernel(parameter_names, expression_fragment):
     param_decls = _generate_param_decls(parameter_names)
-    param_load_i = _generate_param_load_i(parameter_names)
+    sorted_param_decls = _generate_sorted_param_decls(parameter_names)
+    sorted_param_load_i = _generate_sorted_param_load_i(parameter_names)
     param_load_j = _generate_param_load_j_tile(parameter_names)
     shuffle_code = _generate_shuffle_warp_data(parameter_names)
-    param_select = _generate_param_select(parameter_names)
-    param_restore = _generate_param_restore(parameter_names)
+    param_use = _generate_param_use(parameter_names)
 
-    kernel = f'''extern "C" __global__
+    kernel = f'''extern "C" __global__ __launch_bounds__(256, 5)
 void tile_kernel(
+    const float* __restrict__ sorted_pos_x,
+    const float* __restrict__ sorted_pos_y,
+    const float* __restrict__ sorted_pos_z,
     const float* __restrict__ pos_x,
     const float* __restrict__ pos_y,
     const float* __restrict__ pos_z,
@@ -392,7 +419,7 @@ void tile_kernel(
     int num_tiles,
     int num_particles,
     float box_x, float box_y, float box_z,
-    float inv_box_x, float inv_box_y, float inv_box_z{param_decls}
+    float inv_box_x, float inv_box_y, float inv_box_z{param_decls}{sorted_param_decls}
 ) {{
     int total_warps = (blockDim.x * gridDim.x) / 32;
     int warp_id = (blockIdx.x * blockDim.x + threadIdx.x) / 32;
@@ -412,13 +439,10 @@ void tile_kernel(
         int block_x = tiles[pos];
 
         int gi = block_atoms[block_x * 32 + tgx];
-        float px_i = 0.0f, py_i = 0.0f, pz_i = 0.0f;
-        if (gi >= 0 && gi < num_particles) {{
-            px_i = pos_x[gi];
-            py_i = pos_y[gi];
-            pz_i = pos_z[gi];
-        }}
-        {param_load_i}
+        float px_i = sorted_pos_x[block_x * 32 + tgx];
+        float py_i = sorted_pos_y[block_x * 32 + tgx];
+        float pz_i = sorted_pos_z[block_x * 32 + tgx];
+        {sorted_param_load_i}
 
         int gj = interacting_atoms[pos * 32 + tgx];
         float shfl_px = 0.0f, shfl_py = 0.0f, shfl_pz = 0.0f;
@@ -457,7 +481,7 @@ void tile_kernel(
             if (!excluded && dist_sq > 1.0e-12f && dist_sq <= cutoff_sq && gi >= 0 && gi < num_particles) {{
                 float inv_dist = rsqrtf(dist_sq);
                 float r = dist_sq * inv_dist;
-                {param_select}
+                {param_use}
                 {expression_fragment}
                 float inv_dist_force = force_magnitude * inv_dist;
                 float fx = dx * inv_dist_force;
@@ -466,7 +490,6 @@ void tile_kernel(
                 force_x += fx; force_y += fy; force_z += fz;
                 shfl_fx -= fx; shfl_fy -= fy; shfl_fz -= fz;
                 total_energy += energy_val;
-                {param_restore}
             }}
             {shuffle_code}
             tj = (tj + 1) & 31;
