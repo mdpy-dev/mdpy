@@ -170,7 +170,7 @@ CUDA_VISIBLE_DEVICES=0 /home/ubuntu/Programs/cuda/13.0/bin/nsys profile \
   --trace=cuda,nvtx,osrt \
   --sample=cpu \
   --output=mdpy_timeline \
-  conda run -n md_analysis python mdpy/test/benchmark_1m9z_perf.py
+  conda run -n md_analysis python benchmark/benchmark_1m9z.py
 ```
 
 **ncu deep dive on a specific kernel:**
@@ -181,7 +181,7 @@ CUDA_VISIBLE_DEVICES=0 /home/ubuntu/Programs/cuda/13.0/bin/ncu \
   --launch-skip 10 --launch-count 5 \
   -k "regex:kernel_name_pattern" \
   -o mdpy_kernel_profile \
-  conda run -n md_analysis python mdpy/test/benchmark_1m9z_perf.py
+  conda run -n md_analysis python benchmark/benchmark_1m9z.py
 ```
 
 ### OpenMM Profiling
@@ -258,7 +258,7 @@ nvtx.range_pop()
 - **6-GPU environment**: always set `CUDA_VISIBLE_DEVICES=0` (or target GPU index) to profile the correct device
 - **ncu serializes the GPU**: profiling is ~10-100x slower. Always use `-k` to filter kernels and `--launch-count` to limit iterations
 - **P0 violation detection**: `float(d_energy[0])` readback appears as a gap in nsys CUDA timeline — useful for locating GPU→CPU transfer violations (§5)
-- **Benchmark scripts**: use existing scripts in `mdpy/test/benchmark_*.py` as profiling workloads
+- **Benchmark scripts**: use existing scripts in `benchmark/` as profiling workloads
 
 ## Architecture
 
@@ -299,6 +299,10 @@ Data flow:
 | `mdpy/integrator/verlet.py` | `@cuda.jit` Verlet integrator |
 | `mdpy/integrator/langevin.py` | `@cuda.jit` Langevin BAOAB (LCG PRNG) |
 | `mdpy/io/` | File parsers (PSF/PDB/DCD/HDF5/CHARMM toppar) |
+| `benchmark/benchmark_1m9z.py` | 1M9Z performance benchmark with per-kernel GPU timing |
+| `benchmark/profile_tile_list.py` | Tile list nsys profiling workload |
+| `benchmark/profile_tile_list_phases.py` | Tile list per-phase timing breakdown |
+| `benchmark/profile_openmm_nl.py` | OpenMM neighbor list nsys profiling workload |
 
 ## Development Notes
 
