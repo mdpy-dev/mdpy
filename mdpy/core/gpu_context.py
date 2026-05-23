@@ -7,9 +7,9 @@ from mdpy import env
 _PBC_WRAP_KERNEL = r"""
 extern "C" __global__
 void pbc_wrap_kernel(
-    float* positions,
-    const float* pbc_matrix,
-    const float* pbc_inv,
+    float* __restrict__ positions,
+    const float* __restrict__ pbc_matrix,
+    const float* __restrict__ pbc_inv,
     int number_particles
 ) {
     int index = blockIdx.x * blockDim.x + threadIdx.x;

@@ -10,9 +10,9 @@ NUM_ATOMS_SENTINEL = 0x7FFFFFFF
 _PBC_WRAP_KERNEL = r"""
 extern "C" __global__
 void pbc_wrap_kernel(
-    float* positions,
-    const float* pbc_matrix,
-    const float* pbc_inv,
+    float* __restrict__ positions,
+    const float* __restrict__ pbc_matrix,
+    const float* __restrict__ pbc_inv,
     int number_particles
 ) {
     int index = blockIdx.x * blockDim.x + threadIdx.x;
@@ -48,12 +48,12 @@ __device__ unsigned long long morton_split(unsigned int v) {
 
 extern "C" __global__
 void morton_encode_kernel(
-    const float* positions,
-    const float* pbc_matrix,
-    const float* pbc_inv,
+    const float* __restrict__ positions,
+    const float* __restrict__ pbc_matrix,
+    const float* __restrict__ pbc_inv,
     int number_particles,
     float box_x, float box_y, float box_z,
-    unsigned long long* morton_codes
+    unsigned long long* __restrict__ morton_codes
 ) {
     int index = blockIdx.x * blockDim.x + threadIdx.x;
     if (index >= number_particles) return;
@@ -85,10 +85,10 @@ void morton_encode_kernel(
 _FORM_BLOCKS_KERNEL = r"""
 extern "C" __global__
 void form_blocks_kernel(
-    const int* sorted_indices,
+    const int* __restrict__ sorted_indices,
     int number_particles,
     int num_blocks,
-    int* block_atoms_out
+    int* __restrict__ block_atoms_out
 ) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= num_blocks * 32) return;
@@ -103,11 +103,11 @@ void form_blocks_kernel(
 _COMPUTE_BLOCK_BOUNDS_KERNEL = r"""
 extern "C" __global__
 void compute_block_bounds_kernel(
-    const float* positions,
-    const int* block_atoms,
+    const float* __restrict__ positions,
+    const int* __restrict__ block_atoms,
     int num_blocks,
-    float* block_center_out,
-    float* block_size_out
+    float* __restrict__ block_center_out,
+    float* __restrict__ block_size_out
 ) {
     int bi = blockIdx.x * blockDim.x + threadIdx.x;
     if (bi >= num_blocks) return;
@@ -134,11 +134,11 @@ void compute_block_bounds_kernel(
 _BUILD_ATOM_MAP_KERNEL = r'''
 extern "C" __global__
 void build_atom_map_kernel(
-    const int* block_atoms,
+    const int* __restrict__ block_atoms,
     const int num_blocks,
     const int W,
-    int* atom_to_block,
-    int* atom_to_slot
+    int* __restrict__ atom_to_block,
+    int* __restrict__ atom_to_slot
 ) {
     int block_index = blockIdx.x * blockDim.x + threadIdx.x;
     if (block_index >= num_blocks) return;
@@ -200,11 +200,11 @@ void compute_large_block_bounds_kernel(
 _CHECK_REBUILD_KERNEL = r"""
 extern "C" __global__
 void check_rebuild_kernel(
-    const float* positions,
-    const float* old_positions,
+    const float* __restrict__ positions,
+    const float* __restrict__ old_positions,
     int num_particles,
     float threshold_sq,
-    int* rebuild_flag
+    int* __restrict__ rebuild_flag
 ) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= num_particles) return;
@@ -427,10 +427,10 @@ void find_interacting_blocks_kernel(
 _BUILD_REVERSE_COUNT_KERNEL = r'''
 extern "C" __global__
 void build_reverse_count_kernel(
-    const int* exclusion_offset,
-    const int* exclusion_neighbors,
+    const int* __restrict__ exclusion_offset,
+    const int* __restrict__ exclusion_neighbors,
     const int num_particles,
-    int* reverse_offset
+    int* __restrict__ reverse_offset
 ) {
     int atom_a = blockIdx.x * blockDim.x + threadIdx.x;
     if (atom_a >= num_particles) return;
@@ -446,14 +446,14 @@ void build_reverse_count_kernel(
 _FILL_REVERSE_KERNEL = r'''
 extern "C" __global__
 void fill_reverse_kernel(
-    const int* exclusion_offset,
-    const int* exclusion_neighbors,
-    const float* exclusion_scale,
-    const int* reverse_offset,
+    const int* __restrict__ exclusion_offset,
+    const int* __restrict__ exclusion_neighbors,
+    const float* __restrict__ exclusion_scale,
+    const int* __restrict__ reverse_offset,
     const int num_particles,
-    int* reverse_neighbors,
-    float* reverse_scale,
-    int* temp_offset
+    int* __restrict__ reverse_neighbors,
+    float* __restrict__ reverse_scale,
+    int* __restrict__ temp_offset
 ) {
     int atom_a = blockIdx.x * blockDim.x + threadIdx.x;
     if (atom_a >= num_particles) return;
@@ -472,21 +472,21 @@ void fill_reverse_kernel(
 _BUILD_MASKS_KERNEL = r'''
 extern "C" __global__
 void build_masks_kernel(
-    const int* tiles,
-    const int* interacting_atoms,
-    const int* block_atoms,
-    const int* atom_to_block,
-    const int* atom_to_slot,
-    const int* exclusion_offset,
-    const int* exclusion_neighbors,
-    const float* exclusion_scale,
-    const int* reverse_offset,
-    const int* reverse_neighbors,
-    const float* reverse_scale,
+    const int* __restrict__ tiles,
+    const int* __restrict__ interacting_atoms,
+    const int* __restrict__ block_atoms,
+    const int* __restrict__ atom_to_block,
+    const int* __restrict__ atom_to_slot,
+    const int* __restrict__ exclusion_offset,
+    const int* __restrict__ exclusion_neighbors,
+    const float* __restrict__ exclusion_scale,
+    const int* __restrict__ reverse_offset,
+    const int* __restrict__ reverse_neighbors,
+    const float* __restrict__ reverse_scale,
     int num_tiles,
     int num_particles,
-    unsigned int* exclusion_masks_out,
-    unsigned int* scaling_masks_out
+    unsigned int* __restrict__ exclusion_masks_out,
+    unsigned int* __restrict__ scaling_masks_out
 ) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= num_tiles * 32) return;
