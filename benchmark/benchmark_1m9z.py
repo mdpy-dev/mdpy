@@ -1,7 +1,7 @@
 """mdpy 1M9Z (95,567 atoms) performance benchmark.
 
 Usage:
-    conda run -n md_analysis python mdpy/test/benchmark_1m9z.py
+    conda run -n md_analysis python benchmark/benchmark_1m9z.py
 
 Uses Verlet integrator at dt=0.5fs (no constraints, so small dt needed for
 water stability). Reports ms/step and ns/day.
@@ -13,7 +13,7 @@ import time
 import cupy as cp
 import numpy as np
 
-DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
+from benchmark._data_path import DATA_DIR
 PSF_PATH = os.path.join(DATA_DIR, '1M9Z.psf')
 PDB_PATH = os.path.join(DATA_DIR, '1M9Z_minimized.pdb')
 PRM_PATH = os.path.join(DATA_DIR, 'par_all36_prot.prm')
