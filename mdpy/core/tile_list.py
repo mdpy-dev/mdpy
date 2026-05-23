@@ -152,6 +152,25 @@ void build_atom_map_kernel(
 }
 '''
 
+_CHECK_REBUILD_KERNEL = r"""
+extern "C" __global__
+void check_rebuild_kernel(
+    const float* positions,
+    const float* old_positions,
+    int num_particles,
+    float threshold_sq,
+    int* rebuild_flag
+) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= num_particles) return;
+    float dx = positions[idx*3]   - old_positions[idx*3];
+    float dy = positions[idx*3+1] - old_positions[idx*3+1];
+    float dz = positions[idx*3+2] - old_positions[idx*3+2];
+    if (dx*dx + dy*dy + dz*dz > threshold_sq)
+        rebuild_flag[0] = 1;
+}
+"""
+
 _FIND_INTERACTING_BLOCKS_KERNEL = r"""
 extern "C" __global__
 void find_interacting_blocks_kernel(
@@ -377,6 +396,7 @@ def _compile_gpu_kernels():
         'rev_count': cp.RawKernel(_BUILD_REVERSE_COUNT_KERNEL, 'build_reverse_count_kernel'),
         'rev_fill': cp.RawKernel(_FILL_REVERSE_KERNEL, 'fill_reverse_kernel'),
         'build_masks': cp.RawKernel(_BUILD_MASKS_KERNEL, 'build_masks_kernel'),
+        'check_rebuild': cp.RawKernel(_CHECK_REBUILD_KERNEL, 'check_rebuild_kernel'),
     }
 
 
@@ -387,8 +407,6 @@ class TileList:
         self.skin = skin
         self.build_radius = cutoff + skin
         self._is_initialized = False
-        self._steps_since_rebuild = 0
-        self._rebuild_interval = 20
 
         self.num_blocks = 0
         self.num_tiles = 0
@@ -408,6 +426,7 @@ class TileList:
 
         self.d_positions_at_rebuild = cp.empty(0, dtype=env.NUMPY_FLOAT)
         self._d_counters = cp.zeros(1, dtype=env.NUMPY_INT)
+        self.d_rebuild_flag = cp.zeros(1, dtype=env.NUMPY_INT)
         self._d_tile_buf = cp.empty(0, dtype=env.NUMPY_INT)
         self._d_interacting_buf = cp.empty(0, dtype=env.NUMPY_INT)
         self._d_pbc_matrix = None
@@ -645,17 +664,30 @@ class TileList:
         self._build_masks_gpu(topology)
 
         self.d_positions_at_rebuild = cp.array(wrapped, copy=True, dtype=env.NUMPY_FLOAT)
+        self.d_rebuild_flag[0] = 0
         self._is_initialized = True
-        self._steps_since_rebuild = 0
 
     def check_rebuild(self, positions) -> bool:
         if not self._is_initialized:
             return True
-        self._steps_since_rebuild += 1
-        if self._steps_since_rebuild >= self._rebuild_interval:
-            self._steps_since_rebuild = 0
+        if self.d_positions_at_rebuild.size == 0:
             return True
-        return False
+        if not isinstance(positions, cp.ndarray):
+            positions = cp.asarray(
+                np.ascontiguousarray(positions.ravel(), dtype=env.NUMPY_FLOAT)
+            )
+        self.d_rebuild_flag[0] = 0
+        threshold_sq = (self.skin * 0.5) ** 2
+        tpb = 256
+        grid = ((self.num_particles + tpb - 1) // tpb,)
+        self._kernels['check_rebuild'](
+            grid, (tpb,),
+            (positions, self.d_positions_at_rebuild,
+             np.int32(self.num_particles),
+             np.float32(threshold_sq),
+             self.d_rebuild_flag))
+        flag = int(self.d_rebuild_flag[0])
+        return flag == 1
 
     def _init_empty(self):
         self.num_blocks = 0
@@ -672,5 +704,4 @@ class TileList:
         self.d_scaling_masks = cp.empty(0, dtype=np.uint32)
         self.d_positions_at_rebuild = cp.empty(0, dtype=env.NUMPY_FLOAT)
         self._is_initialized = True
-        self._steps_since_rebuild = 0
         self._invalidate_caches()

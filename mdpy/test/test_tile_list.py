@@ -409,7 +409,10 @@ class TestRebuildMechanics:
 
         for _ in range(19):
             assert not tl.check_rebuild(positions)
-        assert tl.check_rebuild(positions)
+
+        moved = positions.copy()
+        moved[0, 0] += 2.0
+        assert tl.check_rebuild(moved)
 
     def test_check_rebuild_uninitialized(self):
         topology = _make_topology(4)
