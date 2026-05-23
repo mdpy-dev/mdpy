@@ -1,112 +1,198 @@
-#!/usr/bin/env python
-# -*- encoding: utf-8 -*-
-'''
-file : charmm_forcefield.py
-created time : 2021/10/05
-author : Zhenyu Wei
-copyright : (C)Copyright 2021-present, mdpy organization
-'''
-
 import numpy as np
-from mdpy.forcefield import Forcefield
-from mdpy.ensemble import Ensemble
-from mdpy.core import Topology
-from mdpy.io import CharmmTopparParser
-from mdpy.utils import check_quantity_value, check_pbc_matrix
-from mdpy.constraint import *
-from mdpy.unit import *
-from mdpy.error import *
+from mdpy import env
+from mdpy.core.topology import Builder
+from mdpy.forcefield.parameters import ParameterTable
+from mdpy.force.bonded_force import BondedForce
+from mdpy.force.nonbonded_force import NonbondedForce
+from mdpy.force.expressions.lennard_jones import lennard_jones
+from mdpy.force.expressions.coulomb import coulomb
+from mdpy.system import System
 
-class CharmmForcefield(Forcefield):
-    def __init__(
-        self, topology: Topology, pbc_matrix: np.ndarray,
-        cutoff_radius=12, long_range_solver='PPPM', ewald_error=1e-6,
-        is_SHAKE: bool=True
-    ) -> None:
-        super().__init__(topology)
-        pbc_matrix = check_quantity_value(pbc_matrix, default_length_unit)
-        self._pbc_matrix = check_pbc_matrix(pbc_matrix)
-        self._cutoff_radius = check_quantity_value(cutoff_radius, default_length_unit)
-        self._long_range_solver = long_range_solver
-        self._ewald_error = ewald_error
-        self._is_SHAKE = is_SHAKE
 
-    def set_param_files(self, *file_pathes) -> None:
-        self._parameters = CharmmTopparParser(*file_pathes).parameters
+class CharmmForcefield:
 
-    def check_parameters(self):
-        particle_keys = self._parameters['nonbonded'].keys()
-        bond_keys = self._parameters['bond'].keys()
-        angle_keys = self._parameters['angle'].keys()
-        dihedral_keys = self._parameters['dihedral'].keys()
-        improper_keys = self._parameters['improper'].keys()
-        for particle in self._topology.particles:
-            particle_type = particle.particle_type
-            if not particle_type in particle_keys:
-                raise ParameterPoorDefinedError(
-                    'The nonbonded parameter for particle %d (%s) can not be found'
-                    %(particle_type)
-                )
-        for bond in self._topology.bonds:
-            bond_name = (
-                self._topology.particles[bond[0]].particle_type + '-' +
-                self._topology.particles[bond[1]].particle_type
-            )
-            if not bond_name in bond_keys:
-                raise ParameterPoorDefinedError(
-                    'The parameter for bond %d-%d (%s) can not be found'
-                    %(*bond, bond_name)
-                )
-        for angle in self._topology.angles:
-            angle_name = (
-                self._topology.particles[angle[0]].particle_type + '-' +
-                self._topology.particles[angle[1]].particle_type + '-' +
-                self._topology.particles[angle[2]].particle_type
-            )
-            if not angle_name in angle_keys:
-                raise ParameterPoorDefinedError(
-                    'The parameter for angle %d-%d-%d (%s) can not be found'
-                    %(*angle, angle_name)
-                )
-        for dihedral in self._topology.dihedrals:
-            dihedral_name = (
-                self._topology.particles[dihedral[0]].particle_type + '-' +
-                self._topology.particles[dihedral[1]].particle_type + '-' +
-                self._topology.particles[dihedral[2]].particle_type + '-' +
-                self._topology.particles[dihedral[3]].particle_type
-            )
-            if not dihedral_name in dihedral_keys:
-                raise ParameterPoorDefinedError(
-                    'The parameter for dihedral %d-%d-%d-%d (%s) can not be found'
-                    %(*dihedral, dihedral_name)
-                )
-        for improper in self._topology.impropers:
-            improper_name = (
-                self._topology.particles[improper[0]].particle_type + '-' +
-                self._topology.particles[improper[1]].particle_type + '-' +
-                self._topology.particles[improper[2]].particle_type + '-' +
-                self._topology.particles[improper[3]].particle_type
-            )
-            if not improper_name in improper_keys:
-                raise ParameterPoorDefinedError(
-                    'The parameter for improper %d-%d-%d-%d (%s) can not be found'
-                    %(*improper, improper_name)
-                )
+    def __init__(self, psf_path, pdb_path, parameter_paths, cutoff=12.0):
+        from mdpy.io.psf_parser import PSFParser
+        from mdpy.io.pdb_parser import PDBParser
+        from mdpy.io.charmm_toppar_parser import CharmmTopparParser
 
-    def create_ensemble(self):
-        self.check_parameters()
-        ensemble = Ensemble(self._topology, self._pbc_matrix)
-        constraints = []
-        if self._topology.num_particles != 0:
-            constraints.append(ElectrostaticConstraint())
-            constraints.append(CharmmNonbondedConstraint(self._parameters['nonbonded'], self._cutoff_radius))
-        if self._topology.num_bonds != 0:
-            constraints.append(CharmmBondConstraint(self._parameters['bond']))
-        if self._topology.num_angles != 0:
-            constraints.append(CharmmAngleConstraint(self._parameters['angle']))
-        if self._topology.num_dihedrals != 0:
-            constraints.append(CharmmDihedralConstraint(self._parameters['dihedral']))
-        if self._topology.num_impropers != 0:
-            constraints.append(CharmmImproperConstraint(self._parameters['improper']))
-        ensemble.add_constraints(*constraints)
-        return ensemble
+        self._psf = PSFParser(psf_path)
+        self._pdb = PDBParser(pdb_path)
+        if isinstance(parameter_paths, str):
+            parameter_paths = [parameter_paths]
+        self._toppar = CharmmTopparParser(*parameter_paths)
+        self._cutoff = cutoff
+        self._term_params = {}
+
+    def create_topology(self):
+        psf = self._psf
+        toppar = self._toppar
+        parameters = toppar.parameters
+
+        type_name_to_index = {}
+        type_names_sorted = sorted(set(psf.particle_types))
+        for index, type_name in enumerate(type_names_sorted):
+            type_name_to_index[type_name] = index
+
+        masses = psf._masses.copy()
+        charges = psf._charges.copy()
+        particle_types = np.array(
+            [type_name_to_index[t] for t in psf.particle_types],
+            dtype=env.NUMPY_INT,
+        )
+        molecule_ids = np.array(psf.molecule_ids, dtype=env.NUMPY_INT)
+
+        builder = Builder()
+        builder.set_particles(
+            masses=masses,
+            charges=charges,
+            particle_types=particle_types,
+            molecule_ids=molecule_ids,
+            particle_names=psf.particle_names,
+            type_names=psf.particle_types,
+            chain_ids=psf.chain_ids,
+            molecule_types=psf.molecule_types,
+        )
+
+        _resolve_bonds(builder, psf, parameters)
+        _resolve_angles(builder, psf, parameters)
+        _resolve_dihedrals(builder, psf, parameters)
+        _resolve_impropers(builder, psf, parameters)
+
+        builder.build_exclusion_map(scale_14=1.0)
+        topology, self._term_params = builder.build()
+        return topology
+
+    def create_parameter_table(self):
+        toppar = self._toppar
+        parameters = toppar.parameters
+        psf = self._psf
+
+        type_name_to_index = {}
+        type_names_sorted = sorted(set(psf.particle_types))
+        for index, type_name in enumerate(type_names_sorted):
+            type_name_to_index[type_name] = index
+
+        table = ParameterTable()
+        num_types = len(type_names_sorted)
+
+        sigma_array = np.zeros(num_types, dtype=env.NUMPY_FLOAT)
+        epsilon_array = np.zeros(num_types, dtype=env.NUMPY_FLOAT)
+        sigma_14_array = np.zeros(num_types, dtype=env.NUMPY_FLOAT)
+        epsilon_14_array = np.zeros(num_types, dtype=env.NUMPY_FLOAT)
+
+        for type_name, type_index in type_name_to_index.items():
+            nonbonded = parameters['nonbonded'].get(type_name)
+            if nonbonded is not None:
+                epsilon_array[type_index] = nonbonded[0]
+                sigma_array[type_index] = nonbonded[1]
+                if len(nonbonded) == 4:
+                    epsilon_14_array[type_index] = nonbonded[2]
+                    sigma_14_array[type_index] = nonbonded[3]
+                else:
+                    epsilon_14_array[type_index] = nonbonded[0]
+                    sigma_14_array[type_index] = nonbonded[1]
+
+        table.add_per_type('sigma', sigma_array)
+        table.add_per_type('epsilon', epsilon_array)
+        table.add_per_type('sigma_14', sigma_14_array)
+        table.add_per_type('epsilon_14', epsilon_14_array)
+        table.add_per_atom('charge', psf._charges.copy())
+        table.add_per_atom('charge_14', psf._charges.copy())
+
+        for term_name, params in self._term_params.items():
+            table.add_per_term(term_name, params)
+
+        return table
+
+    def create_system(self, pbc_matrix=None):
+        topology = self.create_topology()
+        parameter_table = self.create_parameter_table()
+
+        if pbc_matrix is None:
+            pbc_matrix = self._pdb.pbc_matrix
+        if pbc_matrix is None:
+            pbc_matrix = np.eye(3, dtype=env.NUMPY_FLOAT) * 100.0
+
+        system = System(topology, pbc_matrix, cutoff=self._cutoff)
+
+        bonded = BondedForce.charmm(topology, parameter_table)
+        system.add_force_term(bonded)
+
+        lj_expression = lennard_jones + coulomb
+        nonbonded = NonbondedForce(lj_expression)
+        nonbonded.bind(topology, parameter_table, self._cutoff)
+        system.add_force_term(nonbonded)
+
+        system.particles.positions[:] = self._pdb.positions
+        system.gpu.upload_positions(system.particles)
+        system.gpu.upload_velocities(system.particles)
+
+        return system
+
+
+def _resolve_bonds(builder, psf, parameters):
+    bond_parameters = parameters.get('bond', {})
+    for bond in psf._bonds:
+        type_i = psf.particle_types[bond[0]]
+        type_j = psf.particle_types[bond[1]]
+        key_forward = '%s-%s' % (type_i, type_j)
+        key_reverse = '%s-%s' % (type_j, type_i)
+        params = bond_parameters.get(key_forward) or bond_parameters.get(key_reverse)
+        if params is None:
+            continue
+        builder.add_bond(bond[0], bond[1], params[0], params[1])
+
+
+def _resolve_angles(builder, psf, parameters):
+    angle_parameters = parameters.get('angle', {})
+    for angle in psf._angles:
+        type_i = psf.particle_types[angle[0]]
+        type_j = psf.particle_types[angle[1]]
+        type_k = psf.particle_types[angle[2]]
+        key_forward = '%s-%s-%s' % (type_i, type_j, type_k)
+        key_reverse = '%s-%s-%s' % (type_k, type_j, type_i)
+        params = angle_parameters.get(key_forward) or angle_parameters.get(key_reverse)
+        if params is None:
+            continue
+        builder.add_angle(
+            angle[0], angle[1], angle[2],
+            params[0], params[1], params[2], params[3],
+        )
+
+
+def _resolve_dihedrals(builder, psf, parameters):
+    dihedral_parameters = parameters.get('dihedral', {})
+    for dihedral in psf._dihedrals:
+        type_i = psf.particle_types[dihedral[0]]
+        type_j = psf.particle_types[dihedral[1]]
+        type_k = psf.particle_types[dihedral[2]]
+        type_l = psf.particle_types[dihedral[3]]
+        key_forward = '%s-%s-%s-%s' % (type_i, type_j, type_k, type_l)
+        key_reverse = '%s-%s-%s-%s' % (type_l, type_k, type_j, type_i)
+        term_list = dihedral_parameters.get(key_forward) or dihedral_parameters.get(key_reverse)
+        if term_list is None:
+            continue
+        for term in term_list:
+            builder.add_dihedral(
+                dihedral[0], dihedral[1], dihedral[2], dihedral[3],
+                term[0], term[1], term[2],
+            )
+
+
+def _resolve_impropers(builder, psf, parameters):
+    improper_parameters = parameters.get('improper', {})
+    for improper in psf._impropers:
+        type_i = psf.particle_types[improper[0]]
+        type_j = psf.particle_types[improper[1]]
+        type_k = psf.particle_types[improper[2]]
+        type_l = psf.particle_types[improper[3]]
+        key_forward = '%s-%s-%s-%s' % (type_i, type_j, type_k, type_l)
+        key_reverse = '%s-%s-%s-%s' % (type_l, type_k, type_j, type_i)
+        params = improper_parameters.get(key_forward) or improper_parameters.get(key_reverse)
+        if params is None:
+            continue
+        builder.add_improper(
+            improper[0], improper[1], improper[2], improper[3],
+            params[0], params[1],
+        )
