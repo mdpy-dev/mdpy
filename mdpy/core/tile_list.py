@@ -152,6 +152,51 @@ void build_atom_map_kernel(
 }
 '''
 
+_COMPUTE_LARGE_BLOCK_BOUNDS_KERNEL = r"""
+extern "C" __global__
+void compute_large_block_bounds_kernel(
+    const float* __restrict__ block_center,
+    const float* __restrict__ block_size,
+    int num_blocks,
+    int num_large_blocks,
+    float box_x, float box_y, float box_z,
+    float inv_box_x, float inv_box_y, float inv_box_z,
+    float* __restrict__ large_block_center_out,
+    float* __restrict__ large_block_size_out
+) {
+    int lb = blockIdx.x * blockDim.x + threadIdx.x;
+    if (lb >= num_large_blocks) return;
+
+    int start = lb * 32;
+    int end = min(start + 32, num_blocks);
+
+    float min_x = 1e30f, min_y = 1e30f, min_z = 1e30f;
+    float max_x = -1e30f, max_y = -1e30f, max_z = -1e30f;
+
+    for (int b = start; b < end; b++) {
+        float bcx = block_center[b*3], bcy = block_center[b*3+1], bcz = block_center[b*3+2];
+        float bsx = block_size[b*3],   bsy = block_size[b*3+1],   bsz = block_size[b*3+2];
+        if (b > start) {
+            float ref_x = block_center[start*3], ref_y = block_center[start*3+1], ref_z = block_center[start*3+2];
+            float dx = bcx - ref_x, dy = bcy - ref_y, dz = bcz - ref_z;
+            dx -= box_x * roundf(dx * inv_box_x);
+            dy -= box_y * roundf(dy * inv_box_y);
+            dz -= box_z * roundf(dz * inv_box_z);
+            bcx = ref_x + dx; bcy = ref_y + dy; bcz = ref_z + dz;
+        }
+        min_x = fminf(min_x, bcx - bsx); min_y = fminf(min_y, bcy - bsy); min_z = fminf(min_z, bcz - bsz);
+        max_x = fmaxf(max_x, bcx + bsx); max_y = fmaxf(max_y, bcy + bsy); max_z = fmaxf(max_z, bcz + bsz);
+    }
+
+    large_block_center_out[lb*3]   = 0.5f * (min_x + max_x);
+    large_block_center_out[lb*3+1] = 0.5f * (min_y + max_y);
+    large_block_center_out[lb*3+2] = 0.5f * (min_z + max_z);
+    large_block_size_out[lb*3]     = 0.5f * (max_x - min_x);
+    large_block_size_out[lb*3+1]   = 0.5f * (max_y - min_y);
+    large_block_size_out[lb*3+2]   = 0.5f * (max_z - min_z);
+}
+"""
+
 _CHECK_REBUILD_KERNEL = r"""
 extern "C" __global__
 void check_rebuild_kernel(
@@ -172,19 +217,23 @@ void check_rebuild_kernel(
 """
 
 _FIND_INTERACTING_BLOCKS_KERNEL = r"""
-extern "C" __global__
+extern "C" __global__ __launch_bounds__(256, 3)
 void find_interacting_blocks_kernel(
-    const float* positions,
-    const int* block_atoms,
-    const float* block_center,
-    const float* block_size,
+    const float* __restrict__ positions,
+    const int* __restrict__ block_atoms,
+    const float* __restrict__ block_center,
+    const float* __restrict__ block_size,
     int num_blocks,
     int num_particles,
     float build_radius_sq,
     float box_x, float box_y, float box_z,
-    int* tiles_out,
-    int* interacting_atoms_out,
-    int* interaction_count,
+    float inv_box_x, float inv_box_y, float inv_box_z,
+    int single_periodic_copy,
+    const float* __restrict__ large_block_center,
+    const float* __restrict__ large_block_size,
+    int* __restrict__ tiles_out,
+    int* __restrict__ interacting_atoms_out,
+    int* __restrict__ interaction_count,
     int max_tiles
 ) {
     int tgx = threadIdx.x & 31;
@@ -194,48 +243,154 @@ void find_interacting_blocks_kernel(
     if (global_warp >= num_blocks) return;
 
     __shared__ int buffer[8 * 256];
+    __shared__ float4 pos_buf[256];
     int* my_buf = buffer + warp_in_block * 256;
+    float4* my_pos = pos_buf + (warp_in_block << 5);
     int nBuf = 0;
 
     int bx = global_warp;
     float cx = block_center[bx*3], cy = block_center[bx*3+1], cz = block_center[bx*3+2];
     float sx = block_size[bx*3],   sy = block_size[bx*3+1],   sz = block_size[bx*3+2];
 
+    float4 my_p;
+    my_p.x = 0.0f; my_p.y = 0.0f; my_p.z = 0.0f; my_p.w = 0.0f;
     int gi = block_atoms[bx * 32 + tgx];
-    float px_i = 0, py_i = 0, pz_i = 0;
     if (gi >= 0 && gi < num_particles) {
-        px_i = positions[gi*3]; py_i = positions[gi*3+1]; pz_i = positions[gi*3+2];
+        my_p.x = positions[gi*3];
+        my_p.y = positions[gi*3+1];
+        my_p.z = positions[gi*3+2];
+        if (single_periodic_copy) {
+            my_p.x -= box_x * roundf(my_p.x * inv_box_x);
+            my_p.y -= box_y * roundf(my_p.y * inv_box_y);
+            my_p.z -= box_z * roundf(my_p.z * inv_box_z);
+        }
+        my_p.w = 0.5f * (my_p.x*my_p.x + my_p.y*my_p.y + my_p.z*my_p.z);
     }
+    my_pos[tgx] = my_p;
+    __syncwarp();
 
-    for (int by = bx; by < num_blocks; by++) {
-        float bcx = block_center[by*3], bcy = block_center[by*3+1], bcz = block_center[by*3+2];
-        float bsx = block_size[by*3],   bsy = block_size[by*3+1],   bsz = block_size[by*3+2];
+    float half_cutoff_sq = 0.5f * build_radius_sq;
+    int my_large_block = bx >> 5;
+    int num_large_blocks = (num_blocks + 31) >> 5;
 
-        float dx = bcx - cx, dy = bcy - cy, dz = bcz - cz;
-        dx -= box_x * roundf(dx / box_x);
-        dy -= box_y * roundf(dy / box_y);
-        dz -= box_z * roundf(dz / box_z);
-        float cd = sqrtf(dx*dx + dy*dy + dz*dz) - fmaxf(sx+bsx,0) - fmaxf(sy+bsy,0) - fmaxf(sz+bsz,0);
-        if (cd > 0.0f && cd * cd > build_radius_sq) continue;
+    for (int lb = my_large_block; lb < num_large_blocks; lb++) {
+        bool lb_pass;
+        if (lb == my_large_block) {
+            lb_pass = true;
+        } else {
+            float lcx = large_block_center[lb*3];
+            float lcy = large_block_center[lb*3+1];
+            float lcz = large_block_center[lb*3+2];
+            float lsx = large_block_size[lb*3];
+            float lsy = large_block_size[lb*3+1];
+            float lsz = large_block_size[lb*3+2];
 
-        int gj = block_atoms[by * 32 + tgx];
-        int interacts = 0;
-        if (gj >= 0 && gj < num_particles) {
-            float px_j = positions[gj*3], py_j = positions[gj*3+1], pz_j = positions[gj*3+2];
-            for (int k = 0; k < 32; k++) {
-                int gk = block_atoms[bx * 32 + k];
-                if (gk < 0) continue;
-                float ddx = px_j - positions[gk*3];
-                float ddy = py_j - positions[gk*3+1];
-                float ddz = pz_j - positions[gk*3+2];
-                ddx -= box_x * roundf(ddx / box_x);
-                ddy -= box_y * roundf(ddy / box_y);
-                ddz -= box_z * roundf(ddz / box_z);
-                if (ddx*ddx + ddy*ddy + ddz*ddz <= build_radius_sq) {
-                    interacts = 1; break;
+            float dx = lcx - cx, dy = lcy - cy, dz = lcz - cz;
+            dx -= box_x * roundf(dx * inv_box_x);
+            dy -= box_y * roundf(dy * inv_box_y);
+            dz -= box_z * roundf(dz * inv_box_z);
+            dx = fmaxf(0.0f, fabsf(dx) - sx - lsx);
+            dy = fmaxf(0.0f, fabsf(dy) - sy - lsy);
+            dz = fmaxf(0.0f, fabsf(dz) - sz - lsz);
+            lb_pass = (dx*dx + dy*dy + dz*dz < build_radius_sq);
+        }
+
+        if (!lb_pass) continue;
+
+        int block2Base = lb << 5;
+        {
+            int block2 = block2Base + tgx;
+            bool include_block = false;
+
+            if (block2 < num_blocks && block2 > bx) {
+                float bcx2 = block_center[block2*3];
+                float bcy2 = block_center[block2*3+1];
+                float bcz2 = block_center[block2*3+2];
+                float bsx2 = block_size[block2*3];
+                float bsy2 = block_size[block2*3+1];
+                float bsz2 = block_size[block2*3+2];
+
+                float dx = bcx2 - cx, dy = bcy2 - cy, dz = bcz2 - cz;
+                dx -= box_x * roundf(dx * inv_box_x);
+                dy -= box_y * roundf(dy * inv_box_y);
+                dz -= box_z * roundf(dz * inv_box_z);
+                dx = fmaxf(0.0f, fabsf(dx) - sx - bsx2);
+                dy = fmaxf(0.0f, fabsf(dy) - sy - bsy2);
+                dz = fmaxf(0.0f, fabsf(dz) - sz - bsz2);
+                include_block = (dx*dx + dy*dy + dz*dz < build_radius_sq);
+            }
+
+            unsigned int include_flags = __ballot_sync(0xffffffff, include_block);
+
+            while (include_flags != 0) {
+                int i = __ffs(include_flags) - 1;
+                include_flags &= include_flags - 1;
+                int by = block2Base + i;
+
+                int gj = block_atoms[by * 32 + tgx];
+                int interacts = 0;
+
+                if (gj >= 0 && gj < num_particles) {
+                    if (single_periodic_copy) {
+                        float4 p2;
+                        p2.x = positions[gj*3];
+                        p2.y = positions[gj*3+1];
+                        p2.z = positions[gj*3+2];
+                        p2.x -= box_x * roundf(p2.x * inv_box_x);
+                        p2.y -= box_y * roundf(p2.y * inv_box_y);
+                        p2.z -= box_z * roundf(p2.z * inv_box_z);
+                        p2.w = 0.5f * (p2.x*p2.x + p2.y*p2.y + p2.z*p2.z);
+
+                        #pragma unroll
+                        for (int k = 0; k < 32; k++) {
+                            float4 pk = my_pos[k];
+                            float hd2 = pk.w + p2.w - pk.x*p2.x - pk.y*p2.y - pk.z*p2.z;
+                            if (hd2 < half_cutoff_sq) { interacts = 1; break; }
+                        }
+                    } else {
+                        float px_j = positions[gj*3];
+                        float py_j = positions[gj*3+1];
+                        float pz_j = positions[gj*3+2];
+                        for (int k = 0; k < 32; k++) {
+                            int gk = block_atoms[bx * 32 + k];
+                            if (gk < 0) continue;
+                            float ddx = px_j - positions[gk*3];
+                            float ddy = py_j - positions[gk*3+1];
+                            float ddz = pz_j - positions[gk*3+2];
+                            ddx -= box_x * roundf(ddx * inv_box_x);
+                            ddy -= box_y * roundf(ddy * inv_box_y);
+                            ddz -= box_z * roundf(ddz * inv_box_z);
+                            if (ddx*ddx + ddy*ddy + ddz*ddz <= build_radius_sq) {
+                                interacts = 1; break;
+                            }
+                        }
+                    }
+                }
+
+                unsigned int ballot = __ballot_sync(0xffffffff, interacts);
+                int rank = __popc(ballot & ((1u << tgx) - 1));
+                if (interacts) my_buf[nBuf + rank] = gj;
+                nBuf += __popc(ballot);
+
+                while (nBuf >= 32) {
+                    int ti = 0;
+                    if (tgx == 0) ti = atomicAdd(interaction_count, 1);
+                    ti = __shfl_sync(0xffffffff, ti, 0);
+                    if (ti < max_tiles) {
+                        if (tgx < 1) tiles_out[ti] = bx;
+                        interacting_atoms_out[ti * 32 + tgx] = my_buf[tgx];
+                    }
+                    for (int s = tgx; s < nBuf - 32; s += 32)
+                        my_buf[s] = my_buf[s + 32];
+                    nBuf -= 32;
                 }
             }
         }
+    }
+
+    {
+        int gj = block_atoms[bx * 32 + tgx];
+        int interacts = (gj >= 0 && gj < num_particles) ? 1 : 0;
 
         unsigned int ballot = __ballot_sync(0xffffffff, interacts);
         int rank = __popc(ballot & ((1u << tgx) - 1));
@@ -397,6 +552,7 @@ def _compile_gpu_kernels():
         'rev_fill': cp.RawKernel(_FILL_REVERSE_KERNEL, 'fill_reverse_kernel'),
         'build_masks': cp.RawKernel(_BUILD_MASKS_KERNEL, 'build_masks_kernel'),
         'check_rebuild': cp.RawKernel(_CHECK_REBUILD_KERNEL, 'check_rebuild_kernel'),
+        'large_block_bounds': cp.RawKernel(_COMPUTE_LARGE_BLOCK_BOUNDS_KERNEL, 'compute_large_block_bounds_kernel'),
     }
 
 
@@ -427,6 +583,9 @@ class TileList:
         self.d_positions_at_rebuild = cp.empty(0, dtype=env.NUMPY_FLOAT)
         self._d_counters = cp.zeros(1, dtype=env.NUMPY_INT)
         self.d_rebuild_flag = cp.zeros(1, dtype=env.NUMPY_INT)
+        self.num_large_blocks = 0
+        self.d_large_block_center = cp.empty(0, dtype=env.NUMPY_FLOAT)
+        self.d_large_block_size = cp.empty(0, dtype=env.NUMPY_FLOAT)
         self._d_tile_buf = cp.empty(0, dtype=env.NUMPY_INT)
         self._d_interacting_buf = cp.empty(0, dtype=env.NUMPY_INT)
         self._d_pbc_matrix = None
@@ -570,6 +729,18 @@ class TileList:
             (wrapped, self.d_block_atoms, np.int32(num_blocks),
              self.d_block_center, self.d_block_size))
 
+        num_large_blocks = (num_blocks + 31) // 32
+        self.num_large_blocks = num_large_blocks
+        self.d_large_block_center = cp.empty(num_large_blocks * 3, dtype=env.NUMPY_FLOAT)
+        self.d_large_block_size = cp.empty(num_large_blocks * 3, dtype=env.NUMPY_FLOAT)
+        nlb = (num_large_blocks + tpb - 1) // tpb
+        self._kernels['large_block_bounds']((nlb,), (tpb,),
+            (self.d_block_center, self.d_block_size,
+             np.int32(num_blocks), np.int32(num_large_blocks),
+             np.float32(box_x), np.float32(box_y), np.float32(box_z),
+             np.float32(1.0/box_x), np.float32(1.0/box_y), np.float32(1.0/box_z),
+             self.d_large_block_center, self.d_large_block_size))
+
         self.d_atom_to_block = cp.full(N, -1, dtype=env.NUMPY_INT)
         self.d_atom_to_slot = cp.full(N, -1, dtype=env.NUMPY_INT)
         self._kernels['atom_map']((nb,), (tpb,),
@@ -584,7 +755,16 @@ class TileList:
         box_x = abs(float(pbc_2d[0, 0]))
         box_y = abs(float(pbc_2d[1, 1]))
         box_z = abs(float(pbc_2d[2, 2]))
-        build_radius_sq = self.build_radius ** 2
+        build_radius = self.build_radius
+        build_radius_sq = build_radius ** 2
+        inv_box_x = 1.0 / box_x
+        inv_box_y = 1.0 / box_y
+        inv_box_z = 1.0 / box_z
+        single_periodic_copy = int(
+            box_x > 2.0 * build_radius
+            and box_y > 2.0 * build_radius
+            and box_z > 2.0 * build_radius
+        )
 
         max_tiles = max(num_blocks * 100, 10000)
         if self._d_tile_buf.size < max_tiles:
@@ -601,6 +781,9 @@ class TileList:
              np.int32(num_blocks), np.int32(self.num_particles),
              np.float32(build_radius_sq),
              np.float32(box_x), np.float32(box_y), np.float32(box_z),
+             np.float32(inv_box_x), np.float32(inv_box_y), np.float32(inv_box_z),
+             np.int32(single_periodic_copy),
+             self.d_large_block_center, self.d_large_block_size,
              self._d_tile_buf, self._d_interacting_buf,
              self._d_counters, np.int32(max_tiles)))
 
