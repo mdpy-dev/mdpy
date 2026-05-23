@@ -799,27 +799,28 @@ class TileList:
 
         self._upload_exclusion(topology)
         N = self.num_particles
-
-        d_rev_offset = cp.zeros(N + 1, dtype=env.NUMPY_INT)
         tpb = 256
-        n1 = (N + tpb - 1) // tpb
-        self._kernels['rev_count']((n1,), (tpb,),
-            (self._d_excl_offset, self._d_excl_neighbors, np.int32(N), d_rev_offset))
 
-        d_rev_offset = cp.cumsum(d_rev_offset, dtype=env.NUMPY_INT)
-        max_rev = int(d_rev_offset[-1])
-        d_rev_neighbors = cp.empty(max_rev, dtype=env.NUMPY_INT)
-        d_rev_scale = cp.empty(max_rev, dtype=env.NUMPY_FLOAT)
-        d_temp = d_rev_offset.copy()
+        if self._d_reverse_offset is None:
+            d_rev_offset = cp.zeros(N + 1, dtype=env.NUMPY_INT)
+            n1 = (N + tpb - 1) // tpb
+            self._kernels['rev_count']((n1,), (tpb,),
+                (self._d_excl_offset, self._d_excl_neighbors, np.int32(N), d_rev_offset))
 
-        self._kernels['rev_fill']((n1,), (tpb,),
-            (self._d_excl_offset, self._d_excl_neighbors, self._d_excl_scale,
-             d_rev_offset, np.int32(N),
-             d_rev_neighbors, d_rev_scale, d_temp))
+            d_rev_offset = cp.cumsum(d_rev_offset, dtype=env.NUMPY_INT)
+            max_rev = int(d_rev_offset[-1])
+            d_rev_neighbors = cp.empty(max_rev, dtype=env.NUMPY_INT)
+            d_rev_scale = cp.empty(max_rev, dtype=env.NUMPY_FLOAT)
+            d_temp = d_rev_offset.copy()
 
-        self._d_reverse_offset = d_rev_offset
-        self._d_reverse_neighbors = d_rev_neighbors
-        self._d_reverse_scale = d_rev_scale
+            self._kernels['rev_fill']((n1,), (tpb,),
+                (self._d_excl_offset, self._d_excl_neighbors, self._d_excl_scale,
+                 d_rev_offset, np.int32(N),
+                 d_rev_neighbors, d_rev_scale, d_temp))
+
+            self._d_reverse_offset = d_rev_offset
+            self._d_reverse_neighbors = d_rev_neighbors
+            self._d_reverse_scale = d_rev_scale
 
         total_work = self.num_tiles * W
         grid = ((total_work + tpb - 1) // tpb,)
