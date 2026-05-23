@@ -9,6 +9,7 @@ test_order = [
     'tile_list',
     'system',
     'charmm_forcefield',
+    'bruteforce_validation',
 ]
 
 def pytest_collection_modifyitems(items):

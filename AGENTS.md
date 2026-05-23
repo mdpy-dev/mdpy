@@ -110,6 +110,9 @@ conda run -n md_analysis pytest mdpy/test/test_openmm_validation.py -sv -k "6PO6
 
 # Full validation (includes 1M9Z, 95567 atoms, slower)
 conda run -n md_analysis pytest mdpy/test/test_openmm_validation.py -sv -m "slow"
+
+# Brute-force gold standard (1M9Z, must pass after any force/tile-list change)
+CUDA_VISIBLE_DEVICES=0 conda run -n md_analysis pytest mdpy/test/test_bruteforce_validation.py -sv -m slow
 ```
 
 - Test framework: pytest
@@ -141,6 +144,57 @@ Output files: `mdpy/test/data/openmm_reference_6PO6.npz` and `openmm_reference_1
 | electrostatic | < 1e-3 | < 1e-2 | Direct Coulomb comparison |
 
 **Note**: OpenMM is configured with `NoCutoff` or `CutoffNonPeriodic` to align with mdpy (mdpy has no PME).
+
+### Brute-Force Correctness Validation (Gold Standard)
+
+This is the **primary correctness test** for mdpy. It must pass after any change to force computation or tile list code.
+
+Uses pure numpy O(N²) brute-force computation as ground truth. Independent of any external MD engine.
+
+**When to regenerate reference data** (MANDATORY):
+- After modifying ANY force computation code (`bonded_force.py`, `nonbonded_force.py`, `expressions/`)
+- After modifying tile list code that affects neighbor pair finding or exclusion/scaling masks
+- After adding new force types or modifying existing force expressions
+- After changing the expression transpiler or bonded expression system
+
+**Reference value generation:**
+
+```bash
+# Takes ~10-20 minutes (one-time computation, stores results as .npz)
+CUDA_VISIBLE_DEVICES=0 conda run -n md_analysis python mdpy/test/generate_bruteforce_reference.py
+```
+
+Output file: `mdpy/test/data/bruteforce_reference_1M9Z.npz`
+
+**Running the validation:**
+
+```bash
+# Full brute-force validation (1M9Z, 95567 atoms)
+CUDA_VISIBLE_DEVICES=0 conda run -n md_analysis pytest mdpy/test/test_bruteforce_validation.py -sv -m slow
+```
+
+**What it validates:**
+
+| Category | Tests | What is checked |
+|----------|-------|-----------------|
+| Tile list | 3 tests | Neighbor pair completeness, exclusion/scaling mask correctness, atom mapping consistency |
+| Bonded forces | 2 tests | Bonded energy relative error < 1e-4, total forces correlation > 0.99 |
+| Bonded energies | 2 tests | Total bonded energy error < 1e-4, total energy error < 1e-3 |
+| Nonbonded forces | 4 tests | Energy error < 1e-3, force direction/magnitude correlation > 0.99 |
+
+**Key files:**
+
+| File | Purpose |
+|------|---------|
+| `mdpy/test/generate_bruteforce_reference.py` | Pre-computes reference data (run once, commit .npz) |
+| `mdpy/test/test_bruteforce_validation.py` | Loads reference and compares against GPU |
+| `mdpy/test/data/bruteforce_reference_1M9Z.npz` | Reference data (numpy arrays) |
+
+**Maintenance rule**: When adding new force types (e.g., CMAP, restraint), you MUST:
+1. Add the corresponding brute-force computation to `generate_bruteforce_reference.py`
+2. Add validation tests to `test_bruteforce_validation.py`
+3. Regenerate the reference `.npz` file
+4. Verify all tests pass
 
 ## GPU Kernel Profiling
 
@@ -299,6 +353,8 @@ Data flow:
 | `mdpy/integrator/verlet.py` | `@cuda.jit` Verlet integrator |
 | `mdpy/integrator/langevin.py` | `@cuda.jit` Langevin BAOAB (LCG PRNG) |
 | `mdpy/io/` | File parsers (PSF/PDB/DCD/HDF5/CHARMM toppar) |
+| `mdpy/test/generate_bruteforce_reference.py` | Brute-force O(N²) reference data generator for 1M9Z |
+| `mdpy/test/test_bruteforce_validation.py` | Gold standard validation: tile list + forces vs brute-force |
 | `benchmark/benchmark_1m9z.py` | 1M9Z performance benchmark with per-kernel GPU timing |
 | `benchmark/profile_tile_list.py` | Tile list nsys profiling workload |
 | `benchmark/profile_tile_list_phases.py` | Tile list per-phase timing breakdown |
