@@ -96,7 +96,7 @@ class TestTranspiler:
             force_magnitude = energy / r
             return energy, force_magnitude
         fragment = add_test.cuda_fragment
-        assert '(sigma_i + sigma_j)' in fragment
+        assert '(sigma_i_use + sigma_j_use)' in fragment
         assert '(combined / r)' in fragment
 
     def test_local_variables_tracked(self):
@@ -107,7 +107,7 @@ class TestTranspiler:
         assert 'sr12' in lennard_jones.local_variables
 
     def test_sqrt_transpilation(self):
-        assert 'sqrtf((epsilon_i * epsilon_j))' in lennard_jones.cuda_fragment
+        assert 'sqrtf((epsilon_i_use * epsilon_j_use))' in lennard_jones.cuda_fragment
 
 
 class TestExpressionCombination:
@@ -257,7 +257,7 @@ class TestEdgeCases:
             energy = val / r
             force_magnitude = val / (r * r)
             return energy, force_magnitude
-        assert 'sqrtf((sigma_i * sigma_j))' in with_sqrt.cuda_fragment
+        assert 'sqrtf((sigma_i_use * sigma_j_use))' in with_sqrt.cuda_fragment
 
     def test_expression_with_power_of_6(self):
         fragment = lennard_jones.cuda_fragment

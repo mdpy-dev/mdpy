@@ -49,6 +49,14 @@ def _setup_mdpy_system(psf_path, pdb_path, prm_path, cutoff=12.0):
         positions_2d, topology,
         system.pbc_matrix, system.pbc_inv,
     )
+    for term in system.force_terms:
+        if hasattr(term, 'bind_sorted_params'):
+            term.bind_sorted_params(system.tile_list)
+    system.tile_list.update_sorted_positions(
+        system.gpu.d_positions_x,
+        system.gpu.d_positions_y,
+        system.gpu.d_positions_z,
+    )
     system.compute_forces()
     system.gpu.download_forces(system.particles)
     return system

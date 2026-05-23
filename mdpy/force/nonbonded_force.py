@@ -1090,11 +1090,26 @@ class NonbondedForce(ForceTerm):
                 self._parameter_arrays[param_name]
             )
 
+    def bind_sorted_params(self, tile_list):
+        self._ensure_compiled()
+        param_arrays = {}
+        for param_name in self.expression.parameter_names:
+            param_arrays[param_name] = self._d_parameter_arrays[param_name]
+            param_arrays[param_name + '_14'] = self._d_parameter_arrays[param_name + '_14']
+        tile_list.gather_sorted_params(param_arrays)
+
     def _param_args(self):
         args = []
         for param_name in self.expression.parameter_names:
             args.append(self._d_parameter_arrays[param_name])
             args.append(self._d_parameter_arrays[param_name + '_14'])
+        return args
+
+    def _sorted_param_args(self, tile_list):
+        args = []
+        for param_name in self.expression.parameter_names:
+            args.append(getattr(tile_list, f'd_sorted_{param_name}'))
+            args.append(getattr(tile_list, f'd_sorted_{param_name}_14'))
         return args
 
     def compute(self, gpu_context, tile_list=None):
@@ -1104,6 +1119,9 @@ class NonbondedForce(ForceTerm):
             return
 
         args = [
+            tile_list.d_sorted_pos_x,
+            tile_list.d_sorted_pos_y,
+            tile_list.d_sorted_pos_z,
             gpu_context.d_positions_x,
             gpu_context.d_positions_y,
             gpu_context.d_positions_z,
@@ -1125,8 +1143,8 @@ class NonbondedForce(ForceTerm):
             np.float32(gpu_context._inv_box_x),
             np.float32(gpu_context._inv_box_y),
             np.float32(gpu_context._inv_box_z),
-        ] + self._param_args()
+        ] + self._param_args() + self._sorted_param_args(tile_list)
 
         num_sm = self._num_sm
-        grid_size = 4 * num_sm
+        grid_size = 5 * num_sm
         self._kernel((grid_size,), (256,), tuple(args))

@@ -29,6 +29,7 @@ class System:
         self._velocities_uploaded = False
         self._profiling_enabled = False
         self._profile_data = {}
+        self._sorted_params_bound = False
 
     def add_force_term(self, term):
         self.force_terms.append(term)
@@ -105,6 +106,16 @@ class System:
                     positions_soa, self.topology,
                     self.pbc_matrix, self.pbc_inv,
                 )
+                if not self._sorted_params_bound:
+                    for term in self.force_terms:
+                        if hasattr(term, 'bind_sorted_params'):
+                            term.bind_sorted_params(self.tile_list)
+                    self._sorted_params_bound = True
+            self.tile_list.update_sorted_positions(
+                self.gpu.d_positions_x,
+                self.gpu.d_positions_y,
+                self.gpu.d_positions_z,
+            )
             self.compute_forces()
             if prof:
                 s = cp.cuda.Event()
