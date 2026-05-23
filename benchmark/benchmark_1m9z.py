@@ -77,11 +77,14 @@ def main():
     t_warm = time.perf_counter() - t0
     print(f"  {t_warm:.1f}s ({t_warm / WARMUP_STEPS * 1000:.2f} ms/step)")
 
+    system.enable_profiling()
+
     print(f"\nBenchmark: {NUM_BLOCKS} x {BLOCK_STEPS} steps")
     print(f"  {'Block':>6s}  {'ms/step':>10s}  {'ns/day':>10s}  {'E_pot (kcal/mol)':>18s}")
     print(f"  {'------':>6s}  {'----------':>10s}  {'----------':>10s}  {'------------------':>18s}")
 
     block_times = []
+    kernel_totals = {}
     for i in range(NUM_BLOCKS):
         cp.cuda.Stream.null.synchronize()
         t0 = time.perf_counter()
@@ -97,6 +100,13 @@ def main():
         block_times.append(ms_per_step)
         print(f"  {i + 1:6d}  {ms_per_step:10.3f}  {ns_day:10.1f}  {e_kcal:18.1f}")
 
+        profile = system.dump_profile()
+        for name, data in profile.items():
+            kernel_totals[name] = kernel_totals.get(name, 0.0) + data['total_ms']
+        parts = [f"{n}={profile[n]['avg_ms']:.2f}" for n in sorted(profile)]
+        if parts:
+            print(f"          {', '.join(parts)}")
+
     avg = np.mean(block_times)
     med = np.median(block_times)
     ns_avg = 86400.0 / (avg * 1e-3) * DT_FS * 1e-6
@@ -109,6 +119,17 @@ def main():
     print("Per-term energies (last block, kcal/mol):")
     for name, val in energy_dict.items():
         print(f"  {name:>12s}: {val * KCAL_PER_INTERNAL:18.1f}")
+
+    total_kernel_ms = sum(kernel_totals.values())
+    print()
+    print("Per-kernel timing (GPU, accumulated):")
+    if total_kernel_ms > 0:
+        for name, total_ms in sorted(kernel_totals.items(), key=lambda x: -x[1]):
+            avg_ms = total_ms / NUM_BLOCKS / BLOCK_STEPS
+            pct = total_ms / total_kernel_ms * 100
+            print(f"  {name:>20s}: {avg_ms:8.3f} ms/call  ({pct:5.1f}%)")
+    else:
+        print("  (no profile data collected)")
 
     print()
     print("Note: dt=0.5fs required because mdpy has no bond constraints.")
