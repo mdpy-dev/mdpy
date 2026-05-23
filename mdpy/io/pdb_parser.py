@@ -12,7 +12,7 @@ import numpy as np
 import MDAnalysis as mda
 from MDAnalysis.topology.guessers import guess_atom_type
 from mdpy import env, SPATIAL_DIM
-from mdpy.error import *
+from mdpy.error import FileFormatError, ArrayDimError, ParserPoorDefinedError
 
 class PDBParser:
     def __init__(self, file_path, is_parse_all=True) -> None:
@@ -125,4 +125,6 @@ class PDBParser:
 
     @property
     def pbc_matrix(self) -> np.ndarray:
+        if self._pbc_matrix is None:
+            return None
         return self._pbc_matrix.copy()

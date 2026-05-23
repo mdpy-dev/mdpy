@@ -8,17 +8,14 @@ copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
 import numpy as np
-import numba as nb
 from mdpy.error import *
 
 class MDPYEnvironment:
     def __init__(self) -> None:
-        self._supported_precisions = ['SINGLE', 'DOUBLE'] 
+        self._supported_precisions = ['SINGLE', 'DOUBLE']
         self._default_precisions = 'SINGLE'
-        self._supproted_platforms = ['CPU', 'CUDA']
-        self._default_platforms = 'CPU'
+        self._platform = 'CUDA'
         self.set_precision(self._default_precisions)
-        self.set_platform(self._default_platforms)
 
     def set_precision(self, precision: str):
         precision = precision.upper()
@@ -26,14 +23,10 @@ class MDPYEnvironment:
             self._precision = precision
             if precision == 'SINGLE':
                 self.NUMPY_FLOAT = np.float32
-                self.NUMBA_FLOAT= nb.float32
                 self.NUMPY_INT = np.int32
-                self.NUMBA_INT = nb.int32
             elif precision == 'DOUBLE':
                 self.NUMPY_FLOAT = np.float64
-                self.NUMBA_FLOAT= nb.float64
                 self.NUMPY_INT = np.int64
-                self.NUMBA_INT = nb.int64
             self.UNIT_FLOAT = np.float128
         else:
             raise EnvironmentVariableError(
@@ -41,19 +34,8 @@ class MDPYEnvironment:
                 'Check supported precision with `mdpy.env.supported_precisions`'
             )
 
-    def set_platform(self, platform: str):
-        platform = platform.upper()
-        if platform in self._supproted_platforms:
-            self._platform = platform
-        else:
-            raise EnvironmentVariableError(
-                'Platform %s is not supported. ' %platform +
-                'Check supported platform with `mdpy.env.supported_platforms`'
-            )
-
     def set_default(self):
         self.set_precision(self._default_precisions)
-        self.set_platform(self._default_platforms)
 
     @property
     def supported_presisions(self):
@@ -66,14 +48,6 @@ class MDPYEnvironment:
     @property
     def precision(self):
         return self._precision
-
-    @property
-    def supported_platforms(self):
-        return self._supproted_platforms
-
-    @property
-    def default_platform(self):
-        return self._default_platforms
 
     @property
     def platform(self):

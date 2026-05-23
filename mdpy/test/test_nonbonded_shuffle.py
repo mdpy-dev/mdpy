@@ -105,7 +105,7 @@ class TestCrossTileKernelV2:
     def test_kernel_has_warp_energy_reduce(self, combined_expr):
         source = combined_expr.assemble_cross_tile_kernel()
         assert '__shfl_down_sync' in source
-        assert 'atomicAdd(energy_buffer, energy)' in source
+        assert 'atomicAdd(energy_buffer, total_energy)' in source
 
     def test_kernel_has_param_select_both(self, combined_expr):
         source = combined_expr.assemble_cross_tile_kernel()
@@ -143,9 +143,10 @@ class TestSelfTileKernelV2:
         source = combined_expr.assemble_self_tile_kernel()
         assert 'j != tgx' in source
 
-    def test_self_kernel_has_half_energy(self, combined_expr):
+    def test_self_kernel_no_half_energy(self, combined_expr):
         source = combined_expr.assemble_self_tile_kernel()
-        assert '0.5f * energy_val' in source
+        assert '0.5f * energy_val' not in source
+        assert 'total_energy += energy_val' in source
 
     def test_self_kernel_no_shared_mem_positions(self, combined_expr):
         source = combined_expr.assemble_self_tile_kernel()

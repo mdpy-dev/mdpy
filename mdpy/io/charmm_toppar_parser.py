@@ -10,8 +10,9 @@ copyright : (C)Copyright 2021-present, mdpy organization
 import itertools
 import numpy as np
 from mdpy import env
-from mdpy.error import *
+from mdpy.error import FileFormatError
 from mdpy.unit import *
+from mdpy.forcefield.parameters import ParameterTable
 
 RMIN_TO_SIGMA_FACTOR = env.NUMPY_FLOAT(2**(-1/6))
 USED_BLOCK_LABELS = ['ATOMS', 'BONDS', 'ANGLES', 'DIHEDRALS', 'IMPROPER', 'NONBONDED']
@@ -276,3 +277,18 @@ class CharmmTopparParser:
         top_info, par_info = info[:split_index+1], info[split_index:]
 
         return self._fine_top_info(top_info), self._fine_par_info(par_info)
+
+    def create_parameter_table(self, unique_type_names, particle_type_indices):
+        number_types = len(unique_type_names)
+        sigma_array = np.zeros(number_types, dtype=env.NUMPY_FLOAT)
+        epsilon_array = np.zeros(number_types, dtype=env.NUMPY_FLOAT)
+        nonbonded = self._parameters.get('nonbonded', {})
+        for type_index, type_name in enumerate(unique_type_names):
+            if type_name in nonbonded:
+                values = nonbonded[type_name]
+                epsilon_array[type_index] = values[0]
+                sigma_array[type_index] = values[1]
+        table = ParameterTable()
+        table.add_per_type('sigma', sigma_array)
+        table.add_per_type('epsilon', epsilon_array)
+        return table

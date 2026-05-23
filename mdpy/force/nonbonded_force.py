@@ -241,6 +241,13 @@ class NonbondedExpression:
             fragment += '\nfloat force_magnitude = _result_force;'
         return _assemble_cross_tile_kernel_v2(self.parameter_names, fragment)
 
+    def assemble_tile_kernel(self):
+        fragment = self.cuda_fragment
+        if '_result_energy_1' not in fragment:
+            fragment += '\nfloat energy_val = _result_energy;'
+            fragment += '\nfloat force_magnitude = _result_force;'
+        return _assemble_tile_kernel(self.parameter_names, fragment)
+
 
 def _rename_output_vars(cuda_fragment, tag):
     lines = cuda_fragment.split('\n')
@@ -314,6 +321,14 @@ def _generate_param_load_j_init(parameter_names):
     return '\n        '.join(lines)
 
 
+def _generate_param_load_j_tile(parameter_names):
+    lines = []
+    for name in parameter_names:
+        lines.append(f'float {name}_j = 0.0f, {name}_j_14 = 0.0f;')
+        lines.append(f'if (gj >= 0 && gj < num_particles) {{ {name}_j = {name}[gj]; {name}_j_14 = {name}_14[gj]; }}')
+    return '\n        '.join(lines)
+
+
 def _generate_shuffle_warp_data(parameter_names):
     lines = [
         'shfl_px = __shfl_sync(0xffffffff, shfl_px, (tgx + 1) & 31);',
@@ -351,6 +366,129 @@ def _generate_param_restore(parameter_names):
     return '\n            '.join(lines)
 
 
+def _assemble_tile_kernel(parameter_names, expression_fragment):
+    param_decls = _generate_param_decls(parameter_names)
+    param_load_i = _generate_param_load_i(parameter_names)
+    param_load_j = _generate_param_load_j_tile(parameter_names)
+    shuffle_code = _generate_shuffle_warp_data(parameter_names)
+    param_select = _generate_param_select(parameter_names)
+    param_restore = _generate_param_restore(parameter_names)
+
+    kernel = f'''extern "C" __global__
+void tile_kernel(
+    const float* positions,
+    float* forces,
+    float* energy_buffer,
+    const int* block_atoms,
+    const int* tiles,
+    const int* interacting_atoms,
+    const unsigned int* exclusion_masks,
+    const unsigned int* scaling_masks,
+    float cutoff_sq,
+    int num_tiles,
+    int num_particles,
+    float box_x, float box_y, float box_z,
+    float inv_box_x, float inv_box_y, float inv_box_z{param_decls}
+) {{
+    int total_warps = (blockDim.x * gridDim.x) / 32;
+    int warp_id = (blockIdx.x * blockDim.x + threadIdx.x) / 32;
+    int tgx = threadIdx.x & 31;
+    int tbx = threadIdx.x - tgx;
+
+    int pos = (int)((long long)warp_id * num_tiles / total_warps);
+    int end = (int)((long long)(warp_id + 1) * num_tiles / total_warps);
+
+    float total_energy = 0.0f;
+
+    __shared__ int atom_indices_shared[256];
+    __shared__ unsigned int excl_shared[256];
+    __shared__ unsigned int scale_shared[256];
+
+    for (; pos < end; pos++) {{
+        int block_x = tiles[pos];
+
+        int gi = block_atoms[block_x * 32 + tgx];
+        float px_i = 0.0f, py_i = 0.0f, pz_i = 0.0f;
+        if (gi >= 0 && gi < num_particles) {{
+            px_i = positions[gi * 3 + 0];
+            py_i = positions[gi * 3 + 1];
+            pz_i = positions[gi * 3 + 2];
+        }}
+        {param_load_i}
+
+        int gj = interacting_atoms[pos * 32 + tgx];
+        float shfl_px = 0.0f, shfl_py = 0.0f, shfl_pz = 0.0f;
+        if (gj >= 0 && gj < num_particles) {{
+            shfl_px = positions[gj * 3 + 0];
+            shfl_py = positions[gj * 3 + 1];
+            shfl_pz = positions[gj * 3 + 2];
+        }}
+        {param_load_j}
+
+        atom_indices_shared[threadIdx.x] = gj;
+        excl_shared[threadIdx.x] = exclusion_masks[pos * 32 + tgx];
+        scale_shared[threadIdx.x] = scaling_masks[pos * 32 + tgx];
+
+        float force_x = 0.0f, force_y = 0.0f, force_z = 0.0f;
+        float shfl_fx = 0.0f, shfl_fy = 0.0f, shfl_fz = 0.0f;
+
+        int tj = tgx;
+        for (int j = 0; j < 32; j++) {{
+            unsigned int excl_j = excl_shared[tbx + tj];
+            unsigned int scale_j = scale_shared[tbx + tj];
+            int atom2 = atom_indices_shared[tbx + tj];
+
+            float dx = shfl_px - px_i;
+            float dy = shfl_py - py_i;
+            float dz = shfl_pz - pz_i;
+            dx -= box_x * roundf(dx * inv_box_x);
+            dy -= box_y * roundf(dy * inv_box_y);
+            dz -= box_z * roundf(dz * inv_box_z);
+            float dist_sq = dx * dx + dy * dy + dz * dz;
+
+            bool excluded = (atom2 < 0 || atom2 >= num_particles)
+                         || ((excl_j >> tgx) & 1);
+            bool is_14 = (scale_j >> tgx) & 1;
+
+            if (!excluded && dist_sq > 1.0e-12f && dist_sq <= cutoff_sq && gi >= 0 && gi < num_particles) {{
+                float inv_dist = rsqrtf(dist_sq);
+                float r = dist_sq * inv_dist;
+                {param_select}
+                {expression_fragment}
+                float inv_dist_force = force_magnitude * inv_dist;
+                float fx = dx * inv_dist_force;
+                float fy = dy * inv_dist_force;
+                float fz = dz * inv_dist_force;
+                force_x += fx; force_y += fy; force_z += fz;
+                shfl_fx -= fx; shfl_fy -= fy; shfl_fz -= fz;
+                total_energy += energy_val;
+                {param_restore}
+            }}
+            {shuffle_code}
+            tj = (tj + 1) & 31;
+        }}
+
+        if (gi >= 0 && gi < num_particles) {{
+            atomicAdd(&forces[gi * 3 + 0], force_x);
+            atomicAdd(&forces[gi * 3 + 1], force_y);
+            atomicAdd(&forces[gi * 3 + 2], force_z);
+        }}
+        int gj_out = atom_indices_shared[threadIdx.x];
+        if (gj_out >= 0 && gj_out < num_particles) {{
+            atomicAdd(&forces[gj_out * 3 + 0], shfl_fx);
+            atomicAdd(&forces[gj_out * 3 + 1], shfl_fy);
+            atomicAdd(&forces[gj_out * 3 + 2], shfl_fz);
+        }}
+    }}
+
+    for (int offset = 16; offset > 0; offset >>= 1) {{
+        total_energy += __shfl_down_sync(0xffffffff, total_energy, offset);
+    }}
+    if (tgx == 0) atomicAdd(energy_buffer, total_energy);
+}}'''
+    return kernel
+
+
 def _assemble_cross_tile_kernel_v2(parameter_names, expression_fragment):
     param_decls = _generate_param_decls(parameter_names)
     param_load_i = _generate_param_load_i(parameter_names)
@@ -380,7 +518,7 @@ void cross_tile_kernel(
     int pos = warp_id * num_cross / total_warps;
     int end = (warp_id + 1) * num_cross / total_warps;
 
-    float energy = 0.0f;
+    float total_energy = 0.0f;
 
     for (; pos < end; pos++) {{
         int bi = cross_tiles_i[pos];
@@ -437,13 +575,13 @@ void cross_tile_kernel(
                 float fy = dy * inv_dist_force;
                 float fz = dz * inv_dist_force;
 
-                force_x -= fx;
-                force_y -= fy;
-                force_z -= fz;
-                shfl_fx += fx;
-                shfl_fy += fy;
-                shfl_fz += fz;
-                energy += energy_val;
+                force_x += fx;
+                force_y += fy;
+                force_z += fz;
+                shfl_fx -= fx;
+                shfl_fy -= fy;
+                shfl_fz -= fz;
+                total_energy += energy_val;
 
                 {param_restore}
             }}
@@ -468,9 +606,9 @@ void cross_tile_kernel(
     }}
 
     for (int offset = 16; offset > 0; offset >>= 1) {{
-        energy += __shfl_down_sync(0xffffffff, energy, offset);
+        total_energy += __shfl_down_sync(0xffffffff, total_energy, offset);
     }}
-    if (tgx == 0) atomicAdd(energy_buffer, energy);
+    if (tgx == 0) atomicAdd(energy_buffer, total_energy);
 }}'''
     return kernel
 
@@ -518,7 +656,7 @@ void self_tile_kernel(
     if (threadIdx.x >= 32) return;
 
     int block_k = self_tile_indices[tile_idx];
-    float energy = 0.0f;
+    float total_energy = 0.0f;
 
     int gi = block_atoms[block_k * 32 + tgx];
     float px_i = 0.0f, py_i = 0.0f, pz_i = 0.0f;
@@ -540,6 +678,8 @@ void self_tile_kernel(
         float py_j = __shfl_sync(0xffffffff, py_i, j);
         float pz_j = __shfl_sync(0xffffffff, pz_i, j);
 
+        {broadcast_j}
+
         float dx = px_j - px_i;
         float dy = py_j - py_i;
         float dz = pz_j - pz_i;
@@ -553,16 +693,15 @@ void self_tile_kernel(
             float inv_dist = rsqrtf(dist_sq);
             float r = dist_sq * inv_dist;
 
-            {broadcast_j}
             {param_select}
 
             {expression_fragment}
 
             float inv_dist_force = force_magnitude * inv_dist;
-            force_x -= dx * inv_dist_force;
-            force_y -= dy * inv_dist_force;
-            force_z -= dz * inv_dist_force;
-            energy += 0.5f * energy_val;
+            force_x += dx * inv_dist_force;
+            force_y += dy * inv_dist_force;
+            force_z += dz * inv_dist_force;
+            total_energy += energy_val;
 
             {param_restore}
         }}
@@ -578,9 +717,9 @@ void self_tile_kernel(
     }}
 
     for (int offset = 16; offset > 0; offset >>= 1) {{
-        energy += __shfl_down_sync(0xffffffff, energy, offset);
+        total_energy += __shfl_down_sync(0xffffffff, total_energy, offset);
     }}
-    if (tgx == 0) atomicAdd(energy_buffer, energy);
+    if (tgx == 0) atomicAdd(energy_buffer, total_energy);
 }}'''
     return kernel
 
@@ -873,10 +1012,8 @@ class NonbondedForce(ForceTerm):
 
     def __init__(self, expression):
         self.expression = expression
-        self._self_kernel = None
-        self._cross_kernel = None
-        self._self_kernel_source = None
-        self._cross_kernel_source = None
+        self._kernel = None
+        self._kernel_source = None
         self._d_parameter_arrays = {}
         self._parameter_arrays = {}
         self._cutoff = None
@@ -899,14 +1036,12 @@ class NonbondedForce(ForceTerm):
                 per_atom_14 = per_atom
             self._parameter_arrays[name_14] = per_atom_14.astype(np.float32)
 
-        self._self_kernel_source = self.expression.assemble_self_tile_kernel()
-        self._cross_kernel_source = self.expression.assemble_cross_tile_kernel()
+        self._kernel_source = self.expression.assemble_tile_kernel()
 
     def _ensure_compiled(self):
-        if self._self_kernel is not None:
+        if self._kernel is not None:
             return
-        self._self_kernel = cp.RawKernel(self._self_kernel_source, 'self_tile_kernel')
-        self._cross_kernel = cp.RawKernel(self._cross_kernel_source, 'cross_tile_kernel')
+        self._kernel = cp.RawKernel(self._kernel_source, 'tile_kernel')
         for param_name in self._parameter_arrays:
             self._d_parameter_arrays[param_name] = cp.asarray(
                 self._parameter_arrays[param_name]
@@ -922,46 +1057,29 @@ class NonbondedForce(ForceTerm):
     def compute(self, gpu_context, tile_list=None):
         self._ensure_compiled()
 
-        if tile_list is None:
-            return 0.0
+        if tile_list is None or tile_list.num_tiles == 0:
+            return
 
-        if tile_list.num_self > 0:
-            self_args = [
-                gpu_context.d_positions,
-                gpu_context.d_forces,
-                gpu_context.d_energy,
-                tile_list.d_block_atoms,
-                tile_list.d_self_tile_indices,
-                tile_list.d_self_exclusion_masks,
-                tile_list.d_self_scaling_masks,
-                np.float32(self._cutoff_sq),
-            ] + self._param_args()
-            self._self_kernel(
-                (tile_list.num_self,), (256,),
-                tuple(self_args),
-            )
+        args = [
+            gpu_context.d_positions,
+            gpu_context.d_forces,
+            gpu_context.d_energy,
+            tile_list.d_block_atoms,
+            tile_list.d_tiles,
+            tile_list.d_interacting_atoms,
+            tile_list.d_exclusion_masks,
+            tile_list.d_scaling_masks,
+            np.float32(self._cutoff_sq),
+            np.int32(tile_list.num_tiles),
+            np.int32(gpu_context.number_particles),
+            np.float32(gpu_context._box_x),
+            np.float32(gpu_context._box_y),
+            np.float32(gpu_context._box_z),
+            np.float32(gpu_context._inv_box_x),
+            np.float32(gpu_context._inv_box_y),
+            np.float32(gpu_context._inv_box_z),
+        ] + self._param_args()
 
-        if tile_list.num_cross > 0:
-            cross_args = [
-                gpu_context.d_positions,
-                gpu_context.d_forces,
-                gpu_context.d_energy,
-                tile_list.d_block_atoms,
-                tile_list.d_cross_tiles_i,
-                tile_list.d_cross_tiles_j,
-                tile_list.d_cross_tiles_shift,
-                tile_list.d_cross_exclusion_masks,
-                tile_list.d_cross_scaling_masks,
-                np.float32(self._cutoff_sq),
-                np.int32(tile_list.num_cross),
-            ] + self._param_args()
-            num_sm = self._num_sm
-            cross_grid = 4 * num_sm
-            self._cross_kernel(
-                (cross_grid,), (256,),
-                tuple(cross_args),
-            )
-
-        if tile_list.num_interactions == 0:
-            return 0.0
-        return None
+        num_sm = self._num_sm
+        grid_size = 4 * num_sm
+        self._kernel((grid_size,), (256,), tuple(args))

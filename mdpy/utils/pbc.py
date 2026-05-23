@@ -8,7 +8,6 @@ copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
 import numpy as np
-import numba as nb
 from mdpy import SPATIAL_DIM
 from mdpy.error import *
 
@@ -35,7 +34,6 @@ def wrap_positions(positions: np.ndarray, pbc_matrix: np.ndarray, pbc_inv: np.ar
     move_vec = np.dot(move_vec, pbc_matrix)
     return positions + move_vec
 
-@nb.njit()
 def unwrap_vec(vec: np.ndarray, pbc_matrix: np.ndarray, pbc_inv: np.array):
     scaled_vec = np.dot(vec, pbc_inv)
     temp_vec = np.empty(scaled_vec.shape)

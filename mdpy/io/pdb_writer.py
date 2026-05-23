@@ -202,43 +202,38 @@ class PDBWriter:
 
     def _write_model(self, positions: np.ndarray):
         model = MODEL % self._cur_model
-        cur_chain_id, serial = self._topology.particles[0].chain_id[:1], 1
-        for index, particle in enumerate(self._topology.particles):
-            if cur_chain_id != particle.chain_id[:1]:
-                cur_chain_id = particle.chain_id[:1]
-                # Serial resname chainid resid
-                pre_particle = self._topology.particles[index-1]
+        topology = self._topology
+        num_particles = topology.num_particles
+        particle_names = topology.particle_names
+        molecule_types = topology.molecule_types
+        chain_ids = topology.chain_ids
+        molecule_ids = topology.molecule_ids
+        type_names = topology.type_names
+
+        cur_chain_id = chain_ids[0][:1] if num_particles > 0 else ''
+        serial = 1
+        for index in range(num_particles):
+            if cur_chain_id != chain_ids[index][:1]:
+                cur_chain_id = chain_ids[index][:1]
                 model += TER(
-                    serial, pre_particle.molecule_type,
-                    pre_particle.chain_id, pre_particle.molecule_id
+                    serial,
+                    molecule_types[index - 1],
+                    chain_ids[index - 1],
+                    molecule_ids[index - 1],
                 )
                 serial += 1
-            # Serial atomname resname chainid resid x y z 0 0 element
             model += ATOM(
-                serial, particle.particle_name, particle.molecule_type,
-                particle.chain_id, particle.molecule_id,
+                serial, particle_names[index], molecule_types[index],
+                chain_ids[index], molecule_ids[index],
                 positions[index, 0], positions[index, 1], positions[index, 2],
-                particle.particle_type
+                type_names[index],
             )
-            # if particle.molecule_type in STD_RES_NAMES:
-            #     model += ATOM(
-            #         serial, particle.particle_name, particle.molecule_type,
-            #         particle.chain_id, particle.molecule_id,
-            #         positions[index, 0], positions[index, 1], positions[index, 2],
-            #         particle.particle_type
-            #     )
-            # else:
-            #     model += HETATM(
-            #         serial, particle.particle_name, particle.molecule_type,
-            #         particle.chain_id, particle.molecule_id,
-            #         positions[index, 0], positions[index, 1], positions[index, 2],
-            #         particle.particle_type
-            #     )
             serial += 1
-        pre_particle = self._topology.particles[-1]
         model += TER(
-            serial, pre_particle.molecule_type,
-            pre_particle.chain_id, pre_particle.molecule_id
+            serial,
+            molecule_types[num_particles - 1],
+            chain_ids[num_particles - 1],
+            molecule_ids[num_particles - 1],
         )
         model += ENDMDL
         self._write_info(model)
