@@ -27,10 +27,36 @@ class System:
         self._step_count = 0
         self._positions_uploaded = False
         self._velocities_uploaded = False
+        self._profiling_enabled = False
+        self._profile_data = {}
 
     def add_force_term(self, term):
         self.force_terms.append(term)
         self.gpu.allocate_energy_accumulator(len(self.force_terms))
+
+    def enable_profiling(self):
+        self._profiling_enabled = True
+        self._profile_data = {}
+        for term in self.force_terms:
+            self._profile_data[term.name] = []
+        self._profile_data['integrator'] = []
+
+    def disable_profiling(self):
+        self._profiling_enabled = False
+
+    def dump_profile(self):
+        cp.cuda.Stream.null.synchronize()
+        result = {}
+        for key, pairs in self._profile_data.items():
+            if pairs:
+                times = [cp.cuda.get_elapsed_time(s, e) for s, e in pairs]
+                result[key] = {
+                    'total_ms': sum(times),
+                    'avg_ms': sum(times) / len(times),
+                    'count': len(times),
+                }
+        self._profile_data = {k: [] for k in self._profile_data}
+        return result
 
     def compute_forces(self):
         self.gpu.zero_forces()
@@ -41,9 +67,16 @@ class System:
             abs(float(pbc_2d[2, 2]))
         )
         for term_index, term in enumerate(self.force_terms):
+            if self._profiling_enabled:
+                s = cp.cuda.Event()
+                e = cp.cuda.Event()
+                s.record()
             self.gpu.zero_energy()
             term.compute(self.gpu, self.tile_list)
             self.gpu.accumulate_energy(term_index)
+            if self._profiling_enabled:
+                e.record()
+                self._profile_data[term.name].append((s, e))
 
     def dump_energy(self):
         if self.gpu.d_energy_accumulator is None:
@@ -64,6 +97,7 @@ class System:
             self.gpu.upload_velocities(self.particles)
             self._velocities_uploaded = True
 
+        prof = self._profiling_enabled
         for _ in range(number_steps):
             positions_2d = self.gpu.get_positions_2d()
             if self.tile_list.check_rebuild(positions_2d):
@@ -72,7 +106,14 @@ class System:
                     self.pbc_matrix, self.pbc_inv,
                 )
             self.compute_forces()
+            if prof:
+                s = cp.cuda.Event()
+                e = cp.cuda.Event()
+                s.record()
             integrator.step(self.gpu)
+            if prof:
+                e.record()
+                self._profile_data['integrator'].append((s, e))
             self._step_count += 1
 
     def minimize(self, minimizer, number_steps=100):
