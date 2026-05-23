@@ -99,10 +99,10 @@ class System:
 
         prof = self._profiling_enabled
         for _ in range(number_steps):
-            positions_2d = self.gpu.get_positions_2d()
-            if self.tile_list.check_rebuild(positions_2d):
+            positions_soa = self.gpu.get_positions_2d()
+            if self.tile_list.check_rebuild(positions_soa):
                 self.tile_list.rebuild(
-                    positions_2d, self.topology,
+                    positions_soa, self.topology,
                     self.pbc_matrix, self.pbc_inv,
                 )
             self.compute_forces()
@@ -124,10 +124,10 @@ class System:
             self.gpu.upload_velocities(self.particles)
             self._velocities_uploaded = True
 
-        positions_2d = self.gpu.get_positions_2d()
-        if self.tile_list.check_rebuild(positions_2d):
+        positions_soa = self.gpu.get_positions_2d()
+        if self.tile_list.check_rebuild(positions_soa):
             self.tile_list.rebuild(
-                positions_2d, self.topology,
+                positions_soa, self.topology,
                 self.pbc_matrix, self.pbc_inv,
             )
         self.compute_forces()
