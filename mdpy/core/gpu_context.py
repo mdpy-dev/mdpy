@@ -7,7 +7,9 @@ from mdpy import env
 _PBC_WRAP_KERNEL = r"""
 extern "C" __global__
 void pbc_wrap_kernel(
-    float* __restrict__ positions,
+    float* __restrict__ pos_x,
+    float* __restrict__ pos_y,
+    float* __restrict__ pos_z,
     const float* __restrict__ pbc_matrix,
     const float* __restrict__ pbc_inv,
     int number_particles
@@ -15,9 +17,9 @@ void pbc_wrap_kernel(
     int index = blockIdx.x * blockDim.x + threadIdx.x;
     if (index >= number_particles) return;
 
-    float px = positions[index * 3 + 0];
-    float py = positions[index * 3 + 1];
-    float pz = positions[index * 3 + 2];
+    float px = pos_x[index];
+    float py = pos_y[index];
+    float pz = pos_z[index];
 
     float fx = px * pbc_inv[0] + py * pbc_inv[3] + pz * pbc_inv[6];
     float fy = px * pbc_inv[1] + py * pbc_inv[4] + pz * pbc_inv[7];
@@ -27,9 +29,9 @@ void pbc_wrap_kernel(
     fy = fy - floorf(fy);
     fz = fz - floorf(fz);
 
-    positions[index * 3 + 0] = fx * pbc_matrix[0] + fy * pbc_matrix[3] + fz * pbc_matrix[6];
-    positions[index * 3 + 1] = fx * pbc_matrix[1] + fy * pbc_matrix[4] + fz * pbc_matrix[7];
-    positions[index * 3 + 2] = fx * pbc_matrix[2] + fy * pbc_matrix[5] + fz * pbc_matrix[8];
+    pos_x[index] = fx * pbc_matrix[0] + fy * pbc_matrix[3] + fz * pbc_matrix[6];
+    pos_y[index] = fx * pbc_matrix[1] + fy * pbc_matrix[4] + fz * pbc_matrix[7];
+    pos_z[index] = fx * pbc_matrix[2] + fy * pbc_matrix[5] + fz * pbc_matrix[8];
 }
 """
 
@@ -41,10 +43,22 @@ class GPUContext:
     def __init__(self):
         self.number_particles = 0
 
-        self.d_positions = None
-        self.d_velocities = None
-        self.d_forces = None
-        self.d_prev_positions = None
+        self.d_positions_x = None
+        self.d_positions_y = None
+        self.d_positions_z = None
+
+        self.d_velocities_x = None
+        self.d_velocities_y = None
+        self.d_velocities_z = None
+
+        self.d_forces_x = None
+        self.d_forces_y = None
+        self.d_forces_z = None
+
+        self.d_prev_positions_x = None
+        self.d_prev_positions_y = None
+        self.d_prev_positions_z = None
+
         self.d_masses = None
         self.d_types = None
         self.d_energy = None
@@ -73,10 +87,22 @@ class GPUContext:
         float_dtype = np.float32
         int_dtype = np.int32
 
-        self.d_positions = cp.zeros(number * 3, dtype=float_dtype)
-        self.d_velocities = cp.zeros(number * 3, dtype=float_dtype)
-        self.d_forces = cp.zeros(number * 3, dtype=float_dtype)
-        self.d_prev_positions = cp.zeros(number * 3, dtype=float_dtype)
+        self.d_positions_x = cp.zeros(number, dtype=float_dtype)
+        self.d_positions_y = cp.zeros(number, dtype=float_dtype)
+        self.d_positions_z = cp.zeros(number, dtype=float_dtype)
+
+        self.d_velocities_x = cp.zeros(number, dtype=float_dtype)
+        self.d_velocities_y = cp.zeros(number, dtype=float_dtype)
+        self.d_velocities_z = cp.zeros(number, dtype=float_dtype)
+
+        self.d_forces_x = cp.zeros(number, dtype=float_dtype)
+        self.d_forces_y = cp.zeros(number, dtype=float_dtype)
+        self.d_forces_z = cp.zeros(number, dtype=float_dtype)
+
+        self.d_prev_positions_x = cp.zeros(number, dtype=float_dtype)
+        self.d_prev_positions_y = cp.zeros(number, dtype=float_dtype)
+        self.d_prev_positions_z = cp.zeros(number, dtype=float_dtype)
+
         self.d_masses = cp.asarray(
             topology.masses.astype(float_dtype)
         )
@@ -102,32 +128,54 @@ class GPUContext:
         tpb = 256
         self._pbc_wrap_kernel(
             ((number + tpb - 1) // tpb,), (tpb,),
-            (self.d_positions, self.d_pbc_matrix, self.d_pbc_inv, np.int32(number)),
+            (self.d_positions_x, self.d_positions_y, self.d_positions_z,
+             self.d_pbc_matrix, self.d_pbc_inv, np.int32(number)),
         )
 
     def upload_positions(self, particle_table):
         data = np.ascontiguousarray(
-            particle_table.positions.astype(np.float32).ravel()
+            particle_table.positions.astype(np.float32)
         )
-        self.d_positions[:] = cp.asarray(data)
+        self.d_positions_x[:] = cp.asarray(data[:, 0])
+        self.d_positions_y[:] = cp.asarray(data[:, 1])
+        self.d_positions_z[:] = cp.asarray(data[:, 2])
 
     def upload_velocities(self, particle_table):
         data = np.ascontiguousarray(
-            particle_table.velocities.astype(np.float32).ravel()
+            particle_table.velocities.astype(np.float32)
         )
-        self.d_velocities[:] = cp.asarray(data)
+        self.d_velocities_x[:] = cp.asarray(data[:, 0])
+        self.d_velocities_y[:] = cp.asarray(data[:, 1])
+        self.d_velocities_z[:] = cp.asarray(data[:, 2])
 
     def download_positions(self, particle_table):
-        particle_table.positions[:] = self.d_positions.get().reshape(-1, 3)
+        pos = np.stack([
+            self.d_positions_x.get(),
+            self.d_positions_y.get(),
+            self.d_positions_z.get(),
+        ], axis=1)
+        particle_table.positions[:] = pos
 
     def download_velocities(self, particle_table):
-        particle_table.velocities[:] = self.d_velocities.get().reshape(-1, 3)
+        vel = np.stack([
+            self.d_velocities_x.get(),
+            self.d_velocities_y.get(),
+            self.d_velocities_z.get(),
+        ], axis=1)
+        particle_table.velocities[:] = vel
 
     def download_forces(self, particle_table):
-        particle_table.forces[:] = self.d_forces.get().reshape(-1, 3)
+        frc = np.stack([
+            self.d_forces_x.get(),
+            self.d_forces_y.get(),
+            self.d_forces_z.get(),
+        ], axis=1)
+        particle_table.forces[:] = frc
 
     def zero_forces(self):
-        self.d_forces[:] = 0
+        self.d_forces_x[:] = 0
+        self.d_forces_y[:] = 0
+        self.d_forces_z[:] = 0
 
     def zero_energy(self):
         self.d_energy[:] = 0
@@ -139,7 +187,7 @@ class GPUContext:
         self.d_energy_accumulator[term_index] = self.d_energy[0]
 
     def get_positions_2d(self):
-        return self.d_positions.reshape(-1, 3)
+        return (self.d_positions_x, self.d_positions_y, self.d_positions_z)
 
     def set_box_dims(self, box_x, box_y, box_z):
         self._box_x = float(box_x)
