@@ -231,6 +231,26 @@ void check_rebuild_kernel(
 }
 """
 
+_GATHER_SORTED_KERNEL = r"""
+extern "C" __global__
+void gather_sorted_kernel(
+    const float* __restrict__ src,
+    const int* __restrict__ block_atoms,
+    int total_slots,
+    int num_particles,
+    float* __restrict__ dst
+) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= total_slots) return;
+    int atom_id = block_atoms[idx];
+    float val = 0.0f;
+    if (atom_id >= 0 && atom_id < num_particles) {
+        val = src[atom_id];
+    }
+    dst[idx] = val;
+}
+"""
+
 _FIND_INTERACTING_BLOCKS_KERNEL = r"""
 extern "C" __global__ __launch_bounds__(256, 3)
 void find_interacting_blocks_kernel(
@@ -245,7 +265,6 @@ void find_interacting_blocks_kernel(
     float build_radius_sq,
     float box_x, float box_y, float box_z,
     float inv_box_x, float inv_box_y, float inv_box_z,
-    int single_periodic_copy,
     const float* __restrict__ large_block_center,
     const float* __restrict__ large_block_size,
     int* __restrict__ tiles_out,
@@ -260,33 +279,12 @@ void find_interacting_blocks_kernel(
     if (global_warp >= num_blocks) return;
 
     __shared__ int buffer[8 * 256];
-    __shared__ float4 pos_buf[256];
     int* my_buf = buffer + warp_in_block * 256;
-    float4* my_pos = pos_buf + (warp_in_block << 5);
     int nBuf = 0;
 
     int bx = global_warp;
     float cx = block_center[bx*3], cy = block_center[bx*3+1], cz = block_center[bx*3+2];
     float sx = block_size[bx*3],   sy = block_size[bx*3+1],   sz = block_size[bx*3+2];
-
-    float4 my_p;
-    my_p.x = 0.0f; my_p.y = 0.0f; my_p.z = 0.0f; my_p.w = 0.0f;
-    int gi = block_atoms[bx * 32 + tgx];
-    if (gi >= 0 && gi < num_particles) {
-        my_p.x = pos_x[gi];
-        my_p.y = pos_y[gi];
-        my_p.z = pos_z[gi];
-        if (single_periodic_copy) {
-            my_p.x -= box_x * roundf(my_p.x * inv_box_x);
-            my_p.y -= box_y * roundf(my_p.y * inv_box_y);
-            my_p.z -= box_z * roundf(my_p.z * inv_box_z);
-        }
-        my_p.w = 0.5f * (my_p.x*my_p.x + my_p.y*my_p.y + my_p.z*my_p.z);
-    }
-    my_pos[tgx] = my_p;
-    __syncwarp();
-
-    float half_cutoff_sq = 0.5f * build_radius_sq;
     int my_large_block = bx >> 5;
     int num_large_blocks = (num_blocks + 31) >> 5;
 
@@ -348,38 +346,20 @@ void find_interacting_blocks_kernel(
                 int interacts = 0;
 
                 if (gj >= 0 && gj < num_particles) {
-                    if (single_periodic_copy) {
-                        float4 p2;
-                        p2.x = pos_x[gj];
-                        p2.y = pos_y[gj];
-                        p2.z = pos_z[gj];
-                        p2.x -= box_x * roundf(p2.x * inv_box_x);
-                        p2.y -= box_y * roundf(p2.y * inv_box_y);
-                        p2.z -= box_z * roundf(p2.z * inv_box_z);
-                        p2.w = 0.5f * (p2.x*p2.x + p2.y*p2.y + p2.z*p2.z);
-
-                        #pragma unroll
-                        for (int k = 0; k < 32; k++) {
-                            float4 pk = my_pos[k];
-                            float hd2 = pk.w + p2.w - pk.x*p2.x - pk.y*p2.y - pk.z*p2.z;
-                            if (hd2 < half_cutoff_sq) { interacts = 1; break; }
-                        }
-                    } else {
-                        float px_j = pos_x[gj];
-                        float py_j = pos_y[gj];
-                        float pz_j = pos_z[gj];
-                        for (int k = 0; k < 32; k++) {
-                            int gk = block_atoms[bx * 32 + k];
-                            if (gk < 0) continue;
-                            float ddx = px_j - pos_x[gk];
-                            float ddy = py_j - pos_y[gk];
-                            float ddz = pz_j - pos_z[gk];
-                            ddx -= box_x * roundf(ddx * inv_box_x);
-                            ddy -= box_y * roundf(ddy * inv_box_y);
-                            ddz -= box_z * roundf(ddz * inv_box_z);
-                            if (ddx*ddx + ddy*ddy + ddz*ddz <= build_radius_sq) {
-                                interacts = 1; break;
-                            }
+                    float px_j = pos_x[gj];
+                    float py_j = pos_y[gj];
+                    float pz_j = pos_z[gj];
+                    for (int k = 0; k < 32; k++) {
+                        int gk = block_atoms[bx * 32 + k];
+                        if (gk < 0) continue;
+                        float ddx = px_j - pos_x[gk];
+                        float ddy = py_j - pos_y[gk];
+                        float ddz = pz_j - pos_z[gk];
+                        ddx -= box_x * roundf(ddx * inv_box_x);
+                        ddy -= box_y * roundf(ddy * inv_box_y);
+                        ddz -= box_z * roundf(ddz * inv_box_z);
+                        if (ddx*ddx + ddy*ddy + ddz*ddz <= build_radius_sq) {
+                            interacts = 1; break;
                         }
                     }
                 }
@@ -569,6 +549,7 @@ def _compile_gpu_kernels():
         'rev_fill': cp.RawKernel(_FILL_REVERSE_KERNEL, 'fill_reverse_kernel'),
         'build_masks': cp.RawKernel(_BUILD_MASKS_KERNEL, 'build_masks_kernel'),
         'check_rebuild': cp.RawKernel(_CHECK_REBUILD_KERNEL, 'check_rebuild_kernel'),
+        'gather_sorted': cp.RawKernel(_GATHER_SORTED_KERNEL, 'gather_sorted_kernel'),
         'large_block_bounds': cp.RawKernel(_COMPUTE_LARGE_BLOCK_BOUNDS_KERNEL, 'compute_large_block_bounds_kernel'),
     }
 
@@ -609,6 +590,10 @@ class TileList:
         self._d_interacting_buf = cp.empty(0, dtype=env.NUMPY_INT)
         self._d_pbc_matrix = None
         self._d_pbc_inv = None
+
+        self.d_sorted_pos_x = cp.empty(0, dtype=env.NUMPY_FLOAT)
+        self.d_sorted_pos_y = cp.empty(0, dtype=env.NUMPY_FLOAT)
+        self.d_sorted_pos_z = cp.empty(0, dtype=env.NUMPY_FLOAT)
 
         self._d_excl_offset = None
         self._d_excl_neighbors = None
@@ -701,6 +686,38 @@ class TileList:
             np.ascontiguousarray(topology.exclusion_scale, dtype=env.NUMPY_FLOAT)
         )
 
+    def update_sorted_positions(self, d_pos_x, d_pos_y, d_pos_z):
+        if self.num_blocks == 0:
+            return
+        self._ensure_kernels()
+        total_slots = self.num_blocks * W
+        tpb = 256
+        grid = ((total_slots + tpb - 1) // tpb,)
+        for src, attr in [(d_pos_x, 'd_sorted_pos_x'),
+                           (d_pos_y, 'd_sorted_pos_y'),
+                           (d_pos_z, 'd_sorted_pos_z')]:
+            if getattr(self, attr).size != total_slots:
+                setattr(self, attr, cp.empty(total_slots, dtype=env.NUMPY_FLOAT))
+            self._kernels['gather_sorted'](grid, (tpb,),
+                (src, self.d_block_atoms,
+                 np.int32(total_slots), np.int32(self.num_particles),
+                 getattr(self, attr)))
+
+    def gather_sorted_params(self, param_arrays):
+        if self.num_blocks == 0:
+            return
+        self._ensure_kernels()
+        total_slots = self.num_blocks * W
+        tpb = 256
+        grid = ((total_slots + tpb - 1) // tpb,)
+        for name, d_arr in param_arrays.items():
+            sorted_arr = cp.empty(total_slots, dtype=env.NUMPY_FLOAT)
+            self._kernels['gather_sorted'](grid, (tpb,),
+                (d_arr, self.d_block_atoms,
+                 np.int32(total_slots), np.int32(self.num_particles),
+                 sorted_arr))
+            setattr(self, f'd_sorted_{name}', sorted_arr)
+
     def _rebuild_core(self, positions, topology, pbc_matrix, pbc_inv):
         N = topology.num_particles
         self.num_particles = N
@@ -791,11 +808,6 @@ class TileList:
         inv_box_x = 1.0 / box_x
         inv_box_y = 1.0 / box_y
         inv_box_z = 1.0 / box_z
-        single_periodic_copy = int(
-            box_x > 2.0 * build_radius
-            and box_y > 2.0 * build_radius
-            and box_z > 2.0 * build_radius
-        )
 
         max_tiles = max(num_blocks * 100, 10000)
         if self._d_tile_buf.size < max_tiles:
@@ -813,7 +825,6 @@ class TileList:
              np.float32(build_radius_sq),
              np.float32(box_x), np.float32(box_y), np.float32(box_z),
              np.float32(inv_box_x), np.float32(inv_box_y), np.float32(inv_box_z),
-             np.int32(single_periodic_copy),
              self.d_large_block_center, self.d_large_block_size,
              self._d_tile_buf, self._d_interacting_buf,
              self._d_counters, np.int32(max_tiles)))
@@ -933,5 +944,7 @@ class TileList:
         self.d_positions_at_rebuild_x = cp.empty(0, dtype=env.NUMPY_FLOAT)
         self.d_positions_at_rebuild_y = cp.empty(0, dtype=env.NUMPY_FLOAT)
         self.d_positions_at_rebuild_z = cp.empty(0, dtype=env.NUMPY_FLOAT)
-        self._is_initialized = True
+        self.d_sorted_pos_x = cp.empty(0, dtype=env.NUMPY_FLOAT)
+        self.d_sorted_pos_y = cp.empty(0, dtype=env.NUMPY_FLOAT)
+        self.d_sorted_pos_z = cp.empty(0, dtype=env.NUMPY_FLOAT)
         self._invalidate_caches()
