@@ -10,12 +10,12 @@ def harmonic_bond(r, k=0.0, r0=0.0):
 @bonded_expression(body=3)
 def charmm_angle(theta, r13, k=0.0, theta0=0.0, k_ub=0.0, r_ub=0.0):
     dt = theta - theta0
-    e = k * dt * dt
+    e_angle = k * dt * dt
     f_theta = 2.0 * k * dt
-    dr = r13 - r_ub
-    e_ub = k_ub * dr * dr
-    f_r13 = 2.0 * k_ub * dr
-    return e + e_ub, f_theta, f_r13
+    dr13 = r13 - r_ub
+    e_ub = k_ub * dr13 * dr13
+    f_r13 = 2.0 * k_ub * dr13
+    return e_angle + e_ub, f_theta, f_r13
 
 
 @bonded_expression(body=4)
