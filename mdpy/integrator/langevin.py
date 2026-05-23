@@ -19,21 +19,28 @@ _LCG_DIVISOR = 1073741824.0
 
 
 @cuda.jit
-def langevin_init_kernel(positions, velocities, forces, masses,
-                         prev_positions, dt, dt_sq, number_particles):
+def langevin_init_kernel(pos_x, pos_y, pos_z,
+                         vel_x, vel_y, vel_z,
+                         f_x, f_y, f_z,
+                         masses,
+                         prev_pos_x, prev_pos_y, prev_pos_z,
+                         dt, dt_sq, number_particles):
     index = cuda.grid(1)
     if index >= number_particles:
         return
     if masses[index] <= 0.0:
         return
     inv_mass = 1.0 / masses[index]
-    prev_positions[index * 3] = positions[index * 3] - velocities[index * 3] * dt + 0.5 * forces[index * 3] * inv_mass * dt_sq
-    prev_positions[index * 3 + 1] = positions[index * 3 + 1] - velocities[index * 3 + 1] * dt + 0.5 * forces[index * 3 + 1] * inv_mass * dt_sq
-    prev_positions[index * 3 + 2] = positions[index * 3 + 2] - velocities[index * 3 + 2] * dt + 0.5 * forces[index * 3 + 2] * inv_mass * dt_sq
+    prev_pos_x[index] = pos_x[index] - vel_x[index] * dt + 0.5 * f_x[index] * inv_mass * dt_sq
+    prev_pos_y[index] = pos_y[index] - vel_y[index] * dt + 0.5 * f_y[index] * inv_mass * dt_sq
+    prev_pos_z[index] = pos_z[index] - vel_z[index] * dt + 0.5 * f_z[index] * inv_mass * dt_sq
 
 
 @cuda.jit
-def langevin_baoab_kernel(positions, prev_positions, forces, masses,
+def langevin_baoab_kernel(pos_x, pos_y, pos_z,
+                          prev_pos_x, prev_pos_y, prev_pos_z,
+                          f_x, f_y, f_z,
+                          masses,
                           pbc_matrix, pbc_inv,
                           dt, dt_half, alpha, temperature, boltzmann,
                           seed, number_particles):
@@ -60,17 +67,17 @@ def langevin_baoab_kernel(positions, prev_positions, forces, masses,
     inv_mass = 1.0 / masses[index]
     sigma = math.sqrt(boltzmann * temperature * inv_mass * (1.0 - alpha * alpha))
 
-    velocity_x = (positions[index * 3] - prev_positions[index * 3]) / dt
-    velocity_y = (positions[index * 3 + 1] - prev_positions[index * 3 + 1]) / dt
-    velocity_z = (positions[index * 3 + 2] - prev_positions[index * 3 + 2]) / dt
+    velocity_x = (pos_x[index] - prev_pos_x[index]) / dt
+    velocity_y = (pos_y[index] - prev_pos_y[index]) / dt
+    velocity_z = (pos_z[index] - prev_pos_z[index]) / dt
 
-    velocity_x += 0.5 * dt * forces[index * 3] * inv_mass
-    velocity_y += 0.5 * dt * forces[index * 3 + 1] * inv_mass
-    velocity_z += 0.5 * dt * forces[index * 3 + 2] * inv_mass
+    velocity_x += 0.5 * dt * f_x[index] * inv_mass
+    velocity_y += 0.5 * dt * f_y[index] * inv_mass
+    velocity_z += 0.5 * dt * f_z[index] * inv_mass
 
-    position_x = positions[index * 3] + 0.5 * dt * velocity_x
-    position_y = positions[index * 3 + 1] + 0.5 * dt * velocity_y
-    position_z = positions[index * 3 + 2] + 0.5 * dt * velocity_z
+    position_x = pos_x[index] + 0.5 * dt * velocity_x
+    position_y = pos_y[index] + 0.5 * dt * velocity_y
+    position_z = pos_z[index] + 0.5 * dt * velocity_z
 
     velocity_x = alpha * velocity_x + sigma * rand1
     velocity_y = alpha * velocity_y + sigma * rand2
@@ -84,12 +91,12 @@ def langevin_baoab_kernel(positions, prev_positions, forces, masses,
         position_x, position_y, position_z, pbc_matrix, pbc_inv
     )
 
-    prev_positions[index * 3] = positions[index * 3]
-    prev_positions[index * 3 + 1] = positions[index * 3 + 1]
-    prev_positions[index * 3 + 2] = positions[index * 3 + 2]
-    positions[index * 3] = position_x
-    positions[index * 3 + 1] = position_y
-    positions[index * 3 + 2] = position_z
+    prev_pos_x[index] = pos_x[index]
+    prev_pos_y[index] = pos_y[index]
+    prev_pos_z[index] = pos_z[index]
+    pos_x[index] = position_x
+    pos_y[index] = position_y
+    pos_z[index] = position_z
 
 
 class LangevinBAOABIntegrator:
@@ -110,11 +117,11 @@ class LangevinBAOABIntegrator:
 
         if not self._initialized:
             langevin_init_kernel[grid, block](
-                gpu_context.d_positions,
-                gpu_context.d_velocities,
-                gpu_context.d_forces,
+                gpu_context.d_positions_x, gpu_context.d_positions_y, gpu_context.d_positions_z,
+                gpu_context.d_velocities_x, gpu_context.d_velocities_y, gpu_context.d_velocities_z,
+                gpu_context.d_forces_x, gpu_context.d_forces_y, gpu_context.d_forces_z,
                 gpu_context.d_masses,
-                gpu_context.d_prev_positions,
+                gpu_context.d_prev_positions_x, gpu_context.d_prev_positions_y, gpu_context.d_prev_positions_z,
                 np.float32(self.dt),
                 np.float32(self.dt * self.dt),
                 number,
@@ -124,9 +131,9 @@ class LangevinBAOABIntegrator:
         self._step_counter += 1
 
         langevin_baoab_kernel[grid, block](
-            gpu_context.d_positions,
-            gpu_context.d_prev_positions,
-            gpu_context.d_forces,
+            gpu_context.d_positions_x, gpu_context.d_positions_y, gpu_context.d_positions_z,
+            gpu_context.d_prev_positions_x, gpu_context.d_prev_positions_y, gpu_context.d_prev_positions_z,
+            gpu_context.d_forces_x, gpu_context.d_forces_y, gpu_context.d_forces_z,
             gpu_context.d_masses,
             gpu_context.d_pbc_matrix,
             gpu_context.d_pbc_inv,
