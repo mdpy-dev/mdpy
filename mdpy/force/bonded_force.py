@@ -38,13 +38,23 @@ __device__ __forceinline__ float3 pbc_ortho(float3 d, const float* box) {
         d.z - box[2]*roundf(d.z*box[5])
     );
 }
-__device__ __forceinline__ float3 load_pos(const float* __restrict__ p, int i) {
-    return make_float3(p[i*3], p[i*3+1], p[i*3+2]);
+__device__ __forceinline__ float3 load_pos(
+    const float* __restrict__ px,
+    const float* __restrict__ py,
+    const float* __restrict__ pz,
+    int i
+) {
+    return make_float3(px[i], py[i], pz[i]);
 }
-__device__ __forceinline__ void add_force(float* __restrict__ f, int i, float3 v) {
-    atomicAdd(&f[i*3],   v.x);
-    atomicAdd(&f[i*3+1], v.y);
-    atomicAdd(&f[i*3+2], v.z);
+__device__ __forceinline__ void add_force(
+    float* __restrict__ fx,
+    float* __restrict__ fy,
+    float* __restrict__ fz,
+    int i, float3 v
+) {
+    atomicAdd(&fx[i], v.x);
+    atomicAdd(&fy[i], v.y);
+    atomicAdd(&fz[i], v.z);
 }
 '''
 
@@ -54,15 +64,15 @@ _TWO_BODY_TEMPLATE = r'''
         int a1 = {name}_idx[idx*2];
         int a2 = {name}_idx[idx*2+1];
         {param_loads}
-        float3 delta = pbc_ortho(sub_f3(load_pos(pos,a2), load_pos(pos,a1)), box);
+        float3 delta = pbc_ortho(sub_f3(load_pos(pos_x,pos_y,pos_z,a2), load_pos(pos_x,pos_y,pos_z,a1)), box);
         float {geo0} = len_f3(delta);
         if ({geo0} < 1e-12f) continue;
         float inv_r = 1.0f / {geo0};
         {expression_fragment}
         float f_common = _result_force * inv_r;
         float3 fvec = scale_f3(delta, f_common);
-        add_force(f, a1, fvec);
-        add_force(f, a2, scale_f3(fvec, -1.0f));
+        add_force(f_x,f_y,f_z, a1, fvec);
+        add_force(f_x,f_y,f_z, a2, scale_f3(fvec, -1.0f));
         e += _result_energy;
     }}
 '''
@@ -74,8 +84,8 @@ _THREE_BODY_TEMPLATE = r'''
         int a2 = {name}_idx[idx*3+1];
         int a3 = {name}_idx[idx*3+2];
         {param_loads}
-        float3 r21 = pbc_ortho(sub_f3(load_pos(pos,a1), load_pos(pos,a2)), box);
-        float3 r23 = pbc_ortho(sub_f3(load_pos(pos,a3), load_pos(pos,a2)), box);
+        float3 r21 = pbc_ortho(sub_f3(load_pos(pos_x,pos_y,pos_z,a1), load_pos(pos_x,pos_y,pos_z,a2)), box);
+        float3 r23 = pbc_ortho(sub_f3(load_pos(pos_x,pos_y,pos_z,a3), load_pos(pos_x,pos_y,pos_z,a2)), box);
         float l21 = len_f3(r21);
         float l23 = len_f3(r23);
         if (l21 < 1e-12f || l23 < 1e-12f) continue;
@@ -84,7 +94,7 @@ _THREE_BODY_TEMPLATE = r'''
         float ct = dot_f3(r21, r23) * inv_l21 * inv_l23;
         ct = fmaxf(-1.0f, fminf(1.0f, ct));
         float {geo0} = acosf(ct);
-        float3 r13v = pbc_ortho(sub_f3(load_pos(pos,a3), load_pos(pos,a1)), box);
+        float3 r13v = pbc_ortho(sub_f3(load_pos(pos_x,pos_y,pos_z,a3), load_pos(pos_x,pos_y,pos_z,a1)), box);
         float {geo1} = len_f3(r13v);
         {expression_fragment}
         float neg_dEdtheta = -_result_force_0;
@@ -94,23 +104,23 @@ _THREE_BODY_TEMPLATE = r'''
         if (lc1 > 1e-12f) {{
             float inv = neg_dEdtheta / (lc1 * l21);
             float3 fv1 = scale_f3(c1, inv);
-            add_force(f, a1, fv1);
-            add_force(f, a2, scale_f3(fv1, -1.0f));
+            add_force(f_x,f_y,f_z, a1, fv1);
+            add_force(f_x,f_y,f_z, a2, scale_f3(fv1, -1.0f));
         }}
         float3 c3 = cross_f3(scale_f3(r23, -1.0f), n);
         float lc3 = len_f3(c3);
         if (lc3 > 1e-12f) {{
             float inv = neg_dEdtheta / (lc3 * l23);
             float3 fv3 = scale_f3(c3, inv);
-            add_force(f, a3, fv3);
-            add_force(f, a2, scale_f3(fv3, -1.0f));
+            add_force(f_x,f_y,f_z, a3, fv3);
+            add_force(f_x,f_y,f_z, a2, scale_f3(fv3, -1.0f));
         }}
         if ({geo1} >= 1e-12f) {{
             float inv_l13 = 1.0f / {geo1};
             float f_ub = _result_force_1 * inv_l13;
             float3 f13 = scale_f3(r13v, f_ub);
-            add_force(f, a1, f13);
-            add_force(f, a3, scale_f3(f13, -1.0f));
+            add_force(f_x,f_y,f_z, a1, f13);
+            add_force(f_x,f_y,f_z, a3, scale_f3(f13, -1.0f));
         }}
         e += _result_energy;
     }}
@@ -124,9 +134,9 @@ _FOUR_BODY_TEMPLATE = r'''
         int a3 = {name}_idx[idx*4+2];
         int a4 = {name}_idx[idx*4+3];
         {param_loads}
-        float3 rab = pbc_ortho(sub_f3(load_pos(pos,a2), load_pos(pos,a1)), box);
-        float3 rbc = pbc_ortho(sub_f3(load_pos(pos,a3), load_pos(pos,a2)), box);
-        float3 rcd = pbc_ortho(sub_f3(load_pos(pos,a4), load_pos(pos,a3)), box);
+        float3 rab = pbc_ortho(sub_f3(load_pos(pos_x,pos_y,pos_z,a2), load_pos(pos_x,pos_y,pos_z,a1)), box);
+        float3 rbc = pbc_ortho(sub_f3(load_pos(pos_x,pos_y,pos_z,a3), load_pos(pos_x,pos_y,pos_z,a2)), box);
+        float3 rcd = pbc_ortho(sub_f3(load_pos(pos_x,pos_y,pos_z,a4), load_pos(pos_x,pos_y,pos_z,a3)), box);
         float lab = len_f3(rab), lbc = len_f3(rbc), lcd = len_f3(rcd);
         if (lab < 1e-12f || lbc < 1e-12f || lcd < 1e-12f) continue;
         float3 n1 = cross_f3(rab, rbc);
@@ -152,10 +162,10 @@ _FOUR_BODY_TEMPLATE = r'''
         float3 st = scale_f3(add_f3(t1, add_f3(t2, t3)), -1.0f);
         float3 f_c = scale_f3(cross_f3(st, voc), ils);
         float3 f_b = scale_f3(add_f3(f_a, add_f3(f_c, f_d)), -1.0f);
-        add_force(f, a1, f_a);
-        add_force(f, a2, f_b);
-        add_force(f, a3, f_c);
-        add_force(f, a4, f_d);
+        add_force(f_x,f_y,f_z, a1, f_a);
+        add_force(f_x,f_y,f_z, a2, f_b);
+        add_force(f_x,f_y,f_z, a3, f_c);
+        add_force(f_x,f_y,f_z, a4, f_d);
         e += _result_energy;
     }}
 '''
@@ -163,7 +173,13 @@ _FOUR_BODY_TEMPLATE = r'''
 _MAIN_TEMPLATE = r'''
 extern "C" __global__
 void compute_bonded(
-    const float* __restrict__ pos, float* __restrict__ f, float* __restrict__ energy_buf,
+    const float* __restrict__ pos_x,
+    const float* __restrict__ pos_y,
+    const float* __restrict__ pos_z,
+    float* __restrict__ f_x,
+    float* __restrict__ f_y,
+    float* __restrict__ f_z,
+    float* __restrict__ energy_buf,
     const float* __restrict__ box,
     {kernel_params}
 ) {{
@@ -317,8 +333,12 @@ class BondedForce(ForceTerm):
         grid_size = max(min((total + block_size - 1) // block_size, max_blocks), 1)
 
         args = [
-            gpu_context.d_positions,
-            gpu_context.d_forces,
+            gpu_context.d_positions_x,
+            gpu_context.d_positions_y,
+            gpu_context.d_positions_z,
+            gpu_context.d_forces_x,
+            gpu_context.d_forces_y,
+            gpu_context.d_forces_z,
             gpu_context.d_energy,
             gpu_context.d_box_dims,
         ]
