@@ -10,7 +10,9 @@ NUM_ATOMS_SENTINEL = 0x7FFFFFFF
 _PBC_WRAP_KERNEL = r"""
 extern "C" __global__
 void pbc_wrap_kernel(
-    float* __restrict__ positions,
+    float* __restrict__ pos_x,
+    float* __restrict__ pos_y,
+    float* __restrict__ pos_z,
     const float* __restrict__ pbc_matrix,
     const float* __restrict__ pbc_inv,
     int number_particles
@@ -18,9 +20,9 @@ void pbc_wrap_kernel(
     int index = blockIdx.x * blockDim.x + threadIdx.x;
     if (index >= number_particles) return;
 
-    float px = positions[index * 3 + 0];
-    float py = positions[index * 3 + 1];
-    float pz = positions[index * 3 + 2];
+    float px = pos_x[index];
+    float py = pos_y[index];
+    float pz = pos_z[index];
 
     float fx = px * pbc_inv[0] + py * pbc_inv[3] + pz * pbc_inv[6];
     float fy = px * pbc_inv[1] + py * pbc_inv[4] + pz * pbc_inv[7];
@@ -30,9 +32,9 @@ void pbc_wrap_kernel(
     fy = fy - floorf(fy);
     fz = fz - floorf(fz);
 
-    positions[index * 3 + 0] = fx * pbc_matrix[0] + fy * pbc_matrix[3] + fz * pbc_matrix[6];
-    positions[index * 3 + 1] = fx * pbc_matrix[1] + fy * pbc_matrix[4] + fz * pbc_matrix[7];
-    positions[index * 3 + 2] = fx * pbc_matrix[2] + fy * pbc_matrix[5] + fz * pbc_matrix[8];
+    pos_x[index] = fx * pbc_matrix[0] + fy * pbc_matrix[3] + fz * pbc_matrix[6];
+    pos_y[index] = fx * pbc_matrix[1] + fy * pbc_matrix[4] + fz * pbc_matrix[7];
+    pos_z[index] = fx * pbc_matrix[2] + fy * pbc_matrix[5] + fz * pbc_matrix[8];
 }
 """
 
@@ -48,7 +50,9 @@ __device__ unsigned long long morton_split(unsigned int v) {
 
 extern "C" __global__
 void morton_encode_kernel(
-    const float* __restrict__ positions,
+    const float* __restrict__ pos_x,
+    const float* __restrict__ pos_y,
+    const float* __restrict__ pos_z,
     const float* __restrict__ pbc_matrix,
     const float* __restrict__ pbc_inv,
     int number_particles,
@@ -58,9 +62,9 @@ void morton_encode_kernel(
     int index = blockIdx.x * blockDim.x + threadIdx.x;
     if (index >= number_particles) return;
 
-    float px = positions[index * 3 + 0];
-    float py = positions[index * 3 + 1];
-    float pz = positions[index * 3 + 2];
+    float px = pos_x[index];
+    float py = pos_y[index];
+    float pz = pos_z[index];
 
     float fx = px * pbc_inv[0] + py * pbc_inv[3] + pz * pbc_inv[6];
     float fy = px * pbc_inv[1] + py * pbc_inv[4] + pz * pbc_inv[7];
@@ -103,7 +107,9 @@ void form_blocks_kernel(
 _COMPUTE_BLOCK_BOUNDS_KERNEL = r"""
 extern "C" __global__
 void compute_block_bounds_kernel(
-    const float* __restrict__ positions,
+    const float* __restrict__ pos_x,
+    const float* __restrict__ pos_y,
+    const float* __restrict__ pos_z,
     const int* __restrict__ block_atoms,
     int num_blocks,
     float* __restrict__ block_center_out,
@@ -117,7 +123,7 @@ void compute_block_bounds_kernel(
     for (int s = 0; s < 32; s++) {
         int a = block_atoms[bi * 32 + s];
         if (a < 0) continue;
-        float x = positions[a*3], y = positions[a*3+1], z = positions[a*3+2];
+        float x = pos_x[a], y = pos_y[a], z = pos_z[a];
         min_x = fminf(min_x, x); max_x = fmaxf(max_x, x);
         min_y = fminf(min_y, y); max_y = fmaxf(max_y, y);
         min_z = fminf(min_z, z); max_z = fmaxf(max_z, z);
@@ -200,17 +206,26 @@ void compute_large_block_bounds_kernel(
 _CHECK_REBUILD_KERNEL = r"""
 extern "C" __global__
 void check_rebuild_kernel(
-    const float* __restrict__ positions,
-    const float* __restrict__ old_positions,
+    const float* __restrict__ pos_x,
+    const float* __restrict__ pos_y,
+    const float* __restrict__ pos_z,
+    const float* __restrict__ old_pos_x,
+    const float* __restrict__ old_pos_y,
+    const float* __restrict__ old_pos_z,
     int num_particles,
     float threshold_sq,
+    float box_x, float box_y, float box_z,
+    float inv_box_x, float inv_box_y, float inv_box_z,
     int* __restrict__ rebuild_flag
 ) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= num_particles) return;
-    float dx = positions[idx*3]   - old_positions[idx*3];
-    float dy = positions[idx*3+1] - old_positions[idx*3+1];
-    float dz = positions[idx*3+2] - old_positions[idx*3+2];
+    float dx = pos_x[idx] - old_pos_x[idx];
+    float dy = pos_y[idx] - old_pos_y[idx];
+    float dz = pos_z[idx] - old_pos_z[idx];
+    dx -= box_x * roundf(dx * inv_box_x);
+    dy -= box_y * roundf(dy * inv_box_y);
+    dz -= box_z * roundf(dz * inv_box_z);
     if (dx*dx + dy*dy + dz*dz > threshold_sq)
         rebuild_flag[0] = 1;
 }
@@ -219,7 +234,9 @@ void check_rebuild_kernel(
 _FIND_INTERACTING_BLOCKS_KERNEL = r"""
 extern "C" __global__ __launch_bounds__(256, 3)
 void find_interacting_blocks_kernel(
-    const float* __restrict__ positions,
+    const float* __restrict__ pos_x,
+    const float* __restrict__ pos_y,
+    const float* __restrict__ pos_z,
     const int* __restrict__ block_atoms,
     const float* __restrict__ block_center,
     const float* __restrict__ block_size,
@@ -256,9 +273,9 @@ void find_interacting_blocks_kernel(
     my_p.x = 0.0f; my_p.y = 0.0f; my_p.z = 0.0f; my_p.w = 0.0f;
     int gi = block_atoms[bx * 32 + tgx];
     if (gi >= 0 && gi < num_particles) {
-        my_p.x = positions[gi*3];
-        my_p.y = positions[gi*3+1];
-        my_p.z = positions[gi*3+2];
+        my_p.x = pos_x[gi];
+        my_p.y = pos_y[gi];
+        my_p.z = pos_z[gi];
         if (single_periodic_copy) {
             my_p.x -= box_x * roundf(my_p.x * inv_box_x);
             my_p.y -= box_y * roundf(my_p.y * inv_box_y);
@@ -333,9 +350,9 @@ void find_interacting_blocks_kernel(
                 if (gj >= 0 && gj < num_particles) {
                     if (single_periodic_copy) {
                         float4 p2;
-                        p2.x = positions[gj*3];
-                        p2.y = positions[gj*3+1];
-                        p2.z = positions[gj*3+2];
+                        p2.x = pos_x[gj];
+                        p2.y = pos_y[gj];
+                        p2.z = pos_z[gj];
                         p2.x -= box_x * roundf(p2.x * inv_box_x);
                         p2.y -= box_y * roundf(p2.y * inv_box_y);
                         p2.z -= box_z * roundf(p2.z * inv_box_z);
@@ -348,15 +365,15 @@ void find_interacting_blocks_kernel(
                             if (hd2 < half_cutoff_sq) { interacts = 1; break; }
                         }
                     } else {
-                        float px_j = positions[gj*3];
-                        float py_j = positions[gj*3+1];
-                        float pz_j = positions[gj*3+2];
+                        float px_j = pos_x[gj];
+                        float py_j = pos_y[gj];
+                        float pz_j = pos_z[gj];
                         for (int k = 0; k < 32; k++) {
                             int gk = block_atoms[bx * 32 + k];
                             if (gk < 0) continue;
-                            float ddx = px_j - positions[gk*3];
-                            float ddy = py_j - positions[gk*3+1];
-                            float ddz = pz_j - positions[gk*3+2];
+                            float ddx = px_j - pos_x[gk];
+                            float ddy = py_j - pos_y[gk];
+                            float ddz = pz_j - pos_z[gk];
                             ddx -= box_x * roundf(ddx * inv_box_x);
                             ddy -= box_y * roundf(ddy * inv_box_y);
                             ddz -= box_z * roundf(ddz * inv_box_z);
@@ -580,7 +597,9 @@ class TileList:
         self.d_exclusion_masks = cp.empty(0, dtype=np.uint32)
         self.d_scaling_masks = cp.empty(0, dtype=np.uint32)
 
-        self.d_positions_at_rebuild = cp.empty(0, dtype=env.NUMPY_FLOAT)
+        self.d_positions_at_rebuild_x = cp.empty(0, dtype=env.NUMPY_FLOAT)
+        self.d_positions_at_rebuild_y = cp.empty(0, dtype=env.NUMPY_FLOAT)
+        self.d_positions_at_rebuild_z = cp.empty(0, dtype=env.NUMPY_FLOAT)
         self._d_counters = cp.zeros(1, dtype=env.NUMPY_INT)
         self.d_rebuild_flag = cp.zeros(1, dtype=env.NUMPY_INT)
         self.num_large_blocks = 0
@@ -687,27 +706,38 @@ class TileList:
         self.num_particles = N
         tpb = 256
 
-        if isinstance(positions, cp.ndarray):
-            wrapped = positions.ravel().astype(env.NUMPY_FLOAT, copy=True)
+        if isinstance(positions, tuple):
+            pos_x = cp.asarray(positions[0], dtype=env.NUMPY_FLOAT).copy()
+            pos_y = cp.asarray(positions[1], dtype=env.NUMPY_FLOAT).copy()
+            pos_z = cp.asarray(positions[2], dtype=env.NUMPY_FLOAT).copy()
         else:
-            wrapped = cp.asarray(
+            data = cp.asarray(
                 np.ascontiguousarray(positions.ravel(), dtype=env.NUMPY_FLOAT)
-            ).copy()
+            )
+            pos_x = data[0::3].copy()
+            pos_y = data[1::3].copy()
+            pos_z = data[2::3].copy()
         self._upload_pbc(pbc_matrix, pbc_inv)
 
         n3 = (N + tpb - 1) // tpb
         self._kernels['wrap']((n3,), (tpb,),
-            (wrapped, self._d_pbc_matrix, self._d_pbc_inv, np.int32(N)))
+            (pos_x, pos_y, pos_z, self._d_pbc_matrix, self._d_pbc_inv, np.int32(N)))
 
         morton_codes = cp.empty(N, dtype=np.uint64)
         pbc_2d = np.asarray(pbc_matrix).reshape(3, 3)
         box_x = abs(float(pbc_2d[0, 0]))
         box_y = abs(float(pbc_2d[1, 1]))
         box_z = abs(float(pbc_2d[2, 2]))
+        self._box_x = box_x
+        self._box_y = box_y
+        self._box_z = box_z
+        self._inv_box_x = 1.0 / box_x
+        self._inv_box_y = 1.0 / box_y
+        self._inv_box_z = 1.0 / box_z
 
         nm = (N + tpb - 1) // tpb
         self._kernels['morton']((nm,), (tpb,),
-            (wrapped, self._d_pbc_matrix, self._d_pbc_inv, np.int32(N),
+            (pos_x, pos_y, pos_z, self._d_pbc_matrix, self._d_pbc_inv, np.int32(N),
              np.float32(box_x), np.float32(box_y), np.float32(box_z),
              morton_codes))
 
@@ -726,7 +756,7 @@ class TileList:
         self.d_block_size = cp.empty(num_blocks * 3, dtype=env.NUMPY_FLOAT)
         nb = (num_blocks + tpb - 1) // tpb
         self._kernels['compute_bounds']((nb,), (tpb,),
-            (wrapped, self.d_block_atoms, np.int32(num_blocks),
+            (pos_x, pos_y, pos_z, self.d_block_atoms, np.int32(num_blocks),
              self.d_block_center, self.d_block_size))
 
         num_large_blocks = (num_blocks + 31) // 32
@@ -747,9 +777,10 @@ class TileList:
             (self.d_block_atoms, np.int32(num_blocks), np.int32(W),
              self.d_atom_to_block, self.d_atom_to_slot))
 
-        return wrapped
+        return (pos_x, pos_y, pos_z)
 
-    def _find_interacting_blocks(self, positions, pbc_matrix):
+    def _find_interacting_blocks(self, positions_soa, pbc_matrix):
+        pos_x, pos_y, pos_z = positions_soa
         num_blocks = self.num_blocks
         pbc_2d = np.asarray(pbc_matrix).reshape(3, 3)
         box_x = abs(float(pbc_2d[0, 0]))
@@ -777,7 +808,7 @@ class TileList:
         grid_blocks = max((num_blocks + 7) // 8, 1)
         self._kernels['find_interacting'](
             (grid_blocks,), (tpb,),
-            (positions, self.d_block_atoms, self.d_block_center, self.d_block_size,
+            (pos_x, pos_y, pos_z, self.d_block_atoms, self.d_block_center, self.d_block_size,
              np.int32(num_blocks), np.int32(self.num_particles),
              np.float32(build_radius_sq),
              np.float32(box_x), np.float32(box_y), np.float32(box_z),
@@ -843,32 +874,45 @@ class TileList:
         self._ensure_kernels()
         self._invalidate_caches()
 
-        wrapped = self._rebuild_core(positions, topology, pbc_matrix, pbc_inv)
-        self._find_interacting_blocks(wrapped, pbc_matrix)
+        positions_soa = self._rebuild_core(positions, topology, pbc_matrix, pbc_inv)
+        self._find_interacting_blocks(positions_soa, pbc_matrix)
         self._build_masks_gpu(topology)
 
-        self.d_positions_at_rebuild = cp.array(wrapped, copy=True, dtype=env.NUMPY_FLOAT)
+        pos_x, pos_y, pos_z = positions_soa
+        self.d_positions_at_rebuild_x = pos_x.copy()
+        self.d_positions_at_rebuild_y = pos_y.copy()
+        self.d_positions_at_rebuild_z = pos_z.copy()
         self.d_rebuild_flag[0] = 0
         self._is_initialized = True
 
     def check_rebuild(self, positions) -> bool:
         if not self._is_initialized:
             return True
-        if self.d_positions_at_rebuild.size == 0:
+        if self.d_positions_at_rebuild_x.size == 0:
             return True
-        if not isinstance(positions, cp.ndarray):
-            positions = cp.asarray(
+
+        if isinstance(positions, tuple):
+            pos_x, pos_y, pos_z = positions
+        else:
+            data = cp.asarray(
                 np.ascontiguousarray(positions.ravel(), dtype=env.NUMPY_FLOAT)
             )
+            pos_x = data[0::3]
+            pos_y = data[1::3]
+            pos_z = data[2::3]
+
         self.d_rebuild_flag[0] = 0
         threshold_sq = (self.skin * 0.5) ** 2
         tpb = 256
         grid = ((self.num_particles + tpb - 1) // tpb,)
         self._kernels['check_rebuild'](
             grid, (tpb,),
-            (positions, self.d_positions_at_rebuild,
+            (pos_x, pos_y, pos_z,
+             self.d_positions_at_rebuild_x, self.d_positions_at_rebuild_y, self.d_positions_at_rebuild_z,
              np.int32(self.num_particles),
              np.float32(threshold_sq),
+             np.float32(self._box_x), np.float32(self._box_y), np.float32(self._box_z),
+             np.float32(self._inv_box_x), np.float32(self._inv_box_y), np.float32(self._inv_box_z),
              self.d_rebuild_flag))
         flag = int(self.d_rebuild_flag[0])
         return flag == 1
@@ -886,6 +930,8 @@ class TileList:
         self.d_interacting_atoms = cp.empty(0, dtype=env.NUMPY_INT)
         self.d_exclusion_masks = cp.empty(0, dtype=np.uint32)
         self.d_scaling_masks = cp.empty(0, dtype=np.uint32)
-        self.d_positions_at_rebuild = cp.empty(0, dtype=env.NUMPY_FLOAT)
+        self.d_positions_at_rebuild_x = cp.empty(0, dtype=env.NUMPY_FLOAT)
+        self.d_positions_at_rebuild_y = cp.empty(0, dtype=env.NUMPY_FLOAT)
+        self.d_positions_at_rebuild_z = cp.empty(0, dtype=env.NUMPY_FLOAT)
         self._is_initialized = True
         self._invalidate_caches()
