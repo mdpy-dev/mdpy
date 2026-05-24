@@ -315,6 +315,18 @@ class BondedForce(ForceTerm):
         bonded.bind(topology, parameter_table)
         return bonded
 
+    def remap_indices(self, topology):
+        for td in self._term_data:
+            term_name = td['name']
+            indices_field = f'{term_name}_indices'
+            indices = getattr(topology, indices_field, None)
+            if indices is None or indices.shape[0] == 0:
+                continue
+            td['d_indices'] = cp.asarray(
+                np.ascontiguousarray(indices.astype(np.int32).ravel())
+            )
+            td['count'] = indices.shape[0]
+
     def _ensure_compiled(self):
         if self._kernel is not None:
             return
