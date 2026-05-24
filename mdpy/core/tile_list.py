@@ -299,6 +299,65 @@ void gather_sorted_kernel_4comp(
 }
 """
 
+_PERMUTE_ARRAY_KERNEL = r"""
+extern "C" __global__
+void permute_array_kernel(
+    const float* __restrict__ src,
+    const int* __restrict__ permutation,
+    int num_particles,
+    float* __restrict__ dst
+) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= num_particles) return;
+    dst[idx] = src[permutation[idx]];
+}
+"""
+
+_PERMUTE_INT_ARRAY_KERNEL = r"""
+extern "C" __global__
+void permute_int_array_kernel(
+    const int* __restrict__ src,
+    const int* __restrict__ permutation,
+    int num_particles,
+    int* __restrict__ dst
+) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= num_particles) return;
+    dst[idx] = src[permutation[idx]];
+}
+"""
+
+_PERMUTE_ARRAY_2COMP_KERNEL = r"""
+extern "C" __global__
+void permute_array_2comp_kernel(
+    const float* __restrict__ src,
+    const int* __restrict__ permutation,
+    int num_particles,
+    float* __restrict__ dst
+) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= num_particles) return;
+    int src_idx = permutation[idx];
+    dst[idx * 2 + 0] = src[src_idx * 2 + 0];
+    dst[idx * 2 + 1] = src[src_idx * 2 + 1];
+}
+"""
+
+_INVERSE_PERMUTE_KERNEL = r"""
+extern "C" __global__
+void inverse_permute_kernel(
+    const float* __restrict__ sorted_src,
+    const int* __restrict__ sorted_to_pdb,
+    int num_particles,
+    float* __restrict__ pdb_dst
+) {
+    int sorted_idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (sorted_idx >= num_particles) return;
+    int pdb_idx = sorted_to_pdb[sorted_idx];
+    pdb_dst[pdb_idx] = sorted_src[sorted_idx];
+}
+"""
+
 _FIND_INTERACTING_BLOCKS_KERNEL = r"""
 extern "C" __global__ __launch_bounds__(256, 3)
 void find_interacting_blocks_kernel(
@@ -601,6 +660,10 @@ def _compile_gpu_kernels():
         'gather_sorted_2comp': cp.RawKernel(_GATHER_SORTED_KERNEL_2COMP, 'gather_sorted_kernel_2comp'),
         'gather_sorted_4comp': cp.RawKernel(_GATHER_SORTED_KERNEL_4COMP, 'gather_sorted_kernel_4comp'),
         'large_block_bounds': cp.RawKernel(_COMPUTE_LARGE_BLOCK_BOUNDS_KERNEL, 'compute_large_block_bounds_kernel'),
+        'permute': cp.RawKernel(_PERMUTE_ARRAY_KERNEL, 'permute_array_kernel'),
+        'permute_int': cp.RawKernel(_PERMUTE_INT_ARRAY_KERNEL, 'permute_int_array_kernel'),
+        'permute_2comp': cp.RawKernel(_PERMUTE_ARRAY_2COMP_KERNEL, 'permute_array_2comp_kernel'),
+        'inverse_permute': cp.RawKernel(_INVERSE_PERMUTE_KERNEL, 'inverse_permute_kernel'),
     }
 
 
