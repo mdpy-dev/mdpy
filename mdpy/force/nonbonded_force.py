@@ -115,9 +115,9 @@ class _Transpiler(ast.NodeVisitor):
             raise NotImplementedError('Parameter index must be a variable name')
         index_name = node.slice.id
         if index_name == self.index_names[0]:
-            return f'{param_name}_i_use'
+            return f'{param_name}_i'
         elif index_name == self.index_names[1]:
-            return f'{param_name}_j_use'
+            return f'{param_name}_j'
         raise ValueError(f'Index variable {index_name} is not a recognized particle index')
 
     def _translate_call(self, node):
@@ -396,9 +396,10 @@ def _assemble_tile_kernel(parameter_names, expression_fragment):
     sorted_param_load_i = _generate_sorted_param_load_i(parameter_names)
     param_load_j = _generate_param_load_j_tile(parameter_names)
     shuffle_code = _generate_shuffle_warp_data(parameter_names)
-    param_use = _generate_param_use(parameter_names)
+    param_select = _generate_param_select(parameter_names)
+    param_restore = _generate_param_restore(parameter_names)
 
-    kernel = f'''extern "C" __global__ __launch_bounds__(256, 5)
+    kernel = f'''extern "C" __global__
 void tile_kernel(
     const float* __restrict__ sorted_pos_x,
     const float* __restrict__ sorted_pos_y,
@@ -481,7 +482,7 @@ void tile_kernel(
             if (!excluded && dist_sq > 1.0e-12f && dist_sq <= cutoff_sq && gi >= 0 && gi < num_particles) {{
                 float inv_dist = rsqrtf(dist_sq);
                 float r = dist_sq * inv_dist;
-                {param_use}
+                {param_select}
                 {expression_fragment}
                 float inv_dist_force = force_magnitude * inv_dist;
                 float fx = dx * inv_dist_force;
@@ -490,6 +491,7 @@ void tile_kernel(
                 force_x += fx; force_y += fy; force_z += fz;
                 shfl_fx -= fx; shfl_fy -= fy; shfl_fz -= fz;
                 total_energy += energy_val;
+                {param_restore}
             }}
             {shuffle_code}
             tj = (tj + 1) & 31;
@@ -1146,5 +1148,5 @@ class NonbondedForce(ForceTerm):
         ] + self._param_args() + self._sorted_param_args(tile_list)
 
         num_sm = self._num_sm
-        grid_size = 5 * num_sm
+        grid_size = 4 * num_sm
         self._kernel((grid_size,), (256,), tuple(args))
