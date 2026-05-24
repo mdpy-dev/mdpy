@@ -608,8 +608,8 @@ class TestRebuildSortCorrectness:
         gpu_pos_z = system.gpu.d_positions_z.get()
         gpu_pos = np.stack([gpu_pos_x, gpu_pos_y, gpu_pos_z], axis=1)
 
-        s2p_gpu = system._sorted_to_pdb_np()
-        pdb_gpu_pos = gpu_pos[s2p_gpu]
+        p2s_gpu = system._pdb_to_current_sorted
+        pdb_gpu_pos = gpu_pos[p2s_gpu]
 
         np.testing.assert_allclose(pdb_gpu_pos, pos_after_many, atol=1e-5,
             err_msg="GPU sorted positions don't match dump_state output — "

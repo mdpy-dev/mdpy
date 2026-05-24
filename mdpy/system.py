@@ -29,6 +29,8 @@ class System:
         self._velocities_uploaded = False
         self._profiling_enabled = False
         self._profile_data = {}
+        self._pdb_to_current_sorted = None
+        self._particle_types_pdb = topology.particle_types.copy()
 
 
     def add_force_term(self, term):
@@ -96,6 +98,12 @@ class System:
         grid = ((N + tpb - 1) // tpb,)
         gpu = self.gpu
 
+        sorted_to_pdb_np = cp.asnumpy(self.tile_list.d_sorted_to_pdb)
+
+        perm_np = sorted_to_pdb_np
+
+        perm_gpu = cp.asarray(perm_np)
+
         for old_arr, name in [
             (gpu.d_positions_x, 'd_positions_x'),
             (gpu.d_positions_y, 'd_positions_y'),
@@ -113,15 +121,27 @@ class System:
         ]:
             new_arr = cp.empty_like(old_arr)
             self.tile_list._kernels['permute'](grid, (tpb,),
-                (old_arr, pdb_to_sorted_gpu, np.int32(N), new_arr))
+                (old_arr, perm_gpu, np.int32(N), new_arr))
             setattr(gpu, name, new_arr)
 
-        self.topology.remap_bonded_indices(pdb_to_sorted_np)
+        if self._pdb_to_current_sorted is None:
+            self._pdb_to_current_sorted = pdb_to_sorted_np.copy()
+        else:
+            self._pdb_to_current_sorted = pdb_to_sorted_np[self._pdb_to_current_sorted]
+
+        remap = np.empty(N, dtype=np.int32)
+        remap[perm_np] = np.arange(N, dtype=np.int32)
+        self.topology.remap_bonded_indices(remap)
         self.topology.build_exclusion_map(scale_14=1.0)
 
         for term in self.force_terms:
             if hasattr(term, 'remap_indices'):
                 term.remap_indices(self.topology)
+
+    def _sorted_to_pdb_np(self):
+        inv = np.empty_like(self._pdb_to_current_sorted)
+        inv[self._pdb_to_current_sorted] = np.arange(len(self._pdb_to_current_sorted), dtype=inv.dtype)
+        return inv
 
     def step(self, integrator, number_steps=1):
         if not self._positions_uploaded:
@@ -143,7 +163,11 @@ class System:
                 self.tile_list.build_tiles(self.topology, self.pbc_matrix)
                 for term in self.force_terms:
                     if hasattr(term, 'bind_sorted'):
-                        term.bind_sorted(self.topology, self.tile_list, self.gpu)
+                        s2p = self._sorted_to_pdb_np()
+                        term.bind_sorted(
+                            self.topology, self.tile_list, self.gpu,
+                            sorted_particle_types=self._particle_types_pdb[s2p],
+                        )
             self.compute_forces()
             if prof:
                 s = cp.cuda.Event()
@@ -173,7 +197,11 @@ class System:
             self.tile_list.build_tiles(self.topology, self.pbc_matrix)
             for term in self.force_terms:
                 if hasattr(term, 'bind_sorted'):
-                    term.bind_sorted(self.topology, self.tile_list, self.gpu)
+                    s2p = self._sorted_to_pdb_np()
+                    term.bind_sorted(
+                        self.topology, self.tile_list, self.gpu,
+                        sorted_particle_types=self._particle_types_pdb[s2p],
+                    )
         self.compute_forces()
         for _ in range(number_steps):
             minimizer.step(self)
@@ -181,21 +209,22 @@ class System:
 
     def dump_state(self):
         if self.tile_list.d_sorted_to_pdb.size > 0 and self.tile_list.num_particles > 0:
+            sorted_to_pdb_gpu = cp.asarray(self._sorted_to_pdb_np())
             pdb_x = self.tile_list.permute_from_sorted(
-                self.tile_list.d_sorted_to_pdb, self.gpu.d_positions_x)
+                sorted_to_pdb_gpu, self.gpu.d_positions_x)
             pdb_y = self.tile_list.permute_from_sorted(
-                self.tile_list.d_sorted_to_pdb, self.gpu.d_positions_y)
+                sorted_to_pdb_gpu, self.gpu.d_positions_y)
             pdb_z = self.tile_list.permute_from_sorted(
-                self.tile_list.d_sorted_to_pdb, self.gpu.d_positions_z)
+                sorted_to_pdb_gpu, self.gpu.d_positions_z)
             pos = np.stack([pdb_x.get(), pdb_y.get(), pdb_z.get()], axis=1)
             self.particles.positions[:] = pos
 
             pdb_vx = self.tile_list.permute_from_sorted(
-                self.tile_list.d_sorted_to_pdb, self.gpu.d_velocities_x)
+                sorted_to_pdb_gpu, self.gpu.d_velocities_x)
             pdb_vy = self.tile_list.permute_from_sorted(
-                self.tile_list.d_sorted_to_pdb, self.gpu.d_velocities_y)
+                sorted_to_pdb_gpu, self.gpu.d_velocities_y)
             pdb_vz = self.tile_list.permute_from_sorted(
-                self.tile_list.d_sorted_to_pdb, self.gpu.d_velocities_z)
+                sorted_to_pdb_gpu, self.gpu.d_velocities_z)
             vel = np.stack([pdb_vx.get(), pdb_vy.get(), pdb_vz.get()], axis=1)
             self.particles.velocities[:] = vel
         else:
