@@ -90,6 +90,39 @@ class System:
                 result[term.name] = value
         return result
 
+    def _permute_all_arrays(self, pdb_to_sorted_gpu, pdb_to_sorted_np):
+        N = self.topology.num_particles
+        tpb = 256
+        grid = ((N + tpb - 1) // tpb,)
+        gpu = self.gpu
+
+        for old_arr, name in [
+            (gpu.d_positions_x, 'd_positions_x'),
+            (gpu.d_positions_y, 'd_positions_y'),
+            (gpu.d_positions_z, 'd_positions_z'),
+            (gpu.d_velocities_x, 'd_velocities_x'),
+            (gpu.d_velocities_y, 'd_velocities_y'),
+            (gpu.d_velocities_z, 'd_velocities_z'),
+            (gpu.d_forces_x, 'd_forces_x'),
+            (gpu.d_forces_y, 'd_forces_y'),
+            (gpu.d_forces_z, 'd_forces_z'),
+            (gpu.d_prev_positions_x, 'd_prev_positions_x'),
+            (gpu.d_prev_positions_y, 'd_prev_positions_y'),
+            (gpu.d_prev_positions_z, 'd_prev_positions_z'),
+            (gpu.d_masses, 'd_masses'),
+        ]:
+            new_arr = cp.empty_like(old_arr)
+            self.tile_list._kernels['permute'](grid, (tpb,),
+                (old_arr, pdb_to_sorted_gpu, np.int32(N), new_arr))
+            setattr(gpu, name, new_arr)
+
+        self.topology.remap_bonded_indices(pdb_to_sorted_np)
+        self.topology.build_exclusion_map(scale_14=1.0)
+
+        for term in self.force_terms:
+            if hasattr(term, 'remap_indices'):
+                term.remap_indices(self.topology)
+
     def step(self, integrator, number_steps=1):
         if not self._positions_uploaded:
             self.gpu.upload_positions(self.particles)
@@ -102,18 +135,15 @@ class System:
         for _ in range(number_steps):
             positions_soa = self.gpu.get_positions_2d()
             if self.tile_list.check_rebuild(positions_soa):
-                self.tile_list.rebuild(
+                pdb_to_sorted_gpu, pdb_to_sorted_np = self.tile_list.rebuild(
                     positions_soa, self.topology,
                     self.pbc_matrix, self.pbc_inv,
                 )
+                self._permute_all_arrays(pdb_to_sorted_gpu, pdb_to_sorted_np)
+                self.tile_list.build_tiles(self.topology, self.pbc_matrix)
                 for term in self.force_terms:
-                    if hasattr(term, 'bind_sorted_params'):
-                        term.bind_sorted_params(self.tile_list)
-            self.tile_list.update_sorted_positions(
-                self.gpu.d_positions_x,
-                self.gpu.d_positions_y,
-                self.gpu.d_positions_z,
-            )
+                    if hasattr(term, 'bind_sorted'):
+                        term.bind_sorted(self.topology, self.tile_list)
             self.compute_forces()
             if prof:
                 s = cp.cuda.Event()
@@ -135,13 +165,15 @@ class System:
 
         positions_soa = self.gpu.get_positions_2d()
         if self.tile_list.check_rebuild(positions_soa):
-            self.tile_list.rebuild(
+            pdb_to_sorted_gpu, pdb_to_sorted_np = self.tile_list.rebuild(
                 positions_soa, self.topology,
                 self.pbc_matrix, self.pbc_inv,
             )
+            self._permute_all_arrays(pdb_to_sorted_gpu, pdb_to_sorted_np)
+            self.tile_list.build_tiles(self.topology, self.pbc_matrix)
             for term in self.force_terms:
-                if hasattr(term, 'bind_sorted_params'):
-                    term.bind_sorted_params(self.tile_list)
+                if hasattr(term, 'bind_sorted'):
+                    term.bind_sorted(self.topology, self.tile_list)
         self.compute_forces()
         for _ in range(number_steps):
             minimizer.step(self)

@@ -715,6 +715,10 @@ class TileList:
         self._d_reverse_neighbors = None
         self._d_reverse_scale = None
 
+        self.d_sorted_to_pdb = cp.empty(0, dtype=env.NUMPY_INT)
+        self.d_pdb_to_sorted = cp.empty(0, dtype=env.NUMPY_INT)
+        self._sorted_positions = None
+
         self._block_atoms_np = None
         self._block_center_np = None
         self._tiles_np = None
@@ -926,13 +930,21 @@ class TileList:
 
         sorted_indices = cp.argsort(morton_codes).astype(env.NUMPY_INT)
 
+        sorted_to_pdb = sorted_indices.copy()
+        pdb_to_sorted = cp.empty(N, dtype=env.NUMPY_INT)
+        pdb_to_sorted[sorted_indices] = cp.arange(N, dtype=env.NUMPY_INT)
+        self.d_sorted_to_pdb = sorted_to_pdb
+        self.d_pdb_to_sorted = pdb_to_sorted
+
+        pos_x = pos_x[sorted_indices]
+        pos_y = pos_y[sorted_indices]
+        pos_z = pos_z[sorted_indices]
+
         num_blocks = (N + W - 1) // W
         self.num_blocks = num_blocks
         total_slots = num_blocks * W
         block_atoms = cp.full(total_slots, -1, dtype=env.NUMPY_INT)
-        nf = (total_slots + tpb - 1) // tpb
-        self._kernels['form_blocks']((nf,), (tpb,),
-            (sorted_indices, np.int32(N), np.int32(num_blocks), block_atoms))
+        block_atoms[:N] = cp.arange(N, dtype=env.NUMPY_INT)
         self.d_block_atoms = block_atoms
 
         self.d_block_center = cp.empty(num_blocks * 3, dtype=env.NUMPY_FLOAT)
@@ -1089,22 +1101,45 @@ class TileList:
         N = topology.num_particles
         if N == 0:
             self._init_empty()
-            return
+            return None, None
 
         self._ensure_kernels()
         self._invalidate_caches()
 
         positions_soa = self._rebuild_core(positions, topology, pbc_matrix, pbc_inv)
-        self._find_interacting_blocks(positions_soa, pbc_matrix)
-        self._build_masks_gpu(topology)
-        self._extract_exclusion_tiles()
+        self._sorted_positions = positions_soa
 
         pos_x, pos_y, pos_z = positions_soa
         self.d_positions_at_rebuild_x = pos_x.copy()
         self.d_positions_at_rebuild_y = pos_y.copy()
         self.d_positions_at_rebuild_z = pos_z.copy()
+
+        total_slots = self.num_blocks * W
+        self.d_sorted_pos_x = cp.zeros(total_slots, dtype=env.NUMPY_FLOAT)
+        self.d_sorted_pos_y = cp.zeros(total_slots, dtype=env.NUMPY_FLOAT)
+        self.d_sorted_pos_z = cp.zeros(total_slots, dtype=env.NUMPY_FLOAT)
+        self.d_sorted_pos_x[:N] = pos_x
+        self.d_sorted_pos_y[:N] = pos_y
+        self.d_sorted_pos_z[:N] = pos_z
+
         self.d_rebuild_flag[0] = 0
         self._is_initialized = True
+
+        self._d_excl_offset = None
+        self._d_excl_neighbors = None
+        self._d_excl_scale = None
+        self._d_reverse_offset = None
+        self._d_reverse_neighbors = None
+        self._d_reverse_scale = None
+
+        return self.d_pdb_to_sorted, cp.asnumpy(self.d_pdb_to_sorted)
+
+    def build_tiles(self, topology, pbc_matrix):
+        if self.num_particles == 0 or self._sorted_positions is None:
+            return
+        self._find_interacting_blocks(self._sorted_positions, pbc_matrix)
+        self._build_masks_gpu(topology)
+        self._extract_exclusion_tiles()
 
     def check_rebuild(self, positions) -> bool:
         if not self._is_initialized:
@@ -1165,4 +1200,7 @@ class TileList:
         self.d_sorted_pos_x = cp.empty(0, dtype=env.NUMPY_FLOAT)
         self.d_sorted_pos_y = cp.empty(0, dtype=env.NUMPY_FLOAT)
         self.d_sorted_pos_z = cp.empty(0, dtype=env.NUMPY_FLOAT)
+        self.d_sorted_to_pdb = cp.empty(0, dtype=env.NUMPY_INT)
+        self.d_pdb_to_sorted = cp.empty(0, dtype=env.NUMPY_INT)
+        self._sorted_positions = None
         self._invalidate_caches()
