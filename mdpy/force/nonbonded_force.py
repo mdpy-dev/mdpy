@@ -26,6 +26,22 @@ _MATH_FUNCTIONS = {
     'tan': 'tanf',
 }
 
+_PACKED_PARAMS = {
+    'sigma_half': ('sigma_epsilon', 'x'),
+    'sqrt_epsilon': ('sigma_epsilon', 'y'),
+}
+
+
+def _unique_gpu_arrays(parameter_names):
+    seen = set()
+    result = []
+    for name in parameter_names:
+        arr = _PACKED_PARAMS[name][0] if name in _PACKED_PARAMS else name
+        if arr not in seen:
+            seen.add(arr)
+            result.append(arr)
+    return result
+
 
 class _Transpiler(ast.NodeVisitor):
     def __init__(self, index_names, parameter_names):
@@ -246,7 +262,7 @@ class NonbondedExpression:
         if '_result_energy_1' not in fragment:
             fragment += '\nfloat energy_val = _result_energy;'
             fragment += '\nfloat force_magnitude = _result_force;'
-        return _assemble_tile_kernel(self.parameter_names, fragment)
+        return _assemble_tile_kernel_v2(self.parameter_names, fragment)
 
 
 def _rename_output_vars(cuda_fragment, tag):
@@ -388,6 +404,234 @@ def _generate_param_use(parameter_names):
         lines.append(f'float {name}_i_use = is_14 ? {name}_i_14 : {name}_i;')
         lines.append(f'float {name}_j_use = is_14 ? {name}_j_14 : {name}_j;')
     return '\n                '.join(lines)
+
+
+def _generate_param_decls_v2(parameter_names):
+    decls = ''
+    for arr in _unique_gpu_arrays(parameter_names):
+        if arr in {v[0] for v in _PACKED_PARAMS.values()}:
+            decls += f',\n    const float2* __restrict__ {arr}'
+            decls += f',\n    const float2* __restrict__ {arr}_14'
+        else:
+            decls += f',\n    const float* __restrict__ {arr}'
+            decls += f',\n    const float* __restrict__ {arr}_14'
+    return decls
+
+
+def _generate_sorted_param_decls_v2(parameter_names):
+    decls = ''
+    for arr in _unique_gpu_arrays(parameter_names):
+        if arr in {v[0] for v in _PACKED_PARAMS.values()}:
+            decls += f',\n    const float2* __restrict__ sorted_{arr}'
+            decls += f',\n    const float2* __restrict__ sorted_{arr}_14'
+        else:
+            decls += f',\n    const float* __restrict__ sorted_{arr}'
+            decls += f',\n    const float* __restrict__ sorted_{arr}_14'
+    return decls
+
+
+def _generate_sorted_param_load_i_v2(parameter_names):
+    lines = []
+    loaded = set()
+    for name in parameter_names:
+        if name in _PACKED_PARAMS:
+            arr, comp = _PACKED_PARAMS[name]
+            if arr not in loaded:
+                lines.append(f'float2 {arr}_i_v = sorted_{arr}[block_x * 32 + tgx];')
+                lines.append(f'float2 {arr}_i_14_v = sorted_{arr}_14[block_x * 32 + tgx];')
+                loaded.add(arr)
+            lines.append(f'float {name}_i = {arr}_i_v.{comp};')
+            lines.append(f'float {name}_i_14 = {arr}_i_14_v.{comp};')
+        else:
+            lines.append(f'float {name}_i = sorted_{name}[block_x * 32 + tgx];')
+            lines.append(f'float {name}_i_14 = sorted_{name}_14[block_x * 32 + tgx];')
+    return '\n        '.join(lines)
+
+
+def _generate_param_load_j_tile_v2(parameter_names):
+    lines = []
+    loaded_j = set()
+    for name in parameter_names:
+        if name in _PACKED_PARAMS:
+            arr, comp = _PACKED_PARAMS[name]
+            lines.append(f'float {name}_j = 0.0f;')
+            lines.append(f'float {name}_j_14 = 0.0f;')
+        else:
+            lines.append(f'float {name}_j = 0.0f, {name}_j_14 = 0.0f;')
+            lines.append(f'if (gj >= 0 && gj < num_particles) {{ {name}_j = {name}[gj]; {name}_j_14 = {name}_14[gj]; }}')
+    for name in parameter_names:
+        if name in _PACKED_PARAMS:
+            arr, comp = _PACKED_PARAMS[name]
+            if arr not in loaded_j:
+                lines.append(f'if (gj >= 0 && gj < num_particles) {{ float2 _{arr}_j_v = {arr}[gj]; float2 _{arr}_j_14_v = {arr}_14[gj];')
+                loaded_j.add(arr)
+    if loaded_j:
+        for name in parameter_names:
+            if name in _PACKED_PARAMS:
+                arr, comp = _PACKED_PARAMS[name]
+                lines.append(f'{name}_j = _{arr}_j_v.{comp};')
+                lines.append(f'{name}_j_14 = _{arr}_j_14_v.{comp};')
+        lines.append('}')
+    return '\n        '.join(lines)
+
+
+def _generate_shuffle_warp_data_v2(parameter_names):
+    lines = [
+        'shfl_px = __shfl_sync(0xffffffff, shfl_px, (tgx + 1) & 31);',
+        'shfl_py = __shfl_sync(0xffffffff, shfl_py, (tgx + 1) & 31);',
+        'shfl_pz = __shfl_sync(0xffffffff, shfl_pz, (tgx + 1) & 31);',
+        'shfl_fx = __shfl_sync(0xffffffff, shfl_fx, (tgx + 1) & 31);',
+        'shfl_fy = __shfl_sync(0xffffffff, shfl_fy, (tgx + 1) & 31);',
+        'shfl_fz = __shfl_sync(0xffffffff, shfl_fz, (tgx + 1) & 31);',
+    ]
+    for name in parameter_names:
+        lines.append(f'{name}_j = __shfl_sync(0xffffffff, {name}_j, (tgx + 1) & 31);')
+        lines.append(f'{name}_j_14 = __shfl_sync(0xffffffff, {name}_j_14, (tgx + 1) & 31);')
+    return '\n        '.join(lines)
+
+
+def _generate_param_select_v2(parameter_names):
+    lines = []
+    for name in parameter_names:
+        lines.append(f'float {name}_i_saved = {name}_i; if (is_14) {name}_i = {name}_i_14;')
+        lines.append(f'float {name}_j_saved = {name}_j; if (is_14) {name}_j = {name}_j_14;')
+    return '\n            '.join(lines)
+
+
+def _generate_param_restore_v2(parameter_names):
+    lines = []
+    for name in parameter_names:
+        lines.append(f'if (is_14) {name}_i = {name}_i_saved;')
+        lines.append(f'if (is_14) {name}_j = {name}_j_saved;')
+    return '\n            '.join(lines)
+
+
+def _assemble_tile_kernel_v2(parameter_names, expression_fragment):
+    param_decls = _generate_param_decls_v2(parameter_names)
+    sorted_param_decls = _generate_sorted_param_decls_v2(parameter_names)
+    sorted_param_load_i = _generate_sorted_param_load_i_v2(parameter_names)
+    param_load_j = _generate_param_load_j_tile_v2(parameter_names)
+    shuffle_code = _generate_shuffle_warp_data_v2(parameter_names)
+    param_select = _generate_param_select_v2(parameter_names)
+    param_restore = _generate_param_restore_v2(parameter_names)
+
+    kernel = f'''extern "C" __global__
+void tile_kernel(
+    const float* __restrict__ sorted_pos_x,
+    const float* __restrict__ sorted_pos_y,
+    const float* __restrict__ sorted_pos_z,
+    const float* __restrict__ pos_x,
+    const float* __restrict__ pos_y,
+    const float* __restrict__ pos_z,
+    float* __restrict__ f_x,
+    float* __restrict__ f_y,
+    float* __restrict__ f_z,
+    float* __restrict__ energy_buffer,
+    const int* __restrict__ block_atoms,
+    const int* __restrict__ tiles,
+    const int* __restrict__ interacting_atoms,
+    const unsigned int* __restrict__ exclusion_masks,
+    const unsigned int* __restrict__ scaling_masks,
+    float cutoff_sq,
+    int num_tiles,
+    int num_particles,
+    float box_x, float box_y, float box_z,
+    float inv_box_x, float inv_box_y, float inv_box_z{param_decls}{sorted_param_decls}
+) {{
+    int total_warps = (blockDim.x * gridDim.x) / 32;
+    int warp_id = (blockIdx.x * blockDim.x + threadIdx.x) / 32;
+    int tgx = threadIdx.x & 31;
+    int tbx = threadIdx.x - tgx;
+
+    int pos = (int)((long long)warp_id * num_tiles / total_warps);
+    int end = (int)((long long)(warp_id + 1) * num_tiles / total_warps);
+
+    float total_energy = 0.0f;
+
+    __shared__ int atom_indices_shared[256];
+    __shared__ unsigned int excl_shared[256];
+    __shared__ unsigned int scale_shared[256];
+
+    for (; pos < end; pos++) {{
+        int block_x = tiles[pos];
+
+        int gi = block_atoms[block_x * 32 + tgx];
+        float px_i = sorted_pos_x[block_x * 32 + tgx];
+        float py_i = sorted_pos_y[block_x * 32 + tgx];
+        float pz_i = sorted_pos_z[block_x * 32 + tgx];
+        {sorted_param_load_i}
+
+        int gj = interacting_atoms[pos * 32 + tgx];
+        float shfl_px = 0.0f, shfl_py = 0.0f, shfl_pz = 0.0f;
+        if (gj >= 0 && gj < num_particles) {{
+            shfl_px = pos_x[gj];
+            shfl_py = pos_y[gj];
+            shfl_pz = pos_z[gj];
+        }}
+        {param_load_j}
+
+        atom_indices_shared[threadIdx.x] = gj;
+        excl_shared[threadIdx.x] = exclusion_masks[pos * 32 + tgx];
+        scale_shared[threadIdx.x] = scaling_masks[pos * 32 + tgx];
+
+        float force_x = 0.0f, force_y = 0.0f, force_z = 0.0f;
+        float shfl_fx = 0.0f, shfl_fy = 0.0f, shfl_fz = 0.0f;
+
+        int tj = tgx;
+        for (int j = 0; j < 32; j++) {{
+            unsigned int excl_j = excl_shared[tbx + tj];
+            unsigned int scale_j = scale_shared[tbx + tj];
+            int atom2 = atom_indices_shared[tbx + tj];
+
+            float dx = shfl_px - px_i;
+            float dy = shfl_py - py_i;
+            float dz = shfl_pz - pz_i;
+            dx -= box_x * roundf(dx * inv_box_x);
+            dy -= box_y * roundf(dy * inv_box_y);
+            dz -= box_z * roundf(dz * inv_box_z);
+            float dist_sq = dx * dx + dy * dy + dz * dz;
+
+            bool excluded = (atom2 < 0 || atom2 >= num_particles)
+                         || ((excl_j >> tgx) & 1);
+            bool is_14 = (scale_j >> tgx) & 1;
+
+            if (!excluded && dist_sq > 1.0e-12f && dist_sq <= cutoff_sq && gi >= 0 && gi < num_particles) {{
+                float inv_dist = rsqrtf(dist_sq);
+                float r = dist_sq * inv_dist;
+                {param_select}
+                {expression_fragment}
+                float inv_dist_force = force_magnitude * inv_dist;
+                float fx = dx * inv_dist_force;
+                float fy = dy * inv_dist_force;
+                float fz = dz * inv_dist_force;
+                force_x += fx; force_y += fy; force_z += fz;
+                shfl_fx -= fx; shfl_fy -= fy; shfl_fz -= fz;
+                total_energy += energy_val;
+                {param_restore}
+            }}
+            {shuffle_code}
+            tj = (tj + 1) & 31;
+        }}
+
+        if (gi >= 0 && gi < num_particles) {{
+            atomicAdd(&f_x[gi], force_x);
+            atomicAdd(&f_y[gi], force_y);
+            atomicAdd(&f_z[gi], force_z);
+        }}
+        int gj_out = atom_indices_shared[threadIdx.x];
+        if (gj_out >= 0 && gj_out < num_particles) {{
+            atomicAdd(&f_x[gj_out], shfl_fx);
+            atomicAdd(&f_y[gj_out], shfl_fy);
+            atomicAdd(&f_z[gj_out], shfl_fz);
+        }}
+    }}
+
+    for (int offset = 16; offset > 0; offset >>= 1) {{
+        total_energy += __shfl_down_sync(0xffffffff, total_energy, offset);
+    }}
+    if (tgx == 0) atomicAdd(energy_buffer, total_energy);
+}}'''
+    return kernel
 
 
 def _assemble_tile_kernel(parameter_names, expression_fragment):
@@ -1070,16 +1314,44 @@ class NonbondedForce(ForceTerm):
         self._num_sm = cp.cuda.runtime.getDeviceProperties(0)['multiProcessorCount']
         particle_types = topology.particle_types
 
+        _TABLE_PARAM_MAP = {
+            'sigma_half': 'sigma',
+            'sqrt_epsilon': 'epsilon',
+        }
+
         for param_name in self.expression.parameter_names:
-            per_atom = parameter_table.expand_to_per_atom(param_name, particle_types)
+            table_name = _TABLE_PARAM_MAP.get(param_name, param_name)
+            per_atom = parameter_table.expand_to_per_atom(table_name, particle_types)
+            if param_name == 'sigma_half':
+                per_atom = 0.5 * per_atom
+            elif param_name == 'sqrt_epsilon':
+                per_atom = np.sqrt(np.maximum(per_atom, 0.0))
             self._parameter_arrays[param_name] = per_atom.astype(np.float32)
 
             name_14 = param_name + '_14'
-            if name_14 in parameter_table.per_type or name_14 in parameter_table.per_atom:
-                per_atom_14 = parameter_table.expand_to_per_atom(name_14, particle_types)
+            table_name_14 = _TABLE_PARAM_MAP.get(param_name, param_name) + '_14'
+            has_14 = table_name_14 in parameter_table.per_type or table_name_14 in parameter_table.per_atom
+            if has_14:
+                per_atom_14 = parameter_table.expand_to_per_atom(table_name_14, particle_types)
+                if param_name == 'sigma_half':
+                    per_atom_14 = 0.5 * per_atom_14
+                elif param_name == 'sqrt_epsilon':
+                    per_atom_14 = np.sqrt(np.maximum(per_atom_14, 0.0))
             else:
                 per_atom_14 = per_atom
             self._parameter_arrays[name_14] = per_atom_14.astype(np.float32)
+
+        if 'sigma_half' in self.expression.parameter_names and 'sqrt_epsilon' in self.expression.parameter_names:
+            N = len(particle_types)
+            se = np.empty(N * 2, dtype=np.float32)
+            se[0::2] = self._parameter_arrays['sigma_half']
+            se[1::2] = self._parameter_arrays['sqrt_epsilon']
+            self._parameter_arrays['sigma_epsilon'] = se
+
+            se_14 = np.empty(N * 2, dtype=np.float32)
+            se_14[0::2] = self._parameter_arrays['sigma_half_14']
+            se_14[1::2] = self._parameter_arrays['sqrt_epsilon_14']
+            self._parameter_arrays['sigma_epsilon_14'] = se_14
 
         self._kernel_source = self.expression.assemble_tile_kernel()
 
@@ -1095,23 +1367,23 @@ class NonbondedForce(ForceTerm):
     def bind_sorted_params(self, tile_list):
         self._ensure_compiled()
         param_arrays = {}
-        for param_name in self.expression.parameter_names:
-            param_arrays[param_name] = self._d_parameter_arrays[param_name]
-            param_arrays[param_name + '_14'] = self._d_parameter_arrays[param_name + '_14']
+        for arr in _unique_gpu_arrays(self.expression.parameter_names):
+            param_arrays[arr] = self._d_parameter_arrays[arr]
+            param_arrays[arr + '_14'] = self._d_parameter_arrays[arr + '_14']
         tile_list.gather_sorted_params(param_arrays)
 
     def _param_args(self):
         args = []
-        for param_name in self.expression.parameter_names:
-            args.append(self._d_parameter_arrays[param_name])
-            args.append(self._d_parameter_arrays[param_name + '_14'])
+        for arr in _unique_gpu_arrays(self.expression.parameter_names):
+            args.append(self._d_parameter_arrays[arr])
+            args.append(self._d_parameter_arrays[arr + '_14'])
         return args
 
     def _sorted_param_args(self, tile_list):
         args = []
-        for param_name in self.expression.parameter_names:
-            args.append(getattr(tile_list, f'd_sorted_{param_name}'))
-            args.append(getattr(tile_list, f'd_sorted_{param_name}_14'))
+        for arr in _unique_gpu_arrays(self.expression.parameter_names):
+            args.append(getattr(tile_list, f'd_sorted_{arr}'))
+            args.append(getattr(tile_list, f'd_sorted_{arr}_14'))
         return args
 
     def compute(self, gpu_context, tile_list=None):

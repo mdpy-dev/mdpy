@@ -251,6 +251,28 @@ void gather_sorted_kernel(
 }
 """
 
+_GATHER_SORTED_KERNEL_2COMP = r"""
+extern "C" __global__
+void gather_sorted_kernel_2comp(
+    const float* __restrict__ src,
+    const int* __restrict__ block_atoms,
+    int total_slots,
+    int num_particles,
+    float* __restrict__ dst
+) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= total_slots) return;
+    int atom_id = block_atoms[idx];
+    if (atom_id >= 0 && atom_id < num_particles) {
+        dst[idx * 2 + 0] = src[atom_id * 2 + 0];
+        dst[idx * 2 + 1] = src[atom_id * 2 + 1];
+    } else {
+        dst[idx * 2 + 0] = 0.0f;
+        dst[idx * 2 + 1] = 0.0f;
+    }
+}
+"""
+
 _FIND_INTERACTING_BLOCKS_KERNEL = r"""
 extern "C" __global__ __launch_bounds__(256, 3)
 void find_interacting_blocks_kernel(
@@ -550,6 +572,7 @@ def _compile_gpu_kernels():
         'build_masks': cp.RawKernel(_BUILD_MASKS_KERNEL, 'build_masks_kernel'),
         'check_rebuild': cp.RawKernel(_CHECK_REBUILD_KERNEL, 'check_rebuild_kernel'),
         'gather_sorted': cp.RawKernel(_GATHER_SORTED_KERNEL, 'gather_sorted_kernel'),
+        'gather_sorted_2comp': cp.RawKernel(_GATHER_SORTED_KERNEL_2COMP, 'gather_sorted_kernel_2comp'),
         'large_block_bounds': cp.RawKernel(_COMPUTE_LARGE_BLOCK_BOUNDS_KERNEL, 'compute_large_block_bounds_kernel'),
     }
 
@@ -711,11 +734,19 @@ class TileList:
         tpb = 256
         grid = ((total_slots + tpb - 1) // tpb,)
         for name, d_arr in param_arrays.items():
-            sorted_arr = cp.empty(total_slots, dtype=env.NUMPY_FLOAT)
-            self._kernels['gather_sorted'](grid, (tpb,),
-                (d_arr, self.d_block_atoms,
-                 np.int32(total_slots), np.int32(self.num_particles),
-                 sorted_arr))
+            num_components = d_arr.shape[0] // self.num_particles if self.num_particles > 0 else 1
+            if num_components == 1 or d_arr.shape[0] == total_slots:
+                sorted_arr = cp.empty(total_slots, dtype=env.NUMPY_FLOAT)
+                self._kernels['gather_sorted'](grid, (tpb,),
+                    (d_arr, self.d_block_atoms,
+                     np.int32(total_slots), np.int32(self.num_particles),
+                     sorted_arr))
+            else:
+                sorted_arr = cp.empty(total_slots * num_components, dtype=env.NUMPY_FLOAT)
+                self._kernels['gather_sorted_2comp'](grid, (tpb,),
+                    (d_arr, self.d_block_atoms,
+                     np.int32(total_slots), np.int32(self.num_particles),
+                     sorted_arr))
             setattr(self, f'd_sorted_{name}', sorted_arr)
 
     def _rebuild_core(self, positions, topology, pbc_matrix, pbc_inv):
