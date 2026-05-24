@@ -11,7 +11,7 @@ from mdpy.core.gpu_context import GPUContext
 
 class System:
 
-    def __init__(self, topology, pbc_matrix, cutoff=12.0):
+    def __init__(self, topology, pbc_matrix, cutoff=12.0, skin=1.0):
         self.topology = topology
         self.particles = ParticleTable(topology.num_particles)
         self.pbc_matrix = np.ascontiguousarray(pbc_matrix, dtype=env.NUMPY_FLOAT)
@@ -21,7 +21,7 @@ class System:
         self.gpu = GPUContext()
         self.gpu.initialize(topology, self.pbc_matrix.flatten())
 
-        self.tile_list = TileList(cutoff, skin=2.0)
+        self.tile_list = TileList(cutoff, skin=skin)
         self.force_terms = []
 
         self._step_count = 0
@@ -29,7 +29,7 @@ class System:
         self._velocities_uploaded = False
         self._profiling_enabled = False
         self._profile_data = {}
-        self._sorted_params_bound = False
+
 
     def add_force_term(self, term):
         self.force_terms.append(term)
@@ -106,11 +106,9 @@ class System:
                     positions_soa, self.topology,
                     self.pbc_matrix, self.pbc_inv,
                 )
-                if not self._sorted_params_bound:
-                    for term in self.force_terms:
-                        if hasattr(term, 'bind_sorted_params'):
-                            term.bind_sorted_params(self.tile_list)
-                    self._sorted_params_bound = True
+                for term in self.force_terms:
+                    if hasattr(term, 'bind_sorted_params'):
+                        term.bind_sorted_params(self.tile_list)
             self.tile_list.update_sorted_positions(
                 self.gpu.d_positions_x,
                 self.gpu.d_positions_y,
@@ -141,6 +139,9 @@ class System:
                 positions_soa, self.topology,
                 self.pbc_matrix, self.pbc_inv,
             )
+            for term in self.force_terms:
+                if hasattr(term, 'bind_sorted_params'):
+                    term.bind_sorted_params(self.tile_list)
         self.compute_forces()
         for _ in range(number_steps):
             minimizer.step(self)

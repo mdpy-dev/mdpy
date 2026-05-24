@@ -105,7 +105,7 @@ class CharmmForcefield:
 
         return table
 
-    def create_system(self, pbc_matrix=None):
+    def create_system(self, pbc_matrix=None, skin=1.0):
         topology = self.create_topology()
         parameter_table = self.create_parameter_table()
 
@@ -114,7 +114,7 @@ class CharmmForcefield:
         if pbc_matrix is None:
             pbc_matrix = np.eye(3, dtype=env.NUMPY_FLOAT) * 100.0
 
-        system = System(topology, pbc_matrix, cutoff=self._cutoff)
+        system = System(topology, pbc_matrix, cutoff=self._cutoff, skin=skin)
 
         bonded = BondedForce.charmm(topology, parameter_table)
         system.add_force_term(bonded)

@@ -556,7 +556,7 @@ def _compile_gpu_kernels():
 
 class TileList:
 
-    def __init__(self, cutoff: float, skin: float = 2.0):
+    def __init__(self, cutoff: float, skin: float = 1.0):
         self.cutoff = cutoff
         self.skin = skin
         self.build_radius = cutoff + skin
