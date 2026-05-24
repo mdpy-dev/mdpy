@@ -8,6 +8,7 @@ import textwrap
 import cupy as cp
 import numpy as np
 
+from mdpy.core.tile_list import _GATHER_SORTED_KERNEL_4COMP
 from mdpy.force.force_term import ForceTerm
 
 
@@ -41,6 +42,26 @@ def _unique_gpu_arrays(parameter_names):
             seen.add(arr)
             result.append(arr)
     return result
+
+
+_PACK_POSQ_KERNEL = r'''
+extern "C" __global__
+void pack_posq_kernel(
+    const float* __restrict__ pos_x,
+    const float* __restrict__ pos_y,
+    const float* __restrict__ pos_z,
+    const float* __restrict__ charge,
+    float* __restrict__ posq,
+    int num_particles
+) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= num_particles) return;
+    posq[idx * 4 + 0] = pos_x[idx];
+    posq[idx * 4 + 1] = pos_y[idx];
+    posq[idx * 4 + 2] = pos_z[idx];
+    posq[idx * 4 + 3] = charge[idx];
+}
+'''
 
 
 class _Transpiler(ast.NodeVisitor):
@@ -506,23 +527,150 @@ def _generate_param_restore_v2(parameter_names):
     return '\n            '.join(lines)
 
 
+def _generate_param_decls_posq_v2(parameter_names):
+    decls = ''
+    for arr in _unique_gpu_arrays(parameter_names):
+        if arr == 'charge':
+            decls += ',\n    const float* __restrict__ charge_14'
+        else:
+            if arr in {v[0] for v in _PACKED_PARAMS.values()}:
+                decls += f',\n    const float2* __restrict__ {arr}'
+                decls += f',\n    const float2* __restrict__ {arr}_14'
+            else:
+                decls += f',\n    const float* __restrict__ {arr}'
+                decls += f',\n    const float* __restrict__ {arr}_14'
+    return decls
+
+
+def _generate_sorted_param_decls_posq_v2(parameter_names):
+    decls = ''
+    for arr in _unique_gpu_arrays(parameter_names):
+        if arr == 'charge':
+            decls += ',\n    const float* __restrict__ sorted_charge_14'
+        else:
+            if arr in {v[0] for v in _PACKED_PARAMS.values()}:
+                decls += f',\n    const float2* __restrict__ sorted_{arr}'
+                decls += f',\n    const float2* __restrict__ sorted_{arr}_14'
+            else:
+                decls += f',\n    const float* __restrict__ sorted_{arr}'
+                decls += f',\n    const float* __restrict__ sorted_{arr}_14'
+    return decls
+
+
+def _generate_sorted_param_load_i_posq_v2(parameter_names):
+    lines = []
+    loaded = set()
+    for name in parameter_names:
+        if name == 'charge':
+            lines.append('float charge_i = posq_i.w;')
+            lines.append('float charge_i_14 = sorted_charge_14[block_x * 32 + tgx];')
+        elif name in _PACKED_PARAMS:
+            arr, comp = _PACKED_PARAMS[name]
+            if arr not in loaded:
+                lines.append(f'float2 {arr}_i_v = sorted_{arr}[block_x * 32 + tgx];')
+                lines.append(f'float2 {arr}_i_14_v = sorted_{arr}_14[block_x * 32 + tgx];')
+                loaded.add(arr)
+            lines.append(f'float {name}_i = {arr}_i_v.{comp};')
+            lines.append(f'float {name}_i_14 = {arr}_i_14_v.{comp};')
+        else:
+            lines.append(f'float {name}_i = sorted_{name}[block_x * 32 + tgx];')
+            lines.append(f'float {name}_i_14 = sorted_{name}_14[block_x * 32 + tgx];')
+    return '\n        '.join(lines)
+
+
+def _generate_param_load_j_tile_posq_v2(parameter_names):
+    lines = []
+    loaded_j = set()
+    for name in parameter_names:
+        if name == 'charge':
+            lines.append('float charge_j = _charge_j_posq;')
+            lines.append('float charge_j_14 = 0.0f;')
+        elif name in _PACKED_PARAMS:
+            lines.append(f'float {name}_j = 0.0f;')
+            lines.append(f'float {name}_j_14 = 0.0f;')
+        else:
+            lines.append(f'float {name}_j = 0.0f, {name}_j_14 = 0.0f;')
+            lines.append(f'if (gj >= 0 && gj < num_particles) {{ {name}_j = {name}[gj]; {name}_j_14 = {name}_14[gj]; }}')
+    for name in parameter_names:
+        if name in _PACKED_PARAMS:
+            arr, comp = _PACKED_PARAMS[name]
+            if arr not in loaded_j:
+                lines.append(f'if (gj >= 0 && gj < num_particles) {{ float2 _{arr}_j_v = {arr}[gj]; float2 _{arr}_j_14_v = {arr}_14[gj];')
+                loaded_j.add(arr)
+    if loaded_j:
+        for name in parameter_names:
+            if name in _PACKED_PARAMS:
+                arr, comp = _PACKED_PARAMS[name]
+                lines.append(f'{name}_j = _{arr}_j_v.{comp};')
+                lines.append(f'{name}_j_14 = _{arr}_j_14_v.{comp};')
+        lines.append('}')
+    if 'charge' in parameter_names:
+        lines.append('if (gj >= 0 && gj < num_particles) { charge_j_14 = charge_14[gj]; }')
+    return '\n        '.join(lines)
+
+
 def _assemble_tile_kernel_v2(parameter_names, expression_fragment):
-    param_decls = _generate_param_decls_v2(parameter_names)
-    sorted_param_decls = _generate_sorted_param_decls_v2(parameter_names)
-    sorted_param_load_i = _generate_sorted_param_load_i_v2(parameter_names)
-    param_load_j = _generate_param_load_j_tile_v2(parameter_names)
+    use_posq = 'charge' in parameter_names
+
+    if use_posq:
+        param_decls = _generate_param_decls_posq_v2(parameter_names)
+        sorted_param_decls = _generate_sorted_param_decls_posq_v2(parameter_names)
+        sorted_param_load_i = _generate_sorted_param_load_i_posq_v2(parameter_names)
+        param_load_j = _generate_param_load_j_tile_posq_v2(parameter_names)
+        pos_args_decl = (
+            '    const float4* __restrict__ sorted_posq,\n'
+            '    const float4* __restrict__ posq,'
+        )
+        i_pos_load = (
+            '        float4 posq_i = sorted_posq[block_x * 32 + tgx];\n'
+            '        float px_i = posq_i.x;\n'
+            '        float py_i = posq_i.y;\n'
+            '        float pz_i = posq_i.z;'
+        )
+        j_pos_load = (
+            '        float shfl_px = 0.0f, shfl_py = 0.0f, shfl_pz = 0.0f, _charge_j_posq = 0.0f;\n'
+            '        if (gj >= 0 && gj < num_particles) {\n'
+            '            float4 _pj = posq[gj];\n'
+            '            shfl_px = _pj.x;\n'
+            '            shfl_py = _pj.y;\n'
+            '            shfl_pz = _pj.z;\n'
+            '            _charge_j_posq = _pj.w;\n'
+            '        }'
+        )
+    else:
+        param_decls = _generate_param_decls_v2(parameter_names)
+        sorted_param_decls = _generate_sorted_param_decls_v2(parameter_names)
+        sorted_param_load_i = _generate_sorted_param_load_i_v2(parameter_names)
+        param_load_j = _generate_param_load_j_tile_v2(parameter_names)
+        pos_args_decl = (
+            '    const float* __restrict__ sorted_pos_x,\n'
+            '    const float* __restrict__ sorted_pos_y,\n'
+            '    const float* __restrict__ sorted_pos_z,\n'
+            '    const float* __restrict__ pos_x,\n'
+            '    const float* __restrict__ pos_y,\n'
+            '    const float* __restrict__ pos_z,'
+        )
+        i_pos_load = (
+            '        float px_i = sorted_pos_x[block_x * 32 + tgx];\n'
+            '        float py_i = sorted_pos_y[block_x * 32 + tgx];\n'
+            '        float pz_i = sorted_pos_z[block_x * 32 + tgx];'
+        )
+        j_pos_load = (
+            '        float shfl_px = 0.0f, shfl_py = 0.0f, shfl_pz = 0.0f;\n'
+            '        if (gj >= 0 && gj < num_particles) {\n'
+            '            shfl_px = pos_x[gj];\n'
+            '            shfl_py = pos_y[gj];\n'
+            '            shfl_pz = pos_z[gj];\n'
+            '        }'
+        )
+
     shuffle_code = _generate_shuffle_warp_data_v2(parameter_names)
     param_select = _generate_param_select_v2(parameter_names)
     param_restore = _generate_param_restore_v2(parameter_names)
 
     kernel = f'''extern "C" __global__
 void tile_kernel(
-    const float* __restrict__ sorted_pos_x,
-    const float* __restrict__ sorted_pos_y,
-    const float* __restrict__ sorted_pos_z,
-    const float* __restrict__ pos_x,
-    const float* __restrict__ pos_y,
-    const float* __restrict__ pos_z,
+{pos_args_decl}
     float* __restrict__ f_x,
     float* __restrict__ f_y,
     float* __restrict__ f_z,
@@ -556,18 +704,11 @@ void tile_kernel(
         int block_x = tiles[pos];
 
         int gi = block_atoms[block_x * 32 + tgx];
-        float px_i = sorted_pos_x[block_x * 32 + tgx];
-        float py_i = sorted_pos_y[block_x * 32 + tgx];
-        float pz_i = sorted_pos_z[block_x * 32 + tgx];
+{i_pos_load}
         {sorted_param_load_i}
 
         int gj = interacting_atoms[pos * 32 + tgx];
-        float shfl_px = 0.0f, shfl_py = 0.0f, shfl_pz = 0.0f;
-        if (gj >= 0 && gj < num_particles) {{
-            shfl_px = pos_x[gj];
-            shfl_py = pos_y[gj];
-            shfl_pz = pos_z[gj];
-        }}
+{j_pos_load}
         {param_load_j}
 
         atom_indices_shared[threadIdx.x] = gj;
@@ -1307,6 +1448,10 @@ class NonbondedForce(ForceTerm):
         self._parameter_arrays = {}
         self._cutoff = None
         self._cutoff_sq = None
+        self._d_posq = None
+        self._d_sorted_posq = None
+        self._pack_posq_kernel = None
+        self._gather_4comp_kernel = None
 
     def bind(self, topology, parameter_table, cutoff):
         self._cutoff = cutoff
@@ -1363,27 +1508,46 @@ class NonbondedForce(ForceTerm):
             self._d_parameter_arrays[param_name] = cp.asarray(
                 self._parameter_arrays[param_name]
             )
+        if self._use_posq():
+            self._pack_posq_kernel = cp.RawKernel(_PACK_POSQ_KERNEL, 'pack_posq_kernel')
+            N = self._parameter_arrays['charge'].shape[0]
+            self._d_posq = cp.zeros(N * 4, dtype=np.float32)
+
+    def _use_posq(self):
+        return 'charge' in self.expression.parameter_names
 
     def bind_sorted_params(self, tile_list):
         self._ensure_compiled()
         param_arrays = {}
         for arr in _unique_gpu_arrays(self.expression.parameter_names):
-            param_arrays[arr] = self._d_parameter_arrays[arr]
-            param_arrays[arr + '_14'] = self._d_parameter_arrays[arr + '_14']
+            if self._use_posq() and arr == 'charge':
+                param_arrays[arr + '_14'] = self._d_parameter_arrays[arr + '_14']
+            else:
+                param_arrays[arr] = self._d_parameter_arrays[arr]
+                param_arrays[arr + '_14'] = self._d_parameter_arrays[arr + '_14']
         tile_list.gather_sorted_params(param_arrays)
+        if self._use_posq():
+            total_slots = tile_list.num_blocks * 32
+            self._d_sorted_posq = cp.empty(total_slots * 4, dtype=np.float32)
 
     def _param_args(self):
         args = []
         for arr in _unique_gpu_arrays(self.expression.parameter_names):
-            args.append(self._d_parameter_arrays[arr])
-            args.append(self._d_parameter_arrays[arr + '_14'])
+            if self._use_posq() and arr == 'charge':
+                args.append(self._d_parameter_arrays[arr + '_14'])
+            else:
+                args.append(self._d_parameter_arrays[arr])
+                args.append(self._d_parameter_arrays[arr + '_14'])
         return args
 
     def _sorted_param_args(self, tile_list):
         args = []
         for arr in _unique_gpu_arrays(self.expression.parameter_names):
-            args.append(getattr(tile_list, f'd_sorted_{arr}'))
-            args.append(getattr(tile_list, f'd_sorted_{arr}_14'))
+            if self._use_posq() and arr == 'charge':
+                args.append(getattr(tile_list, f'd_sorted_{arr}_14'))
+            else:
+                args.append(getattr(tile_list, f'd_sorted_{arr}'))
+                args.append(getattr(tile_list, f'd_sorted_{arr}_14'))
         return args
 
     def compute(self, gpu_context, tile_list=None):
@@ -1392,32 +1556,75 @@ class NonbondedForce(ForceTerm):
         if tile_list is None or tile_list.num_tiles == 0:
             return
 
-        args = [
-            tile_list.d_sorted_pos_x,
-            tile_list.d_sorted_pos_y,
-            tile_list.d_sorted_pos_z,
-            gpu_context.d_positions_x,
-            gpu_context.d_positions_y,
-            gpu_context.d_positions_z,
-            gpu_context.d_forces_x,
-            gpu_context.d_forces_y,
-            gpu_context.d_forces_z,
-            gpu_context.d_energy,
-            tile_list.d_block_atoms,
-            tile_list.d_tiles,
-            tile_list.d_interacting_atoms,
-            tile_list.d_exclusion_masks,
-            tile_list.d_scaling_masks,
-            np.float32(self._cutoff_sq),
-            np.int32(tile_list.num_tiles),
-            np.int32(gpu_context.number_particles),
-            np.float32(gpu_context._box_x),
-            np.float32(gpu_context._box_y),
-            np.float32(gpu_context._box_z),
-            np.float32(gpu_context._inv_box_x),
-            np.float32(gpu_context._inv_box_y),
-            np.float32(gpu_context._inv_box_z),
-        ] + self._param_args() + self._sorted_param_args(tile_list)
+        if self._use_posq():
+            N = gpu_context.number_particles
+            tpb = 256
+            grid = ((N + tpb - 1) // tpb,)
+            self._pack_posq_kernel(grid, (tpb,),
+                (gpu_context.d_positions_x, gpu_context.d_positions_y,
+                 gpu_context.d_positions_z,
+                 self._d_parameter_arrays['charge'], self._d_posq,
+                 np.int32(N)))
+
+            total_slots = tile_list.num_blocks * 32
+            grid_gather = ((total_slots + tpb - 1) // tpb,)
+            if self._gather_4comp_kernel is None:
+                self._gather_4comp_kernel = cp.RawKernel(
+                    _GATHER_SORTED_KERNEL_4COMP, 'gather_sorted_kernel_4comp')
+            self._gather_4comp_kernel(grid_gather, (tpb,),
+                (self._d_posq, tile_list.d_block_atoms,
+                 np.int32(total_slots), np.int32(N),
+                 self._d_sorted_posq))
+
+            args = [
+                self._d_sorted_posq,
+                self._d_posq,
+                gpu_context.d_forces_x,
+                gpu_context.d_forces_y,
+                gpu_context.d_forces_z,
+                gpu_context.d_energy,
+                tile_list.d_block_atoms,
+                tile_list.d_tiles,
+                tile_list.d_interacting_atoms,
+                tile_list.d_exclusion_masks,
+                tile_list.d_scaling_masks,
+                np.float32(self._cutoff_sq),
+                np.int32(tile_list.num_tiles),
+                np.int32(gpu_context.number_particles),
+                np.float32(gpu_context._box_x),
+                np.float32(gpu_context._box_y),
+                np.float32(gpu_context._box_z),
+                np.float32(gpu_context._inv_box_x),
+                np.float32(gpu_context._inv_box_y),
+                np.float32(gpu_context._inv_box_z),
+            ] + self._param_args() + self._sorted_param_args(tile_list)
+        else:
+            args = [
+                tile_list.d_sorted_pos_x,
+                tile_list.d_sorted_pos_y,
+                tile_list.d_sorted_pos_z,
+                gpu_context.d_positions_x,
+                gpu_context.d_positions_y,
+                gpu_context.d_positions_z,
+                gpu_context.d_forces_x,
+                gpu_context.d_forces_y,
+                gpu_context.d_forces_z,
+                gpu_context.d_energy,
+                tile_list.d_block_atoms,
+                tile_list.d_tiles,
+                tile_list.d_interacting_atoms,
+                tile_list.d_exclusion_masks,
+                tile_list.d_scaling_masks,
+                np.float32(self._cutoff_sq),
+                np.int32(tile_list.num_tiles),
+                np.int32(gpu_context.number_particles),
+                np.float32(gpu_context._box_x),
+                np.float32(gpu_context._box_y),
+                np.float32(gpu_context._box_z),
+                np.float32(gpu_context._inv_box_x),
+                np.float32(gpu_context._inv_box_y),
+                np.float32(gpu_context._inv_box_z),
+            ] + self._param_args() + self._sorted_param_args(tile_list)
 
         num_sm = self._num_sm
         grid_size = 4 * num_sm

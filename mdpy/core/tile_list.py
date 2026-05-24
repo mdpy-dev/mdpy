@@ -273,6 +273,32 @@ void gather_sorted_kernel_2comp(
 }
 """
 
+_GATHER_SORTED_KERNEL_4COMP = r"""
+extern "C" __global__
+void gather_sorted_kernel_4comp(
+    const float* __restrict__ src,
+    const int* __restrict__ block_atoms,
+    int total_slots,
+    int num_particles,
+    float* __restrict__ dst
+) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= total_slots) return;
+    int atom_id = block_atoms[idx];
+    if (atom_id >= 0 && atom_id < num_particles) {
+        dst[idx * 4 + 0] = src[atom_id * 4 + 0];
+        dst[idx * 4 + 1] = src[atom_id * 4 + 1];
+        dst[idx * 4 + 2] = src[atom_id * 4 + 2];
+        dst[idx * 4 + 3] = src[atom_id * 4 + 3];
+    } else {
+        dst[idx * 4 + 0] = 0.0f;
+        dst[idx * 4 + 1] = 0.0f;
+        dst[idx * 4 + 2] = 0.0f;
+        dst[idx * 4 + 3] = 0.0f;
+    }
+}
+"""
+
 _FIND_INTERACTING_BLOCKS_KERNEL = r"""
 extern "C" __global__ __launch_bounds__(256, 3)
 void find_interacting_blocks_kernel(
@@ -573,6 +599,7 @@ def _compile_gpu_kernels():
         'check_rebuild': cp.RawKernel(_CHECK_REBUILD_KERNEL, 'check_rebuild_kernel'),
         'gather_sorted': cp.RawKernel(_GATHER_SORTED_KERNEL, 'gather_sorted_kernel'),
         'gather_sorted_2comp': cp.RawKernel(_GATHER_SORTED_KERNEL_2COMP, 'gather_sorted_kernel_2comp'),
+        'gather_sorted_4comp': cp.RawKernel(_GATHER_SORTED_KERNEL_4COMP, 'gather_sorted_kernel_4comp'),
         'large_block_bounds': cp.RawKernel(_COMPUTE_LARGE_BLOCK_BOUNDS_KERNEL, 'compute_large_block_bounds_kernel'),
     }
 
@@ -741,12 +768,20 @@ class TileList:
                     (d_arr, self.d_block_atoms,
                      np.int32(total_slots), np.int32(self.num_particles),
                      sorted_arr))
-            else:
-                sorted_arr = cp.empty(total_slots * num_components, dtype=env.NUMPY_FLOAT)
+            elif num_components == 2:
+                sorted_arr = cp.empty(total_slots * 2, dtype=env.NUMPY_FLOAT)
                 self._kernels['gather_sorted_2comp'](grid, (tpb,),
                     (d_arr, self.d_block_atoms,
                      np.int32(total_slots), np.int32(self.num_particles),
                      sorted_arr))
+            elif num_components == 4:
+                sorted_arr = cp.empty(total_slots * 4, dtype=env.NUMPY_FLOAT)
+                self._kernels['gather_sorted_4comp'](grid, (tpb,),
+                    (d_arr, self.d_block_atoms,
+                     np.int32(total_slots), np.int32(self.num_particles),
+                     sorted_arr))
+            else:
+                raise ValueError(f"Unsupported number of components: {num_components}")
             setattr(self, f'd_sorted_{name}', sorted_arr)
 
     def _rebuild_core(self, positions, topology, pbc_matrix, pbc_inv):
