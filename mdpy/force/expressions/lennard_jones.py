@@ -1,11 +1,10 @@
 from mdpy.force.nonbonded_force import nonbonded_expression, Parameter
-from math import sqrt
 
 
 @nonbonded_expression
-def lennard_jones(r, atom_i, atom_j, sigma=Parameter(), epsilon=Parameter()):
-    sigma_ij = 0.5 * (sigma[atom_i] + sigma[atom_j])
-    epsilon_ij = sqrt(epsilon[atom_i] * epsilon[atom_j])
+def lennard_jones(r, atom_i, atom_j, sigma_half=Parameter(), sqrt_epsilon=Parameter()):
+    sigma_ij = sigma_half[atom_i] + sigma_half[atom_j]
+    epsilon_ij = sqrt_epsilon[atom_i] * sqrt_epsilon[atom_j]
     sr = sigma_ij / r
     sr6 = sr ** 6
     sr12 = sr6 * sr6
