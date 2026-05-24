@@ -847,6 +847,43 @@ class TileList:
                 raise ValueError(f"Unsupported number of components: {num_components}")
             setattr(self, f'd_sorted_{name}', sorted_arr)
 
+    def permute_to_sorted(self, permutation, arrays_float, arrays_int=None, arrays_2comp=None):
+        if self.num_particles == 0:
+            return
+        self._ensure_kernels()
+        N = self.num_particles
+        tpb = 256
+        grid = ((N + tpb - 1) // tpb,)
+        for name, src in arrays_float.items():
+            dst = cp.empty_like(src)
+            self._kernels['permute'](grid, (tpb,),
+                (src, permutation, np.int32(N), dst))
+            arrays_float[name] = dst
+        if arrays_int:
+            for name, src in arrays_int.items():
+                dst = cp.empty_like(src)
+                self._kernels['permute_int'](grid, (tpb,),
+                    (src, permutation, np.int32(N), dst))
+                arrays_int[name] = dst
+        if arrays_2comp:
+            for name, src in arrays_2comp.items():
+                dst = cp.empty_like(src)
+                self._kernels['permute_2comp'](grid, (tpb,),
+                    (src, permutation, np.int32(N), dst))
+                arrays_2comp[name] = dst
+
+    def permute_from_sorted(self, sorted_to_pdb, sorted_array):
+        if self.num_particles == 0:
+            return sorted_array
+        self._ensure_kernels()
+        N = self.num_particles
+        tpb = 256
+        grid = ((N + tpb - 1) // tpb,)
+        pdb_array = cp.empty_like(sorted_array)
+        self._kernels['inverse_permute'](grid, (tpb,),
+            (sorted_array, sorted_to_pdb, np.int32(N), pdb_array))
+        return pdb_array
+
     def _rebuild_core(self, positions, topology, pbc_matrix, pbc_inv):
         N = topology.num_particles
         self.num_particles = N
