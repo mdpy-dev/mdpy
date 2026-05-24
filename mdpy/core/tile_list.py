@@ -940,7 +940,50 @@ class TileList:
              self._d_excl_offset, self._d_excl_neighbors, self._d_excl_scale,
              self._d_reverse_offset, self._d_reverse_neighbors, self._d_reverse_scale,
              np.int32(self.num_tiles), np.int32(N),
-             self.d_exclusion_masks, self.d_scaling_masks))
+              self.d_exclusion_masks, self.d_scaling_masks))
+
+    def _extract_exclusion_tiles(self):
+        if self.num_tiles == 0:
+            self.num_exclusion_tiles = 0
+            self.num_main_tiles = 0
+            self.d_excl_tiles = cp.empty(0, dtype=env.NUMPY_INT)
+            self.d_excl_interacting_atoms = cp.empty(0, dtype=env.NUMPY_INT)
+            self.d_excl_exclusion_masks = cp.empty(0, dtype=np.uint32)
+            self.d_excl_scaling_masks = cp.empty(0, dtype=np.uint32)
+            self.d_main_tiles = cp.empty(0, dtype=env.NUMPY_INT)
+            self.d_main_interacting_atoms = cp.empty(0, dtype=env.NUMPY_INT)
+            return
+
+        excl_np = cp.asnumpy(self.d_exclusion_masks).reshape(-1, 32)
+        scale_np = cp.asnumpy(self.d_scaling_masks).reshape(-1, 32)
+        has_interaction = np.any((excl_np != 0) | (scale_np != 0), axis=1)
+
+        excl_indices = np.where(has_interaction)[0].astype(np.int32)
+        main_indices = np.where(~has_interaction)[0].astype(np.int32)
+
+        self.num_exclusion_tiles = len(excl_indices)
+        self.num_main_tiles = len(main_indices)
+
+        tiles_np = cp.asnumpy(self.d_tiles)
+        int_atoms_np = cp.asnumpy(self.d_interacting_atoms).reshape(-1, 32)
+
+        if len(excl_indices) > 0:
+            self.d_excl_tiles = cp.asarray(tiles_np[excl_indices])
+            self.d_excl_interacting_atoms = cp.asarray(int_atoms_np[excl_indices].ravel().astype(np.int32))
+            self.d_excl_exclusion_masks = cp.asarray(excl_np[excl_indices].ravel().astype(np.uint32))
+            self.d_excl_scaling_masks = cp.asarray(scale_np[excl_indices].ravel().astype(np.uint32))
+        else:
+            self.d_excl_tiles = cp.empty(0, dtype=env.NUMPY_INT)
+            self.d_excl_interacting_atoms = cp.empty(0, dtype=env.NUMPY_INT)
+            self.d_excl_exclusion_masks = cp.empty(0, dtype=np.uint32)
+            self.d_excl_scaling_masks = cp.empty(0, dtype=np.uint32)
+
+        if len(main_indices) > 0:
+            self.d_main_tiles = cp.asarray(tiles_np[main_indices])
+            self.d_main_interacting_atoms = cp.asarray(int_atoms_np[main_indices].ravel().astype(np.int32))
+        else:
+            self.d_main_tiles = cp.empty(0, dtype=env.NUMPY_INT)
+            self.d_main_interacting_atoms = cp.empty(0, dtype=env.NUMPY_INT)
 
     def rebuild(self, positions, topology, pbc_matrix, pbc_inv):
         N = topology.num_particles
@@ -954,6 +997,7 @@ class TileList:
         positions_soa = self._rebuild_core(positions, topology, pbc_matrix, pbc_inv)
         self._find_interacting_blocks(positions_soa, pbc_matrix)
         self._build_masks_gpu(topology)
+        self._extract_exclusion_tiles()
 
         pos_x, pos_y, pos_z = positions_soa
         self.d_positions_at_rebuild_x = pos_x.copy()
@@ -1007,6 +1051,14 @@ class TileList:
         self.d_interacting_atoms = cp.empty(0, dtype=env.NUMPY_INT)
         self.d_exclusion_masks = cp.empty(0, dtype=np.uint32)
         self.d_scaling_masks = cp.empty(0, dtype=np.uint32)
+        self.num_exclusion_tiles = 0
+        self.num_main_tiles = 0
+        self.d_excl_tiles = cp.empty(0, dtype=env.NUMPY_INT)
+        self.d_excl_interacting_atoms = cp.empty(0, dtype=env.NUMPY_INT)
+        self.d_excl_exclusion_masks = cp.empty(0, dtype=np.uint32)
+        self.d_excl_scaling_masks = cp.empty(0, dtype=np.uint32)
+        self.d_main_tiles = cp.empty(0, dtype=env.NUMPY_INT)
+        self.d_main_interacting_atoms = cp.empty(0, dtype=env.NUMPY_INT)
         self.d_positions_at_rebuild_x = cp.empty(0, dtype=env.NUMPY_FLOAT)
         self.d_positions_at_rebuild_y = cp.empty(0, dtype=env.NUMPY_FLOAT)
         self.d_positions_at_rebuild_z = cp.empty(0, dtype=env.NUMPY_FLOAT)
