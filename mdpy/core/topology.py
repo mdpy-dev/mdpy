@@ -148,6 +148,19 @@ class Topology:
     def join(self):
         self._is_joined = True
 
+    def remap_bonded_indices(self, pdb_to_sorted):
+        for field in ('bond_indices', 'angle_indices', 'dihedral_indices', 'improper_indices'):
+            indices = getattr(self, field, None)
+            if indices is not None and len(indices) > 0:
+                setattr(self, field, pdb_to_sorted[indices])
+
+        self.exclusion_offset = None
+        self.exclusion_neighbors = None
+        self.exclusion_scale = None
+
+    def sorted_particle_types(self, pdb_to_sorted):
+        return self.particle_types[pdb_to_sorted]
+
     def split(self):
         self._is_joined = False
 
