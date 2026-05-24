@@ -143,7 +143,7 @@ class System:
                 self.tile_list.build_tiles(self.topology, self.pbc_matrix)
                 for term in self.force_terms:
                     if hasattr(term, 'bind_sorted'):
-                        term.bind_sorted(self.topology, self.tile_list)
+                        term.bind_sorted(self.topology, self.tile_list, self.gpu)
             self.compute_forces()
             if prof:
                 s = cp.cuda.Event()
@@ -173,7 +173,7 @@ class System:
             self.tile_list.build_tiles(self.topology, self.pbc_matrix)
             for term in self.force_terms:
                 if hasattr(term, 'bind_sorted'):
-                    term.bind_sorted(self.topology, self.tile_list)
+                    term.bind_sorted(self.topology, self.tile_list, self.gpu)
         self.compute_forces()
         for _ in range(number_steps):
             minimizer.step(self)

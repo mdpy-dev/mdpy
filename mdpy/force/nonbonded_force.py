@@ -1752,6 +1752,7 @@ class NonbondedForce(ForceTerm):
         self._exclusion_kernel_source = None
         self._d_parameter_arrays = {}
         self._parameter_arrays = {}
+        self._parameter_table = None
         self._cutoff = None
         self._cutoff_sq = None
         self._d_posq = None
@@ -1763,16 +1764,20 @@ class NonbondedForce(ForceTerm):
         self._cutoff = cutoff
         self._cutoff_sq = cutoff * cutoff
         self._num_sm = cp.cuda.runtime.getDeviceProperties(0)['multiProcessorCount']
-        particle_types = topology.particle_types
+        self._parameter_table = parameter_table
+        self._rebuild_param_arrays(topology.particle_types)
+        self._kernel_source = self.expression.assemble_main_tile_kernel()
+        self._exclusion_kernel_source = self.expression.assemble_tile_kernel()
 
+    def _rebuild_param_arrays(self, particle_types):
         _TABLE_PARAM_MAP = {
             'sigma_half': 'sigma',
             'sqrt_epsilon': 'epsilon',
         }
-
+        pt = self._parameter_table
         for param_name in self.expression.parameter_names:
             table_name = _TABLE_PARAM_MAP.get(param_name, param_name)
-            per_atom = parameter_table.expand_to_per_atom(table_name, particle_types)
+            per_atom = pt.expand_to_per_atom(table_name, particle_types)
             if param_name == 'sigma_half':
                 per_atom = 0.5 * per_atom
             elif param_name == 'sqrt_epsilon':
@@ -1781,9 +1786,9 @@ class NonbondedForce(ForceTerm):
 
             name_14 = param_name + '_14'
             table_name_14 = _TABLE_PARAM_MAP.get(param_name, param_name) + '_14'
-            has_14 = table_name_14 in parameter_table.per_type or table_name_14 in parameter_table.per_atom
+            has_14 = table_name_14 in pt.per_type or table_name_14 in pt.per_atom
             if has_14:
-                per_atom_14 = parameter_table.expand_to_per_atom(table_name_14, particle_types)
+                per_atom_14 = pt.expand_to_per_atom(table_name_14, particle_types)
                 if param_name == 'sigma_half':
                     per_atom_14 = 0.5 * per_atom_14
                 elif param_name == 'sqrt_epsilon':
@@ -1804,28 +1809,30 @@ class NonbondedForce(ForceTerm):
             se_14[1::2] = self._parameter_arrays['sqrt_epsilon_14']
             self._parameter_arrays['sigma_epsilon_14'] = se_14
 
-        self._kernel_source = self.expression.assemble_main_tile_kernel()
-        self._exclusion_kernel_source = self.expression.assemble_tile_kernel()
+    def _upload_param_arrays(self):
+        for name, arr in self._parameter_arrays.items():
+            self._d_parameter_arrays[name] = cp.asarray(arr)
 
     def _ensure_compiled(self):
         if self._kernel is not None:
             return
         self._kernel = cp.RawKernel(self._kernel_source, 'main_tile_kernel')
         self._exclusion_kernel = cp.RawKernel(self._exclusion_kernel_source.replace('void tile_kernel(', 'void exclusion_tile_kernel('), 'exclusion_tile_kernel')
-        for param_name in self._parameter_arrays:
-            self._d_parameter_arrays[param_name] = cp.asarray(
-                self._parameter_arrays[param_name]
-            )
+        self._upload_param_arrays()
         if self._use_posq():
             self._pack_posq_kernel = cp.RawKernel(_PACK_POSQ_KERNEL, 'pack_posq_kernel')
             N = self._parameter_arrays['charge'].shape[0]
             self._d_posq = cp.zeros(N * 4, dtype=np.float32)
+            self._gather_4comp_kernel = cp.RawKernel(
+                _GATHER_SORTED_KERNEL_4COMP, 'gather_sorted_kernel_4comp')
 
     def _use_posq(self):
         return 'charge' in self.expression.parameter_names
 
-    def bind_sorted_params(self, tile_list):
+    def bind_sorted(self, topology, tile_list, gpu_context):
         self._ensure_compiled()
+        self._rebuild_param_arrays(topology.particle_types)
+        self._upload_param_arrays()
         param_arrays = {}
         for arr in _unique_gpu_arrays(self.expression.parameter_names):
             if self._use_posq() and arr == 'charge':
@@ -1835,8 +1842,20 @@ class NonbondedForce(ForceTerm):
                 param_arrays[arr + '_14'] = self._d_parameter_arrays[arr + '_14']
         tile_list.gather_sorted_params(param_arrays)
         if self._use_posq():
+            N = gpu_context.number_particles
+            tpb = 256
+            grid = ((N + tpb - 1) // tpb,)
+            self._pack_posq_kernel(grid, (tpb,),
+                (gpu_context.d_positions_x, gpu_context.d_positions_y,
+                 gpu_context.d_positions_z,
+                 self._d_parameter_arrays['charge'], self._d_posq,
+                 np.int32(N)))
             total_slots = tile_list.num_blocks * 32
-            self._d_sorted_posq = cp.empty(total_slots * 4, dtype=np.float32)
+            grid_gather = ((total_slots + tpb - 1) // tpb,)
+            self._gather_4comp_kernel(grid_gather, (tpb,),
+                (self._d_posq, tile_list.d_block_atoms,
+                 np.int32(total_slots), np.int32(N),
+                 self._d_sorted_posq))
 
     def _param_args(self):
         args = []
@@ -1890,25 +1909,6 @@ class NonbondedForce(ForceTerm):
         grid_size = 4 * num_sm
 
         if self._use_posq():
-            N = gpu_context.number_particles
-            tpb = 256
-            grid = ((N + tpb - 1) // tpb,)
-            self._pack_posq_kernel(grid, (tpb,),
-                (gpu_context.d_positions_x, gpu_context.d_positions_y,
-                 gpu_context.d_positions_z,
-                 self._d_parameter_arrays['charge'], self._d_posq,
-                 np.int32(N)))
-
-            total_slots = tile_list.num_blocks * 32
-            grid_gather = ((total_slots + tpb - 1) // tpb,)
-            if self._gather_4comp_kernel is None:
-                self._gather_4comp_kernel = cp.RawKernel(
-                    _GATHER_SORTED_KERNEL_4COMP, 'gather_sorted_kernel_4comp')
-            self._gather_4comp_kernel(grid_gather, (tpb,),
-                (self._d_posq, tile_list.d_block_atoms,
-                 np.int32(total_slots), np.int32(N),
-                 self._d_sorted_posq))
-
             num_main = getattr(tile_list, 'num_main_tiles', 0)
             if num_main > 0:
                 main_args = [
