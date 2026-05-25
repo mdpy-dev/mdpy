@@ -643,6 +643,52 @@ void build_masks_kernel(
 }
 '''
 
+_CLASSIFY_TILES_KERNEL = r"""
+extern "C" __global__
+void classify_tiles_kernel(
+    const unsigned int* __restrict__ excl_masks,
+    const unsigned int* __restrict__ scale_masks,
+    const int* __restrict__ tiles,
+    const int* __restrict__ interacting_atoms,
+    int num_tiles,
+    int* __restrict__ excl_counter,
+    int* __restrict__ main_counter,
+    int* __restrict__ excl_tiles_out,
+    int* __restrict__ excl_int_atoms_out,
+    unsigned int* __restrict__ excl_masks_out,
+    unsigned int* __restrict__ excl_scale_out,
+    int* __restrict__ main_tiles_out,
+    int* __restrict__ main_int_atoms_out
+) {
+    int tile = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tile >= num_tiles) return;
+
+    bool has_mask = false;
+    for (int i = 0; i < 32; i++) {
+        if (excl_masks[tile * 32 + i] != 0 || scale_masks[tile * 32 + i] != 0) {
+            has_mask = true;
+            break;
+        }
+    }
+
+    if (has_mask) {
+        int idx = atomicAdd(excl_counter, 1);
+        excl_tiles_out[idx] = tiles[tile];
+        for (int i = 0; i < 32; i++) {
+            excl_int_atoms_out[idx * 32 + i] = interacting_atoms[tile * 32 + i];
+            excl_masks_out[idx * 32 + i] = excl_masks[tile * 32 + i];
+            excl_scale_out[idx * 32 + i] = scale_masks[tile * 32 + i];
+        }
+    } else {
+        int idx = atomicAdd(main_counter, 1);
+        main_tiles_out[idx] = tiles[tile];
+        for (int i = 0; i < 32; i++) {
+            main_int_atoms_out[idx * 32 + i] = interacting_atoms[tile * 32 + i];
+        }
+    }
+}
+"""
+
 
 def _compile_gpu_kernels():
     return {
@@ -664,6 +710,7 @@ def _compile_gpu_kernels():
         'permute_int': cp.RawKernel(_PERMUTE_INT_ARRAY_KERNEL, 'permute_int_array_kernel'),
         'permute_2comp': cp.RawKernel(_PERMUTE_ARRAY_2COMP_KERNEL, 'permute_array_2comp_kernel'),
         'inverse_permute': cp.RawKernel(_INVERSE_PERMUTE_KERNEL, 'inverse_permute_kernel'),
+        'classify_tiles': cp.RawKernel(_CLASSIFY_TILES_KERNEL, 'classify_tiles_kernel'),
     }
 
 
@@ -725,6 +772,15 @@ class TileList:
         self._interacting_atoms_np = None
         self._exclusion_masks_np = None
         self._scaling_masks_np = None
+
+        self._d_classify_excl_counter = cp.zeros(1, dtype=env.NUMPY_INT)
+        self._d_classify_main_counter = cp.zeros(1, dtype=env.NUMPY_INT)
+        self._d_classify_excl_tiles = cp.empty(0, dtype=env.NUMPY_INT)
+        self._d_classify_excl_int_atoms = cp.empty(0, dtype=env.NUMPY_INT)
+        self._d_classify_excl_masks = cp.empty(0, dtype=np.uint32)
+        self._d_classify_excl_scale = cp.empty(0, dtype=np.uint32)
+        self._d_classify_main_tiles = cp.empty(0, dtype=env.NUMPY_INT)
+        self._d_classify_main_int_atoms = cp.empty(0, dtype=env.NUMPY_INT)
 
         self._kernels = None
 
@@ -1066,33 +1122,51 @@ class TileList:
             self.d_main_interacting_atoms = cp.empty(0, dtype=env.NUMPY_INT)
             return
 
-        excl_np = cp.asnumpy(self.d_exclusion_masks).reshape(-1, 32)
-        scale_np = cp.asnumpy(self.d_scaling_masks).reshape(-1, 32)
-        has_interaction = np.any((excl_np != 0) | (scale_np != 0), axis=1)
+        nt = self.num_tiles
+        max_tiles = nt
 
-        excl_indices = np.where(has_interaction)[0].astype(np.int32)
-        main_indices = np.where(~has_interaction)[0].astype(np.int32)
+        if self._d_classify_excl_tiles.size < max_tiles:
+            self._d_classify_excl_tiles = cp.empty(max_tiles, dtype=env.NUMPY_INT)
+            self._d_classify_excl_int_atoms = cp.empty(max_tiles * W, dtype=env.NUMPY_INT)
+            self._d_classify_excl_masks = cp.empty(max_tiles * W, dtype=np.uint32)
+            self._d_classify_excl_scale = cp.empty(max_tiles * W, dtype=np.uint32)
+            self._d_classify_main_tiles = cp.empty(max_tiles, dtype=env.NUMPY_INT)
+            self._d_classify_main_int_atoms = cp.empty(max_tiles * W, dtype=env.NUMPY_INT)
 
-        self.num_exclusion_tiles = len(excl_indices)
-        self.num_main_tiles = len(main_indices)
+        self._d_classify_excl_counter[0] = 0
+        self._d_classify_main_counter[0] = 0
 
-        tiles_np = cp.asnumpy(self.d_tiles)
-        int_atoms_np = cp.asnumpy(self.d_interacting_atoms).reshape(-1, 32)
+        tpb = 256
+        grid = ((nt + tpb - 1) // tpb,)
+        self._kernels['classify_tiles'](grid, (tpb,),
+            (self.d_exclusion_masks, self.d_scaling_masks,
+             self.d_tiles, self.d_interacting_atoms,
+             np.int32(nt),
+             self._d_classify_excl_counter, self._d_classify_main_counter,
+             self._d_classify_excl_tiles, self._d_classify_excl_int_atoms,
+             self._d_classify_excl_masks, self._d_classify_excl_scale,
+             self._d_classify_main_tiles, self._d_classify_main_int_atoms))
 
-        if len(excl_indices) > 0:
-            self.d_excl_tiles = cp.asarray(tiles_np[excl_indices])
-            self.d_excl_interacting_atoms = cp.asarray(int_atoms_np[excl_indices].ravel().astype(np.int32))
-            self.d_excl_exclusion_masks = cp.asarray(excl_np[excl_indices].ravel().astype(np.uint32))
-            self.d_excl_scaling_masks = cp.asarray(scale_np[excl_indices].ravel().astype(np.uint32))
+        self.num_exclusion_tiles = int(self._d_classify_excl_counter[0])
+        self.num_main_tiles = int(self._d_classify_main_counter[0])
+
+        ne = self.num_exclusion_tiles
+        nm = self.num_main_tiles
+
+        if ne > 0:
+            self.d_excl_tiles = self._d_classify_excl_tiles[:ne].copy()
+            self.d_excl_interacting_atoms = self._d_classify_excl_int_atoms[:ne * W].copy()
+            self.d_excl_exclusion_masks = self._d_classify_excl_masks[:ne * W].copy()
+            self.d_excl_scaling_masks = self._d_classify_excl_scale[:ne * W].copy()
         else:
             self.d_excl_tiles = cp.empty(0, dtype=env.NUMPY_INT)
             self.d_excl_interacting_atoms = cp.empty(0, dtype=env.NUMPY_INT)
             self.d_excl_exclusion_masks = cp.empty(0, dtype=np.uint32)
             self.d_excl_scaling_masks = cp.empty(0, dtype=np.uint32)
 
-        if len(main_indices) > 0:
-            self.d_main_tiles = cp.asarray(tiles_np[main_indices])
-            self.d_main_interacting_atoms = cp.asarray(int_atoms_np[main_indices].ravel().astype(np.int32))
+        if nm > 0:
+            self.d_main_tiles = self._d_classify_main_tiles[:nm].copy()
+            self.d_main_interacting_atoms = self._d_classify_main_int_atoms[:nm * W].copy()
         else:
             self.d_main_tiles = cp.empty(0, dtype=env.NUMPY_INT)
             self.d_main_interacting_atoms = cp.empty(0, dtype=env.NUMPY_INT)
