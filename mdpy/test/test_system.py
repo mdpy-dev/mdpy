@@ -687,3 +687,103 @@ class TestLazyEnergy:
         assert 'bonded' in energy_1
         assert 'bonded' in energy_2
         assert energy_1['bonded'] != energy_2['bonded']
+
+
+class TestAsyncRebuild:
+
+    def test_async_rebuild_deterministic_trajectory(self):
+        topology, term_params = _build_four_particle()
+        parameter_table = _make_parameter_table(term_params)
+        pbc_matrix = _make_large_pbc()
+        system_a = System(topology, pbc_matrix, cutoff=12.0, skin=1.0)
+        bonded = BondedForce.charmm(topology, parameter_table)
+        system_a.add_force_term(bonded)
+        system_a.particles.positions[:] = np.array([
+            [0.0, 0.0, 0.0],
+            [1.5, 0.0, 0.0],
+            [3.0, 0.0, 0.0],
+            [4.5, 0.0, 0.0],
+        ], dtype=env.NUMPY_FLOAT)
+        system_a.particles.velocities[:] = 0.0
+
+        system_b = System(topology, pbc_matrix, cutoff=12.0, skin=1.0)
+        bonded_b = BondedForce.charmm(topology, parameter_table)
+        system_b.add_force_term(bonded_b)
+        system_b.particles.positions[:] = np.array([
+            [0.0, 0.0, 0.0],
+            [1.5, 0.0, 0.0],
+            [3.0, 0.0, 0.0],
+            [4.5, 0.0, 0.0],
+        ], dtype=env.NUMPY_FLOAT)
+        system_b.particles.velocities[:] = 0.0
+
+        integrator_a = VerletIntegrator(time_step=0.1)
+        integrator_b = VerletIntegrator(time_step=0.1)
+
+        for _ in range(50):
+            system_a.step(integrator_a, number_steps=1)
+        pos_a, vel_a = system_a.dump_state()
+
+        for _ in range(50):
+            system_b.step(integrator_b, number_steps=1)
+        pos_b, vel_b = system_b.dump_state()
+
+        np.testing.assert_allclose(pos_a, pos_b, atol=1e-5,
+            err_msg="Two identical async simulations produce different trajectories")
+
+    def test_async_rebuild_with_multi_step_call(self):
+        topology, term_params = _build_four_particle()
+        parameter_table = _make_parameter_table(term_params)
+        pbc_matrix = _make_large_pbc()
+        system = System(topology, pbc_matrix, cutoff=12.0, skin=1.0)
+        bonded = BondedForce.charmm(topology, parameter_table)
+        system.add_force_term(bonded)
+        system.particles.positions[:] = np.array([
+            [0.0, 0.0, 0.0],
+            [1.5, 0.0, 0.0],
+            [3.0, 0.0, 0.0],
+            [4.5, 0.0, 0.0],
+        ], dtype=env.NUMPY_FLOAT)
+        system.particles.velocities[:] = 0.0
+
+        integrator = VerletIntegrator(time_step=0.1)
+        system.step(integrator, number_steps=100)
+        pos, vel = system.dump_state()
+        assert np.all(np.isfinite(pos))
+        assert np.all(np.isfinite(vel))
+        assert system.step_count == 100
+
+    def test_async_rebuild_preserves_permutation_invariant(self):
+        n = 100
+        builder = Builder()
+        builder.set_particles(
+            masses=np.full(n, 12.0, dtype=env.NUMPY_FLOAT),
+            charges=np.zeros(n, dtype=env.NUMPY_FLOAT),
+            particle_types=np.zeros(n, dtype=env.NUMPY_INT),
+        )
+        for i in range(n - 1):
+            builder.add_bond(i, i + 1, k=300.0, r0=1.5)
+        builder.build_exclusion_map()
+        topology, term_params = builder.build()
+        parameter_table = _make_parameter_table(term_params)
+        pbc_matrix = np.eye(3, dtype=env.NUMPY_FLOAT) * 80.0
+        system = System(topology, pbc_matrix, cutoff=10.0, skin=1.0)
+        bonded = BondedForce.charmm(topology, parameter_table)
+        system.add_force_term(bonded)
+
+        rng = np.random.RandomState(42)
+        system.particles.positions[:] = rng.uniform(10, 70, (n, 3)).astype(env.NUMPY_FLOAT)
+        system.particles.velocities[:] = rng.randn(n, 3).astype(env.NUMPY_FLOAT) * 0.001
+
+        integrator = VerletIntegrator(time_step=0.5)
+        system.step(integrator, number_steps=200)
+        pos, vel = system.dump_state()
+
+        assert np.all(np.isfinite(pos))
+        assert np.all(np.isfinite(vel))
+
+        p2s = system._pdb_to_current_sorted
+        s2p = system._sorted_to_pdb_np()
+        identity = np.arange(n, dtype=env.NUMPY_INT)
+        np.testing.assert_array_equal(s2p[p2s], identity,
+            err_msg="permutation invariant broken with async rebuild")

@@ -12,7 +12,7 @@ from mdpy.core.gpu_context import GPUContext
 
 class System:
 
-    def __init__(self, topology, pbc_matrix, cutoff=12.0, skin=1.0):
+    def __init__(self, topology, pbc_matrix, cutoff=12.0, skin=1.0, rebuild_check_interval=10):
         self.topology = topology
         self.particles = ParticleTable(topology.num_particles)
         self.pbc_matrix = np.ascontiguousarray(pbc_matrix, dtype=env.NUMPY_FLOAT)
@@ -22,7 +22,7 @@ class System:
         self.gpu = GPUContext()
         self.gpu.initialize(topology, self.pbc_matrix.flatten())
 
-        self.tile_list = TileList(cutoff, skin=skin)
+        self.tile_list = TileList(cutoff, skin=skin, rebuild_check_interval=rebuild_check_interval)
         self.force_terms = []
 
         self._step_count = 0
@@ -36,6 +36,7 @@ class System:
         self._d_cached_unique_i = None
         self._d_cached_unique_j = None
         self._d_cached_unique_scale = None
+        self._steps_since_check = 0
 
 
     def add_force_term(self, term):
@@ -189,21 +190,8 @@ class System:
         prof = self._profiling_enabled
         for _ in range(number_steps):
             positions_soa = self.gpu.get_positions_2d()
-            if self.tile_list.check_rebuild(positions_soa):
-                pdb_to_sorted_gpu, pdb_to_sorted_np = self.tile_list.rebuild(
-                    positions_soa, self.topology,
-                    self.pbc_matrix, self.pbc_inv,
-                )
-                self._permute_all_arrays(pdb_to_sorted_gpu, pdb_to_sorted_np)
-                self.tile_list.build_tiles(self.topology, self.pbc_matrix)
-                for term in self.force_terms:
-                    if hasattr(term, 'bind_sorted'):
-                        s2p = self._sorted_to_pdb_np()
-                        term.bind_sorted(
-                            self.topology, self.tile_list, self.gpu,
-                            sorted_to_pdb_np=s2p,
-                            sorted_particle_types=self._particle_types_pdb[s2p],
-                        )
+            if self.tile_list.check_rebuild_async(positions_soa):
+                self._do_full_rebuild(positions_soa)
             self.compute_forces()
             if prof:
                 s = cp.cuda.Event()
@@ -214,6 +202,27 @@ class System:
                 e.record()
                 self._profile_data['integrator'].append((s, e))
             self._step_count += 1
+            self._steps_since_check += 1
+            if self._steps_since_check >= self.tile_list.rebuild_check_interval:
+                if int(self.tile_list.d_rebuild_flag[0]) == 1:
+                    self._do_full_rebuild(self.gpu.get_positions_2d())
+                self._steps_since_check = 0
+
+    def _do_full_rebuild(self, positions_soa):
+        pdb_to_sorted_gpu, pdb_to_sorted_np = self.tile_list.rebuild(
+            positions_soa, self.topology,
+            self.pbc_matrix, self.pbc_inv,
+        )
+        self._permute_all_arrays(pdb_to_sorted_gpu, pdb_to_sorted_np)
+        self.tile_list.build_tiles(self.topology, self.pbc_matrix)
+        for term in self.force_terms:
+            if hasattr(term, 'bind_sorted'):
+                s2p = self._sorted_to_pdb_np()
+                term.bind_sorted(
+                    self.topology, self.tile_list, self.gpu,
+                    sorted_to_pdb_np=s2p,
+                    sorted_particle_types=self._particle_types_pdb[s2p],
+                )
 
     def minimize(self, minimizer, number_steps=100):
         if not self._positions_uploaded:
