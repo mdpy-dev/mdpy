@@ -1,102 +1,131 @@
 from __future__ import annotations
 
-import math
-
 import numpy as np
-from numba import cuda, uint64
-
-from mdpy.core.gpu_kernels import minimum_image
-
+import cupy as cp
 
 _BOLTZMANN = 8.314462618e-7
 
-_LCG_MULT = np.uint64(6364136223846793005)
-_LCG_ADD = np.uint64(1442695040888963407)
-_LCG_SEED_STRIDE = np.uint64(12345)
-_LCG_SHIFT = np.uint64(33)
-_LCG_MASK = np.uint64(0x7FFFFFFF)
-_LCG_DIVISOR = 1073741824.0
+_LANGEVIN_INIT_KERNEL = r"""
+extern "C" __global__
+void langevin_init_kernel(
+    const float* __restrict__ pos_x,
+    const float* __restrict__ pos_y,
+    const float* __restrict__ pos_z,
+    const float* __restrict__ vel_x,
+    const float* __restrict__ vel_y,
+    const float* __restrict__ vel_z,
+    const float* __restrict__ f_x,
+    const float* __restrict__ f_y,
+    const float* __restrict__ f_z,
+    const float* __restrict__ masses,
+    float* __restrict__ prev_pos_x,
+    float* __restrict__ prev_pos_y,
+    float* __restrict__ prev_pos_z,
+    float dt, float dt_sq, int number_particles
+) {
+    int index = blockIdx.x * blockDim.x + threadIdx.x;
+    if (index >= number_particles) return;
+    float mass = masses[index];
+    if (mass <= 0.0f) return;
+    float inv_mass = 1.0f / mass;
+    float half_inv = 0.5f * inv_mass * dt_sq;
+    prev_pos_x[index] = pos_x[index] - vel_x[index]*dt + f_x[index]*half_inv;
+    prev_pos_y[index] = pos_y[index] - vel_y[index]*dt + f_y[index]*half_inv;
+    prev_pos_z[index] = pos_z[index] - vel_z[index]*dt + f_z[index]*half_inv;
+}
+"""
 
+_LANGEVIN_BAOAB_KERNEL = r"""
+extern "C" __global__
+void langevin_baoab_kernel(
+    float* __restrict__ pos_x,
+    float* __restrict__ pos_y,
+    float* __restrict__ pos_z,
+    float* __restrict__ prev_pos_x,
+    float* __restrict__ prev_pos_y,
+    float* __restrict__ prev_pos_z,
+    const float* __restrict__ f_x,
+    const float* __restrict__ f_y,
+    const float* __restrict__ f_z,
+    const float* __restrict__ masses,
+    const float* __restrict__ pbc_matrix,
+    const float* __restrict__ pbc_inv,
+    float dt, float dt_half, float alpha, float temperature, float boltzmann,
+    unsigned long long seed, int number_particles
+) {
+    int index = blockIdx.x * blockDim.x + threadIdx.x;
+    if (index >= number_particles) return;
+    float mass = masses[index];
+    if (mass <= 0.0f) return;
 
-@cuda.jit
-def langevin_init_kernel(pos_x, pos_y, pos_z,
-                         vel_x, vel_y, vel_z,
-                         f_x, f_y, f_z,
-                         masses,
-                         prev_pos_x, prev_pos_y, prev_pos_z,
-                         dt, dt_sq, number_particles):
-    index = cuda.grid(1)
-    if index >= number_particles:
-        return
-    if masses[index] <= 0.0:
-        return
-    inv_mass = 1.0 / masses[index]
-    prev_pos_x[index] = pos_x[index] - vel_x[index] * dt + 0.5 * f_x[index] * inv_mass * dt_sq
-    prev_pos_y[index] = pos_y[index] - vel_y[index] * dt + 0.5 * f_y[index] * inv_mass * dt_sq
-    prev_pos_z[index] = pos_z[index] - vel_z[index] * dt + 0.5 * f_z[index] * inv_mass * dt_sq
+    unsigned long long state = seed + (unsigned long long)index * 12345ULL;
+    state = state * 6364136223846793005ULL + 1442695040888963407ULL;
+    float rand1 = (float)((state >> 33) & 0x7FFFFFFFULL) / 1073741824.0f - 1.0f;
+    state = state * 6364136223846793005ULL + 1442695040888963407ULL;
+    float rand2 = (float)((state >> 33) & 0x7FFFFFFFULL) / 1073741824.0f - 1.0f;
+    state = state * 6364136223846793005ULL + 1442695040888963407ULL;
+    float rand3 = (float)((state >> 33) & 0x7FFFFFFFULL) / 1073741824.0f - 1.0f;
+    state = state * 6364136223846793005ULL + 1442695040888963407ULL;
+    float rand4 = (float)((state >> 33) & 0x7FFFFFFFULL) / 1073741824.0f - 1.0f;
+    state = state * 6364136223846793005ULL + 1442695040888963407ULL;
+    float rand5 = (float)((state >> 33) & 0x7FFFFFFFULL) / 1073741824.0f - 1.0f;
+    state = state * 6364136223846793005ULL + 1442695040888963407ULL;
+    float rand6 = (float)((state >> 33) & 0x7FFFFFFFULL) / 1073741824.0f - 1.0f;
 
+    float inv_mass = 1.0f / mass;
+    float sigma = sqrtf(boltzmann * temperature * inv_mass * (1.0f - alpha * alpha));
 
-@cuda.jit
-def langevin_baoab_kernel(pos_x, pos_y, pos_z,
-                          prev_pos_x, prev_pos_y, prev_pos_z,
-                          f_x, f_y, f_z,
-                          masses,
-                          pbc_matrix, pbc_inv,
-                          dt, dt_half, alpha, temperature, boltzmann,
-                          seed, number_particles):
-    index = cuda.grid(1)
-    if index >= number_particles:
-        return
-    if masses[index] <= 0.0:
-        return
+    float r1 = sqrtf(-2.0f * logf(max(1.0f - fabsf(rand1), 1e-30f)));
+    float theta1 = 2.0f * 3.14159265358979323846f * rand2;
+    float g1 = r1 * cosf(theta1);
+    float r2 = sqrtf(-2.0f * logf(max(1.0f - fabsf(rand3), 1e-30f)));
+    float theta2 = 2.0f * 3.14159265358979323846f * rand4;
+    float g3 = r2 * cosf(theta2);
+    float r3 = sqrtf(-2.0f * logf(max(1.0f - fabsf(rand5), 1e-30f)));
+    float theta3 = 2.0f * 3.14159265358979323846f * rand6;
+    float g5 = r3 * cosf(theta3);
 
-    state = seed + uint64(index) * _LCG_SEED_STRIDE
-    state = state * _LCG_MULT + _LCG_ADD
-    rand1 = float((state >> _LCG_SHIFT) & _LCG_MASK) / _LCG_DIVISOR - 1.0
-    state = state * _LCG_MULT + _LCG_ADD
-    rand2 = float((state >> _LCG_SHIFT) & _LCG_MASK) / _LCG_DIVISOR - 1.0
-    state = state * _LCG_MULT + _LCG_ADD
-    rand3 = float((state >> _LCG_SHIFT) & _LCG_MASK) / _LCG_DIVISOR - 1.0
-    state = state * _LCG_MULT + _LCG_ADD
-    rand4 = float((state >> _LCG_SHIFT) & _LCG_MASK) / _LCG_DIVISOR - 1.0
-    state = state * _LCG_MULT + _LCG_ADD
-    rand5 = float((state >> _LCG_SHIFT) & _LCG_MASK) / _LCG_DIVISOR - 1.0
-    state = state * _LCG_MULT + _LCG_ADD
-    rand6 = float((state >> _LCG_SHIFT) & _LCG_MASK) / _LCG_DIVISOR - 1.0
+    float vx = (pos_x[index] - prev_pos_x[index]) / dt;
+    float vy = (pos_y[index] - prev_pos_y[index]) / dt;
+    float vz = (pos_z[index] - prev_pos_z[index]) / dt;
 
-    inv_mass = 1.0 / masses[index]
-    sigma = math.sqrt(boltzmann * temperature * inv_mass * (1.0 - alpha * alpha))
+    vx += 0.5f * dt * f_x[index] * inv_mass;
+    vy += 0.5f * dt * f_y[index] * inv_mass;
+    vz += 0.5f * dt * f_z[index] * inv_mass;
 
-    velocity_x = (pos_x[index] - prev_pos_x[index]) / dt
-    velocity_y = (pos_y[index] - prev_pos_y[index]) / dt
-    velocity_z = (pos_z[index] - prev_pos_z[index]) / dt
+    float px = pos_x[index] + 0.5f * dt * vx;
+    float py = pos_y[index] + 0.5f * dt * vy;
+    float pz = pos_z[index] + 0.5f * dt * vz;
 
-    velocity_x += 0.5 * dt * f_x[index] * inv_mass
-    velocity_y += 0.5 * dt * f_y[index] * inv_mass
-    velocity_z += 0.5 * dt * f_z[index] * inv_mass
+    vx = alpha * vx + sigma * g1;
+    vy = alpha * vy + sigma * g3;
+    vz = alpha * vz + sigma * g5;
 
-    position_x = pos_x[index] + 0.5 * dt * velocity_x
-    position_y = pos_y[index] + 0.5 * dt * velocity_y
-    position_z = pos_z[index] + 0.5 * dt * velocity_z
+    px += 0.5f * dt * vx;
+    py += 0.5f * dt * vy;
+    pz += 0.5f * dt * vz;
 
-    velocity_x = alpha * velocity_x + sigma * rand1
-    velocity_y = alpha * velocity_y + sigma * rand2
-    velocity_z = alpha * velocity_z + sigma * rand3
+    float fx = px * pbc_inv[0] + py * pbc_inv[3] + pz * pbc_inv[6];
+    float fy = px * pbc_inv[1] + py * pbc_inv[4] + pz * pbc_inv[7];
+    float fz = px * pbc_inv[2] + py * pbc_inv[5] + pz * pbc_inv[8];
+    fx -= roundf(fx); fy -= roundf(fy); fz -= roundf(fz);
+    float nx = fx * pbc_matrix[0] + fy * pbc_matrix[3] + fz * pbc_matrix[6];
+    float ny = fx * pbc_matrix[1] + fy * pbc_matrix[4] + fz * pbc_matrix[7];
+    float nz = fx * pbc_matrix[2] + fy * pbc_matrix[5] + fz * pbc_matrix[8];
 
-    position_x += 0.5 * dt * velocity_x
-    position_y += 0.5 * dt * velocity_y
-    position_z += 0.5 * dt * velocity_z
+    prev_pos_x[index] = pos_x[index];
+    prev_pos_y[index] = pos_y[index];
+    prev_pos_z[index] = pos_z[index];
+    pos_x[index] = nx;
+    pos_y[index] = ny;
+    pos_z[index] = nz;
+}
+"""
 
-    position_x, position_y, position_z = minimum_image(
-        position_x, position_y, position_z, pbc_matrix, pbc_inv
-    )
-
-    prev_pos_x[index] = pos_x[index]
-    prev_pos_y[index] = pos_y[index]
-    prev_pos_z[index] = pos_z[index]
-    pos_x[index] = position_x
-    pos_y[index] = position_y
-    pos_z[index] = position_z
+_kernels = {
+    'init': cp.RawKernel(_LANGEVIN_INIT_KERNEL, 'langevin_init_kernel'),
+    'step': cp.RawKernel(_LANGEVIN_BAOAB_KERNEL, 'langevin_baoab_kernel'),
+}
 
 
 class LangevinBAOABIntegrator:
@@ -110,13 +139,13 @@ class LangevinBAOABIntegrator:
         self._initialized = False
         self._step_counter = 0
 
-    def step(self, gpu_context):
+    def step(self, gpu_context, stream=None):
         number = gpu_context.number_particles
         block = 256
         grid = (number + block - 1) // block
 
         if not self._initialized:
-            langevin_init_kernel[grid, block](
+            _kernels['init']((grid,), (block,), (
                 gpu_context.d_positions_x, gpu_context.d_positions_y, gpu_context.d_positions_z,
                 gpu_context.d_velocities_x, gpu_context.d_velocities_y, gpu_context.d_velocities_z,
                 gpu_context.d_forces_x, gpu_context.d_forces_y, gpu_context.d_forces_z,
@@ -124,13 +153,13 @@ class LangevinBAOABIntegrator:
                 gpu_context.d_prev_positions_x, gpu_context.d_prev_positions_y, gpu_context.d_prev_positions_z,
                 np.float32(self.dt),
                 np.float32(self.dt * self.dt),
-                number,
-            )
+                np.int32(number),
+            ))
             self._initialized = True
 
         self._step_counter += 1
 
-        langevin_baoab_kernel[grid, block](
+        _kernels['step']((grid,), (block,), (
             gpu_context.d_positions_x, gpu_context.d_positions_y, gpu_context.d_positions_z,
             gpu_context.d_prev_positions_x, gpu_context.d_prev_positions_y, gpu_context.d_prev_positions_z,
             gpu_context.d_forces_x, gpu_context.d_forces_y, gpu_context.d_forces_z,
@@ -143,5 +172,5 @@ class LangevinBAOABIntegrator:
             np.float32(self.temperature),
             np.float32(_BOLTZMANN),
             np.uint64(self._step_counter) * np.uint64(1000003),
-            number,
-        )
+            np.int32(number),
+        ), stream=stream)
