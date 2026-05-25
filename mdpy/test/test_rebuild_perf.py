@@ -177,6 +177,89 @@ def test_parallel_csr_matches_sequential():
     np.testing.assert_array_equal(parallel_offset, cpu_offset)
 
 
+def test_parallel_dedup_matches_sequential():
+    system, integrator = _make_system_6po6()
+    topology = system.topology
+
+    from mdpy.core.topology import _get_gpu_kernels
+    import cupy as cp
+
+    topology.build_exclusion_map(scale_14=1.0)
+    cpu_neighbors = topology.exclusion_neighbors.copy()
+    cpu_scale = topology.exclusion_scale.copy()
+
+    total_pairs = topology.num_bonds + topology.num_angles + topology.num_dihedrals + topology.num_impropers
+
+    kernels = _get_gpu_kernels()
+    d_bond_idx = cp.asarray(topology.bond_indices.ravel().astype(np.int32))
+    d_angle_idx = cp.asarray(topology.angle_indices.ravel().astype(np.int32))
+    d_dihedral_idx = cp.asarray(topology.dihedral_indices.ravel().astype(np.int32))
+    d_improper_idx = cp.asarray(topology.improper_indices.ravel().astype(np.int32))
+
+    d_pair_i = cp.empty(total_pairs, dtype=cp.int32)
+    d_pair_j = cp.empty(total_pairs, dtype=cp.int32)
+    d_pair_scale = cp.empty(total_pairs, dtype=cp.float32)
+
+    block = 256
+    grid = (total_pairs + block - 1) // block
+    kernels['generate'](
+        (grid,), (block,),
+        (d_bond_idx, np.int32(topology.num_bonds),
+         d_angle_idx, np.int32(topology.num_angles),
+         d_dihedral_idx, np.int32(topology.num_dihedrals),
+         d_improper_idx, np.int32(topology.num_impropers),
+         np.float32(1.0),
+         d_pair_i, d_pair_j, d_pair_scale,
+         np.int32(total_pairs)))
+
+    max_j = int(cp.max(d_pair_j)) + 1
+    sort_key = (d_pair_i.astype(cp.int64) * np.int64(max_j * 2 + 2)
+                + d_pair_j.astype(cp.int64) * np.int64(2)
+                + (d_pair_scale > 0.0).astype(cp.int64))
+    order = cp.argsort(sort_key)
+    d_sorted_i = d_pair_i[order]
+    d_sorted_j = d_pair_j[order]
+    d_sorted_scale = d_pair_scale[order]
+
+    d_seq_i = cp.empty(total_pairs, dtype=cp.int32)
+    d_seq_j = cp.empty(total_pairs, dtype=cp.int32)
+    d_seq_scale = cp.empty(total_pairs, dtype=cp.float32)
+    d_seq_count = cp.empty(1, dtype=cp.int32)
+    kernels['dedup'](
+        (1,), (1,),
+        (d_sorted_i, d_sorted_j, d_sorted_scale,
+         d_seq_i, d_seq_j, d_seq_scale,
+         d_seq_count,
+         np.int32(total_pairs)))
+    seq_count = int(d_seq_count[0])
+    seq_neighbors = cp.asnumpy(d_seq_j[:seq_count])
+    seq_scale = cp.asnumpy(d_seq_scale[:seq_count])
+
+    d_flags = cp.zeros(total_pairs, dtype=cp.int32)
+    tpb = 256
+    grid_d = ((total_pairs + tpb - 1) // tpb,)
+    kernels['parallel_dedup'](grid_d, (tpb,),
+        (d_sorted_i, d_sorted_j, d_sorted_scale,
+         np.int32(total_pairs), d_flags))
+
+    scatter_idx = cp.cumsum(d_flags) - 1
+    unique_count = int(scatter_idx[total_pairs - 1]) + 1
+    assert unique_count == seq_count
+
+    d_par_j = cp.full(unique_count, -1, dtype=cp.int32)
+    d_par_scale = cp.zeros(unique_count, dtype=cp.float32)
+    d_par_j[scatter_idx] = d_sorted_j
+    d_par_scale[scatter_idx] = d_sorted_scale
+
+    par_neighbors = cp.asnumpy(d_par_j[:unique_count])
+    par_scale = cp.asnumpy(d_par_scale[:unique_count])
+
+    np.testing.assert_array_equal(par_neighbors, seq_neighbors)
+    np.testing.assert_allclose(par_scale, seq_scale, atol=1e-7)
+    np.testing.assert_array_equal(par_neighbors, cpu_neighbors)
+    np.testing.assert_allclose(par_scale, cpu_scale, atol=1e-7)
+
+
 @pytest.mark.slow
 def test_rebuild_1m9z_correctness():
     ff = CharmmForcefield(

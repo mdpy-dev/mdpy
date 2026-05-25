@@ -387,6 +387,25 @@ void fill_csr_gaps_kernel(
 }
 '''
 
+_PARALLEL_DEDUP_KERNEL = r'''
+extern "C" __global__
+void parallel_dedup_kernel(
+    const int* __restrict__ sorted_i,
+    const int* __restrict__ sorted_j,
+    const float* __restrict__ sorted_scale,
+    const int total_pairs,
+    int* __restrict__ flags
+) {
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tid == 0) {
+        flags[0] = 1;
+    } else if (tid < total_pairs) {
+        flags[tid] = (sorted_i[tid] != sorted_i[tid - 1]
+                      || sorted_j[tid] != sorted_j[tid - 1]) ? 1 : 0;
+    }
+}
+'''
+
 _gpu_kernels = None
 
 
@@ -399,6 +418,7 @@ def _get_gpu_kernels():
             'csr': cp.RawKernel(_BUILD_CSR_OFFSET_KERNEL, 'build_csr_offset_kernel'),
             'parallel_csr': cp.RawKernel(_PARALLEL_CSR_KERNEL, 'parallel_csr_kernel'),
             'fill_csr_gaps': cp.RawKernel(_FILL_CSR_GAPS_KERNEL, 'fill_csr_gaps_kernel'),
+            'parallel_dedup': cp.RawKernel(_PARALLEL_DEDUP_KERNEL, 'parallel_dedup_kernel'),
         }
     return _gpu_kernels
 
@@ -451,23 +471,23 @@ def build_exclusion_map_gpu(topology, scale_14=1.0):
     d_pair_j = d_pair_j[order]
     d_pair_scale = d_pair_scale[order]
 
-    d_unique_i = cp.empty(total_pairs, dtype=cp.int32)
-    d_unique_j = cp.empty(total_pairs, dtype=cp.int32)
-    d_unique_scale = cp.empty(total_pairs, dtype=cp.float32)
-    d_unique_count = cp.empty(1, dtype=cp.int32)
-
-    kernels['dedup'](
-        (1,), (1,),
+    d_flags = cp.zeros(total_pairs, dtype=cp.int32)
+    tpb_dedup = 256
+    grid_dedup = ((total_pairs + tpb_dedup - 1) // tpb_dedup,)
+    kernels['parallel_dedup'](grid_dedup, (tpb_dedup,),
         (d_pair_i, d_pair_j, d_pair_scale,
-         d_unique_i, d_unique_j, d_unique_scale,
-         d_unique_count,
-         np.int32(total_pairs))
-    )
+         np.int32(total_pairs), d_flags))
 
-    unique_count = int(d_unique_count[0])
-    d_unique_i = d_unique_i[:unique_count]
-    d_unique_j = d_unique_j[:unique_count]
-    d_unique_scale = d_unique_scale[:unique_count]
+    scatter_idx = cp.cumsum(d_flags) - 1
+    unique_count = int(scatter_idx[total_pairs - 1]) + 1
+
+    d_unique_i = cp.full(unique_count, -1, dtype=cp.int32)
+    d_unique_j = cp.full(unique_count, -1, dtype=cp.int32)
+    d_unique_scale = cp.zeros(unique_count, dtype=cp.float32)
+
+    d_unique_i[scatter_idx] = d_pair_i
+    d_unique_j[scatter_idx] = d_pair_j
+    d_unique_scale[scatter_idx] = d_pair_scale
 
     d_offset = cp.full(num_particles + 1, -1, dtype=cp.int32)
     tpb_csr = 256
