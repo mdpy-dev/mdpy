@@ -350,6 +350,43 @@ void build_csr_offset_kernel(
 }
 '''
 
+_PARALLEL_CSR_KERNEL = r'''
+extern "C" __global__
+void parallel_csr_kernel(
+    const int* __restrict__ sorted_i,
+    const int num_unique,
+    const int num_particles,
+    int* __restrict__ offset
+) {
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tid == 0) {
+        offset[num_particles] = num_unique;
+    }
+    if (tid >= num_unique) return;
+    if (tid == 0 || sorted_i[tid] != sorted_i[tid - 1]) {
+        offset[sorted_i[tid]] = tid;
+    }
+}
+'''
+
+_FILL_CSR_GAPS_KERNEL = r'''
+extern "C" __global__
+void fill_csr_gaps_kernel(
+    int* __restrict__ offset,
+    const int num_particles
+) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= num_particles) return;
+    if (offset[i] >= 0) return;
+    for (int j = i + 1; j <= num_particles; j++) {
+        if (offset[j] >= 0) {
+            offset[i] = offset[j];
+            break;
+        }
+    }
+}
+'''
+
 _gpu_kernels = None
 
 
@@ -360,6 +397,8 @@ def _get_gpu_kernels():
             'generate': cp.RawKernel(_GENERATE_PAIRS_KERNEL, 'generate_pairs_kernel'),
             'dedup': cp.RawKernel(_DEDUP_PAIRS_KERNEL, 'dedup_pairs_kernel'),
             'csr': cp.RawKernel(_BUILD_CSR_OFFSET_KERNEL, 'build_csr_offset_kernel'),
+            'parallel_csr': cp.RawKernel(_PARALLEL_CSR_KERNEL, 'parallel_csr_kernel'),
+            'fill_csr_gaps': cp.RawKernel(_FILL_CSR_GAPS_KERNEL, 'fill_csr_gaps_kernel'),
         }
     return _gpu_kernels
 
@@ -430,12 +469,19 @@ def build_exclusion_map_gpu(topology, scale_14=1.0):
     d_unique_j = d_unique_j[:unique_count]
     d_unique_scale = d_unique_scale[:unique_count]
 
-    d_offset = cp.zeros(num_particles + 1, dtype=cp.int32)
-    kernels['csr'](
-        (1,), (1,),
+    d_offset = cp.full(num_particles + 1, -1, dtype=cp.int32)
+    tpb_csr = 256
+    grid_csr = ((unique_count + 1 + tpb_csr - 1) // tpb_csr,)
+    kernels['parallel_csr'](
+        grid_csr, (tpb_csr,),
         (d_unique_i, np.int32(unique_count),
-         np.int32(num_particles), d_offset)
-    )
+         np.int32(num_particles), d_offset))
+
+    tpb_fill = 256
+    grid_fill = ((num_particles + tpb_fill - 1) // tpb_fill,)
+    kernels['fill_csr_gaps'](
+        grid_fill, (tpb_fill,),
+        (d_offset, np.int32(num_particles)))
 
     return d_offset, d_unique_j, d_unique_scale
 
