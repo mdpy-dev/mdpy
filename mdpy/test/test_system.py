@@ -787,3 +787,77 @@ class TestAsyncRebuild:
         identity = np.arange(n, dtype=env.NUMPY_INT)
         np.testing.assert_array_equal(s2p[p2s], identity,
             err_msg="permutation invariant broken with async rebuild")
+
+    def test_rebuild_triggered_within_batch(self):
+        topology, term_params = _build_four_particle()
+        parameter_table = _make_parameter_table(term_params)
+        pbc_matrix = _make_large_pbc()
+        system = System(topology, pbc_matrix, cutoff=12.0, skin=0.5)
+        bonded = BondedForce.charmm(topology, parameter_table)
+        system.add_force_term(bonded)
+        system.particles.positions[:] = np.array([
+            [0.0, 0.0, 0.0],
+            [1.5, 0.0, 0.0],
+            [3.0, 0.0, 0.0],
+            [4.5, 0.0, 0.0],
+        ], dtype=env.NUMPY_FLOAT)
+        system.particles.velocities[:] = np.array([
+            [0.0, 0.0, 0.0],
+            [2.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0],
+            [-2.0, 0.0, 0.0],
+        ], dtype=env.NUMPY_FLOAT)
+
+        integrator = VerletIntegrator(time_step=2.0)
+        for _ in range(100):
+            system.step(integrator, number_steps=1)
+        pos, vel = system.dump_state()
+        assert np.all(np.isfinite(pos))
+        assert system.step_count == 100
+
+    def test_langevin_async_rebuild_stable(self):
+        topology, term_params = _build_four_particle()
+        parameter_table = _make_parameter_table(term_params)
+        pbc_matrix = _make_large_pbc()
+        system = System(topology, pbc_matrix, cutoff=12.0, skin=1.0)
+        bonded = BondedForce.charmm(topology, parameter_table)
+        system.add_force_term(bonded)
+        system.particles.positions[:] = np.array([
+            [0.0, 0.0, 0.0],
+            [1.6, 0.0, 0.0],
+            [3.0, 0.5, 0.0],
+            [4.5, 0.0, 1.0],
+        ], dtype=env.NUMPY_FLOAT)
+        system.particles.velocities[:] = 0.0
+
+        integrator = LangevinBAOABIntegrator(
+            time_step=0.1, temperature=300.0, friction=0.1
+        )
+        for _ in range(200):
+            system.step(integrator, number_steps=1)
+        pos, vel = system.dump_state()
+        assert np.all(np.isfinite(pos))
+        assert np.all(np.isfinite(vel))
+        assert system.step_count == 200
+
+    def test_custom_interval_affects_rebuild_timing(self):
+        topology, term_params = _build_four_particle()
+        parameter_table = _make_parameter_table(term_params)
+        pbc_matrix = _make_large_pbc()
+        system = System(topology, pbc_matrix, cutoff=12.0, skin=1.0,
+                        rebuild_check_interval=3)
+        bonded = BondedForce.charmm(topology, parameter_table)
+        system.add_force_term(bonded)
+        system.particles.positions[:] = np.array([
+            [0.0, 0.0, 0.0],
+            [1.5, 0.0, 0.0],
+            [3.0, 0.0, 0.0],
+            [4.5, 0.0, 0.0],
+        ], dtype=env.NUMPY_FLOAT)
+        system.particles.velocities[:] = 0.0
+
+        integrator = VerletIntegrator(time_step=0.1)
+        system.step(integrator, number_steps=50)
+        pos, vel = system.dump_state()
+        assert np.all(np.isfinite(pos))
+        assert system.step_count == 50
