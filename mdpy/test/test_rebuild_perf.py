@@ -89,3 +89,37 @@ def test_rebuild_produces_correct_forces_after_gpu_exclusion():
     assert not np.any(np.isnan(vel2))
     max_disp = np.max(np.abs(pos2 - pos1))
     assert max_disp > 0.0
+
+
+@pytest.mark.slow
+def test_rebuild_1m9z_correctness():
+    ff = CharmmForcefield(
+        os.path.join(DATA_DIR, '1M9Z.psf'),
+        os.path.join(DATA_DIR, '1M9Z_minimized.pdb'),
+        [os.path.join(DATA_DIR, 'par_all36_prot.prm'),
+         os.path.join(DATA_DIR, 'toppar_water_ions.str')])
+    topology = ff.create_topology()
+    pt = ff.create_parameter_table()
+    pbc = np.eye(3, dtype=np.float64) * 108.0
+    system = System(topology, pbc, cutoff=12.0)
+    system.add_force_term(BondedForce.charmm(topology, pt))
+    nb = NonbondedForce(lennard_jones + coulomb)
+    nb.bind(topology, pt, 12.0)
+    system.add_force_term(nb)
+    raw = ff._pdb.positions.astype(np.float64)
+    pbc_inv = np.linalg.inv(pbc)
+    frac = raw @ pbc_inv
+    frac -= np.floor(frac)
+    system.particles.positions[:] = frac @ pbc
+    system.particles.velocities[:] = 0.0
+    system.gpu.upload_positions(system.particles)
+    system.gpu.upload_velocities(system.particles)
+    integrator = VerletIntegrator(0.5)
+
+    system.step(integrator, 10)
+    energies = system.dump_energy()
+    pos, vel = system.dump_state()
+
+    assert not np.any(np.isnan(pos))
+    assert not np.any(np.isnan(vel))
+    assert 'bonded' in energies or 'nonbonded' in energies

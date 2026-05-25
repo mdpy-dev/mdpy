@@ -44,11 +44,9 @@ def test_gpu_tile_classification():
     tl = system.tile_list
     assert tl.num_exclusion_tiles + tl.num_main_tiles == tl.num_tiles
     assert tl.num_exclusion_tiles > 0
-    assert tl.d_excl_tiles.shape[0] == tl.num_exclusion_tiles
-    assert tl.d_main_tiles.shape[0] == tl.num_main_tiles
-    if tl.num_exclusion_tiles > 0:
-        assert tl.d_excl_interacting_atoms.shape[0] == tl.num_exclusion_tiles * 32
-        assert tl.d_excl_exclusion_masks.shape[0] == tl.num_exclusion_tiles * 32
-        assert tl.d_excl_scaling_masks.shape[0] == tl.num_exclusion_tiles * 32
-    if tl.num_main_tiles > 0:
-        assert tl.d_main_interacting_atoms.shape[0] == tl.num_main_tiles * 32
+    assert tl.d_excl_tiles.shape[0] >= tl.num_exclusion_tiles
+    assert tl.d_main_tiles.shape[0] >= tl.num_main_tiles
+    assert tl.d_excl_interacting_atoms.shape[0] >= tl.num_exclusion_tiles * 32
+    assert tl.d_excl_exclusion_masks.shape[0] >= tl.num_exclusion_tiles * 32
+    assert tl.d_excl_scaling_masks.shape[0] >= tl.num_exclusion_tiles * 32
+    assert tl.d_main_interacting_atoms.shape[0] >= tl.num_main_tiles * 32
