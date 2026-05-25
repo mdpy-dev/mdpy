@@ -716,11 +716,12 @@ def _compile_gpu_kernels():
 
 class TileList:
 
-    def __init__(self, cutoff: float, skin: float = 1.0):
+    def __init__(self, cutoff: float, skin: float = 1.0, rebuild_check_interval: int = 10):
         self.cutoff = cutoff
         self.skin = skin
         self.build_radius = cutoff + skin
         self._is_initialized = False
+        self.rebuild_check_interval = rebuild_check_interval
 
         self.num_blocks = 0
         self.num_tiles = 0
@@ -1239,6 +1240,37 @@ class TileList:
              self.d_rebuild_flag))
         flag = int(self.d_rebuild_flag[0])
         return flag == 1
+
+    def check_rebuild_async(self, positions) -> bool:
+        if not self._is_initialized:
+            return True
+        if self.d_positions_at_rebuild_x.size == 0:
+            return True
+
+        if isinstance(positions, tuple):
+            pos_x, pos_y, pos_z = positions
+        else:
+            data = cp.asarray(
+                np.ascontiguousarray(positions.ravel(), dtype=env.NUMPY_FLOAT)
+            )
+            pos_x = cp.ascontiguousarray(data[0::3])
+            pos_y = cp.ascontiguousarray(data[1::3])
+            pos_z = cp.ascontiguousarray(data[2::3])
+
+        self._ensure_kernels()
+        threshold_sq = (self.skin * 0.5) ** 2
+        tpb = 256
+        grid = ((self.num_particles + tpb - 1) // tpb,)
+        self._kernels['check_rebuild'](
+            grid, (tpb,),
+            (pos_x, pos_y, pos_z,
+             self.d_positions_at_rebuild_x, self.d_positions_at_rebuild_y, self.d_positions_at_rebuild_z,
+             np.int32(self.num_particles),
+             np.float32(threshold_sq),
+             np.float32(self._box_x), np.float32(self._box_y), np.float32(self._box_z),
+             np.float32(self._inv_box_x), np.float32(self._inv_box_y), np.float32(self._inv_box_z),
+             self.d_rebuild_flag))
+        return False
 
     def _init_empty(self):
         self.num_blocks = 0

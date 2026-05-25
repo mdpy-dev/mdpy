@@ -490,3 +490,86 @@ class TestRebuildMechanics:
         if tl.num_tiles > 0:
             assert tl.exclusion_masks.shape == (tl.num_tiles, W)
             assert tl.scaling_masks.shape == (tl.num_tiles, W)
+
+
+class TestAsyncCheckRebuild:
+
+    def test_async_check_no_rebuild_needed(self):
+        n, box = 50, 50.0
+        positions = _make_positions(n, box)
+        topology = _make_topology(n)
+        pbc_matrix = _make_pbc(box)
+        pbc_inv = np.linalg.inv(pbc_matrix)
+        tl = TileList(cutoff=10.0, skin=2.0)
+        tl.rebuild(positions, topology, pbc_matrix, pbc_inv)
+
+        pos_x = tl.d_positions_at_rebuild_x.copy()
+        pos_y = tl.d_positions_at_rebuild_y.copy()
+        pos_z = tl.d_positions_at_rebuild_z.copy()
+
+        tl.d_rebuild_flag[0] = 0
+        result = tl.check_rebuild_async((pos_x, pos_y, pos_z))
+        assert result is False
+        cp.cuda.Stream.null.synchronize()
+        assert int(tl.d_rebuild_flag[0]) == 0
+
+    def test_async_check_rebuild_needed_after_displacement(self):
+        n, box = 50, 50.0
+        positions = _make_positions(n, box)
+        topology = _make_topology(n)
+        pbc_matrix = _make_pbc(box)
+        pbc_inv = np.linalg.inv(pbc_matrix)
+        tl = TileList(cutoff=10.0, skin=2.0)
+        tl.rebuild(positions, topology, pbc_matrix, pbc_inv)
+
+        pos_x = tl.d_positions_at_rebuild_x.copy()
+        pos_y = tl.d_positions_at_rebuild_y.copy()
+        pos_z = tl.d_positions_at_rebuild_z.copy()
+
+        pos_x[:5] += 3.0
+
+        tl.d_rebuild_flag[0] = 0
+        result = tl.check_rebuild_async((pos_x, pos_y, pos_z))
+        assert result is False
+        cp.cuda.Stream.null.synchronize()
+        assert int(tl.d_rebuild_flag[0]) == 1
+
+    def test_async_check_sticky_flag(self):
+        n, box = 50, 50.0
+        positions = _make_positions(n, box)
+        topology = _make_topology(n)
+        pbc_matrix = _make_pbc(box)
+        pbc_inv = np.linalg.inv(pbc_matrix)
+        tl = TileList(cutoff=10.0, skin=2.0)
+        tl.rebuild(positions, topology, pbc_matrix, pbc_inv)
+
+        pos_x = tl.d_positions_at_rebuild_x.copy()
+        pos_y = tl.d_positions_at_rebuild_y.copy()
+        pos_z = tl.d_positions_at_rebuild_z.copy()
+
+        tl.d_rebuild_flag[0] = 0
+        pos_x[:5] += 3.0
+        tl.check_rebuild_async((pos_x, pos_y, pos_z))
+        cp.cuda.Stream.null.synchronize()
+        assert int(tl.d_rebuild_flag[0]) == 1
+
+        pos_x[:5] -= 3.0
+        tl.check_rebuild_async((pos_x, pos_y, pos_z))
+        cp.cuda.Stream.null.synchronize()
+        assert int(tl.d_rebuild_flag[0]) == 1, "flag must stay sticky after atom returns"
+
+    def test_async_check_default_interval(self):
+        tl = TileList(cutoff=10.0, skin=2.0)
+        assert tl.rebuild_check_interval == 10
+
+    def test_async_check_custom_interval(self):
+        tl = TileList(cutoff=10.0, skin=2.0, rebuild_check_interval=5)
+        assert tl.rebuild_check_interval == 5
+
+    def test_first_call_not_initialized_returns_true(self):
+        tl = TileList(cutoff=10.0, skin=2.0)
+        positions = cp.zeros((10, 3), dtype=np.float32)
+        result = tl.check_rebuild_async(
+            (positions[:, 0], positions[:, 1], positions[:, 2])
+        )
+        assert result is True
