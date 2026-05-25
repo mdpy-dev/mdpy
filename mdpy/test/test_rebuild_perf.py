@@ -95,18 +95,16 @@ def test_parallel_csr_matches_sequential():
     system, integrator = _make_system_6po6()
     topology = system.topology
 
-    from mdpy.core.topology import build_exclusion_map_gpu, _get_gpu_kernels
+    from mdpy.core.topology import _get_gpu_kernels
     import cupy as cp
 
     topology.build_exclusion_map(scale_14=1.0)
-    gpu_offset, gpu_neighbors, gpu_scale = build_exclusion_map_gpu(topology, scale_14=1.0)
-    sequential_offset = cp.asnumpy(gpu_offset).copy()
+    cpu_offset = topology.exclusion_offset.copy()
 
     num_particles = topology.num_particles
     total_pairs = topology.num_bonds + topology.num_angles + topology.num_dihedrals + topology.num_impropers
 
-    from mdpy.core.topology import _PARALLEL_CSR_KERNEL
-    parallel_csr = cp.RawKernel(_PARALLEL_CSR_KERNEL, 'parallel_csr_kernel')
+    kernels = _get_gpu_kernels()
 
     d_bond_idx = cp.asarray(topology.bond_indices.ravel().astype(np.int32))
     d_angle_idx = cp.asarray(topology.angle_indices.ravel().astype(np.int32))
@@ -117,7 +115,6 @@ def test_parallel_csr_matches_sequential():
     d_pair_j = cp.empty(total_pairs, dtype=cp.int32)
     d_pair_scale = cp.empty(total_pairs, dtype=cp.float32)
 
-    kernels = _get_gpu_kernels()
     block = 256
     grid = (total_pairs + block - 1) // block
     kernels['generate'](
@@ -152,25 +149,32 @@ def test_parallel_csr_matches_sequential():
          np.int32(total_pairs)))
 
     unique_count = int(d_unique_count[0])
+    d_unique_i = d_unique_i[:unique_count]
+
+    d_offset_seq = cp.zeros(num_particles + 1, dtype=cp.int32)
+    kernels['csr'](
+        (1,), (1,),
+        (d_unique_i, np.int32(unique_count),
+         np.int32(num_particles), d_offset_seq))
+    sequential_offset = cp.asnumpy(d_offset_seq)
 
     d_offset_parallel = cp.full(num_particles + 1, -1, dtype=cp.int32)
     tpb = 256
     grid_csr = ((unique_count + 1 + tpb - 1) // tpb,)
-    parallel_csr(
+    kernels['parallel_csr'](
         grid_csr, (tpb,),
-        (d_unique_i[:unique_count], np.int32(unique_count),
+        (d_unique_i, np.int32(unique_count),
          np.int32(num_particles), d_offset_parallel))
 
-    from mdpy.core.topology import _FILL_CSR_GAPS_KERNEL
-    fill_gaps = cp.RawKernel(_FILL_CSR_GAPS_KERNEL, 'fill_csr_gaps_kernel')
     tpb_fill = 256
     grid_fill = ((num_particles + tpb_fill - 1) // tpb_fill,)
-    fill_gaps(
+    kernels['fill_csr_gaps'](
         grid_fill, (tpb_fill,),
         (d_offset_parallel, np.int32(num_particles)))
 
     parallel_offset = cp.asnumpy(d_offset_parallel)
     np.testing.assert_array_equal(parallel_offset, sequential_offset)
+    np.testing.assert_array_equal(parallel_offset, cpu_offset)
 
 
 @pytest.mark.slow
