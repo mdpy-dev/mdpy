@@ -489,11 +489,10 @@ def build_exclusion_map_gpu(topology, scale_14=1.0):
          np.int32(total_pairs))
     )
 
-    scale_rank = (d_pair_scale > 0.0).astype(cp.int32)
-    max_j = int(cp.max(d_pair_j)) + 1
-    sort_key = (d_pair_i.astype(cp.int64) * np.int64(max_j * 2 + 2)
+    scale_rank = (d_pair_scale > 0.0).astype(cp.int64)
+    sort_key = (d_pair_i.astype(cp.int64) * np.int64(2000000000)
                 + d_pair_j.astype(cp.int64) * np.int64(2)
-                + scale_rank.astype(cp.int64))
+                + scale_rank)
     order = cp.argsort(sort_key)
     d_pair_i = d_pair_i[order]
     d_pair_j = d_pair_j[order]
@@ -556,8 +555,7 @@ def permute_exclusion_pairs_gpu(d_cached_i, d_cached_j, d_cached_scale,
          d_composed_perm, np.int32(num_pairs),
          d_new_i, d_new_j, d_new_scale))
 
-    max_j = int(cp.max(d_new_j)) + 1
-    sort_key = (d_new_i.astype(cp.int64) * np.int64(max_j * 2 + 2)
+    sort_key = (d_new_i.astype(cp.int64) * np.int64(2000000000)
                 + d_new_j.astype(cp.int64) * np.int64(2)
                 + (d_new_scale > 0.0).astype(cp.int64))
     order = cp.argsort(sort_key)

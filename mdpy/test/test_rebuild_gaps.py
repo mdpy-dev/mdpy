@@ -58,3 +58,20 @@ def test_exclusion_data_preserved_across_rebuild():
     pos, vel = system.dump_state()
     assert not np.any(np.isnan(pos))
     assert not np.any(np.isnan(vel))
+
+
+def test_exclusion_map_constant_sort_key():
+    system, _ = _make_system()
+    topology = system.topology
+    from mdpy.core.topology import build_exclusion_map_gpu
+
+    d_offset, d_neighbors, d_scale, d_unique_i = build_exclusion_map_gpu(topology, scale_14=1.0)
+
+    topology.build_exclusion_map(scale_14=1.0)
+    cpu_offset = topology.exclusion_offset
+    cpu_neighbors = topology.exclusion_neighbors
+    cpu_scale = topology.exclusion_scale
+
+    np.testing.assert_array_equal(cp.asnumpy(d_offset), cpu_offset)
+    np.testing.assert_array_equal(cp.asnumpy(d_neighbors), cpu_neighbors)
+    np.testing.assert_allclose(cp.asnumpy(d_scale), cpu_scale, atol=1e-7)
