@@ -30,7 +30,7 @@ class TestParameter:
 class TestDecorator:
     def test_classifies_lj_arguments(self):
         assert lennard_jones.index_names == ['atom_i', 'atom_j']
-        assert lennard_jones.parameter_names == ['sigma', 'epsilon']
+        assert lennard_jones.parameter_names == ['sigma_half', 'sqrt_epsilon']
         assert lennard_jones.distance_name == 'r'
 
     def test_classifies_coulomb_arguments(self):
@@ -58,10 +58,10 @@ class TestTranspiler:
         fragment = lennard_jones.cuda_fragment
         assert 'float sigma_ij' in fragment
         assert 'float epsilon_ij' in fragment
-        assert 'sigma_i' in fragment
-        assert 'sigma_j' in fragment
-        assert 'epsilon_i' in fragment
-        assert 'epsilon_j' in fragment
+        assert 'sigma_half_i' in fragment
+        assert 'sigma_half_j' in fragment
+        assert 'sqrt_epsilon_i' in fragment
+        assert 'sqrt_epsilon_j' in fragment
         assert 'float _result_energy' in fragment
         assert 'float _result_force' in fragment
 
@@ -96,7 +96,7 @@ class TestTranspiler:
             force_magnitude = energy / r
             return energy, force_magnitude
         fragment = add_test.cuda_fragment
-        assert '(sigma_i_use + sigma_j_use)' in fragment
+        assert '(sigma_i + sigma_j)' in fragment
         assert '(combined / r)' in fragment
 
     def test_local_variables_tracked(self):
@@ -107,14 +107,15 @@ class TestTranspiler:
         assert 'sr12' in lennard_jones.local_variables
 
     def test_sqrt_transpilation(self):
-        assert 'sqrtf((epsilon_i_use * epsilon_j_use))' in lennard_jones.cuda_fragment
+        assert 'sqrtf((epsilon_i_use * epsilon_j_use))' not in lennard_jones.cuda_fragment
+        assert '(sqrt_epsilon_i * sqrt_epsilon_j)' in lennard_jones.cuda_fragment
 
 
 class TestExpressionCombination:
     def test_combined_parameter_names(self):
         combined = lennard_jones + coulomb
-        assert 'sigma' in combined.parameter_names
-        assert 'epsilon' in combined.parameter_names
+        assert 'sigma_half' in combined.parameter_names
+        assert 'sqrt_epsilon' in combined.parameter_names
         assert 'charge' in combined.parameter_names
 
     def test_combined_deduplicates_parameters(self):
@@ -134,14 +135,11 @@ class TestExpressionCombination:
 
     def test_combined_kernel_source(self):
         combined = lennard_jones + coulomb
-        kernel = combined.assemble_cross_tile_kernel()
+        kernel = combined.assemble_tile_kernel()
         assert 'extern "C" __global__' in kernel
-        assert 'cross_tile_kernel' in kernel
-        assert '__restrict__ sigma' in kernel
-        assert '__restrict__ epsilon' in kernel
-        assert '__restrict__ charge' in kernel
-        assert 'sigma_14' in kernel
-        assert 'epsilon_14' in kernel
+        assert 'tile_kernel' in kernel
+        assert '__restrict__ sigma_epsilon' in kernel
+        assert 'sigma_epsilon_14' in kernel
         assert 'charge_14' in kernel
 
     def test_second_expression_locals_renamed(self):
@@ -154,9 +152,9 @@ class TestExpressionCombination:
 
 class TestKernelAssembly:
     def test_lj_kernel_structure(self):
-        kernel = lennard_jones.assemble_cross_tile_kernel()
+        kernel = lennard_jones.assemble_tile_kernel()
         assert 'extern "C" __global__' in kernel
-        assert 'void cross_tile_kernel' in kernel
+        assert 'void tile_kernel' in kernel
         assert '__shfl_sync' in kernel
         assert 'atomicAdd' in kernel
         assert 'rsqrtf' in kernel
@@ -165,36 +163,31 @@ class TestKernelAssembly:
         assert 'force_magnitude' in kernel
 
     def test_coulomb_kernel_has_charge_arrays(self):
-        kernel = coulomb.assemble_cross_tile_kernel()
-        assert '__restrict__ charge' in kernel
+        kernel = coulomb.assemble_tile_kernel()
         assert 'charge_14' in kernel
         assert 'charge_i' in kernel
         assert 'charge_j' in kernel
 
     def test_combined_kernel_has_all_params(self):
         combined = lennard_jones + coulomb
-        kernel = combined.assemble_cross_tile_kernel()
-        assert '__restrict__ sigma' in kernel
-        assert '__restrict__ epsilon' in kernel
-        assert '__restrict__ charge' in kernel
-        assert 'sigma_i' in kernel
-        assert 'epsilon_i' in kernel
+        kernel = combined.assemble_tile_kernel()
+        assert '__restrict__ sigma_epsilon' in kernel
+        assert 'sigma_half_i' in kernel
+        assert 'sqrt_epsilon_i' in kernel
         assert 'charge_i' in kernel
 
-    def test_kernel_has_shift(self):
-        kernel = lennard_jones.assemble_cross_tile_kernel()
-        assert 'cross_tiles_shift' in kernel
-        assert 'shift_x' in kernel
-        assert 'shift_y' in kernel
-        assert 'shift_z' in kernel
+    def test_kernel_has_tiles_and_interacting(self):
+        kernel = lennard_jones.assemble_tile_kernel()
+        assert 'tiles[' in kernel
+        assert 'interacting_atoms' in kernel
 
     def test_kernel_has_exclusion(self):
-        kernel = lennard_jones.assemble_cross_tile_kernel()
+        kernel = lennard_jones.assemble_tile_kernel()
         assert 'exclusion_masks' in kernel
         assert 'scaling_masks' in kernel
 
     def test_kernel_is_valid_c_syntax(self):
-        kernel = lennard_jones.assemble_cross_tile_kernel()
+        kernel = lennard_jones.assemble_tile_kernel()
         assert kernel.count('{') == kernel.count('}')
 
 
@@ -257,7 +250,7 @@ class TestEdgeCases:
             energy = val / r
             force_magnitude = val / (r * r)
             return energy, force_magnitude
-        assert 'sqrtf((sigma_i_use * sigma_j_use))' in with_sqrt.cuda_fragment
+        assert 'sqrtf((sigma_i * sigma_j))' in with_sqrt.cuda_fragment
 
     def test_expression_with_power_of_6(self):
         fragment = lennard_jones.cuda_fragment
@@ -276,22 +269,19 @@ class TestEdgeCases:
 class TestCombinedKernelSource:
     def test_combined_kernel_source(self):
         combined = lennard_jones + coulomb
-        kernel = combined.assemble_cross_tile_kernel()
+        kernel = combined.assemble_tile_kernel()
 
         assert 'extern "C" __global__' in kernel
-        assert 'void cross_tile_kernel' in kernel
+        assert 'void tile_kernel' in kernel
 
-        assert '__restrict__ sigma' in kernel
-        assert '__restrict__ sigma_14' in kernel
-        assert '__restrict__ epsilon' in kernel
-        assert '__restrict__ epsilon_14' in kernel
-        assert '__restrict__ charge' in kernel
-        assert '__restrict__ charge_14' in kernel
+        assert '__restrict__ sigma_epsilon' in kernel
+        assert '__restrict__ sigma_epsilon_14' in kernel
+        assert 'charge_14' in kernel
 
-        assert 'sigma_i = sigma[gi]' in kernel
-        assert 'sigma_i_14 = sigma_14[gi]' in kernel
-        assert 'epsilon_i = epsilon[gi]' in kernel
-        assert 'charge_i = charge[gi]' in kernel
+        assert 'sigma_half_i' in kernel
+        assert 'sigma_half_i_14' in kernel
+        assert 'sqrt_epsilon_i' in kernel
+        assert 'charge_i' in kernel
 
         assert 'rsqrtf' in kernel
         assert 'atomicAdd' in kernel
