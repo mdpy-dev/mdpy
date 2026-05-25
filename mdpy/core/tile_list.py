@@ -1202,7 +1202,7 @@ class TileList:
         self._d_reverse_neighbors = None
         self._d_reverse_scale = None
 
-        return self.d_pdb_to_sorted, cp.asnumpy(self.d_pdb_to_sorted)
+        return self.d_pdb_to_sorted, None
 
     def build_tiles(self, topology, pbc_matrix):
         if self.num_particles == 0 or self._sorted_positions is None:
