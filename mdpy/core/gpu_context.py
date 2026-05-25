@@ -82,6 +82,12 @@ class GPUContext:
 
         self.d_box_dims = cp.zeros(6, dtype=float_dtype)
 
+        pbc_2d = pbc_matrix.reshape(3, 3)
+        box_x = abs(float(pbc_2d[0, 0]))
+        box_y = abs(float(pbc_2d[1, 1]))
+        box_z = abs(float(pbc_2d[2, 2]))
+        self._set_box_dims_once(box_x, box_y, box_z)
+
     def upload_positions(self, particle_table):
         data = np.ascontiguousarray(
             particle_table.positions.astype(np.float32)
@@ -140,6 +146,9 @@ class GPUContext:
         return (self.d_positions_x, self.d_positions_y, self.d_positions_z)
 
     def set_box_dims(self, box_x, box_y, box_z):
+        self._set_box_dims_once(box_x, box_y, box_z)
+
+    def _set_box_dims_once(self, box_x, box_y, box_z):
         self._box_x = float(box_x)
         self._box_y = float(box_y)
         self._box_z = float(box_z)

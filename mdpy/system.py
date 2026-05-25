@@ -73,12 +73,6 @@ class System:
             self.gpu.d_positions_x,
             self.gpu.d_positions_y,
             self.gpu.d_positions_z)
-        pbc_2d = self.pbc_matrix.reshape(3, 3)
-        self.gpu.set_box_dims(
-            abs(float(pbc_2d[0, 0])),
-            abs(float(pbc_2d[1, 1])),
-            abs(float(pbc_2d[2, 2]))
-        )
         for term_index, term in enumerate(self.force_terms):
             if self._profiling_enabled:
                 s = cp.cuda.Event()
