@@ -21,9 +21,6 @@ class ParticleTable:
         self.molecule_ids = np.zeros(number, dtype=env.NUMPY_INT)
         self.num_particles = number
 
-    def zero_forces(self):
-        self.forces[:] = 0
-
     def __repr__(self) -> str:
         return '<mdpy.core.ParticleTable: %d particles at %x>' % (
             self.num_particles, id(self)

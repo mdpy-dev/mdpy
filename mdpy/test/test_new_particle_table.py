@@ -22,13 +22,6 @@ def test_dtype():
     assert table.particle_types.dtype == env.NUMPY_INT
 
 
-def test_zero_forces():
-    table = ParticleTable(10)
-    table.forces[:] = 42.0
-    table.zero_forces()
-    assert np.all(table.forces == 0)
-
-
 def test_positions_writable():
     table = ParticleTable(5)
     table.positions[:] = np.arange(15).reshape(5, 3)

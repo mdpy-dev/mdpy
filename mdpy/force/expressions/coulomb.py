@@ -1,8 +1,4 @@
-import numpy as np
 from mdpy.force.nonbonded_force import nonbonded_expression, Parameter
-from mdpy.unit import EPSILON0
-
-_COULOMB_CONSTANT = 1.0 / (4.0 * np.pi * EPSILON0.value)
 
 
 @nonbonded_expression

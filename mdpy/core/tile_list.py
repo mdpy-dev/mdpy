@@ -787,10 +787,6 @@ class TileList:
         self._kernels = None
 
     @property
-    def num_interactions(self):
-        return self.num_tiles
-
-    @property
     def block_atoms(self):
         if self._block_atoms_np is None and self.d_block_atoms.size > 0:
             self._block_atoms_np = cp.asnumpy(self.d_block_atoms).reshape(-1, W)
