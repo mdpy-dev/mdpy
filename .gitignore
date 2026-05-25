@@ -138,3 +138,26 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# Ignore non-code root content by default.
+/*
+
+# Keep tracked project code and selected root files.
+!/.gitattributes
+!/.gitignore
+!/README.md
+!/REMADME.md
+!/mdpy/
+!/setup.py
+
+# Explicitly ignore requested root directories and files.
+/.opencode/
+/.nvvm_lib/
+/.pytest_cache/
+/AGENTS.md
+/benchmark/
+/docs/
+/plan.md
+/reference/
+/ROADMAP.md
+/WORKPLAN.md
