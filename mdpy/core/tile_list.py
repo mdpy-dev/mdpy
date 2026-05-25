@@ -1195,9 +1195,6 @@ class TileList:
         self.d_rebuild_flag[0] = 0
         self._is_initialized = True
 
-        self._d_excl_offset = None
-        self._d_excl_neighbors = None
-        self._d_excl_scale = None
         self._d_reverse_offset = None
         self._d_reverse_neighbors = None
         self._d_reverse_scale = None
