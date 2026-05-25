@@ -761,6 +761,7 @@ class TileList:
         self._d_reverse_offset = None
         self._d_reverse_neighbors = None
         self._d_reverse_scale = None
+        self._total_exclusion_pairs = 0
 
         self.d_sorted_to_pdb = cp.empty(0, dtype=env.NUMPY_INT)
         self.d_pdb_to_sorted = cp.empty(0, dtype=env.NUMPY_INT)
@@ -803,25 +804,25 @@ class TileList:
     @property
     def tiles(self):
         if self._tiles_np is None and self.d_tiles.size > 0:
-            self._tiles_np = cp.asnumpy(self.d_tiles)
+            self._tiles_np = cp.asnumpy(self.d_tiles[:self.num_tiles])
         return self._tiles_np
 
     @property
     def interacting_atoms(self):
         if self._interacting_atoms_np is None and self.d_interacting_atoms.size > 0:
-            self._interacting_atoms_np = cp.asnumpy(self.d_interacting_atoms).reshape(-1, W)
+            self._interacting_atoms_np = cp.asnumpy(self.d_interacting_atoms[:self.num_tiles * W]).reshape(-1, W)
         return self._interacting_atoms_np
 
     @property
     def exclusion_masks(self):
         if self._exclusion_masks_np is None and self.d_exclusion_masks.size > 0:
-            self._exclusion_masks_np = cp.asnumpy(self.d_exclusion_masks).reshape(-1, W)
+            self._exclusion_masks_np = cp.asnumpy(self.d_exclusion_masks[:self.num_tiles * W]).reshape(-1, W)
         return self._exclusion_masks_np
 
     @property
     def scaling_masks(self):
         if self._scaling_masks_np is None and self.d_scaling_masks.size > 0:
-            self._scaling_masks_np = cp.asnumpy(self.d_scaling_masks).reshape(-1, W)
+            self._scaling_masks_np = cp.asnumpy(self.d_scaling_masks[:self.num_tiles * W]).reshape(-1, W)
         return self._scaling_masks_np
 
     def _invalidate_caches(self):
@@ -853,14 +854,7 @@ class TileList:
         self._d_reverse_offset = None
         self._d_reverse_neighbors = None
         self._d_reverse_scale = None
-
-    def set_gpu_exclusion(self, d_offset, d_neighbors, d_scale):
-        self._d_excl_offset = d_offset
-        self._d_excl_neighbors = d_neighbors
-        self._d_excl_scale = d_scale
-        self._d_reverse_offset = None
-        self._d_reverse_neighbors = None
-        self._d_reverse_scale = None
+        self._total_exclusion_pairs = int(d_neighbors.shape[0])
 
     def _upload_exclusion(self, topology):
         if self._d_excl_offset is not None:
@@ -1080,8 +1074,8 @@ class TileList:
              self._d_counters, np.int32(max_tiles)))
 
         self.num_tiles = int(self._d_counters[0])
-        self.d_tiles = self._d_tile_buf[:self.num_tiles].copy()
-        self.d_interacting_atoms = self._d_interacting_buf[:self.num_tiles * W].copy()
+        self.d_tiles = self._d_tile_buf
+        self.d_interacting_atoms = self._d_interacting_buf
 
     def _build_masks_gpu(self, topology):
         if self.num_tiles == 0:
@@ -1100,7 +1094,7 @@ class TileList:
                 (self._d_excl_offset, self._d_excl_neighbors, np.int32(N), d_rev_offset))
 
             d_rev_offset = cp.cumsum(d_rev_offset, dtype=env.NUMPY_INT)
-            max_rev = int(d_rev_offset[-1])
+            max_rev = self._total_exclusion_pairs if self._total_exclusion_pairs > 0 else int(d_rev_offset[-1])
             d_rev_neighbors = cp.empty(max_rev, dtype=env.NUMPY_INT)
             d_rev_scale = cp.empty(max_rev, dtype=env.NUMPY_FLOAT)
             d_temp = d_rev_offset.copy()
@@ -1166,26 +1160,12 @@ class TileList:
         self.num_exclusion_tiles = int(self._d_classify_excl_counter[0])
         self.num_main_tiles = int(self._d_classify_main_counter[0])
 
-        ne = self.num_exclusion_tiles
-        nm = self.num_main_tiles
-
-        if ne > 0:
-            self.d_excl_tiles = self._d_classify_excl_tiles[:ne].copy()
-            self.d_excl_interacting_atoms = self._d_classify_excl_int_atoms[:ne * W].copy()
-            self.d_excl_exclusion_masks = self._d_classify_excl_masks[:ne * W].copy()
-            self.d_excl_scaling_masks = self._d_classify_excl_scale[:ne * W].copy()
-        else:
-            self.d_excl_tiles = cp.empty(0, dtype=env.NUMPY_INT)
-            self.d_excl_interacting_atoms = cp.empty(0, dtype=env.NUMPY_INT)
-            self.d_excl_exclusion_masks = cp.empty(0, dtype=np.uint32)
-            self.d_excl_scaling_masks = cp.empty(0, dtype=np.uint32)
-
-        if nm > 0:
-            self.d_main_tiles = self._d_classify_main_tiles[:nm].copy()
-            self.d_main_interacting_atoms = self._d_classify_main_int_atoms[:nm * W].copy()
-        else:
-            self.d_main_tiles = cp.empty(0, dtype=env.NUMPY_INT)
-            self.d_main_interacting_atoms = cp.empty(0, dtype=env.NUMPY_INT)
+        self.d_excl_tiles = self._d_classify_excl_tiles
+        self.d_excl_interacting_atoms = self._d_classify_excl_int_atoms
+        self.d_excl_exclusion_masks = self._d_classify_excl_masks
+        self.d_excl_scaling_masks = self._d_classify_excl_scale
+        self.d_main_tiles = self._d_classify_main_tiles
+        self.d_main_interacting_atoms = self._d_classify_main_int_atoms
 
     def rebuild(self, positions, topology, pbc_matrix, pbc_inv):
         N = topology.num_particles
