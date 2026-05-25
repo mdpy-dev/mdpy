@@ -106,14 +106,6 @@ class Topology:
         self._legacy_impropers = []
         self._is_joined = False
 
-    def get_excluded_neighbors(self, particle_index: int) -> tuple:
-        start = self.exclusion_offset[particle_index]
-        end = self.exclusion_offset[particle_index + 1]
-        return (
-            self.exclusion_neighbors[start:end],
-            self.exclusion_scale[start:end],
-        )
-
     @property
     def is_joined(self):
         return getattr(self, '_is_joined', True)
@@ -130,64 +122,6 @@ class Topology:
         self.exclusion_offset = None
         self.exclusion_neighbors = None
         self.exclusion_scale = None
-
-    def build_exclusion_map(self, scale_14=1.0):
-        num_particles = self.num_particles
-        exclusion_dict = {i: {} for i in range(num_particles)}
-
-        def _add(pair_i, pair_j, scale):
-            if pair_j < pair_i:
-                pair_i, pair_j = pair_j, pair_i
-            if pair_j not in exclusion_dict[pair_i]:
-                exclusion_dict[pair_i][pair_j] = scale
-            else:
-                exclusion_dict[pair_i][pair_j] = min(
-                    exclusion_dict[pair_i][pair_j], scale
-                )
-
-        if self.bond_indices.shape[0] > 0:
-            for bond in self.bond_indices:
-                _add(int(bond[0]), int(bond[1]), 0.0)
-
-        if self.angle_indices.shape[0] > 0:
-            for angle in self.angle_indices:
-                _add(int(angle[0]), int(angle[2]), 0.0)
-
-        if self.dihedral_indices.shape[0] > 0:
-            for dihedral in self.dihedral_indices:
-                _add(int(dihedral[0]), int(dihedral[3]), scale_14)
-
-        if self.improper_indices.shape[0] > 0:
-            for improper in self.improper_indices:
-                _add(int(improper[0]), int(improper[3]), 0.0)
-
-        sorted_pairs = []
-        for particle_index in range(num_particles):
-            neighbors = sorted(exclusion_dict[particle_index].keys())
-            for neighbor in neighbors:
-                sorted_pairs.append(
-                    (particle_index, neighbor, exclusion_dict[particle_index][neighbor])
-                )
-
-        offset = np.zeros(num_particles + 1, dtype=env.NUMPY_INT)
-        neighbors_array = np.empty(len(sorted_pairs), dtype=env.NUMPY_INT)
-        scale_array = np.empty(len(sorted_pairs), dtype=env.NUMPY_FLOAT)
-
-        pair_index = 0
-        for particle_index in range(num_particles):
-            offset[particle_index] = pair_index
-            while (
-                pair_index < len(sorted_pairs)
-                and sorted_pairs[pair_index][0] == particle_index
-            ):
-                neighbors_array[pair_index] = sorted_pairs[pair_index][1]
-                scale_array[pair_index] = sorted_pairs[pair_index][2]
-                pair_index += 1
-        offset[num_particles] = pair_index
-
-        self.exclusion_offset = offset
-        self.exclusion_neighbors = neighbors_array
-        self.exclusion_scale = scale_array
 
     def __repr__(self) -> str:
         return (

@@ -63,15 +63,40 @@ def test_exclusion_data_preserved_across_rebuild():
 def test_exclusion_map_constant_sort_key():
     system, _ = _make_system()
     topology = system.topology
-    from mdpy.core.topology import build_exclusion_map_gpu
+    from mdpy.core.topology import build_exclusion_map_gpu, Builder
 
     d_offset, d_neighbors, d_scale, d_unique_i = build_exclusion_map_gpu(topology, scale_14=1.0)
 
-    topology.build_exclusion_map(scale_14=1.0)
-    cpu_offset = topology.exclusion_offset
-    cpu_neighbors = topology.exclusion_neighbors
-    cpu_scale = topology.exclusion_scale
+    builder = Builder()
+    builder.set_particles(
+        masses=topology.masses,
+        charges=topology.charges,
+        particle_types=topology.particle_types,
+    )
+    for i in range(topology.num_bonds):
+        builder.add_bond(
+            int(topology.bond_indices[i, 0]),
+            int(topology.bond_indices[i, 1]), 0, 0)
+    for i in range(topology.num_angles):
+        builder.add_angle(
+            int(topology.angle_indices[i, 0]),
+            int(topology.angle_indices[i, 1]),
+            int(topology.angle_indices[i, 2]), 0, 0)
+    for i in range(topology.num_dihedrals):
+        builder.add_dihedral(
+            int(topology.dihedral_indices[i, 0]),
+            int(topology.dihedral_indices[i, 1]),
+            int(topology.dihedral_indices[i, 2]),
+            int(topology.dihedral_indices[i, 3]), 0, 0, 0)
+    for i in range(topology.num_impropers):
+        builder.add_improper(
+            int(topology.improper_indices[i, 0]),
+            int(topology.improper_indices[i, 1]),
+            int(topology.improper_indices[i, 2]),
+            int(topology.improper_indices[i, 3]), 0, 0)
+    builder.build_exclusion_map(scale_14=1.0)
+    ref_topo, _ = builder.build()
 
-    np.testing.assert_array_equal(cp.asnumpy(d_offset), cpu_offset)
-    np.testing.assert_array_equal(cp.asnumpy(d_neighbors), cpu_neighbors)
-    np.testing.assert_allclose(cp.asnumpy(d_scale), cpu_scale, atol=1e-7)
+    np.testing.assert_array_equal(cp.asnumpy(d_offset), ref_topo.exclusion_offset)
+    np.testing.assert_array_equal(cp.asnumpy(d_neighbors), ref_topo.exclusion_neighbors)
+    np.testing.assert_allclose(cp.asnumpy(d_scale), ref_topo.exclusion_scale, atol=1e-7)

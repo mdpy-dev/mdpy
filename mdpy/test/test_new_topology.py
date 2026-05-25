@@ -2,6 +2,15 @@ import numpy as np
 from mdpy.core.topology import Topology, Builder
 
 
+def _get_neighbors(topology, particle_index):
+    start = topology.exclusion_offset[particle_index]
+    end = topology.exclusion_offset[particle_index + 1]
+    return (
+        topology.exclusion_neighbors[start:end],
+        topology.exclusion_scale[start:end],
+    )
+
+
 def _simple_builder() -> Builder:
     builder = Builder()
     builder.set_particles(
@@ -88,7 +97,7 @@ def test_exclusion_map_basic():
     builder.build_exclusion_map()
     topology, _ = builder.build()
 
-    neighbors_0, scales_0 = topology.get_excluded_neighbors(0)
+    neighbors_0, scales_0 = _get_neighbors(topology,0)
     assert 1 in neighbors_0
     assert 2 in neighbors_0
     assert 3 in neighbors_0
@@ -107,8 +116,8 @@ def test_exclusion_map_symmetry():
     builder.build_exclusion_map()
     topology, _ = builder.build()
 
-    neighbors_0, _ = topology.get_excluded_neighbors(0)
-    neighbors_1, _ = topology.get_excluded_neighbors(1)
+    neighbors_0, _ = _get_neighbors(topology,0)
+    neighbors_1, _ = _get_neighbors(topology,1)
     assert 1 in neighbors_0
     assert len(neighbors_1) == 0
 
@@ -118,7 +127,7 @@ def test_exclusion_map_no_interactions():
     builder.build_exclusion_map()
     topology, _ = builder.build()
     for particle_index in range(4):
-        neighbors, _ = topology.get_excluded_neighbors(particle_index)
+        neighbors, _ = _get_neighbors(topology,particle_index)
         assert len(neighbors) == 0
 
 
@@ -128,7 +137,7 @@ def test_exclusion_map_improper_excluded():
     builder.build_exclusion_map()
     topology, _ = builder.build()
 
-    neighbors_0, scales_0 = topology.get_excluded_neighbors(0)
+    neighbors_0, scales_0 = _get_neighbors(topology,0)
     assert 3 in neighbors_0
     idx_03 = np.where(neighbors_0 == 3)[0][0]
     assert scales_0[idx_03] == 0.0
