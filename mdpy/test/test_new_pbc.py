@@ -1,6 +1,6 @@
 import numpy as np
 from mdpy.core.pbc import (
-    check_pbc_matrix, wrap_positions, compute_pbc_inv, minimum_image,
+    check_pbc_matrix, wrap_positions, compute_pbc_inv,
 )
 
 
@@ -59,18 +59,3 @@ def test_compute_pbc_inv():
     identity = box @ inv
     np.testing.assert_allclose(identity, np.eye(3), atol=1e-4)
 
-
-def test_minimum_image_cubic():
-    box = np.diag([10.0, 10.0, 10.0])
-    box_inv = np.linalg.inv(box)
-    delta = np.array([7.0, 0.0, 0.0])
-    result = minimum_image(delta, box, box_inv)
-    np.testing.assert_allclose(result, [-3.0, 0.0, 0.0], atol=1e-5)
-
-
-def test_minimum_image_no_wrap():
-    box = np.diag([10.0, 10.0, 10.0])
-    box_inv = np.linalg.inv(box)
-    delta = np.array([2.0, 3.0, -4.0])
-    result = minimum_image(delta, box, box_inv)
-    np.testing.assert_allclose(result, delta, atol=1e-5)

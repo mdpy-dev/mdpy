@@ -36,11 +36,3 @@ def compute_pbc_inv(pbc_matrix: np.ndarray) -> np.ndarray:
         np.linalg.inv(pbc_matrix), dtype=env.NUMPY_FLOAT
     )
 
-
-def minimum_image(
-    delta: np.ndarray, pbc_matrix: np.ndarray, pbc_inv: np.ndarray
-) -> np.ndarray:
-    scaled = delta @ pbc_inv
-    rounded = np.round(scaled)
-    scaled -= rounded
-    return scaled @ pbc_matrix
