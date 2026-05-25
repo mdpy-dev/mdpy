@@ -28,6 +28,7 @@ class System:
         self._step_count = 0
         self._positions_uploaded = False
         self._velocities_uploaded = False
+        self._compute_energy = False
         self._profiling_enabled = False
         self._profile_data = {}
         self._pdb_to_current_sorted = None
@@ -82,9 +83,11 @@ class System:
                 s = cp.cuda.Event()
                 e = cp.cuda.Event()
                 s.record()
-            self.gpu.zero_energy()
+            if self._compute_energy:
+                self.gpu.zero_energy()
             term.compute(self.gpu, self.tile_list)
-            self.gpu.accumulate_energy(term_index)
+            if self._compute_energy:
+                self.gpu.accumulate_energy(term_index)
             if self._profiling_enabled:
                 e.record()
                 self._profile_data[term.name].append((s, e))
@@ -92,6 +95,9 @@ class System:
     def dump_energy(self):
         if self.gpu.d_energy_accumulator is None:
             return {}
+        self._compute_energy = True
+        self.compute_forces()
+        self._compute_energy = False
         raw = cp.asnumpy(self.gpu.d_energy_accumulator)
         result = {}
         for term_index, term in enumerate(self.force_terms):

@@ -614,3 +614,76 @@ class TestRebuildSortCorrectness:
         np.testing.assert_allclose(pdb_gpu_pos, pos_after_many, atol=1e-5,
             err_msg="GPU sorted positions don't match dump_state output — "
                      "sorted→PDB mapping is wrong")
+
+
+class TestLazyEnergy:
+
+    def test_dump_energy_returns_correct_values(self):
+        topology, term_params = _build_simple_bond()
+        parameter_table = _make_parameter_table(term_params)
+        pbc_matrix = _make_large_pbc()
+        system = System(topology, pbc_matrix)
+        bonded = BondedForce.charmm(topology, parameter_table)
+        system.add_force_term(bonded)
+
+        system.particles.positions[:] = np.array([
+            [0.0, 0.0, 0.0],
+            [1.6, 0.0, 0.0],
+        ], dtype=env.NUMPY_FLOAT)
+        system.particles.velocities[:] = 0.0
+        system.gpu.upload_positions(system.particles)
+
+        system.compute_forces()
+        energy = system.dump_energy()
+        assert 'bonded' in energy
+        assert energy['bonded'] != 0.0
+        assert np.isfinite(energy['bonded'])
+
+    def test_step_without_dump_energy_no_accumulator_stall(self):
+        topology, term_params = _build_simple_bond()
+        parameter_table = _make_parameter_table(term_params)
+        pbc_matrix = _make_large_pbc()
+        system = System(topology, pbc_matrix)
+        bonded = BondedForce.charmm(topology, parameter_table)
+        system.add_force_term(bonded)
+
+        system.particles.positions[:] = np.array([
+            [0.0, 0.0, 0.0],
+            [1.6, 0.0, 0.0],
+        ], dtype=env.NUMPY_FLOAT)
+        system.particles.velocities[:] = 0.0
+
+        integrator = VerletIntegrator(time_step=0.1)
+        system.step(integrator, number_steps=5)
+        pos, vel = system.dump_state()
+        assert np.all(np.isfinite(pos))
+        assert np.all(np.isfinite(vel))
+
+        energy = system.dump_energy()
+        assert 'bonded' in energy
+        assert np.isfinite(energy['bonded'])
+
+    def test_energy_changes_between_steps(self):
+        topology, term_params = _build_simple_bond()
+        parameter_table = _make_parameter_table(term_params)
+        pbc_matrix = _make_large_pbc()
+        system = System(topology, pbc_matrix)
+        bonded = BondedForce.charmm(topology, parameter_table)
+        system.add_force_term(bonded)
+
+        system.particles.positions[:] = np.array([
+            [0.0, 0.0, 0.0],
+            [1.6, 0.0, 0.0],
+        ], dtype=env.NUMPY_FLOAT)
+        system.particles.velocities[:] = 0.0
+
+        integrator = VerletIntegrator(time_step=0.1)
+        system.step(integrator, number_steps=1)
+        energy_1 = system.dump_energy()
+
+        system.step(integrator, number_steps=5)
+        energy_2 = system.dump_energy()
+
+        assert 'bonded' in energy_1
+        assert 'bonded' in energy_2
+        assert energy_1['bonded'] != energy_2['bonded']
