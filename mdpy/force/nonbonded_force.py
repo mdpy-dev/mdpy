@@ -269,14 +269,14 @@ class NonbondedExpression:
         if '_result_energy_1' not in fragment:
             fragment += '\nfloat energy_val = _result_energy;'
             fragment += '\nfloat force_magnitude = _result_force;'
-        return _assemble_tile_kernel_v2(self.parameter_names, fragment)
+        return _assemble_exclusion_tile_kernel(self.parameter_names, fragment)
 
     def assemble_main_tile_kernel(self):
         fragment = self.cuda_fragment
         if '_result_energy_1' not in fragment:
             fragment += '\nfloat energy_val = _result_energy;'
             fragment += '\nfloat force_magnitude = _result_force;'
-        return _assemble_main_tile_kernel_v3(self.parameter_names, fragment)
+        return _assemble_main_tile_kernel(self.parameter_names, fragment)
 
 
 def _rename_output_vars(cuda_fragment, tag):
@@ -315,7 +315,7 @@ def _is_parameter_call(node):
             node.func.id == 'Parameter')
 
 
-def _generate_param_decls_v2(parameter_names):
+def _generate_parameter_declarations_exclusion(parameter_names):
     decls = ''
     for arr in _unique_gpu_arrays(parameter_names):
         if arr in {v[0] for v in _PACKED_PARAMS.values()}:
@@ -327,7 +327,7 @@ def _generate_param_decls_v2(parameter_names):
     return decls
 
 
-def _generate_sorted_param_decls_v2(parameter_names):
+def _generate_sorted_parameter_declarations_exclusion(parameter_names):
     decls = ''
     for arr in _unique_gpu_arrays(parameter_names):
         if arr in {v[0] for v in _PACKED_PARAMS.values()}:
@@ -339,7 +339,7 @@ def _generate_sorted_param_decls_v2(parameter_names):
     return decls
 
 
-def _generate_sorted_param_load_i_v2(parameter_names):
+def _generate_sorted_parameter_load_i_exclusion(parameter_names):
     lines = []
     loaded = set()
     for name in parameter_names:
@@ -357,7 +357,7 @@ def _generate_sorted_param_load_i_v2(parameter_names):
     return '\n        '.join(lines)
 
 
-def _generate_param_load_j_tile_v2(parameter_names):
+def _generate_parameter_load_j_tile_exclusion(parameter_names):
     lines = []
     loaded_j = set()
     for name in parameter_names:
@@ -384,7 +384,7 @@ def _generate_param_load_j_tile_v2(parameter_names):
     return '\n        '.join(lines)
 
 
-def _generate_shuffle_warp_data_v2(parameter_names):
+def _generate_shuffle_warp_data_exclusion(parameter_names):
     lines = [
         'shfl_px = __shfl_sync(0xffffffff, shfl_px, (tgx + 1) & 31);',
         'shfl_py = __shfl_sync(0xffffffff, shfl_py, (tgx + 1) & 31);',
@@ -399,7 +399,7 @@ def _generate_shuffle_warp_data_v2(parameter_names):
     return '\n        '.join(lines)
 
 
-def _generate_param_select_v2(parameter_names):
+def _generate_parameter_select_exclusion(parameter_names):
     lines = []
     for name in parameter_names:
         lines.append(f'float {name}_i_saved = {name}_i; if (is_14) {name}_i = {name}_i_14;')
@@ -407,7 +407,7 @@ def _generate_param_select_v2(parameter_names):
     return '\n            '.join(lines)
 
 
-def _generate_param_restore_v2(parameter_names):
+def _generate_parameter_restore_exclusion(parameter_names):
     lines = []
     for name in parameter_names:
         lines.append(f'if (is_14) {name}_i = {name}_i_saved;')
@@ -415,7 +415,7 @@ def _generate_param_restore_v2(parameter_names):
     return '\n            '.join(lines)
 
 
-def _generate_param_decls_main(parameter_names):
+def _generate_parameter_declarations_main_posq(parameter_names):
     decls = ''
     for arr in _unique_gpu_arrays(parameter_names):
         if arr == 'charge':
@@ -428,7 +428,7 @@ def _generate_param_decls_main(parameter_names):
     return decls
 
 
-def _generate_sorted_param_decls_main(parameter_names):
+def _generate_sorted_parameter_declarations_main_posq(parameter_names):
     decls = ''
     for arr in _unique_gpu_arrays(parameter_names):
         if arr == 'charge':
@@ -441,7 +441,7 @@ def _generate_sorted_param_decls_main(parameter_names):
     return decls
 
 
-def _generate_sorted_param_load_i_main(parameter_names):
+def _generate_sorted_parameter_load_i_main_posq(parameter_names):
     lines = []
     loaded = set()
     for name in parameter_names:
@@ -458,7 +458,7 @@ def _generate_sorted_param_load_i_main(parameter_names):
     return '\n        '.join(lines)
 
 
-def _generate_param_load_j_tile_main(parameter_names):
+def _generate_parameter_load_j_tile_main_posq(parameter_names):
     lines = []
     loaded_j = set()
     for name in parameter_names:
@@ -501,7 +501,7 @@ def _generate_shuffle_warp_data_main(parameter_names):
     return '\n        '.join(lines)
 
 
-def _generate_param_decls_v2_main(parameter_names):
+def _generate_parameter_declarations_main(parameter_names):
     decls = ''
     for arr in _unique_gpu_arrays(parameter_names):
         if arr in {v[0] for v in _PACKED_PARAMS.values()}:
@@ -511,7 +511,7 @@ def _generate_param_decls_v2_main(parameter_names):
     return decls
 
 
-def _generate_sorted_param_decls_v2_main(parameter_names):
+def _generate_sorted_parameter_declarations_main(parameter_names):
     decls = ''
     for arr in _unique_gpu_arrays(parameter_names):
         if arr in {v[0] for v in _PACKED_PARAMS.values()}:
@@ -521,7 +521,7 @@ def _generate_sorted_param_decls_v2_main(parameter_names):
     return decls
 
 
-def _generate_sorted_param_load_i_v2_main(parameter_names):
+def _generate_sorted_parameter_load_i_main(parameter_names):
     lines = []
     loaded = set()
     for name in parameter_names:
@@ -536,7 +536,7 @@ def _generate_sorted_param_load_i_v2_main(parameter_names):
     return '\n        '.join(lines)
 
 
-def _generate_param_load_j_tile_v2_main(parameter_names):
+def _generate_parameter_load_j_tile_main(parameter_names):
     lines = []
     loaded_j = set()
     for name in parameter_names:
@@ -560,7 +560,7 @@ def _generate_param_load_j_tile_v2_main(parameter_names):
     return '\n        '.join(lines)
 
 
-def _generate_param_decls_posq_v2(parameter_names):
+def _generate_parameter_declarations_exclusion_posq(parameter_names):
     decls = ''
     for arr in _unique_gpu_arrays(parameter_names):
         if arr == 'charge':
@@ -575,7 +575,7 @@ def _generate_param_decls_posq_v2(parameter_names):
     return decls
 
 
-def _generate_sorted_param_decls_posq_v2(parameter_names):
+def _generate_sorted_parameter_declarations_exclusion_posq(parameter_names):
     decls = ''
     for arr in _unique_gpu_arrays(parameter_names):
         if arr == 'charge':
@@ -590,7 +590,7 @@ def _generate_sorted_param_decls_posq_v2(parameter_names):
     return decls
 
 
-def _generate_sorted_param_load_i_posq_v2(parameter_names):
+def _generate_sorted_parameter_load_i_exclusion_posq(parameter_names):
     lines = []
     loaded = set()
     for name in parameter_names:
@@ -611,7 +611,7 @@ def _generate_sorted_param_load_i_posq_v2(parameter_names):
     return '\n        '.join(lines)
 
 
-def _generate_param_load_j_tile_posq_v2(parameter_names):
+def _generate_parameter_load_j_tile_exclusion_posq(parameter_names):
     lines = []
     loaded_j = set()
     for name in parameter_names:
@@ -642,14 +642,14 @@ def _generate_param_load_j_tile_posq_v2(parameter_names):
     return '\n        '.join(lines)
 
 
-def _assemble_tile_kernel_v2(parameter_names, expression_fragment):
+def _assemble_exclusion_tile_kernel(parameter_names, expression_fragment):
     use_posq = 'charge' in parameter_names
 
     if use_posq:
-        param_decls = _generate_param_decls_posq_v2(parameter_names)
-        sorted_param_decls = _generate_sorted_param_decls_posq_v2(parameter_names)
-        sorted_param_load_i = _generate_sorted_param_load_i_posq_v2(parameter_names)
-        param_load_j = _generate_param_load_j_tile_posq_v2(parameter_names)
+        param_decls = _generate_parameter_declarations_exclusion_posq(parameter_names)
+        sorted_param_decls = _generate_sorted_parameter_declarations_exclusion_posq(parameter_names)
+        sorted_param_load_i = _generate_sorted_parameter_load_i_exclusion_posq(parameter_names)
+        param_load_j = _generate_parameter_load_j_tile_exclusion_posq(parameter_names)
         pos_args_decl = (
             '    const float4* __restrict__ sorted_posq,\n'
             '    const float4* __restrict__ posq,'
@@ -671,10 +671,10 @@ def _assemble_tile_kernel_v2(parameter_names, expression_fragment):
             '        }'
         )
     else:
-        param_decls = _generate_param_decls_v2(parameter_names)
-        sorted_param_decls = _generate_sorted_param_decls_v2(parameter_names)
-        sorted_param_load_i = _generate_sorted_param_load_i_v2(parameter_names)
-        param_load_j = _generate_param_load_j_tile_v2(parameter_names)
+        param_decls = _generate_parameter_declarations_exclusion(parameter_names)
+        sorted_param_decls = _generate_sorted_parameter_declarations_exclusion(parameter_names)
+        sorted_param_load_i = _generate_sorted_parameter_load_i_exclusion(parameter_names)
+        param_load_j = _generate_parameter_load_j_tile_exclusion(parameter_names)
         pos_args_decl = (
             '    const float* __restrict__ sorted_pos_x,\n'
             '    const float* __restrict__ sorted_pos_y,\n'
@@ -697,9 +697,9 @@ def _assemble_tile_kernel_v2(parameter_names, expression_fragment):
             '        }'
         )
 
-    shuffle_code = _generate_shuffle_warp_data_v2(parameter_names)
-    param_select = _generate_param_select_v2(parameter_names)
-    param_restore = _generate_param_restore_v2(parameter_names)
+    shuffle_code = _generate_shuffle_warp_data_exclusion(parameter_names)
+    param_select = _generate_parameter_select_exclusion(parameter_names)
+    param_restore = _generate_parameter_restore_exclusion(parameter_names)
 
     kernel = f'''extern "C" __global__
 void tile_kernel(
@@ -808,14 +808,14 @@ void tile_kernel(
     return kernel
 
 
-def _assemble_main_tile_kernel_v3(parameter_names, expression_fragment):
+def _assemble_main_tile_kernel(parameter_names, expression_fragment):
     use_posq = 'charge' in parameter_names
 
     if use_posq:
-        param_decls = _generate_param_decls_main(parameter_names)
-        sorted_param_decls = _generate_sorted_param_decls_main(parameter_names)
-        sorted_param_load_i = _generate_sorted_param_load_i_main(parameter_names)
-        param_load_j = _generate_param_load_j_tile_main(parameter_names)
+        param_decls = _generate_parameter_declarations_main_posq(parameter_names)
+        sorted_param_decls = _generate_sorted_parameter_declarations_main_posq(parameter_names)
+        sorted_param_load_i = _generate_sorted_parameter_load_i_main_posq(parameter_names)
+        param_load_j = _generate_parameter_load_j_tile_main_posq(parameter_names)
         pos_args_decl = (
             '    const float4* __restrict__ sorted_posq,\n'
             '    const float4* __restrict__ posq,'
@@ -837,10 +837,10 @@ def _assemble_main_tile_kernel_v3(parameter_names, expression_fragment):
             '        }'
         )
     else:
-        param_decls = _generate_param_decls_v2_main(parameter_names)
-        sorted_param_decls = _generate_sorted_param_decls_v2_main(parameter_names)
-        sorted_param_load_i = _generate_sorted_param_load_i_v2_main(parameter_names)
-        param_load_j = _generate_param_load_j_tile_v2_main(parameter_names)
+        param_decls = _generate_parameter_declarations_main(parameter_names)
+        sorted_param_decls = _generate_sorted_parameter_declarations_main(parameter_names)
+        sorted_param_load_i = _generate_sorted_parameter_load_i_main(parameter_names)
+        param_load_j = _generate_parameter_load_j_tile_main(parameter_names)
         pos_args_decl = (
             '    const float* __restrict__ sorted_pos_x,\n'
             '    const float* __restrict__ sorted_pos_y,\n'
@@ -1049,13 +1049,13 @@ class NonbondedForce(ForceTerm):
         self._cutoff_sq = cutoff * cutoff
         self._num_sm = cp.cuda.runtime.getDeviceProperties(0)['multiProcessorCount']
         self._parameter_table = parameter_table
-        self._rebuild_param_arrays(topology.particle_types)
-        self._upload_param_arrays()
+        self._rebuild_parameter_arrays(topology.particle_types)
+        self._upload_parameter_arrays()
         self._d_cached_params = dict(self._d_parameter_arrays)
         self._kernel_source = self.expression.assemble_main_tile_kernel()
         self._exclusion_kernel_source = self.expression.assemble_tile_kernel()
 
-    def _rebuild_param_arrays(self, particle_types):
+    def _rebuild_parameter_arrays(self, particle_types):
         _TABLE_PARAM_MAP = {
             'sigma_half': 'sigma',
             'sqrt_epsilon': 'epsilon',
@@ -1095,18 +1095,7 @@ class NonbondedForce(ForceTerm):
             se_14[1::2] = self._parameter_arrays['sqrt_epsilon_14']
             self._parameter_arrays['sigma_epsilon_14'] = se_14
 
-    def _repack_sigma_epsilon(self, N):
-        if 'sigma_half' in self.expression.parameter_names and 'sqrt_epsilon' in self.expression.parameter_names:
-            se = np.empty(N * 2, dtype=np.float32)
-            se[0::2] = self._parameter_arrays['sigma_half']
-            se[1::2] = self._parameter_arrays['sqrt_epsilon']
-            self._parameter_arrays['sigma_epsilon'] = se
-            se_14 = np.empty(N * 2, dtype=np.float32)
-            se_14[0::2] = self._parameter_arrays['sigma_half_14']
-            se_14[1::2] = self._parameter_arrays['sqrt_epsilon_14']
-            self._parameter_arrays['sigma_epsilon_14'] = se_14
-
-    def _upload_param_arrays(self):
+    def _upload_parameter_arrays(self):
         for name, arr in self._parameter_arrays.items():
             self._d_parameter_arrays[name] = cp.asarray(arr)
 
@@ -1122,7 +1111,7 @@ class NonbondedForce(ForceTerm):
             self._gather_4comp_kernel = cp.RawKernel(
                 _GATHER_SORTED_KERNEL_4COMP, 'gather_sorted_kernel_4comp')
         if not self._d_cached_params:
-            self._upload_param_arrays()
+            self._upload_parameter_arrays()
             self._d_cached_params = dict(self._d_parameter_arrays)
 
     def _use_posq(self):
@@ -1131,8 +1120,8 @@ class NonbondedForce(ForceTerm):
     def bind_sorted(self, topology, tile_list, gpu_context, sorted_to_pdb_np=None, sorted_particle_types=None):
         self._ensure_compiled()
         if not self._d_cached_params:
-            self._rebuild_param_arrays(topology.particle_types)
-            self._upload_param_arrays()
+            self._rebuild_parameter_arrays(topology.particle_types)
+            self._upload_parameter_arrays()
             self._d_cached_params = dict(self._d_parameter_arrays)
 
         permutation = tile_list.d_sorted_to_pdb
@@ -1181,7 +1170,7 @@ class NonbondedForce(ForceTerm):
                  np.int32(total_slots), np.int32(N),
                  self._d_sorted_posq))
 
-    def _param_args(self):
+    def _parameter_arguments(self):
         args = []
         for arr in _unique_gpu_arrays(self.expression.parameter_names):
             if self._use_posq() and arr == 'charge':
@@ -1191,7 +1180,7 @@ class NonbondedForce(ForceTerm):
                 args.append(self._d_parameter_arrays[arr + '_14'])
         return args
 
-    def _main_param_args(self):
+    def _main_parameter_arguments(self):
         args = []
         for arr in _unique_gpu_arrays(self.expression.parameter_names):
             if arr == 'charge':
@@ -1202,7 +1191,7 @@ class NonbondedForce(ForceTerm):
                 args.append(self._d_parameter_arrays[arr])
         return args
 
-    def _main_sorted_param_args(self, tile_list):
+    def _main_sorted_parameter_arguments(self, tile_list):
         args = []
         for arr in _unique_gpu_arrays(self.expression.parameter_names):
             if arr == 'charge':
@@ -1213,7 +1202,7 @@ class NonbondedForce(ForceTerm):
                 args.append(getattr(tile_list, f'd_sorted_{arr}'))
         return args
 
-    def _sorted_param_args(self, tile_list):
+    def _sorted_parameter_arguments(self, tile_list):
         args = []
         for arr in _unique_gpu_arrays(self.expression.parameter_names):
             if self._use_posq() and arr == 'charge':
@@ -1273,7 +1262,7 @@ class NonbondedForce(ForceTerm):
                     np.float32(gpu_context._inv_box_x),
                     np.float32(gpu_context._inv_box_y),
                     np.float32(gpu_context._inv_box_z),
-                ] + self._main_param_args() + self._main_sorted_param_args(tile_list)
+                ] + self._main_parameter_arguments() + self._main_sorted_parameter_arguments(tile_list)
                 self._kernel((grid_size,), (256,), tuple(main_args))
 
             num_excl = getattr(tile_list, 'num_exclusion_tiles', 0)
@@ -1300,7 +1289,7 @@ class NonbondedForce(ForceTerm):
                     np.float32(gpu_context._inv_box_x),
                     np.float32(gpu_context._inv_box_y),
                     np.float32(gpu_context._inv_box_z),
-                ] + self._param_args() + self._sorted_param_args(tile_list)
+                ] + self._parameter_arguments() + self._sorted_parameter_arguments(tile_list)
                 self._exclusion_kernel((excl_grid_size,), (256,), tuple(excl_args))
         else:
             num_main = getattr(tile_list, 'num_main_tiles', 0)
@@ -1328,7 +1317,7 @@ class NonbondedForce(ForceTerm):
                     np.float32(gpu_context._inv_box_x),
                     np.float32(gpu_context._inv_box_y),
                     np.float32(gpu_context._inv_box_z),
-                ] + self._main_param_args() + self._main_sorted_param_args(tile_list)
+                ] + self._main_parameter_arguments() + self._main_sorted_parameter_arguments(tile_list)
                 self._kernel((grid_size,), (256,), tuple(main_args))
 
             num_excl = getattr(tile_list, 'num_exclusion_tiles', 0)
@@ -1359,5 +1348,5 @@ class NonbondedForce(ForceTerm):
                     np.float32(gpu_context._inv_box_x),
                     np.float32(gpu_context._inv_box_y),
                     np.float32(gpu_context._inv_box_z),
-                ] + self._param_args() + self._sorted_param_args(tile_list)
+                ] + self._parameter_arguments() + self._sorted_parameter_arguments(tile_list)
                 self._exclusion_kernel((excl_grid_size,), (256,), tuple(excl_args))
