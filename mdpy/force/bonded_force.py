@@ -1,12 +1,179 @@
 from __future__ import annotations
 
+import ast
 import cupy as cp
+import inspect
 import numpy as np
+import textwrap
 
 from mdpy.force.force_term import ForceTerm
-from mdpy.force.expressions.bonded import (
-    harmonic_bond, charmm_angle, periodic_dihedral, harmonic_improper,
-)
+
+_MATH_FUNCTIONS = {
+    'sqrt': 'sqrtf', 'sin': 'sinf', 'cos': 'cosf',
+    'tan': 'tanf', 'acos': 'acosf', 'asin': 'asinf',
+    'atan': 'atanf', 'atan2': 'atan2f', 'exp': 'expf',
+    'log': 'logf', 'abs': 'fabsf', 'floor': 'floorf',
+    'ceil': 'ceilf', 'min': 'fminf', 'max': 'fmaxf',
+}
+
+
+class BondedExpression:
+    def __init__(self, body, parameter_names, geometric_names, cuda_fragment, local_variables):
+        self.body = body
+        self.parameter_names = parameter_names
+        self.geometric_names = geometric_names
+        self.cuda_fragment = cuda_fragment
+        self.local_variables = local_variables
+
+
+def bonded_expression(body):
+    def decorator(func):
+        source = textwrap.dedent(inspect.getsource(func))
+        tree = ast.parse(source)
+        function_definition = tree.body[0]
+        func_name = function_definition.name
+        args = function_definition.args.args
+
+        geometric_names = []
+        parameter_names = []
+        for i, arg in enumerate(args):
+            if arg.arg == 'self':
+                continue
+            if i < len(args) and not _has_parameter_default(function_definition, arg.arg):
+                geometric_names.append(arg.arg)
+            else:
+                parameter_names.append(arg.arg)
+
+        transpiler = _BondedTranspiler(geometric_names, parameter_names)
+        cuda_fragment = transpiler.transpile(function_definition)
+        local_variables = transpiler.local_variables
+
+        return BondedExpression(
+            body=body,
+            parameter_names=parameter_names,
+            geometric_names=geometric_names,
+            cuda_fragment=cuda_fragment,
+            local_variables=local_variables,
+        )
+    return decorator
+
+
+def _has_parameter_default(function_definition, arg_name):
+    defaults = function_definition.args.defaults
+    args = function_definition.args.args
+    number_defaults = len(defaults)
+    number_arguments = len(args)
+    for i, arg in enumerate(args):
+        if arg.arg == arg_name:
+            return i >= (number_arguments - number_defaults)
+    return False
+
+
+class _BondedTranspiler(ast.NodeVisitor):
+    def __init__(self, geometric_names, parameter_names):
+        self.geometric_names = geometric_names
+        self.parameter_names = parameter_names
+        self.lines = []
+        self.local_variables = set()
+
+    def transpile(self, function_definition):
+        for stmt in function_definition.body:
+            self.visit(stmt)
+        return '\n'.join(self.lines)
+
+    def visit_Assign(self, node):
+        for target in node.targets:
+            if isinstance(target, ast.Name):
+                self.local_variables.add(target.id)
+        names = [t.id for t in node.targets if isinstance(t, ast.Name)]
+        value = self._expression(node.value)
+        for name in names:
+            self.lines.append(f'float {name} = {value};')
+
+    def visit_Return(self, node):
+        if isinstance(node.value, ast.Tuple):
+            elements = node.value.elts
+            if len(elements) == 2:
+                self.lines.append(f'float _result_energy = {self._expression(elements[0])};')
+                self.lines.append(f'float _result_force = {self._expression(elements[1])};')
+            elif len(elements) == 3:
+                self.lines.append(f'float _result_energy = {self._expression(elements[0])};')
+                self.lines.append(f'float _result_force_0 = {self._expression(elements[1])};')
+                self.lines.append(f'float _result_force_1 = {self._expression(elements[2])};')
+        else:
+            self.lines.append(f'float _result_energy = {self._expression(node.value)};')
+
+    def _expression(self, node):
+        if isinstance(node, ast.Constant):
+            if isinstance(node.value, float):
+                return f'{node.value}f'
+            return str(float(node.value)) + 'f'
+        if isinstance(node, ast.Name):
+            return node.id
+        if isinstance(node, ast.BinOp):
+            left = self._expression(node.left)
+            right = self._expression(node.right)
+            op = self._binary_operator(node.op)
+            return f'({left} {op} {right})'
+        if isinstance(node, ast.UnaryOp):
+            operand = self._expression(node.operand)
+            if isinstance(node.op, ast.USub):
+                return f'(-{operand})'
+            if isinstance(node.op, ast.UAdd):
+                return f'(+{operand})'
+        if isinstance(node, ast.Call):
+            func_name = self._call_name(node.func)
+            if func_name in _MATH_FUNCTIONS:
+                cuda_name = _MATH_FUNCTIONS[func_name]
+                args = ', '.join(self._expression(a) for a in node.args)
+                return f'{cuda_name}({args})'
+            if func_name == 'pow':
+                base = self._expression(node.args[0])
+                exp_node = node.args[1]
+                if isinstance(exp_node, ast.Constant):
+                    exp_val = exp_node.value
+                    if exp_val == 0:
+                        return '1.0f'
+                    if exp_val == 1:
+                        return base
+                    if exp_val == 2:
+                        return f'({base} * {base})'
+                args = ', '.join(self._expression(a) for a in node.args)
+                return f'powf({args})'
+            args = ', '.join(self._expression(a) for a in node.args)
+            return f'{func_name}({args})'
+        if isinstance(node, ast.BoolOp):
+            op = ' && ' if isinstance(node.op, ast.And) else ' || '
+            return op.join(self._expression(v) for v in node.values)
+        if isinstance(node, ast.Compare):
+            left = self._expression(node.left)
+            parts = []
+            for op, comparator in zip(node.ops, node.comparators):
+                right = self._expression(comparator)
+                parts.append(f'({left} {self._comparison_operator(op)} {right})')
+            return ' && '.join(parts)
+        return '0.0f'
+
+    def _binary_operator(self, op):
+        ops = {
+            ast.Add: '+', ast.Sub: '-', ast.Mult: '*',
+            ast.Div: '/', ast.Mod: '%',
+        }
+        return ops.get(type(op), '?')
+
+    def _comparison_operator(self, op):
+        ops = {
+            ast.Lt: '<', ast.LtE: '<=', ast.Gt: '>',
+            ast.GtE: '>=', ast.Eq: '==', ast.NotEq: '!=',
+        }
+        return ops.get(type(op), '?')
+
+    def _call_name(self, node):
+        if isinstance(node, ast.Name):
+            return node.id
+        if isinstance(node, ast.Attribute):
+            return node.attr
+        return ''
 
 
 _PREAMBLE = r'''
@@ -197,11 +364,11 @@ void compute_bonded(
 '''
 
 
-def _generate_param_loads(term_name, param_names, params_per_term):
+def _generate_parameter_loads(term_name, parameter_names, parameters_per_term):
     lines = []
-    for i, pname in enumerate(param_names):
+    for i, parameter_name in enumerate(parameter_names):
         lines.append(
-            f'float {pname} = {term_name}_prm[idx*{params_per_term} + {i}];'
+            f'float {parameter_name} = {term_name}_prm[idx*{parameters_per_term} + {i}];'
         )
     return '\n        '.join(lines)
 
@@ -209,40 +376,40 @@ def _generate_param_loads(term_name, param_names, params_per_term):
 def _assemble_kernel(term_specs):
     kernel_param_lines = []
     body_phases = []
-    for spec in term_specs:
-        name = spec['name']
-        expr = spec['expression']
-        n_atoms = spec['n_atoms']
-        d_idx = spec['d_indices']
-        d_prm = spec['d_params']
-        count = spec['count']
-        params_per_term = len(expr.param_names)
+    for specification in term_specs:
+        name = specification['name']
+        expression = specification['expression']
+        number_atoms = specification['number_atoms']
+        d_idx = specification['d_indices']
+        d_parameters = specification['d_parameters']
+        count = specification['count']
+        parameters_per_term = len(expression.parameter_names)
 
         kernel_param_lines.append(
             f'const int* __restrict__ {name}_idx, const float* __restrict__ {name}_prm, int num_{name}'
         )
 
-        param_loads = _generate_param_loads(name, expr.param_names, params_per_term)
+        parameter_loads = _generate_parameter_loads(name, expression.parameter_names, parameters_per_term)
 
-        if n_atoms == 2:
-            geo_vars = {'geo0': expr.geometric_names[0]}
-        elif n_atoms == 3:
-            geo_vars = {'geo0': expr.geometric_names[0], 'geo1': expr.geometric_names[1]}
+        if number_atoms == 2:
+            geometric_variables = {'geo0': expression.geometric_names[0]}
+        elif number_atoms == 3:
+            geometric_variables = {'geo0': expression.geometric_names[0], 'geo1': expression.geometric_names[1]}
         else:
-            geo_vars = {'geo0': expr.geometric_names[0]}
+            geometric_variables = {'geo0': expression.geometric_names[0]}
 
-        if n_atoms == 2:
+        if number_atoms == 2:
             template = _TWO_BODY_TEMPLATE
-        elif n_atoms == 3:
+        elif number_atoms == 3:
             template = _THREE_BODY_TEMPLATE
         else:
             template = _FOUR_BODY_TEMPLATE
 
         phase = template.format(
             name=name,
-            param_loads=param_loads,
-            expression_fragment=expr.cuda_fragment,
-            **geo_vars,
+            param_loads=parameter_loads,
+            expression_fragment=expression.cuda_fragment,
+            **geometric_variables,
         )
         body_phases.append(phase)
 
@@ -265,41 +432,41 @@ class BondedForce(ForceTerm):
         self._num_sm = None
 
     def add_expression(self, expression, term_name):
-        n_atoms_map = {2: 2, 3: 3, 4: 4}
-        n_atoms = n_atoms_map.get(expression.body, 4)
+        number_atoms_map = {2: 2, 3: 3, 4: 4}
+        number_atoms = number_atoms_map.get(expression.body, 4)
         self._term_specs.append({
             'expression': expression,
             'term_name': term_name,
-            'n_atoms': n_atoms,
+            'number_atoms': number_atoms,
         })
 
     def bind(self, topology, parameter_table):
         self._term_data = []
-        for spec in self._term_specs:
-            term_name = spec['term_name']
-            expr = spec['expression']
-            n_atoms = spec['n_atoms']
+        for specification in self._term_specs:
+            term_name = specification['term_name']
+            expression = specification['expression']
+            number_atoms = specification['number_atoms']
 
             indices_field = f'{term_name}_indices'
             indices = getattr(topology, indices_field, None)
             if indices is None or indices.shape[0] == 0:
                 continue
 
-            params_matrix = parameter_table.get_per_term(term_name)
+            parameters_matrix = parameter_table.get_per_term(term_name)
 
             d_indices = cp.asarray(
                 np.ascontiguousarray(indices.astype(np.int32).ravel())
             )
-            d_params = cp.asarray(
-                np.ascontiguousarray(params_matrix.astype(np.float32).ravel())
+            d_parameters = cp.asarray(
+                np.ascontiguousarray(parameters_matrix.astype(np.float32).ravel())
             )
 
             self._term_data.append({
                 'name': term_name,
-                'expression': expr,
-                'n_atoms': n_atoms,
+                'expression': expression,
+                'number_atoms': number_atoms,
                 'd_indices': d_indices,
-                'd_params': d_params,
+                'd_parameters': d_parameters,
                 'count': indices.shape[0],
             })
 
@@ -307,6 +474,9 @@ class BondedForce(ForceTerm):
 
     @classmethod
     def charmm(cls, topology, parameter_table):
+        from mdpy.force.expressions.bonded import (
+            harmonic_bond, charmm_angle, periodic_dihedral, harmonic_improper,
+        )
         bonded = cls()
         bonded.add_expression(harmonic_bond, 'bond')
         bonded.add_expression(charmm_angle, 'angle')
@@ -316,16 +486,16 @@ class BondedForce(ForceTerm):
         return bonded
 
     def remap_indices(self, topology):
-        for td in self._term_data:
-            term_name = td['name']
+        for term_data in self._term_data:
+            term_name = term_data['name']
             indices_field = f'{term_name}_indices'
             indices = getattr(topology, indices_field, None)
             if indices is None or indices.shape[0] == 0:
                 continue
-            td['d_indices'] = cp.asarray(
+            term_data['d_indices'] = cp.asarray(
                 np.ascontiguousarray(indices.astype(np.int32).ravel())
             )
-            td['count'] = indices.shape[0]
+            term_data['count'] = indices.shape[0]
 
     def _ensure_compiled(self):
         if self._kernel is not None:
@@ -339,7 +509,7 @@ class BondedForce(ForceTerm):
             return
         self._ensure_compiled()
 
-        total = sum(td['count'] for td in self._term_data)
+        total = sum(term_data['count'] for term_data in self._term_data)
         block_size = 128
         max_blocks = 6 * self._num_sm
         grid_size = max(min((total + block_size - 1) // block_size, max_blocks), 1)
@@ -354,9 +524,9 @@ class BondedForce(ForceTerm):
             gpu_context.d_energy,
             gpu_context.d_box_dims,
         ]
-        for td in self._term_data:
-            args.append(td['d_indices'])
-            args.append(td['d_params'])
-            args.append(np.int32(td['count']))
+        for term_data in self._term_data:
+            args.append(term_data['d_indices'])
+            args.append(term_data['d_parameters'])
+            args.append(np.int32(term_data['count']))
 
         self._kernel((grid_size,), (block_size,), tuple(args))

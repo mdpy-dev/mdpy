@@ -1,4 +1,4 @@
-from mdpy.force.bonded_expression import bonded_expression
+from mdpy.force.bonded_force import bonded_expression
 
 
 @bonded_expression(body=2)
