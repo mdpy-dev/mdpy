@@ -8,7 +8,6 @@ import textwrap
 import cupy as cp
 import numpy as np
 
-from mdpy.core.tile_list import _GATHER_SORTED_KERNEL_4COMP
 from mdpy.force.force_term import ForceTerm
 
 
@@ -60,6 +59,43 @@ void pack_posq_kernel(
     posq[idx * 4 + 1] = pos_y[idx];
     posq[idx * 4 + 2] = pos_z[idx];
     posq[idx * 4 + 3] = charge[idx];
+}
+"""
+
+_PACK_SORTED_POSQ_KERNEL = r"""
+extern "C" __global__
+void pack_sorted_posq_kernel(
+    const float* __restrict__ pos_x,
+    const float* __restrict__ pos_y,
+    const float* __restrict__ pos_z,
+    const float* __restrict__ charge,
+    const int* __restrict__ block_atoms,
+    int num_particles,
+    int total_slots,
+    float* __restrict__ posq,
+    float* __restrict__ sorted_posq
+) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < num_particles) {
+        posq[idx * 4 + 0] = pos_x[idx];
+        posq[idx * 4 + 1] = pos_y[idx];
+        posq[idx * 4 + 2] = pos_z[idx];
+        posq[idx * 4 + 3] = charge[idx];
+    }
+    if (idx < total_slots) {
+        int atom_id = block_atoms[idx];
+        if (atom_id >= 0 && atom_id < num_particles) {
+            sorted_posq[idx * 4 + 0] = pos_x[atom_id];
+            sorted_posq[idx * 4 + 1] = pos_y[atom_id];
+            sorted_posq[idx * 4 + 2] = pos_z[atom_id];
+            sorted_posq[idx * 4 + 3] = charge[atom_id];
+        } else {
+            sorted_posq[idx * 4 + 0] = 0.0f;
+            sorted_posq[idx * 4 + 1] = 0.0f;
+            sorted_posq[idx * 4 + 2] = 0.0f;
+            sorted_posq[idx * 4 + 3] = 0.0f;
+        }
+    }
 }
 """
 
@@ -1120,8 +1156,7 @@ class NonbondedForce(ForceTerm):
         self._cutoff_sq = None
         self._d_posq = None
         self._d_sorted_posq = None
-        self._pack_posq_kernel = None
-        self._gather_4comp_kernel = None
+        self._pack_sorted_posq_kernel = None
 
     def bind(self, topology, parameter_table, cutoff):
         self._cutoff = cutoff
@@ -1192,12 +1227,11 @@ class NonbondedForce(ForceTerm):
             "exclusion_tile_kernel",
         )
         if self._use_posq():
-            self._pack_posq_kernel = cp.RawKernel(_PACK_POSQ_KERNEL, "pack_posq_kernel")
+            self._pack_sorted_posq_kernel = cp.RawKernel(
+                _PACK_SORTED_POSQ_KERNEL, "pack_sorted_posq_kernel"
+            )
             N = self._parameter_arrays["charge"].shape[0]
             self._d_posq = cp.zeros(N * 4, dtype=np.float32)
-            self._gather_4comp_kernel = cp.RawKernel(
-                _GATHER_SORTED_KERNEL_4COMP, "gather_sorted_kernel_4comp"
-            )
         if not self._d_cached_params:
             self._upload_parameter_arrays()
             self._d_cached_params = dict(self._d_parameter_arrays)
@@ -1252,9 +1286,11 @@ class NonbondedForce(ForceTerm):
         tile_list.gather_sorted_params(param_arrays)
         if self._use_posq():
             N = gpu_context.number_particles
+            total_slots = tile_list.num_blocks * 32
             tpb = 256
-            grid = ((N + tpb - 1) // tpb,)
-            self._pack_posq_kernel(
+            grid = ((total_slots + tpb - 1) // tpb,)
+            self._d_sorted_posq = cp.zeros(total_slots * 4, dtype=np.float32)
+            self._pack_sorted_posq_kernel(
                 grid,
                 (tpb,),
                 (
@@ -1262,21 +1298,10 @@ class NonbondedForce(ForceTerm):
                     gpu_context.d_positions_y,
                     gpu_context.d_positions_z,
                     self._d_parameter_arrays["charge"],
-                    self._d_posq,
-                    np.int32(N),
-                ),
-            )
-            total_slots = tile_list.num_blocks * 32
-            self._d_sorted_posq = cp.zeros(total_slots * 4, dtype=np.float32)
-            grid_gather = ((total_slots + tpb - 1) // tpb,)
-            self._gather_4comp_kernel(
-                grid_gather,
-                (tpb,),
-                (
-                    self._d_posq,
                     tile_list.d_block_atoms,
-                    np.int32(total_slots),
                     np.int32(N),
+                    np.int32(total_slots),
+                    self._d_posq,
                     self._d_sorted_posq,
                 ),
             )
@@ -1325,9 +1350,12 @@ class NonbondedForce(ForceTerm):
 
     def _refresh_posq(self, gpu_context, tile_list):
         N = gpu_context.number_particles
+        total_slots = tile_list.num_blocks * 32
         tpb = 256
-        grid = ((N + tpb - 1) // tpb,)
-        self._pack_posq_kernel(
+        grid = ((total_slots + tpb - 1) // tpb,)
+        if self._d_sorted_posq.size != total_slots * 4:
+            self._d_sorted_posq = cp.zeros(total_slots * 4, dtype=np.float32)
+        self._pack_sorted_posq_kernel(
             grid,
             (tpb,),
             (
@@ -1335,20 +1363,10 @@ class NonbondedForce(ForceTerm):
                 gpu_context.d_positions_y,
                 gpu_context.d_positions_z,
                 self._d_parameter_arrays["charge"],
-                self._d_posq,
-                np.int32(N),
-            ),
-        )
-        total_slots = tile_list.num_blocks * 32
-        grid_gather = ((total_slots + tpb - 1) // tpb,)
-        self._gather_4comp_kernel(
-            grid_gather,
-            (tpb,),
-            (
-                self._d_posq,
                 tile_list.d_block_atoms,
-                np.int32(total_slots),
                 np.int32(N),
+                np.int32(total_slots),
+                self._d_posq,
                 self._d_sorted_posq,
             ),
         )
