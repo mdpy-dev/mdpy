@@ -58,27 +58,27 @@ def _setup_mdpy_system():
     system.particles.positions[:] = wrapped
     system.gpu.upload_positions(system.particles)
     positions_2d = system.gpu.get_positions_2d()
-    system.tile_list.rebuild(
+    pdb_to_sorted_gpu, pdb_to_sorted_np = system.tile_list.rebuild(
         positions_2d, topology, system.pbc_matrix, system.pbc_inv,
     )
+    system._permute_all_arrays(pdb_to_sorted_gpu, pdb_to_sorted_np)
+    system.tile_list.build_tiles(topology, system.pbc_matrix)
     for term in system.force_terms:
-        if hasattr(term, 'bind_sorted_params'):
-            term.bind_sorted_params(system.tile_list)
-    system.tile_list.update_sorted_positions(
-        system.gpu.d_positions_x,
-        system.gpu.d_positions_y,
-        system.gpu.d_positions_z,
-    )
+        if hasattr(term, 'bind_sorted'):
+            term.bind_sorted(topology, system.tile_list, system.gpu)
     return system
 
 
 def _extract_tile_pairs(system):
+    import cupy as cp
     tl = system.tile_list
     block_atoms = tl.block_atoms
     tiles = tl.tiles
     interacting_atoms = tl.interacting_atoms
     exclusion_masks = tl.exclusion_masks
     scaling_masks = tl.scaling_masks
+
+    sorted_to_pdb = cp.asnumpy(tl.d_sorted_to_pdb)
 
     pair_set = set()
     excluded_pair_set = set()
@@ -90,13 +90,15 @@ def _extract_tile_pairs(system):
         exc_mask = exclusion_masks[tile_idx]
         scl_mask = scaling_masks[tile_idx]
         for slot_j in range(W):
-            atom_j = interacting_atoms[tile_idx, slot_j]
-            if atom_j == SENTINEL:
+            atom_j_sorted = interacting_atoms[tile_idx, slot_j]
+            if atom_j_sorted == SENTINEL:
                 continue
+            atom_j = int(sorted_to_pdb[atom_j_sorted])
             for slot_i in range(W):
-                atom_i = block_atoms[block_x, slot_i]
-                if atom_i == SENTINEL:
+                atom_i_sorted = block_atoms[block_x, slot_i]
+                if atom_i_sorted == SENTINEL:
                     continue
+                atom_i = int(sorted_to_pdb[atom_i_sorted])
                 if atom_i == atom_j:
                     continue
                 a, b = min(atom_i, atom_j), max(atom_i, atom_j)
@@ -155,25 +157,11 @@ class TestTileListValidation:
 
     def test_atom_mapping_consistency(self, mdpy_system):
         tl = mdpy_system.tile_list
-        block_atoms = tl.block_atoms
-        num_blocks = block_atoms.shape[0]
-        seen_atoms = set()
-        for b in range(num_blocks):
-            for s in range(W):
-                atom_id = block_atoms[b, s]
-                if atom_id < 0:
-                    continue
-                assert atom_id < mdpy_system.topology.num_particles, (
-                    f'Invalid atom ID {atom_id} in block {b} slot {s}'
-                )
-                assert atom_id not in seen_atoms, (
-                    f'Duplicate atom ID {atom_id} in block {b} slot {s}'
-                )
-                seen_atoms.add(atom_id)
-        assert len(seen_atoms) == mdpy_system.topology.num_particles, (
-            f'Expected {mdpy_system.topology.num_particles} atoms, '
-            f'found {len(seen_atoms)} in block_atoms'
-        )
+        N = mdpy_system.topology.num_particles
+        assert tl.d_sorted_to_pdb.shape[0] == N
+        sorted_to_pdb = __import__('cupy').asnumpy(tl.d_sorted_to_pdb)
+        pdb_ids = sorted(int(x) for x in sorted_to_pdb)
+        assert pdb_ids == list(range(N))
 
 
 @pytest.mark.slow
@@ -193,10 +181,19 @@ class TestBondedForces:
             f'rel_err={rel_err:.6e}'
         )
 
+    def _get_pdb_forces(self, mdpy_system):
+        import cupy as cp
+        tl = mdpy_system.tile_list
+        gpu = mdpy_system.gpu
+        sorted_to_pdb = tl.d_sorted_to_pdb
+        pdb_fx = tl.permute_from_sorted(sorted_to_pdb, gpu.d_forces_x).get()
+        pdb_fy = tl.permute_from_sorted(sorted_to_pdb, gpu.d_forces_y).get()
+        pdb_fz = tl.permute_from_sorted(sorted_to_pdb, gpu.d_forces_z).get()
+        return np.stack([pdb_fx, pdb_fy, pdb_fz], axis=1).astype(np.float64)
+
     def test_total_forces_correlation(self, mdpy_system, ref):
         mdpy_system.compute_forces()
-        mdpy_system.gpu.download_forces(mdpy_system.particles)
-        mdpy_forces = mdpy_system.particles.forces.astype(np.float64)
+        mdpy_forces = self._get_pdb_forces(mdpy_system)
         ref_forces = ref['total_forces']
         mask = np.any(np.abs(ref_forces) > 1e-8, axis=1)
         if not np.any(mask):
@@ -257,10 +254,19 @@ class TestNonbondedForces:
             f'rel_err={rel_err:.6e}'
         )
 
+    def _get_pdb_forces(self, mdpy_system):
+        import cupy as cp
+        tl = mdpy_system.tile_list
+        gpu = mdpy_system.gpu
+        sorted_to_pdb = tl.d_sorted_to_pdb
+        pdb_fx = tl.permute_from_sorted(sorted_to_pdb, gpu.d_forces_x).get()
+        pdb_fy = tl.permute_from_sorted(sorted_to_pdb, gpu.d_forces_y).get()
+        pdb_fz = tl.permute_from_sorted(sorted_to_pdb, gpu.d_forces_z).get()
+        return np.stack([pdb_fx, pdb_fy, pdb_fz], axis=1).astype(np.float64)
+
     def test_nonbonded_force_direction(self, mdpy_system, ref):
         mdpy_system.compute_forces()
-        mdpy_system.gpu.download_forces(mdpy_system.particles)
-        mdpy_forces = mdpy_system.particles.forces.astype(np.float64)
+        mdpy_forces = self._get_pdb_forces(mdpy_system)
         ref_total = ref['total_forces']
         ref_bonded = ref['bonded_forces']
         ref_nonbonded = ref_total - ref_bonded
@@ -272,8 +278,7 @@ class TestNonbondedForces:
 
     def test_total_force_correlation(self, mdpy_system, ref):
         mdpy_system.compute_forces()
-        mdpy_system.gpu.download_forces(mdpy_system.particles)
-        mdpy_forces = mdpy_system.particles.forces.astype(np.float64)
+        mdpy_forces = self._get_pdb_forces(mdpy_system)
         ref_forces = ref['total_forces']
         mask = np.any(np.abs(ref_forces) > 1e-8, axis=1)
         if not np.any(mask):
@@ -283,8 +288,7 @@ class TestNonbondedForces:
 
     def test_force_magnitude_correlation(self, mdpy_system, ref):
         mdpy_system.compute_forces()
-        mdpy_system.gpu.download_forces(mdpy_system.particles)
-        mdpy_forces = mdpy_system.particles.forces.astype(np.float64)
+        mdpy_forces = self._get_pdb_forces(mdpy_system)
         ref_forces = ref['total_forces']
         ref_norms = np.linalg.norm(ref_forces, axis=1)
         mdpy_norms = np.linalg.norm(mdpy_forces, axis=1)
@@ -293,3 +297,30 @@ class TestNonbondedForces:
             return
         corr = np.corrcoef(ref_norms[mask], mdpy_norms[mask])[0, 1]
         assert corr > 0.99, f'Force magnitude correlation: {corr:.6f}'
+
+
+@pytest.mark.slow
+class TestMultiStepConsistency:
+
+    def test_energy_changes_after_position_perturbation(self, mdpy_system):
+        import cupy as cp
+        mdpy_system.compute_forces()
+        energies_1 = mdpy_system.dump_energy()
+        e1 = energies_1.get('nonbonded', 0.0)
+
+        gpu = mdpy_system.gpu
+        cp.add(gpu.d_positions_x, np.float32(0.5), out=gpu.d_positions_x)
+
+        mdpy_system.compute_forces()
+        energies_2 = mdpy_system.dump_energy()
+        e2 = energies_2.get('nonbonded', 0.0)
+
+        denom = max(abs(e1), abs(e2))
+        if denom < 1e-14:
+            return
+        rel_change = abs(e2 - e1) / denom
+        assert rel_change > 1e-8, (
+            f'Nonbonded energy did not change after perturbation: '
+            f'e1={e1:.8f}, e2={e2:.8f}, rel_change={rel_change:.6e}. '
+            f'Stale position data suspected.'
+        )

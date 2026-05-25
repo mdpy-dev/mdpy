@@ -63,6 +63,10 @@ class System:
 
     def compute_forces(self):
         self.gpu.zero_forces()
+        self.tile_list.update_sorted_positions(
+            self.gpu.d_positions_x,
+            self.gpu.d_positions_y,
+            self.gpu.d_positions_z)
         pbc_2d = self.pbc_matrix.reshape(3, 3)
         self.gpu.set_box_dims(
             abs(float(pbc_2d[0, 0])),
@@ -98,9 +102,8 @@ class System:
         grid = ((N + tpb - 1) // tpb,)
         gpu = self.gpu
 
-        sorted_to_pdb_np = cp.asnumpy(self.tile_list.d_sorted_to_pdb)
-
-        perm_np = sorted_to_pdb_np
+        new_sorted_to_pdb_np = cp.asnumpy(self.tile_list.d_sorted_to_pdb)
+        perm_np = new_sorted_to_pdb_np.copy()
 
         perm_gpu = cp.asarray(perm_np)
 
@@ -166,6 +169,7 @@ class System:
                         s2p = self._sorted_to_pdb_np()
                         term.bind_sorted(
                             self.topology, self.tile_list, self.gpu,
+                            sorted_to_pdb_np=s2p,
                             sorted_particle_types=self._particle_types_pdb[s2p],
                         )
             self.compute_forces()
@@ -195,13 +199,14 @@ class System:
             )
             self._permute_all_arrays(pdb_to_sorted_gpu, pdb_to_sorted_np)
             self.tile_list.build_tiles(self.topology, self.pbc_matrix)
-            for term in self.force_terms:
-                if hasattr(term, 'bind_sorted'):
-                    s2p = self._sorted_to_pdb_np()
-                    term.bind_sorted(
-                        self.topology, self.tile_list, self.gpu,
-                        sorted_particle_types=self._particle_types_pdb[s2p],
-                    )
+        for term in self.force_terms:
+            if hasattr(term, 'bind_sorted'):
+                s2p = self._sorted_to_pdb_np()
+                term.bind_sorted(
+                    self.topology, self.tile_list, self.gpu,
+                    sorted_to_pdb_np=s2p,
+                    sorted_particle_types=self._particle_types_pdb[s2p],
+                )
         self.compute_forces()
         for _ in range(number_steps):
             minimizer.step(self)

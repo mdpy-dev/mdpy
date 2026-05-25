@@ -1809,6 +1809,17 @@ class NonbondedForce(ForceTerm):
             se_14[1::2] = self._parameter_arrays['sqrt_epsilon_14']
             self._parameter_arrays['sigma_epsilon_14'] = se_14
 
+    def _repack_sigma_epsilon(self, N):
+        if 'sigma_half' in self.expression.parameter_names and 'sqrt_epsilon' in self.expression.parameter_names:
+            se = np.empty(N * 2, dtype=np.float32)
+            se[0::2] = self._parameter_arrays['sigma_half']
+            se[1::2] = self._parameter_arrays['sqrt_epsilon']
+            self._parameter_arrays['sigma_epsilon'] = se
+            se_14 = np.empty(N * 2, dtype=np.float32)
+            se_14[0::2] = self._parameter_arrays['sigma_half_14']
+            se_14[1::2] = self._parameter_arrays['sqrt_epsilon_14']
+            self._parameter_arrays['sigma_epsilon_14'] = se_14
+
     def _upload_param_arrays(self):
         for name, arr in self._parameter_arrays.items():
             self._d_parameter_arrays[name] = cp.asarray(arr)
@@ -1829,9 +1840,16 @@ class NonbondedForce(ForceTerm):
     def _use_posq(self):
         return 'charge' in self.expression.parameter_names
 
-    def bind_sorted(self, topology, tile_list, gpu_context):
+    def bind_sorted(self, topology, tile_list, gpu_context, sorted_to_pdb_np=None, sorted_particle_types=None):
         self._ensure_compiled()
         self._rebuild_param_arrays(topology.particle_types)
+        if sorted_to_pdb_np is None:
+            sorted_to_pdb_np = cp.asnumpy(tile_list.d_sorted_to_pdb)
+        N = len(sorted_to_pdb_np)
+        for name, arr in self._parameter_arrays.items():
+            if arr.shape[0] == N:
+                self._parameter_arrays[name] = arr[sorted_to_pdb_np]
+        self._repack_sigma_epsilon(N)
         self._upload_param_arrays()
         param_arrays = {}
         for arr in _unique_gpu_arrays(self.expression.parameter_names):
@@ -1851,6 +1869,7 @@ class NonbondedForce(ForceTerm):
                  self._d_parameter_arrays['charge'], self._d_posq,
                  np.int32(N)))
             total_slots = tile_list.num_blocks * 32
+            self._d_sorted_posq = cp.zeros(total_slots * 4, dtype=np.float32)
             grid_gather = ((total_slots + tpb - 1) // tpb,)
             self._gather_4comp_kernel(grid_gather, (tpb,),
                 (self._d_posq, tile_list.d_block_atoms,
@@ -1899,11 +1918,30 @@ class NonbondedForce(ForceTerm):
                 args.append(getattr(tile_list, f'd_sorted_{arr}_14'))
         return args
 
+    def _refresh_posq(self, gpu_context, tile_list):
+        N = gpu_context.number_particles
+        tpb = 256
+        grid = ((N + tpb - 1) // tpb,)
+        self._pack_posq_kernel(grid, (tpb,),
+            (gpu_context.d_positions_x, gpu_context.d_positions_y,
+             gpu_context.d_positions_z,
+             self._d_parameter_arrays['charge'], self._d_posq,
+             np.int32(N)))
+        total_slots = tile_list.num_blocks * 32
+        grid_gather = ((total_slots + tpb - 1) // tpb,)
+        self._gather_4comp_kernel(grid_gather, (tpb,),
+            (self._d_posq, tile_list.d_block_atoms,
+             np.int32(total_slots), np.int32(N),
+             self._d_sorted_posq))
+
     def compute(self, gpu_context, tile_list=None):
         self._ensure_compiled()
 
         if tile_list is None or tile_list.num_tiles == 0:
             return
+
+        if self._use_posq():
+            self._refresh_posq(gpu_context, tile_list)
 
         num_sm = self._num_sm
         grid_size = 4 * num_sm

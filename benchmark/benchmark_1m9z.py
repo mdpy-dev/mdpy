@@ -14,18 +14,19 @@ import cupy as cp
 import numpy as np
 
 from benchmark._data_path import DATA_DIR
-PSF_PATH = os.path.join(DATA_DIR, '1M9Z.psf')
-PDB_PATH = os.path.join(DATA_DIR, '1M9Z_minimized.pdb')
-PRM_PATH = os.path.join(DATA_DIR, 'par_all36_prot.prm')
-STR_PATH = os.path.join(DATA_DIR, 'toppar_water_ions.str')
+
+PSF_PATH = os.path.join(DATA_DIR, "1M9Z.psf")
+PDB_PATH = os.path.join(DATA_DIR, "1M9Z_minimized.pdb")
+PRM_PATH = os.path.join(DATA_DIR, "par_all36_prot.prm")
+STR_PATH = os.path.join(DATA_DIR, "toppar_water_ions.str")
 
 BOX_SIZE = 108.0
 CUTOFF = 12.0
 DT_FS = 0.5
 KCAL_PER_INTERNAL = 1.0 / 4.1840286576e-4
-WARMUP_STEPS = 500
+WARMUP_STEPS = 50
 BLOCK_STEPS = 500
-NUM_BLOCKS = 10
+NUM_BLOCKS = 5
 
 
 def main():
@@ -80,8 +81,12 @@ def main():
     system.enable_profiling()
 
     print(f"\nBenchmark: {NUM_BLOCKS} x {BLOCK_STEPS} steps")
-    print(f"  {'Block':>6s}  {'ms/step':>10s}  {'ns/day':>10s}  {'E_pot (kcal/mol)':>18s}")
-    print(f"  {'------':>6s}  {'----------':>10s}  {'----------':>10s}  {'------------------':>18s}")
+    print(
+        f"  {'Block':>6s}  {'ms/step':>10s}  {'ns/day':>10s}  {'E_pot (kcal/mol)':>18s}"
+    )
+    print(
+        f"  {'------':>6s}  {'----------':>10s}  {'----------':>10s}  {'------------------':>18s}"
+    )
 
     block_times = []
     kernel_totals = {}
@@ -102,7 +107,7 @@ def main():
 
         profile = system.dump_profile()
         for name, data in profile.items():
-            kernel_totals[name] = kernel_totals.get(name, 0.0) + data['total_ms']
+            kernel_totals[name] = kernel_totals.get(name, 0.0) + data["total_ms"]
         parts = [f"{n}={profile[n]['avg_ms']:.2f}" for n in sorted(profile)]
         if parts:
             print(f"          {', '.join(parts)}")
@@ -136,5 +141,5 @@ def main():
     print("      OpenMM uses HBond constraints allowing dt=2fs.")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
