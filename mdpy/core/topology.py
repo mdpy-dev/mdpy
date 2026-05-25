@@ -115,36 +115,8 @@ class Topology:
         )
 
     @property
-    def particles(self):
-        return getattr(self, '_legacy_particles', [])
-
-    @property
-    def bonds(self):
-        return getattr(self, '_legacy_bonds', [])
-
-    @property
-    def angles(self):
-        return getattr(self, '_legacy_angles', [])
-
-    @property
-    def dihedrals(self):
-        return getattr(self, '_legacy_dihedrals', [])
-
-    @property
-    def impropers(self):
-        return getattr(self, '_legacy_impropers', [])
-
-    @property
     def is_joined(self):
         return getattr(self, '_is_joined', True)
-
-    @property
-    def bonded_particles(self):
-        return getattr(self, '_legacy_bonded_particles', np.empty((0, 0), dtype=env.NUMPY_INT))
-
-    @property
-    def scaling_particles(self):
-        return getattr(self, '_legacy_scaling_particles', np.empty((0, 0), dtype=env.NUMPY_INT))
 
     def join(self):
         self._is_joined = True
@@ -158,9 +130,6 @@ class Topology:
         self.exclusion_offset = None
         self.exclusion_neighbors = None
         self.exclusion_scale = None
-
-    def sorted_particle_types(self, pdb_to_sorted):
-        return self.particle_types[pdb_to_sorted]
 
     def build_exclusion_map(self, scale_14=1.0):
         num_particles = self.num_particles
@@ -219,24 +188,6 @@ class Topology:
         self.exclusion_offset = offset
         self.exclusion_neighbors = neighbors_array
         self.exclusion_scale = scale_array
-
-    def split(self):
-        self._is_joined = False
-
-    def add_particles(self, particles):
-        pass
-
-    def add_bond(self, bond):
-        pass
-
-    def add_angle(self, angle):
-        pass
-
-    def add_dihedral(self, dihedral, scaling_factor=1):
-        pass
-
-    def add_improper(self, improper):
-        pass
 
     def __repr__(self) -> str:
         return (
