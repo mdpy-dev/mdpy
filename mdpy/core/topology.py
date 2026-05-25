@@ -406,6 +406,33 @@ void parallel_dedup_kernel(
 }
 '''
 
+_PERMUTE_PAIRS_KERNEL = r'''
+extern "C" __global__
+void permute_pairs_kernel(
+    const int* __restrict__ old_i,
+    const int* __restrict__ old_j,
+    const float* __restrict__ old_scale,
+    const int* __restrict__ permutation,
+    const int num_pairs,
+    int* __restrict__ new_i,
+    int* __restrict__ new_j,
+    float* __restrict__ new_scale
+) {
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tid >= num_pairs) return;
+    int ni = permutation[old_i[tid]];
+    int nj = permutation[old_j[tid]];
+    if (ni < nj) {
+        new_i[tid] = ni;
+        new_j[tid] = nj;
+    } else {
+        new_i[tid] = nj;
+        new_j[tid] = ni;
+    }
+    new_scale[tid] = old_scale[tid];
+}
+'''
+
 _gpu_kernels = None
 
 
@@ -419,6 +446,7 @@ def _get_gpu_kernels():
             'parallel_csr': cp.RawKernel(_PARALLEL_CSR_KERNEL, 'parallel_csr_kernel'),
             'fill_csr_gaps': cp.RawKernel(_FILL_CSR_GAPS_KERNEL, 'fill_csr_gaps_kernel'),
             'parallel_dedup': cp.RawKernel(_PARALLEL_DEDUP_KERNEL, 'parallel_dedup_kernel'),
+            'permute_pairs': cp.RawKernel(_PERMUTE_PAIRS_KERNEL, 'permute_pairs_kernel'),
         }
     return _gpu_kernels
 
@@ -435,7 +463,7 @@ def build_exclusion_map_gpu(topology, scale_14=1.0):
         d_offset = cp.zeros(num_particles + 1, dtype=cp.int32)
         d_neighbors = cp.empty(0, dtype=cp.int32)
         d_scale = cp.empty(0, dtype=cp.float32)
-        return d_offset, d_neighbors, d_scale
+        return d_offset, d_neighbors, d_scale, cp.empty(0, dtype=cp.int32)
 
     kernels = _get_gpu_kernels()
 
@@ -503,7 +531,51 @@ def build_exclusion_map_gpu(topology, scale_14=1.0):
         grid_fill, (tpb_fill,),
         (d_offset, np.int32(num_particles)))
 
-    return d_offset, d_unique_j, d_unique_scale
+    return d_offset, d_unique_j, d_unique_scale, d_unique_i
+
+
+def permute_exclusion_pairs_gpu(d_cached_i, d_cached_j, d_cached_scale,
+                                 d_composed_perm, num_particles):
+    num_pairs = len(d_cached_i)
+    if num_pairs == 0:
+        d_offset = cp.zeros(num_particles + 1, dtype=cp.int32)
+        d_neighbors = cp.empty(0, dtype=cp.int32)
+        d_scale = cp.empty(0, dtype=cp.float32)
+        return d_offset, d_neighbors, d_scale, d_cached_i, d_cached_j, d_cached_scale
+
+    kernels = _get_gpu_kernels()
+
+    d_new_i = cp.empty(num_pairs, dtype=cp.int32)
+    d_new_j = cp.empty(num_pairs, dtype=cp.int32)
+    d_new_scale = cp.empty(num_pairs, dtype=cp.float32)
+
+    tpb = 256
+    grid = ((num_pairs + tpb - 1) // tpb,)
+    kernels['permute_pairs'](grid, (tpb,),
+        (d_cached_i, d_cached_j, d_cached_scale,
+         d_composed_perm, np.int32(num_pairs),
+         d_new_i, d_new_j, d_new_scale))
+
+    max_j = int(cp.max(d_new_j)) + 1
+    sort_key = (d_new_i.astype(cp.int64) * np.int64(max_j * 2 + 2)
+                + d_new_j.astype(cp.int64) * np.int64(2)
+                + (d_new_scale > 0.0).astype(cp.int64))
+    order = cp.argsort(sort_key)
+    d_new_i = d_new_i[order]
+    d_new_j = d_new_j[order]
+    d_new_scale = d_new_scale[order]
+
+    d_offset = cp.full(num_particles + 1, -1, dtype=cp.int32)
+    grid_csr = ((num_pairs + 1 + tpb - 1) // tpb,)
+    kernels['parallel_csr'](grid_csr, (tpb,),
+        (d_new_i, np.int32(num_pairs),
+         np.int32(num_particles), d_offset))
+
+    grid_fill = ((num_particles + tpb - 1) // tpb,)
+    kernels['fill_csr_gaps'](grid_fill, (tpb,),
+        (d_offset, np.int32(num_particles)))
+
+    return d_offset, d_new_j, d_new_scale, d_new_i, d_new_j, d_new_scale
 
 
 class Builder:

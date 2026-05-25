@@ -49,7 +49,7 @@ def test_gpu_exclusion_map_matches_cpu():
     cpu_scale = topology.exclusion_scale.copy()
 
     from mdpy.core.topology import build_exclusion_map_gpu
-    gpu_offset, gpu_neighbors, gpu_scale = build_exclusion_map_gpu(topology, scale_14=1.0)
+    gpu_offset, gpu_neighbors, gpu_scale, _ = build_exclusion_map_gpu(topology, scale_14=1.0)
 
     np.testing.assert_array_equal(cp.asnumpy(gpu_offset), cpu_offset)
     np.testing.assert_array_equal(cp.asnumpy(gpu_neighbors), cpu_neighbors)
@@ -68,7 +68,7 @@ def test_exclusion_map_after_remap():
     cpu_scale = topology.exclusion_scale.copy()
 
     from mdpy.core.topology import build_exclusion_map_gpu
-    gpu_offset, gpu_neighbors, gpu_scale = build_exclusion_map_gpu(topology, scale_14=1.0)
+    gpu_offset, gpu_neighbors, gpu_scale, _ = build_exclusion_map_gpu(topology, scale_14=1.0)
 
     np.testing.assert_array_equal(cp.asnumpy(gpu_offset), cpu_offset)
     np.testing.assert_array_equal(cp.asnumpy(gpu_neighbors), cpu_neighbors)
@@ -292,3 +292,40 @@ def test_rebuild_1m9z_correctness():
     assert not np.any(np.isnan(pos))
     assert not np.any(np.isnan(vel))
     assert 'bonded' in energies or 'nonbonded' in energies
+
+
+def test_permute_fast_path_matches_full_rebuild():
+    system, integrator = _make_system_6po6()
+    topology = system.topology
+
+    from mdpy.core.topology import build_exclusion_map_gpu, permute_exclusion_pairs_gpu
+    import cupy as cp
+
+    topology.build_exclusion_map(scale_14=1.0)
+    gpu_offset, gpu_neighbors, gpu_scale, gpu_unique_i = build_exclusion_map_gpu(topology, scale_14=1.0)
+
+    rng = np.random.default_rng(42)
+    perm = np.arange(topology.num_particles, dtype=np.int32)
+    rng.shuffle(perm)
+    d_perm = cp.asarray(perm)
+
+    d_composed_perm = cp.empty(topology.num_particles, dtype=cp.int32)
+    d_composed_perm[d_perm] = cp.arange(topology.num_particles, dtype=cp.int32)
+
+    result = permute_exclusion_pairs_gpu(
+        gpu_unique_i, gpu_neighbors, gpu_scale,
+        d_composed_perm, topology.num_particles)
+    d_offset, d_neighbors, d_scale = result[0], result[1], result[2]
+
+    remap = cp.asnumpy(d_composed_perm)
+    topology_remapped = topology
+    topology_remapped.bond_indices = remap[topology_remapped.bond_indices]
+    topology_remapped.angle_indices = remap[topology_remapped.angle_indices]
+    topology_remapped.dihedral_indices = remap[topology_remapped.dihedral_indices]
+    topology_remapped.improper_indices = remap[topology_remapped.improper_indices]
+
+    gt_offset, gt_neighbors, gt_scale, _ = build_exclusion_map_gpu(topology_remapped, scale_14=1.0)
+
+    np.testing.assert_array_equal(cp.asnumpy(d_offset), cp.asnumpy(gt_offset))
+    np.testing.assert_array_equal(cp.asnumpy(d_neighbors), cp.asnumpy(gt_neighbors))
+    np.testing.assert_allclose(cp.asnumpy(d_scale), cp.asnumpy(gt_scale), atol=1e-7)

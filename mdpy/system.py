@@ -5,7 +5,7 @@ import numpy as np
 from mdpy import env
 from mdpy.core.particle_table import ParticleTable
 from mdpy.core.tile_list import TileList
-from mdpy.core.topology import build_exclusion_map_gpu
+from mdpy.core.topology import build_exclusion_map_gpu, permute_exclusion_pairs_gpu
 from mdpy.core.pbc import compute_pbc_inv
 from mdpy.core.gpu_context import GPUContext
 
@@ -32,6 +32,9 @@ class System:
         self._profile_data = {}
         self._pdb_to_current_sorted = None
         self._particle_types_pdb = topology.particle_types.copy()
+        self._d_cached_unique_i = None
+        self._d_cached_unique_j = None
+        self._d_cached_unique_scale = None
 
 
     def add_force_term(self, term):
@@ -137,7 +140,27 @@ class System:
         remap = np.empty(N, dtype=np.int32)
         remap[perm_np] = np.arange(N, dtype=np.int32)
         self.topology.remap_bonded_indices(remap)
-        d_excl_offset, d_excl_neighbors, d_excl_scale = build_exclusion_map_gpu(self.topology, scale_14=1.0)
+
+        if self._d_cached_unique_i is not None:
+            d_composed_perm = cp.empty(N, dtype=cp.int32)
+            d_composed_perm[perm_gpu] = cp.arange(N, dtype=cp.int32)
+            result = permute_exclusion_pairs_gpu(
+                self._d_cached_unique_i,
+                self._d_cached_unique_j,
+                self._d_cached_unique_scale,
+                d_composed_perm, N)
+            d_excl_offset = result[0]
+            d_excl_neighbors = result[1]
+            d_excl_scale = result[2]
+            self._d_cached_unique_i = result[3]
+            self._d_cached_unique_j = result[4]
+            self._d_cached_unique_scale = result[5]
+        else:
+            d_excl_offset, d_excl_neighbors, d_excl_scale, d_unique_i = build_exclusion_map_gpu(self.topology, scale_14=1.0)
+            self._d_cached_unique_i = d_unique_i
+            self._d_cached_unique_j = d_excl_neighbors
+            self._d_cached_unique_scale = d_excl_scale
+
         self.tile_list.set_gpu_exclusion(d_excl_offset, d_excl_neighbors, d_excl_scale)
 
         for term in self.force_terms:
