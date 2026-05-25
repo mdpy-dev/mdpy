@@ -137,7 +137,7 @@ void compute_block_bounds_kernel(
 }
 """
 
-_BUILD_ATOM_MAP_KERNEL = r'''
+_BUILD_ATOM_MAP_KERNEL = r"""
 extern "C" __global__
 void build_atom_map_kernel(
     const int* __restrict__ block_atoms,
@@ -156,7 +156,7 @@ void build_atom_map_kernel(
         }
     }
 }
-'''
+"""
 
 _COMPUTE_LARGE_BLOCK_BOUNDS_KERNEL = r"""
 extern "C" __global__
@@ -528,7 +528,7 @@ void find_interacting_blocks_kernel(
 }
 """
 
-_BUILD_REVERSE_COUNT_KERNEL = r'''
+_BUILD_REVERSE_COUNT_KERNEL = r"""
 extern "C" __global__
 void build_reverse_count_kernel(
     const int* __restrict__ exclusion_offset,
@@ -545,9 +545,9 @@ void build_reverse_count_kernel(
         atomicAdd(&reverse_offset[neighbor + 1], 1);
     }
 }
-'''
+"""
 
-_FILL_REVERSE_KERNEL = r'''
+_FILL_REVERSE_KERNEL = r"""
 extern "C" __global__
 void fill_reverse_kernel(
     const int* __restrict__ exclusion_offset,
@@ -571,9 +571,9 @@ void fill_reverse_kernel(
         reverse_scale[pos] = scale;
     }
 }
-'''
+"""
 
-_BUILD_MASKS_KERNEL = r'''
+_BUILD_MASKS_KERNEL = r"""
 extern "C" __global__
 void build_masks_kernel(
     const int* __restrict__ tiles,
@@ -641,7 +641,7 @@ void build_masks_kernel(
     exclusion_masks_out[idx] = excl;
     scaling_masks_out[idx] = scale;
 }
-'''
+"""
 
 _CLASSIFY_TILES_KERNEL = r"""
 extern "C" __global__
@@ -692,31 +692,51 @@ void classify_tiles_kernel(
 
 def _compile_gpu_kernels():
     return {
-        'wrap': cp.RawKernel(_PBC_WRAP_KERNEL, 'pbc_wrap_kernel'),
-        'morton': cp.RawKernel(_MORTON_ENCODE_KERNEL, 'morton_encode_kernel'),
-        'form_blocks': cp.RawKernel(_FORM_BLOCKS_KERNEL, 'form_blocks_kernel'),
-        'compute_bounds': cp.RawKernel(_COMPUTE_BLOCK_BOUNDS_KERNEL, 'compute_block_bounds_kernel'),
-        'atom_map': cp.RawKernel(_BUILD_ATOM_MAP_KERNEL, 'build_atom_map_kernel'),
-        'find_interacting': cp.RawKernel(_FIND_INTERACTING_BLOCKS_KERNEL, 'find_interacting_blocks_kernel'),
-        'rev_count': cp.RawKernel(_BUILD_REVERSE_COUNT_KERNEL, 'build_reverse_count_kernel'),
-        'rev_fill': cp.RawKernel(_FILL_REVERSE_KERNEL, 'fill_reverse_kernel'),
-        'build_masks': cp.RawKernel(_BUILD_MASKS_KERNEL, 'build_masks_kernel'),
-        'check_rebuild': cp.RawKernel(_CHECK_REBUILD_KERNEL, 'check_rebuild_kernel'),
-        'gather_sorted': cp.RawKernel(_GATHER_SORTED_KERNEL, 'gather_sorted_kernel'),
-        'gather_sorted_2comp': cp.RawKernel(_GATHER_SORTED_KERNEL_2COMP, 'gather_sorted_kernel_2comp'),
-        'gather_sorted_4comp': cp.RawKernel(_GATHER_SORTED_KERNEL_4COMP, 'gather_sorted_kernel_4comp'),
-        'large_block_bounds': cp.RawKernel(_COMPUTE_LARGE_BLOCK_BOUNDS_KERNEL, 'compute_large_block_bounds_kernel'),
-        'permute': cp.RawKernel(_PERMUTE_ARRAY_KERNEL, 'permute_array_kernel'),
-        'permute_int': cp.RawKernel(_PERMUTE_INT_ARRAY_KERNEL, 'permute_int_array_kernel'),
-        'permute_2comp': cp.RawKernel(_PERMUTE_ARRAY_2COMP_KERNEL, 'permute_array_2comp_kernel'),
-        'inverse_permute': cp.RawKernel(_INVERSE_PERMUTE_KERNEL, 'inverse_permute_kernel'),
-        'classify_tiles': cp.RawKernel(_CLASSIFY_TILES_KERNEL, 'classify_tiles_kernel'),
+        "wrap": cp.RawKernel(_PBC_WRAP_KERNEL, "pbc_wrap_kernel"),
+        "morton": cp.RawKernel(_MORTON_ENCODE_KERNEL, "morton_encode_kernel"),
+        "form_blocks": cp.RawKernel(_FORM_BLOCKS_KERNEL, "form_blocks_kernel"),
+        "compute_bounds": cp.RawKernel(
+            _COMPUTE_BLOCK_BOUNDS_KERNEL, "compute_block_bounds_kernel"
+        ),
+        "atom_map": cp.RawKernel(_BUILD_ATOM_MAP_KERNEL, "build_atom_map_kernel"),
+        "find_interacting": cp.RawKernel(
+            _FIND_INTERACTING_BLOCKS_KERNEL, "find_interacting_blocks_kernel"
+        ),
+        "rev_count": cp.RawKernel(
+            _BUILD_REVERSE_COUNT_KERNEL, "build_reverse_count_kernel"
+        ),
+        "rev_fill": cp.RawKernel(_FILL_REVERSE_KERNEL, "fill_reverse_kernel"),
+        "build_masks": cp.RawKernel(_BUILD_MASKS_KERNEL, "build_masks_kernel"),
+        "check_rebuild": cp.RawKernel(_CHECK_REBUILD_KERNEL, "check_rebuild_kernel"),
+        "gather_sorted": cp.RawKernel(_GATHER_SORTED_KERNEL, "gather_sorted_kernel"),
+        "gather_sorted_2comp": cp.RawKernel(
+            _GATHER_SORTED_KERNEL_2COMP, "gather_sorted_kernel_2comp"
+        ),
+        "gather_sorted_4comp": cp.RawKernel(
+            _GATHER_SORTED_KERNEL_4COMP, "gather_sorted_kernel_4comp"
+        ),
+        "large_block_bounds": cp.RawKernel(
+            _COMPUTE_LARGE_BLOCK_BOUNDS_KERNEL, "compute_large_block_bounds_kernel"
+        ),
+        "permute": cp.RawKernel(_PERMUTE_ARRAY_KERNEL, "permute_array_kernel"),
+        "permute_int": cp.RawKernel(
+            _PERMUTE_INT_ARRAY_KERNEL, "permute_int_array_kernel"
+        ),
+        "permute_2comp": cp.RawKernel(
+            _PERMUTE_ARRAY_2COMP_KERNEL, "permute_array_2comp_kernel"
+        ),
+        "inverse_permute": cp.RawKernel(
+            _INVERSE_PERMUTE_KERNEL, "inverse_permute_kernel"
+        ),
+        "classify_tiles": cp.RawKernel(_CLASSIFY_TILES_KERNEL, "classify_tiles_kernel"),
     }
 
 
 class TileList:
 
-    def __init__(self, cutoff: float, skin: float = 1.0, rebuild_check_interval: int = 10):
+    def __init__(
+        self, cutoff: float, skin: float = 1.0, rebuild_check_interval: int = 10
+    ):
         self.cutoff = cutoff
         self.skin = skin
         self.build_radius = cutoff + skin
@@ -801,25 +821,31 @@ class TileList:
     @property
     def tiles(self):
         if self._tiles_np is None and self.d_tiles.size > 0:
-            self._tiles_np = cp.asnumpy(self.d_tiles[:self.num_tiles])
+            self._tiles_np = cp.asnumpy(self.d_tiles[: self.num_tiles])
         return self._tiles_np
 
     @property
     def interacting_atoms(self):
         if self._interacting_atoms_np is None and self.d_interacting_atoms.size > 0:
-            self._interacting_atoms_np = cp.asnumpy(self.d_interacting_atoms[:self.num_tiles * W]).reshape(-1, W)
+            self._interacting_atoms_np = cp.asnumpy(
+                self.d_interacting_atoms[: self.num_tiles * W]
+            ).reshape(-1, W)
         return self._interacting_atoms_np
 
     @property
     def exclusion_masks(self):
         if self._exclusion_masks_np is None and self.d_exclusion_masks.size > 0:
-            self._exclusion_masks_np = cp.asnumpy(self.d_exclusion_masks[:self.num_tiles * W]).reshape(-1, W)
+            self._exclusion_masks_np = cp.asnumpy(
+                self.d_exclusion_masks[: self.num_tiles * W]
+            ).reshape(-1, W)
         return self._exclusion_masks_np
 
     @property
     def scaling_masks(self):
         if self._scaling_masks_np is None and self.d_scaling_masks.size > 0:
-            self._scaling_masks_np = cp.asnumpy(self.d_scaling_masks[:self.num_tiles * W]).reshape(-1, W)
+            self._scaling_masks_np = cp.asnumpy(
+                self.d_scaling_masks[: self.num_tiles * W]
+            ).reshape(-1, W)
         return self._scaling_masks_np
 
     def _invalidate_caches(self):
@@ -873,15 +899,24 @@ class TileList:
         total_slots = self.num_blocks * W
         tpb = 256
         grid = ((total_slots + tpb - 1) // tpb,)
-        for src, attr in [(d_pos_x, 'd_sorted_pos_x'),
-                           (d_pos_y, 'd_sorted_pos_y'),
-                           (d_pos_z, 'd_sorted_pos_z')]:
+        for src, attr in [
+            (d_pos_x, "d_sorted_pos_x"),
+            (d_pos_y, "d_sorted_pos_y"),
+            (d_pos_z, "d_sorted_pos_z"),
+        ]:
             if getattr(self, attr).size != total_slots:
                 setattr(self, attr, cp.empty(total_slots, dtype=env.NUMPY_FLOAT))
-            self._kernels['gather_sorted'](grid, (tpb,),
-                (src, self.d_block_atoms,
-                 np.int32(total_slots), np.int32(self.num_particles),
-                 getattr(self, attr)))
+            self._kernels["gather_sorted"](
+                grid,
+                (tpb,),
+                (
+                    src,
+                    self.d_block_atoms,
+                    np.int32(total_slots),
+                    np.int32(self.num_particles),
+                    getattr(self, attr),
+                ),
+            )
 
     def gather_sorted_params(self, param_arrays):
         if self.num_blocks == 0:
@@ -891,30 +926,55 @@ class TileList:
         tpb = 256
         grid = ((total_slots + tpb - 1) // tpb,)
         for name, d_arr in param_arrays.items():
-            num_components = d_arr.shape[0] // self.num_particles if self.num_particles > 0 else 1
+            num_components = (
+                d_arr.shape[0] // self.num_particles if self.num_particles > 0 else 1
+            )
             if num_components == 1 or d_arr.shape[0] == total_slots:
                 sorted_arr = cp.empty(total_slots, dtype=env.NUMPY_FLOAT)
-                self._kernels['gather_sorted'](grid, (tpb,),
-                    (d_arr, self.d_block_atoms,
-                     np.int32(total_slots), np.int32(self.num_particles),
-                     sorted_arr))
+                self._kernels["gather_sorted"](
+                    grid,
+                    (tpb,),
+                    (
+                        d_arr,
+                        self.d_block_atoms,
+                        np.int32(total_slots),
+                        np.int32(self.num_particles),
+                        sorted_arr,
+                    ),
+                )
             elif num_components == 2:
                 sorted_arr = cp.empty(total_slots * 2, dtype=env.NUMPY_FLOAT)
-                self._kernels['gather_sorted_2comp'](grid, (tpb,),
-                    (d_arr, self.d_block_atoms,
-                     np.int32(total_slots), np.int32(self.num_particles),
-                     sorted_arr))
+                self._kernels["gather_sorted_2comp"](
+                    grid,
+                    (tpb,),
+                    (
+                        d_arr,
+                        self.d_block_atoms,
+                        np.int32(total_slots),
+                        np.int32(self.num_particles),
+                        sorted_arr,
+                    ),
+                )
             elif num_components == 4:
                 sorted_arr = cp.empty(total_slots * 4, dtype=env.NUMPY_FLOAT)
-                self._kernels['gather_sorted_4comp'](grid, (tpb,),
-                    (d_arr, self.d_block_atoms,
-                     np.int32(total_slots), np.int32(self.num_particles),
-                     sorted_arr))
+                self._kernels["gather_sorted_4comp"](
+                    grid,
+                    (tpb,),
+                    (
+                        d_arr,
+                        self.d_block_atoms,
+                        np.int32(total_slots),
+                        np.int32(self.num_particles),
+                        sorted_arr,
+                    ),
+                )
             else:
                 raise ValueError(f"Unsupported number of components: {num_components}")
-            setattr(self, f'd_sorted_{name}', sorted_arr)
+            setattr(self, f"d_sorted_{name}", sorted_arr)
 
-    def permute_to_sorted(self, permutation, arrays_float, arrays_int=None, arrays_2comp=None):
+    def permute_to_sorted(
+        self, permutation, arrays_float, arrays_int=None, arrays_2comp=None
+    ):
         if self.num_particles == 0:
             return
         self._ensure_kernels()
@@ -923,20 +983,21 @@ class TileList:
         grid = ((N + tpb - 1) // tpb,)
         for name, src in arrays_float.items():
             dst = cp.empty_like(src)
-            self._kernels['permute'](grid, (tpb,),
-                (src, permutation, np.int32(N), dst))
+            self._kernels["permute"](grid, (tpb,), (src, permutation, np.int32(N), dst))
             arrays_float[name] = dst
         if arrays_int:
             for name, src in arrays_int.items():
                 dst = cp.empty_like(src)
-                self._kernels['permute_int'](grid, (tpb,),
-                    (src, permutation, np.int32(N), dst))
+                self._kernels["permute_int"](
+                    grid, (tpb,), (src, permutation, np.int32(N), dst)
+                )
                 arrays_int[name] = dst
         if arrays_2comp:
             for name, src in arrays_2comp.items():
                 dst = cp.empty_like(src)
-                self._kernels['permute_2comp'](grid, (tpb,),
-                    (src, permutation, np.int32(N), dst))
+                self._kernels["permute_2comp"](
+                    grid, (tpb,), (src, permutation, np.int32(N), dst)
+                )
                 arrays_2comp[name] = dst
 
     def permute_from_sorted(self, sorted_to_pdb, sorted_array):
@@ -947,8 +1008,9 @@ class TileList:
         tpb = 256
         grid = ((N + tpb - 1) // tpb,)
         pdb_array = cp.empty_like(sorted_array)
-        self._kernels['inverse_permute'](grid, (tpb,),
-            (sorted_array, sorted_to_pdb, np.int32(N), pdb_array))
+        self._kernels["inverse_permute"](
+            grid, (tpb,), (sorted_array, sorted_to_pdb, np.int32(N), pdb_array)
+        )
         return pdb_array
 
     def _rebuild_core(self, positions, topology, pbc_matrix, pbc_inv):
@@ -970,8 +1032,11 @@ class TileList:
         self._upload_pbc(pbc_matrix, pbc_inv)
 
         n3 = (N + tpb - 1) // tpb
-        self._kernels['wrap']((n3,), (tpb,),
-            (pos_x, pos_y, pos_z, self._d_pbc_matrix, self._d_pbc_inv, np.int32(N)))
+        self._kernels["wrap"](
+            (n3,),
+            (tpb,),
+            (pos_x, pos_y, pos_z, self._d_pbc_matrix, self._d_pbc_inv, np.int32(N)),
+        )
 
         morton_codes = cp.empty(N, dtype=np.uint64)
         pbc_2d = np.asarray(pbc_matrix).reshape(3, 3)
@@ -986,10 +1051,22 @@ class TileList:
         self._inv_box_z = 1.0 / box_z
 
         nm = (N + tpb - 1) // tpb
-        self._kernels['morton']((nm,), (tpb,),
-            (pos_x, pos_y, pos_z, self._d_pbc_matrix, self._d_pbc_inv, np.int32(N),
-             np.float32(box_x), np.float32(box_y), np.float32(box_z),
-             morton_codes))
+        self._kernels["morton"](
+            (nm,),
+            (tpb,),
+            (
+                pos_x,
+                pos_y,
+                pos_z,
+                self._d_pbc_matrix,
+                self._d_pbc_inv,
+                np.int32(N),
+                np.float32(box_x),
+                np.float32(box_y),
+                np.float32(box_z),
+                morton_codes,
+            ),
+        )
 
         sorted_indices = cp.argsort(morton_codes).astype(env.NUMPY_INT)
 
@@ -1013,27 +1090,59 @@ class TileList:
         self.d_block_center = cp.empty(num_blocks * 3, dtype=env.NUMPY_FLOAT)
         self.d_block_size = cp.empty(num_blocks * 3, dtype=env.NUMPY_FLOAT)
         nb = (num_blocks + tpb - 1) // tpb
-        self._kernels['compute_bounds']((nb,), (tpb,),
-            (pos_x, pos_y, pos_z, self.d_block_atoms, np.int32(num_blocks),
-             self.d_block_center, self.d_block_size))
+        self._kernels["compute_bounds"](
+            (nb,),
+            (tpb,),
+            (
+                pos_x,
+                pos_y,
+                pos_z,
+                self.d_block_atoms,
+                np.int32(num_blocks),
+                self.d_block_center,
+                self.d_block_size,
+            ),
+        )
 
         num_large_blocks = (num_blocks + 31) // 32
         self.num_large_blocks = num_large_blocks
-        self.d_large_block_center = cp.empty(num_large_blocks * 3, dtype=env.NUMPY_FLOAT)
+        self.d_large_block_center = cp.empty(
+            num_large_blocks * 3, dtype=env.NUMPY_FLOAT
+        )
         self.d_large_block_size = cp.empty(num_large_blocks * 3, dtype=env.NUMPY_FLOAT)
         nlb = (num_large_blocks + tpb - 1) // tpb
-        self._kernels['large_block_bounds']((nlb,), (tpb,),
-            (self.d_block_center, self.d_block_size,
-             np.int32(num_blocks), np.int32(num_large_blocks),
-             np.float32(box_x), np.float32(box_y), np.float32(box_z),
-             np.float32(1.0/box_x), np.float32(1.0/box_y), np.float32(1.0/box_z),
-             self.d_large_block_center, self.d_large_block_size))
+        self._kernels["large_block_bounds"](
+            (nlb,),
+            (tpb,),
+            (
+                self.d_block_center,
+                self.d_block_size,
+                np.int32(num_blocks),
+                np.int32(num_large_blocks),
+                np.float32(box_x),
+                np.float32(box_y),
+                np.float32(box_z),
+                np.float32(1.0 / box_x),
+                np.float32(1.0 / box_y),
+                np.float32(1.0 / box_z),
+                self.d_large_block_center,
+                self.d_large_block_size,
+            ),
+        )
 
         self.d_atom_to_block = cp.full(N, -1, dtype=env.NUMPY_INT)
         self.d_atom_to_slot = cp.full(N, -1, dtype=env.NUMPY_INT)
-        self._kernels['atom_map']((nb,), (tpb,),
-            (self.d_block_atoms, np.int32(num_blocks), np.int32(W),
-             self.d_atom_to_block, self.d_atom_to_slot))
+        self._kernels["atom_map"](
+            (nb,),
+            (tpb,),
+            (
+                self.d_block_atoms,
+                np.int32(num_blocks),
+                np.int32(W),
+                self.d_atom_to_block,
+                self.d_atom_to_slot,
+            ),
+        )
 
         return (pos_x, pos_y, pos_z)
 
@@ -1045,7 +1154,7 @@ class TileList:
         box_y = abs(float(pbc_2d[1, 1]))
         box_z = abs(float(pbc_2d[2, 2]))
         build_radius = self.build_radius
-        build_radius_sq = build_radius ** 2
+        build_radius_sq = build_radius**2
         inv_box_x = 1.0 / box_x
         inv_box_y = 1.0 / box_y
         inv_box_z = 1.0 / box_z
@@ -1059,16 +1168,33 @@ class TileList:
 
         tpb = 256
         grid_blocks = max((num_blocks + 7) // 8, 1)
-        self._kernels['find_interacting'](
-            (grid_blocks,), (tpb,),
-            (pos_x, pos_y, pos_z, self.d_block_atoms, self.d_block_center, self.d_block_size,
-             np.int32(num_blocks), np.int32(self.num_particles),
-             np.float32(build_radius_sq),
-             np.float32(box_x), np.float32(box_y), np.float32(box_z),
-             np.float32(inv_box_x), np.float32(inv_box_y), np.float32(inv_box_z),
-             self.d_large_block_center, self.d_large_block_size,
-             self._d_tile_buf, self._d_interacting_buf,
-             self._d_counters, np.int32(max_tiles)))
+        self._kernels["find_interacting"](
+            (grid_blocks,),
+            (tpb,),
+            (
+                pos_x,
+                pos_y,
+                pos_z,
+                self.d_block_atoms,
+                self.d_block_center,
+                self.d_block_size,
+                np.int32(num_blocks),
+                np.int32(self.num_particles),
+                np.float32(build_radius_sq),
+                np.float32(box_x),
+                np.float32(box_y),
+                np.float32(box_z),
+                np.float32(inv_box_x),
+                np.float32(inv_box_y),
+                np.float32(inv_box_z),
+                self.d_large_block_center,
+                self.d_large_block_size,
+                self._d_tile_buf,
+                self._d_interacting_buf,
+                self._d_counters,
+                np.int32(max_tiles),
+            ),
+        )
 
         self.num_tiles = int(self._d_counters[0])
         self.d_tiles = self._d_tile_buf
@@ -1087,19 +1213,41 @@ class TileList:
         if self._d_reverse_offset is None:
             d_rev_offset = cp.zeros(N + 1, dtype=env.NUMPY_INT)
             n1 = (N + tpb - 1) // tpb
-            self._kernels['rev_count']((n1,), (tpb,),
-                (self._d_excl_offset, self._d_excl_neighbors, np.int32(N), d_rev_offset))
+            self._kernels["rev_count"](
+                (n1,),
+                (tpb,),
+                (
+                    self._d_excl_offset,
+                    self._d_excl_neighbors,
+                    np.int32(N),
+                    d_rev_offset,
+                ),
+            )
 
             d_rev_offset = cp.cumsum(d_rev_offset, dtype=env.NUMPY_INT)
-            max_rev = self._total_exclusion_pairs if self._total_exclusion_pairs > 0 else int(d_rev_offset[-1])
+            max_rev = (
+                self._total_exclusion_pairs
+                if self._total_exclusion_pairs > 0
+                else int(d_rev_offset[-1])
+            )
             d_rev_neighbors = cp.empty(max_rev, dtype=env.NUMPY_INT)
             d_rev_scale = cp.empty(max_rev, dtype=env.NUMPY_FLOAT)
             d_temp = d_rev_offset.copy()
 
-            self._kernels['rev_fill']((n1,), (tpb,),
-                (self._d_excl_offset, self._d_excl_neighbors, self._d_excl_scale,
-                 d_rev_offset, np.int32(N),
-                 d_rev_neighbors, d_rev_scale, d_temp))
+            self._kernels["rev_fill"](
+                (n1,),
+                (tpb,),
+                (
+                    self._d_excl_offset,
+                    self._d_excl_neighbors,
+                    self._d_excl_scale,
+                    d_rev_offset,
+                    np.int32(N),
+                    d_rev_neighbors,
+                    d_rev_scale,
+                    d_temp,
+                ),
+            )
 
             self._d_reverse_offset = d_rev_offset
             self._d_reverse_neighbors = d_rev_neighbors
@@ -1109,13 +1257,27 @@ class TileList:
         grid = ((total_work + tpb - 1) // tpb,)
         self.d_exclusion_masks = cp.empty(total_work, dtype=np.uint32)
         self.d_scaling_masks = cp.empty(total_work, dtype=np.uint32)
-        self._kernels['build_masks'](grid, (tpb,),
-            (self.d_tiles, self.d_interacting_atoms, self.d_block_atoms,
-             self.d_atom_to_block, self.d_atom_to_slot,
-             self._d_excl_offset, self._d_excl_neighbors, self._d_excl_scale,
-             self._d_reverse_offset, self._d_reverse_neighbors, self._d_reverse_scale,
-             np.int32(self.num_tiles), np.int32(N),
-              self.d_exclusion_masks, self.d_scaling_masks))
+        self._kernels["build_masks"](
+            grid,
+            (tpb,),
+            (
+                self.d_tiles,
+                self.d_interacting_atoms,
+                self.d_block_atoms,
+                self.d_atom_to_block,
+                self.d_atom_to_slot,
+                self._d_excl_offset,
+                self._d_excl_neighbors,
+                self._d_excl_scale,
+                self._d_reverse_offset,
+                self._d_reverse_neighbors,
+                self._d_reverse_scale,
+                np.int32(self.num_tiles),
+                np.int32(N),
+                self.d_exclusion_masks,
+                self.d_scaling_masks,
+            ),
+        )
 
     def _extract_exclusion_tiles(self):
         if self.num_tiles == 0:
@@ -1134,25 +1296,40 @@ class TileList:
 
         if self._d_classify_excl_tiles.size < max_tiles:
             self._d_classify_excl_tiles = cp.empty(max_tiles, dtype=env.NUMPY_INT)
-            self._d_classify_excl_int_atoms = cp.empty(max_tiles * W, dtype=env.NUMPY_INT)
+            self._d_classify_excl_int_atoms = cp.empty(
+                max_tiles * W, dtype=env.NUMPY_INT
+            )
             self._d_classify_excl_masks = cp.empty(max_tiles * W, dtype=np.uint32)
             self._d_classify_excl_scale = cp.empty(max_tiles * W, dtype=np.uint32)
             self._d_classify_main_tiles = cp.empty(max_tiles, dtype=env.NUMPY_INT)
-            self._d_classify_main_int_atoms = cp.empty(max_tiles * W, dtype=env.NUMPY_INT)
+            self._d_classify_main_int_atoms = cp.empty(
+                max_tiles * W, dtype=env.NUMPY_INT
+            )
 
         self._d_classify_excl_counter[0] = 0
         self._d_classify_main_counter[0] = 0
 
         tpb = 256
         grid = ((nt + tpb - 1) // tpb,)
-        self._kernels['classify_tiles'](grid, (tpb,),
-            (self.d_exclusion_masks, self.d_scaling_masks,
-             self.d_tiles, self.d_interacting_atoms,
-             np.int32(nt),
-             self._d_classify_excl_counter, self._d_classify_main_counter,
-             self._d_classify_excl_tiles, self._d_classify_excl_int_atoms,
-             self._d_classify_excl_masks, self._d_classify_excl_scale,
-             self._d_classify_main_tiles, self._d_classify_main_int_atoms))
+        self._kernels["classify_tiles"](
+            grid,
+            (tpb,),
+            (
+                self.d_exclusion_masks,
+                self.d_scaling_masks,
+                self.d_tiles,
+                self.d_interacting_atoms,
+                np.int32(nt),
+                self._d_classify_excl_counter,
+                self._d_classify_main_counter,
+                self._d_classify_excl_tiles,
+                self._d_classify_excl_int_atoms,
+                self._d_classify_excl_masks,
+                self._d_classify_excl_scale,
+                self._d_classify_main_tiles,
+                self._d_classify_main_int_atoms,
+            ),
+        )
 
         self.num_exclusion_tiles = int(self._d_classify_excl_counter[0])
         self.num_main_tiles = int(self._d_classify_main_counter[0])
@@ -1225,15 +1402,27 @@ class TileList:
         threshold_sq = (self.skin * 0.5) ** 2
         tpb = 256
         grid = ((self.num_particles + tpb - 1) // tpb,)
-        self._kernels['check_rebuild'](
-            grid, (tpb,),
-            (pos_x, pos_y, pos_z,
-             self.d_positions_at_rebuild_x, self.d_positions_at_rebuild_y, self.d_positions_at_rebuild_z,
-             np.int32(self.num_particles),
-             np.float32(threshold_sq),
-             np.float32(self._box_x), np.float32(self._box_y), np.float32(self._box_z),
-             np.float32(self._inv_box_x), np.float32(self._inv_box_y), np.float32(self._inv_box_z),
-             self.d_rebuild_flag))
+        self._kernels["check_rebuild"](
+            grid,
+            (tpb,),
+            (
+                pos_x,
+                pos_y,
+                pos_z,
+                self.d_positions_at_rebuild_x,
+                self.d_positions_at_rebuild_y,
+                self.d_positions_at_rebuild_z,
+                np.int32(self.num_particles),
+                np.float32(threshold_sq),
+                np.float32(self._box_x),
+                np.float32(self._box_y),
+                np.float32(self._box_z),
+                np.float32(self._inv_box_x),
+                np.float32(self._inv_box_y),
+                np.float32(self._inv_box_z),
+                self.d_rebuild_flag,
+            ),
+        )
         flag = int(self.d_rebuild_flag[0])
         return flag == 1
 
@@ -1257,15 +1446,27 @@ class TileList:
         threshold_sq = (self.skin * 0.5) ** 2
         tpb = 256
         grid = ((self.num_particles + tpb - 1) // tpb,)
-        self._kernels['check_rebuild'](
-            grid, (tpb,),
-            (pos_x, pos_y, pos_z,
-             self.d_positions_at_rebuild_x, self.d_positions_at_rebuild_y, self.d_positions_at_rebuild_z,
-             np.int32(self.num_particles),
-             np.float32(threshold_sq),
-             np.float32(self._box_x), np.float32(self._box_y), np.float32(self._box_z),
-             np.float32(self._inv_box_x), np.float32(self._inv_box_y), np.float32(self._inv_box_z),
-             self.d_rebuild_flag))
+        self._kernels["check_rebuild"](
+            grid,
+            (tpb,),
+            (
+                pos_x,
+                pos_y,
+                pos_z,
+                self.d_positions_at_rebuild_x,
+                self.d_positions_at_rebuild_y,
+                self.d_positions_at_rebuild_z,
+                np.int32(self.num_particles),
+                np.float32(threshold_sq),
+                np.float32(self._box_x),
+                np.float32(self._box_y),
+                np.float32(self._box_z),
+                np.float32(self._inv_box_x),
+                np.float32(self._inv_box_y),
+                np.float32(self._inv_box_z),
+                self.d_rebuild_flag,
+            ),
+        )
         return False
 
     def _init_empty(self):
