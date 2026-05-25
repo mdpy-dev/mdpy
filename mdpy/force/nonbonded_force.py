@@ -1752,6 +1752,7 @@ class NonbondedForce(ForceTerm):
         self._exclusion_kernel_source = None
         self._d_parameter_arrays = {}
         self._parameter_arrays = {}
+        self._d_cached_params = {}
         self._parameter_table = None
         self._cutoff = None
         self._cutoff_sq = None
@@ -1766,6 +1767,8 @@ class NonbondedForce(ForceTerm):
         self._num_sm = cp.cuda.runtime.getDeviceProperties(0)['multiProcessorCount']
         self._parameter_table = parameter_table
         self._rebuild_param_arrays(topology.particle_types)
+        self._upload_param_arrays()
+        self._d_cached_params = dict(self._d_parameter_arrays)
         self._kernel_source = self.expression.assemble_main_tile_kernel()
         self._exclusion_kernel_source = self.expression.assemble_tile_kernel()
 
@@ -1829,28 +1832,47 @@ class NonbondedForce(ForceTerm):
             return
         self._kernel = cp.RawKernel(self._kernel_source, 'main_tile_kernel')
         self._exclusion_kernel = cp.RawKernel(self._exclusion_kernel_source.replace('void tile_kernel(', 'void exclusion_tile_kernel('), 'exclusion_tile_kernel')
-        self._upload_param_arrays()
         if self._use_posq():
             self._pack_posq_kernel = cp.RawKernel(_PACK_POSQ_KERNEL, 'pack_posq_kernel')
             N = self._parameter_arrays['charge'].shape[0]
             self._d_posq = cp.zeros(N * 4, dtype=np.float32)
             self._gather_4comp_kernel = cp.RawKernel(
                 _GATHER_SORTED_KERNEL_4COMP, 'gather_sorted_kernel_4comp')
+        if not self._d_cached_params:
+            self._upload_param_arrays()
+            self._d_cached_params = dict(self._d_parameter_arrays)
 
     def _use_posq(self):
         return 'charge' in self.expression.parameter_names
 
     def bind_sorted(self, topology, tile_list, gpu_context, sorted_to_pdb_np=None, sorted_particle_types=None):
         self._ensure_compiled()
-        self._rebuild_param_arrays(topology.particle_types)
-        if sorted_to_pdb_np is None:
-            sorted_to_pdb_np = cp.asnumpy(tile_list.d_sorted_to_pdb)
-        N = len(sorted_to_pdb_np)
-        for name, arr in self._parameter_arrays.items():
-            if arr.shape[0] == N:
-                self._parameter_arrays[name] = arr[sorted_to_pdb_np]
-        self._repack_sigma_epsilon(N)
-        self._upload_param_arrays()
+        if not self._d_cached_params:
+            self._rebuild_param_arrays(topology.particle_types)
+            self._upload_param_arrays()
+            self._d_cached_params = dict(self._d_parameter_arrays)
+
+        permutation = tile_list.d_sorted_to_pdb
+        N = tile_list.num_particles
+
+        arrays_float = {}
+        arrays_2comp = {}
+        for name, src_arr in self._d_cached_params.items():
+            n_elem = src_arr.shape[0]
+            if n_elem == N * 2:
+                arrays_2comp[name] = src_arr
+            else:
+                arrays_float[name] = src_arr
+
+        tile_list.permute_to_sorted(permutation, arrays_float, arrays_2comp=arrays_2comp)
+
+        for name, arr in arrays_float.items():
+            self._d_parameter_arrays[name] = arr
+        for name, arr in arrays_2comp.items():
+            self._d_parameter_arrays[name] = arr
+
+        self._d_cached_params = dict(self._d_parameter_arrays)
+
         param_arrays = {}
         for arr in _unique_gpu_arrays(self.expression.parameter_names):
             if self._use_posq() and arr == 'charge':
