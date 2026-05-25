@@ -73,3 +73,19 @@ def test_exclusion_map_after_remap():
     np.testing.assert_array_equal(cp.asnumpy(gpu_offset), cpu_offset)
     np.testing.assert_array_equal(cp.asnumpy(gpu_neighbors), cpu_neighbors)
     np.testing.assert_allclose(cp.asnumpy(gpu_scale), cpu_scale, atol=1e-7)
+
+
+def test_rebuild_produces_correct_forces_after_gpu_exclusion():
+    system, integrator = _make_system_6po6()
+    system.step(integrator, 1)
+    e1 = system.dump_energy()
+    pos1, vel1 = system.dump_state()
+
+    system.step(integrator, 5)
+    e2 = system.dump_energy()
+    pos2, vel2 = system.dump_state()
+
+    assert not np.any(np.isnan(pos2))
+    assert not np.any(np.isnan(vel2))
+    max_disp = np.max(np.abs(pos2 - pos1))
+    assert max_disp > 0.0

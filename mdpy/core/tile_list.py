@@ -846,6 +846,22 @@ class TileList:
                 np.ascontiguousarray(pbc_inv, dtype=env.NUMPY_FLOAT).ravel()
             )
 
+    def set_gpu_exclusion(self, d_offset, d_neighbors, d_scale):
+        self._d_excl_offset = d_offset
+        self._d_excl_neighbors = d_neighbors
+        self._d_excl_scale = d_scale
+        self._d_reverse_offset = None
+        self._d_reverse_neighbors = None
+        self._d_reverse_scale = None
+
+    def set_gpu_exclusion(self, d_offset, d_neighbors, d_scale):
+        self._d_excl_offset = d_offset
+        self._d_excl_neighbors = d_neighbors
+        self._d_excl_scale = d_scale
+        self._d_reverse_offset = None
+        self._d_reverse_neighbors = None
+        self._d_reverse_scale = None
+
     def _upload_exclusion(self, topology):
         if self._d_excl_offset is not None:
             return

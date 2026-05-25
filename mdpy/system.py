@@ -5,6 +5,7 @@ import numpy as np
 from mdpy import env
 from mdpy.core.particle_table import ParticleTable
 from mdpy.core.tile_list import TileList
+from mdpy.core.topology import build_exclusion_map_gpu
 from mdpy.core.pbc import compute_pbc_inv
 from mdpy.core.gpu_context import GPUContext
 
@@ -102,10 +103,7 @@ class System:
         grid = ((N + tpb - 1) // tpb,)
         gpu = self.gpu
 
-        new_sorted_to_pdb_np = cp.asnumpy(self.tile_list.d_sorted_to_pdb)
-        perm_np = new_sorted_to_pdb_np.copy()
-
-        perm_gpu = cp.asarray(perm_np)
+        perm_gpu = self.tile_list.d_sorted_to_pdb
 
         for old_arr, name in [
             (gpu.d_positions_x, 'd_positions_x'),
@@ -127,15 +125,20 @@ class System:
                 (old_arr, perm_gpu, np.int32(N), new_arr))
             setattr(gpu, name, new_arr)
 
+        if pdb_to_sorted_np is None:
+            pdb_to_sorted_np = cp.asnumpy(pdb_to_sorted_gpu)
+
         if self._pdb_to_current_sorted is None:
             self._pdb_to_current_sorted = pdb_to_sorted_np.copy()
         else:
             self._pdb_to_current_sorted = pdb_to_sorted_np[self._pdb_to_current_sorted]
 
+        perm_np = cp.asnumpy(perm_gpu)
         remap = np.empty(N, dtype=np.int32)
         remap[perm_np] = np.arange(N, dtype=np.int32)
         self.topology.remap_bonded_indices(remap)
-        self.topology.build_exclusion_map(scale_14=1.0)
+        d_excl_offset, d_excl_neighbors, d_excl_scale = build_exclusion_map_gpu(self.topology, scale_14=1.0)
+        self.tile_list.set_gpu_exclusion(d_excl_offset, d_excl_neighbors, d_excl_scale)
 
         for term in self.force_terms:
             if hasattr(term, 'remap_indices'):
