@@ -250,57 +250,6 @@ void generate_pairs_kernel(
 }
 '''
 
-_DEDUP_PAIRS_KERNEL = r'''
-extern "C" __global__
-void dedup_pairs_kernel(
-    const int* __restrict__ sorted_i,
-    const int* __restrict__ sorted_j,
-    const float* __restrict__ sorted_scale,
-    int* __restrict__ unique_i,
-    int* __restrict__ unique_j,
-    float* __restrict__ unique_scale,
-    int* __restrict__ unique_count,
-    const int total_pairs
-) {
-    if (total_pairs == 0) {
-        *unique_count = 0;
-        return;
-    }
-    int count = 1;
-    unique_i[0] = sorted_i[0];
-    unique_j[0] = sorted_j[0];
-    unique_scale[0] = sorted_scale[0];
-    for (int k = 1; k < total_pairs; k++) {
-        if (sorted_i[k] != sorted_i[k - 1] || sorted_j[k] != sorted_j[k - 1]) {
-            unique_i[count] = sorted_i[k];
-            unique_j[count] = sorted_j[k];
-            unique_scale[count] = sorted_scale[k];
-            count++;
-        }
-    }
-    *unique_count = count;
-}
-'''
-
-_BUILD_CSR_OFFSET_KERNEL = r'''
-extern "C" __global__
-void build_csr_offset_kernel(
-    const int* __restrict__ sorted_i,
-    const int num_unique,
-    const int num_particles,
-    int* __restrict__ offset
-) {
-    int j = 0;
-    for (int i = 0; i < num_particles; i++) {
-        offset[i] = j;
-        while (j < num_unique && sorted_i[j] == i) {
-            j++;
-        }
-    }
-    offset[num_particles] = j;
-}
-'''
-
 _PARALLEL_CSR_KERNEL = r'''
 extern "C" __global__
 void parallel_csr_kernel(
@@ -392,8 +341,6 @@ def _get_gpu_kernels():
     if _gpu_kernels is None:
         _gpu_kernels = {
             'generate': cp.RawKernel(_GENERATE_PAIRS_KERNEL, 'generate_pairs_kernel'),
-            'dedup': cp.RawKernel(_DEDUP_PAIRS_KERNEL, 'dedup_pairs_kernel'),
-            'csr': cp.RawKernel(_BUILD_CSR_OFFSET_KERNEL, 'build_csr_offset_kernel'),
             'parallel_csr': cp.RawKernel(_PARALLEL_CSR_KERNEL, 'parallel_csr_kernel'),
             'fill_csr_gaps': cp.RawKernel(_FILL_CSR_GAPS_KERNEL, 'fill_csr_gaps_kernel'),
             'parallel_dedup': cp.RawKernel(_PARALLEL_DEDUP_KERNEL, 'parallel_dedup_kernel'),

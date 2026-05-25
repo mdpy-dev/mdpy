@@ -10,6 +10,7 @@ from mdpy.force.expressions.coulomb import coulomb
 from mdpy.integrator.verlet import VerletIntegrator
 from mdpy.system import System
 from mdpy import env
+from mdpy.core.topology import Builder
 
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
 
@@ -39,21 +40,51 @@ def _make_system_6po6():
     return system, VerletIntegrator(0.5)
 
 
+def _build_reference_exclusion_map(topology, scale_14=1.0):
+    builder = Builder()
+    builder.set_particles(
+        masses=topology.masses,
+        charges=topology.charges,
+        particle_types=topology.particle_types,
+    )
+    for i in range(topology.num_bonds):
+        builder.add_bond(
+            int(topology.bond_indices[i, 0]),
+            int(topology.bond_indices[i, 1]), 0, 0)
+    for i in range(topology.num_angles):
+        builder.add_angle(
+            int(topology.angle_indices[i, 0]),
+            int(topology.angle_indices[i, 1]),
+            int(topology.angle_indices[i, 2]), 0, 0)
+    for i in range(topology.num_dihedrals):
+        builder.add_dihedral(
+            int(topology.dihedral_indices[i, 0]),
+            int(topology.dihedral_indices[i, 1]),
+            int(topology.dihedral_indices[i, 2]),
+            int(topology.dihedral_indices[i, 3]), 0, 0, 0)
+    for i in range(topology.num_impropers):
+        builder.add_improper(
+            int(topology.improper_indices[i, 0]),
+            int(topology.improper_indices[i, 1]),
+            int(topology.improper_indices[i, 2]),
+            int(topology.improper_indices[i, 3]), 0, 0)
+    builder.build_exclusion_map(scale_14=scale_14)
+    ref_topo, _ = builder.build()
+    return ref_topo.exclusion_offset, ref_topo.exclusion_neighbors, ref_topo.exclusion_scale
+
+
 def test_gpu_exclusion_map_matches_cpu():
     system, integrator = _make_system_6po6()
     topology = system.topology
 
-    topology.build_exclusion_map(scale_14=1.0)
-    cpu_offset = topology.exclusion_offset.copy()
-    cpu_neighbors = topology.exclusion_neighbors.copy()
-    cpu_scale = topology.exclusion_scale.copy()
+    ref_offset, ref_neighbors, ref_scale = _build_reference_exclusion_map(topology, scale_14=1.0)
 
     from mdpy.core.topology import build_exclusion_map_gpu
     gpu_offset, gpu_neighbors, gpu_scale, _ = build_exclusion_map_gpu(topology, scale_14=1.0)
 
-    np.testing.assert_array_equal(cp.asnumpy(gpu_offset), cpu_offset)
-    np.testing.assert_array_equal(cp.asnumpy(gpu_neighbors), cpu_neighbors)
-    np.testing.assert_allclose(cp.asnumpy(gpu_scale), cpu_scale, atol=1e-7)
+    np.testing.assert_array_equal(cp.asnumpy(gpu_offset), ref_offset)
+    np.testing.assert_array_equal(cp.asnumpy(gpu_neighbors), ref_neighbors)
+    np.testing.assert_allclose(cp.asnumpy(gpu_scale), ref_scale, atol=1e-7)
 
 
 def test_exclusion_map_after_remap():
@@ -62,17 +93,14 @@ def test_exclusion_map_after_remap():
 
     system.step(integrator, 1)
 
-    topology.build_exclusion_map(scale_14=1.0)
-    cpu_offset = topology.exclusion_offset.copy()
-    cpu_neighbors = topology.exclusion_neighbors.copy()
-    cpu_scale = topology.exclusion_scale.copy()
+    ref_offset, ref_neighbors, ref_scale = _build_reference_exclusion_map(topology, scale_14=1.0)
 
     from mdpy.core.topology import build_exclusion_map_gpu
     gpu_offset, gpu_neighbors, gpu_scale, _ = build_exclusion_map_gpu(topology, scale_14=1.0)
 
-    np.testing.assert_array_equal(cp.asnumpy(gpu_offset), cpu_offset)
-    np.testing.assert_array_equal(cp.asnumpy(gpu_neighbors), cpu_neighbors)
-    np.testing.assert_allclose(cp.asnumpy(gpu_scale), cpu_scale, atol=1e-7)
+    np.testing.assert_array_equal(cp.asnumpy(gpu_offset), ref_offset)
+    np.testing.assert_array_equal(cp.asnumpy(gpu_neighbors), ref_neighbors)
+    np.testing.assert_allclose(cp.asnumpy(gpu_scale), ref_scale, atol=1e-7)
 
 
 def test_rebuild_produces_correct_forces_after_gpu_exclusion():
@@ -89,175 +117,6 @@ def test_rebuild_produces_correct_forces_after_gpu_exclusion():
     assert not np.any(np.isnan(vel2))
     max_disp = np.max(np.abs(pos2 - pos1))
     assert max_disp > 0.0
-
-
-def test_parallel_csr_matches_sequential():
-    system, integrator = _make_system_6po6()
-    topology = system.topology
-
-    from mdpy.core.topology import _get_gpu_kernels
-    import cupy as cp
-
-    topology.build_exclusion_map(scale_14=1.0)
-    cpu_offset = topology.exclusion_offset.copy()
-
-    num_particles = topology.num_particles
-    total_pairs = topology.num_bonds + topology.num_angles + topology.num_dihedrals + topology.num_impropers
-
-    kernels = _get_gpu_kernels()
-
-    d_bond_idx = cp.asarray(topology.bond_indices.ravel().astype(np.int32))
-    d_angle_idx = cp.asarray(topology.angle_indices.ravel().astype(np.int32))
-    d_dihedral_idx = cp.asarray(topology.dihedral_indices.ravel().astype(np.int32))
-    d_improper_idx = cp.asarray(topology.improper_indices.ravel().astype(np.int32))
-
-    d_pair_i = cp.empty(total_pairs, dtype=cp.int32)
-    d_pair_j = cp.empty(total_pairs, dtype=cp.int32)
-    d_pair_scale = cp.empty(total_pairs, dtype=cp.float32)
-
-    block = 256
-    grid = (total_pairs + block - 1) // block
-    kernels['generate'](
-        (grid,), (block,),
-        (d_bond_idx, np.int32(topology.num_bonds),
-         d_angle_idx, np.int32(topology.num_angles),
-         d_dihedral_idx, np.int32(topology.num_dihedrals),
-         d_improper_idx, np.int32(topology.num_impropers),
-         np.float32(1.0),
-         d_pair_i, d_pair_j, d_pair_scale,
-         np.int32(total_pairs)))
-
-    max_j = int(cp.max(d_pair_j)) + 1
-    sort_key = (d_pair_i.astype(cp.int64) * np.int64(max_j * 2 + 2)
-                + d_pair_j.astype(cp.int64) * np.int64(2)
-                + (d_pair_scale > 0.0).astype(cp.int64))
-    order = cp.argsort(sort_key)
-    d_pair_i = d_pair_i[order]
-    d_pair_j = d_pair_j[order]
-    d_pair_scale = d_pair_scale[order]
-
-    d_unique_i = cp.empty(total_pairs, dtype=cp.int32)
-    d_unique_j = cp.empty(total_pairs, dtype=cp.int32)
-    d_unique_scale = cp.empty(total_pairs, dtype=cp.float32)
-    d_unique_count = cp.empty(1, dtype=cp.int32)
-
-    kernels['dedup'](
-        (1,), (1,),
-        (d_pair_i, d_pair_j, d_pair_scale,
-         d_unique_i, d_unique_j, d_unique_scale,
-         d_unique_count,
-         np.int32(total_pairs)))
-
-    unique_count = int(d_unique_count[0])
-    d_unique_i = d_unique_i[:unique_count]
-
-    d_offset_seq = cp.zeros(num_particles + 1, dtype=cp.int32)
-    kernels['csr'](
-        (1,), (1,),
-        (d_unique_i, np.int32(unique_count),
-         np.int32(num_particles), d_offset_seq))
-    sequential_offset = cp.asnumpy(d_offset_seq)
-
-    d_offset_parallel = cp.full(num_particles + 1, -1, dtype=cp.int32)
-    tpb = 256
-    grid_csr = ((unique_count + 1 + tpb - 1) // tpb,)
-    kernels['parallel_csr'](
-        grid_csr, (tpb,),
-        (d_unique_i, np.int32(unique_count),
-         np.int32(num_particles), d_offset_parallel))
-
-    tpb_fill = 256
-    grid_fill = ((num_particles + tpb_fill - 1) // tpb_fill,)
-    kernels['fill_csr_gaps'](
-        grid_fill, (tpb_fill,),
-        (d_offset_parallel, np.int32(num_particles)))
-
-    parallel_offset = cp.asnumpy(d_offset_parallel)
-    np.testing.assert_array_equal(parallel_offset, sequential_offset)
-    np.testing.assert_array_equal(parallel_offset, cpu_offset)
-
-
-def test_parallel_dedup_matches_sequential():
-    system, integrator = _make_system_6po6()
-    topology = system.topology
-
-    from mdpy.core.topology import _get_gpu_kernels
-    import cupy as cp
-
-    topology.build_exclusion_map(scale_14=1.0)
-    cpu_neighbors = topology.exclusion_neighbors.copy()
-    cpu_scale = topology.exclusion_scale.copy()
-
-    total_pairs = topology.num_bonds + topology.num_angles + topology.num_dihedrals + topology.num_impropers
-
-    kernels = _get_gpu_kernels()
-    d_bond_idx = cp.asarray(topology.bond_indices.ravel().astype(np.int32))
-    d_angle_idx = cp.asarray(topology.angle_indices.ravel().astype(np.int32))
-    d_dihedral_idx = cp.asarray(topology.dihedral_indices.ravel().astype(np.int32))
-    d_improper_idx = cp.asarray(topology.improper_indices.ravel().astype(np.int32))
-
-    d_pair_i = cp.empty(total_pairs, dtype=cp.int32)
-    d_pair_j = cp.empty(total_pairs, dtype=cp.int32)
-    d_pair_scale = cp.empty(total_pairs, dtype=cp.float32)
-
-    block = 256
-    grid = (total_pairs + block - 1) // block
-    kernels['generate'](
-        (grid,), (block,),
-        (d_bond_idx, np.int32(topology.num_bonds),
-         d_angle_idx, np.int32(topology.num_angles),
-         d_dihedral_idx, np.int32(topology.num_dihedrals),
-         d_improper_idx, np.int32(topology.num_impropers),
-         np.float32(1.0),
-         d_pair_i, d_pair_j, d_pair_scale,
-         np.int32(total_pairs)))
-
-    max_j = int(cp.max(d_pair_j)) + 1
-    sort_key = (d_pair_i.astype(cp.int64) * np.int64(max_j * 2 + 2)
-                + d_pair_j.astype(cp.int64) * np.int64(2)
-                + (d_pair_scale > 0.0).astype(cp.int64))
-    order = cp.argsort(sort_key)
-    d_sorted_i = d_pair_i[order]
-    d_sorted_j = d_pair_j[order]
-    d_sorted_scale = d_pair_scale[order]
-
-    d_seq_i = cp.empty(total_pairs, dtype=cp.int32)
-    d_seq_j = cp.empty(total_pairs, dtype=cp.int32)
-    d_seq_scale = cp.empty(total_pairs, dtype=cp.float32)
-    d_seq_count = cp.empty(1, dtype=cp.int32)
-    kernels['dedup'](
-        (1,), (1,),
-        (d_sorted_i, d_sorted_j, d_sorted_scale,
-         d_seq_i, d_seq_j, d_seq_scale,
-         d_seq_count,
-         np.int32(total_pairs)))
-    seq_count = int(d_seq_count[0])
-    seq_neighbors = cp.asnumpy(d_seq_j[:seq_count])
-    seq_scale = cp.asnumpy(d_seq_scale[:seq_count])
-
-    d_flags = cp.zeros(total_pairs, dtype=cp.int32)
-    tpb = 256
-    grid_d = ((total_pairs + tpb - 1) // tpb,)
-    kernels['parallel_dedup'](grid_d, (tpb,),
-        (d_sorted_i, d_sorted_j, d_sorted_scale,
-         np.int32(total_pairs), d_flags))
-
-    scatter_idx = cp.cumsum(d_flags) - 1
-    unique_count = int(scatter_idx[total_pairs - 1]) + 1
-    assert unique_count == seq_count
-
-    d_par_j = cp.full(unique_count, -1, dtype=cp.int32)
-    d_par_scale = cp.zeros(unique_count, dtype=cp.float32)
-    d_par_j[scatter_idx] = d_sorted_j
-    d_par_scale[scatter_idx] = d_sorted_scale
-
-    par_neighbors = cp.asnumpy(d_par_j[:unique_count])
-    par_scale = cp.asnumpy(d_par_scale[:unique_count])
-
-    np.testing.assert_array_equal(par_neighbors, seq_neighbors)
-    np.testing.assert_allclose(par_scale, seq_scale, atol=1e-7)
-    np.testing.assert_array_equal(par_neighbors, cpu_neighbors)
-    np.testing.assert_allclose(par_scale, cpu_scale, atol=1e-7)
 
 
 @pytest.mark.slow
@@ -301,7 +160,6 @@ def test_permute_fast_path_matches_full_rebuild():
     from mdpy.core.topology import build_exclusion_map_gpu, permute_exclusion_pairs_gpu
     import cupy as cp
 
-    topology.build_exclusion_map(scale_14=1.0)
     gpu_offset, gpu_neighbors, gpu_scale, gpu_unique_i = build_exclusion_map_gpu(topology, scale_14=1.0)
 
     rng = np.random.default_rng(42)
@@ -324,8 +182,12 @@ def test_permute_fast_path_matches_full_rebuild():
     topology_remapped.dihedral_indices = remap[topology_remapped.dihedral_indices]
     topology_remapped.improper_indices = remap[topology_remapped.improper_indices]
 
+    ref_offset, ref_neighbors, ref_scale = _build_reference_exclusion_map(topology_remapped, scale_14=1.0)
     gt_offset, gt_neighbors, gt_scale, _ = build_exclusion_map_gpu(topology_remapped, scale_14=1.0)
 
     np.testing.assert_array_equal(cp.asnumpy(d_offset), cp.asnumpy(gt_offset))
     np.testing.assert_array_equal(cp.asnumpy(d_neighbors), cp.asnumpy(gt_neighbors))
     np.testing.assert_allclose(cp.asnumpy(d_scale), cp.asnumpy(gt_scale), atol=1e-7)
+    np.testing.assert_array_equal(ref_offset, cp.asnumpy(gt_offset))
+    np.testing.assert_array_equal(ref_neighbors, cp.asnumpy(gt_neighbors))
+    np.testing.assert_allclose(ref_scale, cp.asnumpy(gt_scale), atol=1e-7)
