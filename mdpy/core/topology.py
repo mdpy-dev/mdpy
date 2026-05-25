@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import cupy as cp
 import numpy as np
 from mdpy import env
 
@@ -246,6 +247,197 @@ class Topology:
                 self.num_dihedrals, self.num_impropers,
             )
         )
+
+
+_GENERATE_PAIRS_KERNEL = r'''
+extern "C" __global__
+void generate_pairs_kernel(
+    const int* __restrict__ bond_idx, const int num_bonds,
+    const int* __restrict__ angle_idx, const int num_angles,
+    const int* __restrict__ dihedral_idx, const int num_dihedrals,
+    const int* __restrict__ improper_idx, const int num_impropers,
+    const float scale_14,
+    int* __restrict__ out_i, int* __restrict__ out_j,
+    float* __restrict__ out_scale,
+    const int total_pairs
+) {
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tid >= total_pairs) return;
+
+    int bond_end = num_bonds;
+    int angle_end = bond_end + num_angles;
+    int dihedral_end = angle_end + num_dihedrals;
+
+    if (tid < bond_end) {
+        int a = bond_idx[tid * 2];
+        int b = bond_idx[tid * 2 + 1];
+        out_i[tid] = min(a, b);
+        out_j[tid] = max(a, b);
+        out_scale[tid] = 0.0f;
+    } else if (tid < angle_end) {
+        int idx = tid - bond_end;
+        int a = angle_idx[idx * 3];
+        int c = angle_idx[idx * 3 + 2];
+        out_i[tid] = min(a, c);
+        out_j[tid] = max(a, c);
+        out_scale[tid] = 0.0f;
+    } else if (tid < dihedral_end) {
+        int idx = tid - angle_end;
+        int a = dihedral_idx[idx * 4];
+        int d = dihedral_idx[idx * 4 + 3];
+        out_i[tid] = min(a, d);
+        out_j[tid] = max(a, d);
+        out_scale[tid] = scale_14;
+    } else {
+        int idx = tid - dihedral_end;
+        int a = improper_idx[idx * 4];
+        int d = improper_idx[idx * 4 + 3];
+        out_i[tid] = min(a, d);
+        out_j[tid] = max(a, d);
+        out_scale[tid] = 0.0f;
+    }
+}
+'''
+
+_DEDUP_PAIRS_KERNEL = r'''
+extern "C" __global__
+void dedup_pairs_kernel(
+    const int* __restrict__ sorted_i,
+    const int* __restrict__ sorted_j,
+    const float* __restrict__ sorted_scale,
+    int* __restrict__ unique_i,
+    int* __restrict__ unique_j,
+    float* __restrict__ unique_scale,
+    int* __restrict__ unique_count,
+    const int total_pairs
+) {
+    if (total_pairs == 0) {
+        *unique_count = 0;
+        return;
+    }
+    int count = 1;
+    unique_i[0] = sorted_i[0];
+    unique_j[0] = sorted_j[0];
+    unique_scale[0] = sorted_scale[0];
+    for (int k = 1; k < total_pairs; k++) {
+        if (sorted_i[k] != sorted_i[k - 1] || sorted_j[k] != sorted_j[k - 1]) {
+            unique_i[count] = sorted_i[k];
+            unique_j[count] = sorted_j[k];
+            unique_scale[count] = sorted_scale[k];
+            count++;
+        }
+    }
+    *unique_count = count;
+}
+'''
+
+_BUILD_CSR_OFFSET_KERNEL = r'''
+extern "C" __global__
+void build_csr_offset_kernel(
+    const int* __restrict__ sorted_i,
+    const int num_unique,
+    const int num_particles,
+    int* __restrict__ offset
+) {
+    int j = 0;
+    for (int i = 0; i < num_particles; i++) {
+        offset[i] = j;
+        while (j < num_unique && sorted_i[j] == i) {
+            j++;
+        }
+    }
+    offset[num_particles] = j;
+}
+'''
+
+_gpu_kernels = None
+
+
+def _get_gpu_kernels():
+    global _gpu_kernels
+    if _gpu_kernels is None:
+        _gpu_kernels = {
+            'generate': cp.RawKernel(_GENERATE_PAIRS_KERNEL, 'generate_pairs_kernel'),
+            'dedup': cp.RawKernel(_DEDUP_PAIRS_KERNEL, 'dedup_pairs_kernel'),
+            'csr': cp.RawKernel(_BUILD_CSR_OFFSET_KERNEL, 'build_csr_offset_kernel'),
+        }
+    return _gpu_kernels
+
+
+def build_exclusion_map_gpu(topology, scale_14=1.0):
+    num_bonds = topology.num_bonds
+    num_angles = topology.num_angles
+    num_dihedrals = topology.num_dihedrals
+    num_impropers = topology.num_impropers
+    total_pairs = num_bonds + num_angles + num_dihedrals + num_impropers
+    num_particles = topology.num_particles
+
+    if total_pairs == 0:
+        d_offset = cp.zeros(num_particles + 1, dtype=cp.int32)
+        d_neighbors = cp.empty(0, dtype=cp.int32)
+        d_scale = cp.empty(0, dtype=cp.float32)
+        return d_offset, d_neighbors, d_scale
+
+    kernels = _get_gpu_kernels()
+
+    d_bond_idx = cp.asarray(topology.bond_indices.ravel().astype(np.int32))
+    d_angle_idx = cp.asarray(topology.angle_indices.ravel().astype(np.int32))
+    d_dihedral_idx = cp.asarray(topology.dihedral_indices.ravel().astype(np.int32))
+    d_improper_idx = cp.asarray(topology.improper_indices.ravel().astype(np.int32))
+
+    d_pair_i = cp.empty(total_pairs, dtype=cp.int32)
+    d_pair_j = cp.empty(total_pairs, dtype=cp.int32)
+    d_pair_scale = cp.empty(total_pairs, dtype=cp.float32)
+
+    block = 256
+    grid = (total_pairs + block - 1) // block
+    kernels['generate'](
+        (grid,), (block,),
+        (d_bond_idx, np.int32(num_bonds),
+         d_angle_idx, np.int32(num_angles),
+         d_dihedral_idx, np.int32(num_dihedrals),
+         d_improper_idx, np.int32(num_impropers),
+         np.float32(scale_14),
+         d_pair_i, d_pair_j, d_pair_scale,
+         np.int32(total_pairs))
+    )
+
+    scale_rank = (d_pair_scale > 0.0).astype(cp.int32)
+    max_j = int(cp.max(d_pair_j)) + 1
+    sort_key = (d_pair_i.astype(cp.int64) * np.int64(max_j * 2 + 2)
+                + d_pair_j.astype(cp.int64) * np.int64(2)
+                + scale_rank.astype(cp.int64))
+    order = cp.argsort(sort_key)
+    d_pair_i = d_pair_i[order]
+    d_pair_j = d_pair_j[order]
+    d_pair_scale = d_pair_scale[order]
+
+    d_unique_i = cp.empty(total_pairs, dtype=cp.int32)
+    d_unique_j = cp.empty(total_pairs, dtype=cp.int32)
+    d_unique_scale = cp.empty(total_pairs, dtype=cp.float32)
+    d_unique_count = cp.empty(1, dtype=cp.int32)
+
+    kernels['dedup'](
+        (1,), (1,),
+        (d_pair_i, d_pair_j, d_pair_scale,
+         d_unique_i, d_unique_j, d_unique_scale,
+         d_unique_count,
+         np.int32(total_pairs))
+    )
+
+    unique_count = int(d_unique_count[0])
+    d_unique_i = d_unique_i[:unique_count]
+    d_unique_j = d_unique_j[:unique_count]
+    d_unique_scale = d_unique_scale[:unique_count]
+
+    d_offset = cp.zeros(num_particles + 1, dtype=cp.int32)
+    kernels['csr'](
+        (1,), (1,),
+        (d_unique_i, np.int32(unique_count),
+         np.int32(num_particles), d_offset)
+    )
+
+    return d_offset, d_unique_j, d_unique_scale
 
 
 class Builder:
