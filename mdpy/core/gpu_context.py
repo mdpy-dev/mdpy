@@ -4,41 +4,7 @@ import numpy as np
 import cupy as cp
 from mdpy import env
 
-_PBC_WRAP_KERNEL = r"""
-extern "C" __global__
-void pbc_wrap_kernel(
-    float* __restrict__ pos_x,
-    float* __restrict__ pos_y,
-    float* __restrict__ pos_z,
-    const float* __restrict__ pbc_matrix,
-    const float* __restrict__ pbc_inv,
-    int number_particles
-) {
-    int index = blockIdx.x * blockDim.x + threadIdx.x;
-    if (index >= number_particles) return;
-
-    float px = pos_x[index];
-    float py = pos_y[index];
-    float pz = pos_z[index];
-
-    float fx = px * pbc_inv[0] + py * pbc_inv[3] + pz * pbc_inv[6];
-    float fy = px * pbc_inv[1] + py * pbc_inv[4] + pz * pbc_inv[7];
-    float fz = px * pbc_inv[2] + py * pbc_inv[5] + pz * pbc_inv[8];
-
-    fx = fx - floorf(fx);
-    fy = fy - floorf(fy);
-    fz = fz - floorf(fz);
-
-    pos_x[index] = fx * pbc_matrix[0] + fy * pbc_matrix[3] + fz * pbc_matrix[6];
-    pos_y[index] = fx * pbc_matrix[1] + fy * pbc_matrix[4] + fz * pbc_matrix[7];
-    pos_z[index] = fx * pbc_matrix[2] + fy * pbc_matrix[5] + fz * pbc_matrix[8];
-}
-"""
-
-
 class GPUContext:
-
-    _pbc_wrap_kernel = None
 
     def __init__(self):
         self.number_particles = 0
@@ -74,11 +40,6 @@ class GPUContext:
         self._inv_box_x = 0.0
         self._inv_box_y = 0.0
         self._inv_box_z = 0.0
-
-    @classmethod
-    def _ensure_kernels(cls):
-        if cls._pbc_wrap_kernel is None:
-            cls._pbc_wrap_kernel = cp.RawKernel(_PBC_WRAP_KERNEL, 'pbc_wrap_kernel')
 
     def initialize(self, topology, pbc_matrix):
         self.number_particles = topology.num_particles
@@ -120,17 +81,6 @@ class GPUContext:
         )
 
         self.d_box_dims = cp.zeros(6, dtype=float_dtype)
-
-        self._ensure_kernels()
-
-    def wrap_positions(self):
-        number = self.number_particles
-        tpb = 256
-        self._pbc_wrap_kernel(
-            ((number + tpb - 1) // tpb,), (tpb,),
-            (self.d_positions_x, self.d_positions_y, self.d_positions_z,
-             self.d_pbc_matrix, self.d_pbc_inv, np.int32(number)),
-        )
 
     def upload_positions(self, particle_table):
         data = np.ascontiguousarray(

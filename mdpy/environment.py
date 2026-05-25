@@ -34,23 +34,8 @@ class MDPYEnvironment:
                 'Check supported precision with `mdpy.env.supported_precisions`'
             )
 
-    def set_default(self):
-        self.set_precision(self._default_precisions)
-
-    @property
-    def supported_presisions(self):
-        return self._supported_precisions
-
-    @property
-    def default_presisions(self):
-        return self._default_precisions
-
     @property
     def precision(self):
         return self._precision
-
-    @property
-    def platform(self):
-        return self._platform
 
 env = MDPYEnvironment()
