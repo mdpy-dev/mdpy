@@ -786,6 +786,7 @@ class TileList:
 
         self.d_sorted_to_pdb = cp.empty(0, dtype=env.NUMPY_INT)
         self.d_pdb_to_sorted = cp.empty(0, dtype=env.NUMPY_INT)
+        self.d_raw_order = cp.empty(0, dtype=env.NUMPY_INT)
         self._sorted_positions = None
 
         self._block_atoms_np = None
@@ -1070,11 +1071,11 @@ class TileList:
 
         sorted_indices = cp.argsort(morton_codes).astype(env.NUMPY_INT)
 
-        sorted_to_pdb = sorted_indices.copy()
-        pdb_to_sorted = cp.empty(N, dtype=env.NUMPY_INT)
-        pdb_to_sorted[sorted_indices] = cp.arange(N, dtype=env.NUMPY_INT)
-        self.d_sorted_to_pdb = sorted_to_pdb
-        self.d_pdb_to_sorted = pdb_to_sorted
+        raw_order = sorted_indices.copy()
+        raw_inv = cp.empty(N, dtype=env.NUMPY_INT)
+        raw_inv[sorted_indices] = cp.arange(N, dtype=env.NUMPY_INT)
+        self.d_raw_order = raw_order
+        self.d_pdb_to_sorted = raw_inv
 
         pos_x = pos_x[sorted_indices]
         pos_y = pos_y[sorted_indices]
@@ -1369,6 +1370,12 @@ class TileList:
         self.d_rebuild_flag[0] = 0
         self._is_initialized = True
 
+        raw_order = self.d_raw_order
+        if self.d_sorted_to_pdb.size == N:
+            self.d_sorted_to_pdb = self.d_sorted_to_pdb[raw_order]
+        else:
+            self.d_sorted_to_pdb = raw_order.copy()
+
         self._d_reverse_offset = None
         self._d_reverse_neighbors = None
         self._d_reverse_scale = None
@@ -1498,5 +1505,6 @@ class TileList:
         self.d_sorted_pos_z = cp.empty(0, dtype=env.NUMPY_FLOAT)
         self.d_sorted_to_pdb = cp.empty(0, dtype=env.NUMPY_INT)
         self.d_pdb_to_sorted = cp.empty(0, dtype=env.NUMPY_INT)
+        self.d_raw_order = cp.empty(0, dtype=env.NUMPY_INT)
         self._sorted_positions = None
         self._invalidate_caches()
