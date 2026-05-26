@@ -47,9 +47,9 @@ def test_exclusion_data_preserved_across_rebuild():
 
     positions_soa = system.gpu.get_positions_2d()
     if tl.check_rebuild(positions_soa):
-        pdb_to_sorted_gpu, _ = tl.rebuild(positions_soa, system.topology,
-                                           system.pbc_matrix, system.pbc_inv)
-        system._permute_all_arrays(pdb_to_sorted_gpu, None)
+        tl.rebuild(positions_soa, system.topology,
+                    system.pbc_matrix, system.pbc_inv)
+        system._permute_all_arrays()
         tl.build_tiles(system.topology, system.pbc_matrix)
 
     assert tl._d_excl_offset is not None, "exclusion data should survive rebuild"
