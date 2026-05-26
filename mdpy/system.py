@@ -206,34 +206,45 @@ class System:
             self._velocities_uploaded = True
         self.gpu.refresh_wrapped_positions()
 
-        prof = self._profiling_enabled
-        for _ in range(number_steps):
+        if id(integrator) != self._cached_integrator_id:
+            self._graph_needs_capture = True
+
+        if self._graph_needs_capture:
             positions_soa = (
                 self.gpu.d_wrapped_positions_x,
                 self.gpu.d_wrapped_positions_y,
                 self.gpu.d_wrapped_positions_z,
             )
-            if self.tile_list.check_rebuild_async(positions_soa):
+            if self.tile_list.check_rebuild(positions_soa):
                 self._do_full_rebuild(positions_soa)
-            self.compute_forces()
+            self._capture_step_graph(integrator)
+
+        prof = self._profiling_enabled
+        for _ in range(number_steps):
+            if self._step_graph is not None:
+                self._step_graph.launch(self._graph_stream)
+            else:
+                self._emit_step_kernels(integrator)
+
             if prof:
                 s = cp.cuda.Event()
                 e = cp.cuda.Event()
-                s.record()
-            integrator.step(self.gpu)
-            self.gpu.refresh_wrapped_positions()
-            if prof:
-                e.record()
+                s.record(self._graph_stream)
+                e.record(self._graph_stream)
                 self._profile_data["integrator"].append((s, e))
+
             self._step_count += 1
             self._steps_since_check += 1
             if self._steps_since_check >= self.tile_list.rebuild_check_interval:
+                self._graph_stream.synchronize()
                 if int(self.tile_list.d_rebuild_flag[0]) == 1:
-                    self._do_full_rebuild((
+                    positions_soa = (
                         self.gpu.d_wrapped_positions_x,
                         self.gpu.d_wrapped_positions_y,
                         self.gpu.d_wrapped_positions_z,
-                    ))
+                    )
+                    self._do_full_rebuild(positions_soa)
+                    self._capture_step_graph(integrator)
                 self._steps_since_check = 0
 
     def _do_full_rebuild(self, positions_soa):
