@@ -101,11 +101,13 @@ void pack_sorted_posq_kernel(
 
 
 class _Transpiler(ast.NodeVisitor):
-    def __init__(self, index_names, parameter_names):
+    def __init__(self, index_names, parameter_names, distance_name):
         self.index_names = index_names
         self.parameter_names = set(parameter_names)
+        self.distance_name = distance_name
         self.lines = []
         self.local_variables = set()
+        self._inv_dist_aliases = set()
 
     def _emit(self, line):
         self.lines.append(line)
@@ -113,14 +115,20 @@ class _Transpiler(ast.NodeVisitor):
     def transpile(self, func_body):
         for statement in func_body:
             self.visit(statement)
-        return "\n".join(self.lines)
+        fragment = "\n".join(self.lines)
+        needs_r = bool(re.search(r'\b' + re.escape(self.distance_name) + r'\b', fragment))
+        return fragment, needs_r
 
     def visit_Assign(self, node):
         if len(node.targets) != 1:
             raise NotImplementedError("Multiple assignment targets not supported")
         target_name = node.targets[0].id
-        self.local_variables.add(target_name)
         value = self._translate_expr(node.value)
+        if value == "inv_dist":
+            self._inv_dist_aliases.add(target_name)
+            self.local_variables.add(target_name)
+            return
+        self.local_variables.add(target_name)
         self._emit(f"float {target_name} = {value};")
 
     def visit_Return(self, node):
@@ -137,6 +145,8 @@ class _Transpiler(ast.NodeVisitor):
         if isinstance(node, ast.Constant):
             return self._translate_constant(node)
         elif isinstance(node, ast.Name):
+            if node.id in self._inv_dist_aliases:
+                return "inv_dist"
             return node.id
         elif isinstance(node, ast.BinOp):
             return self._translate_binop(node)
@@ -166,6 +176,10 @@ class _Transpiler(ast.NodeVisitor):
             return self._translate_pow(node)
         left = self._translate_expr(node.left)
         right = self._translate_expr(node.right)
+        if isinstance(node.op, ast.Div) and right == self.distance_name:
+            if left == "1.0f":
+                return "inv_dist"
+            return f"({left} * inv_dist)"
         op_map = {
             ast.Add: "+",
             ast.Sub: "-",
@@ -264,6 +278,7 @@ class NonbondedExpression:
         distance_name,
         cuda_fragment,
         local_variables,
+        needs_r=True,
     ):
         self.func = func
         self.source = source
@@ -273,6 +288,7 @@ class NonbondedExpression:
         self.distance_name = distance_name
         self.cuda_fragment = cuda_fragment
         self.local_variables = local_variables
+        self.needs_r = needs_r
 
     def __add__(self, other):
         if not isinstance(other, NonbondedExpression):
@@ -327,6 +343,7 @@ class NonbondedExpression:
             distance_name=self.distance_name,
             cuda_fragment=combined_fragment,
             local_variables=combined_locals,
+            needs_r=self.needs_r or other.needs_r,
         )
 
     def assemble_tile_kernel(self):
@@ -334,14 +351,14 @@ class NonbondedExpression:
         if "_result_energy_1" not in fragment:
             fragment += "\nfloat energy_val = _result_energy;"
             fragment += "\nfloat force_magnitude = _result_force;"
-        return _assemble_exclusion_tile_kernel(self.parameter_names, fragment)
+        return _assemble_exclusion_tile_kernel(self.parameter_names, fragment, self.needs_r)
 
     def assemble_main_tile_kernel(self):
         fragment = self.cuda_fragment
         if "_result_energy_1" not in fragment:
             fragment += "\nfloat energy_val = _result_energy;"
             fragment += "\nfloat force_magnitude = _result_force;"
-        return _assemble_main_tile_kernel(self.parameter_names, fragment)
+        return _assemble_main_tile_kernel(self.parameter_names, fragment, self.needs_r)
 
 
 def _rename_output_vars(cuda_fragment, tag):
@@ -743,7 +760,7 @@ def _generate_parameter_load_j_tile_exclusion_posq(parameter_names):
     return "\n        ".join(lines)
 
 
-def _assemble_exclusion_tile_kernel(parameter_names, expression_fragment):
+def _assemble_exclusion_tile_kernel(parameter_names, expression_fragment, needs_r=True):
     use_posq = "charge" in parameter_names
 
     if use_posq:
@@ -809,6 +826,7 @@ def _assemble_exclusion_tile_kernel(parameter_names, expression_fragment):
     shuffle_code = _generate_shuffle_warp_data_exclusion(parameter_names)
     param_select = _generate_parameter_select_exclusion(parameter_names)
     param_restore = _generate_parameter_restore_exclusion(parameter_names)
+    r_declaration = "                float r = dist_sq * inv_dist;\n" if needs_r else ""
 
     kernel = f"""extern "C" __global__
 void tile_kernel(
@@ -880,8 +898,7 @@ void tile_kernel(
 
             if (!excluded && dist_sq > 1.0e-12f && dist_sq <= cutoff_sq && gi >= 0 && gi < num_particles) {{
                 float inv_dist = rsqrtf(dist_sq);
-                float r = dist_sq * inv_dist;
-                {param_select}
+                {r_declaration}{param_select}
                 {expression_fragment}
                 float inv_dist_force = force_magnitude * inv_dist;
                 float fx = dx * inv_dist_force;
@@ -917,7 +934,7 @@ void tile_kernel(
     return kernel
 
 
-def _assemble_main_tile_kernel(parameter_names, expression_fragment):
+def _assemble_main_tile_kernel(parameter_names, expression_fragment, needs_r=True):
     use_posq = "charge" in parameter_names
 
     if use_posq:
@@ -979,6 +996,7 @@ def _assemble_main_tile_kernel(parameter_names, expression_fragment):
         )
 
     shuffle_code = _generate_shuffle_warp_data_main(parameter_names)
+    r_declaration = "                float r = dist_sq * inv_dist;\n" if needs_r else ""
 
     kernel = f"""extern "C" __global__
 void main_tile_kernel(
@@ -1040,8 +1058,7 @@ void main_tile_kernel(
 
             if (!excluded && dist_sq > 1.0e-12f && dist_sq <= cutoff_sq && gi >= 0 && gi < num_particles) {{
                 float inv_dist = rsqrtf(dist_sq);
-                float r = dist_sq * inv_dist;
-                {expression_fragment}
+                {r_declaration}{expression_fragment}
                 float inv_dist_force = force_magnitude * inv_dist;
                 float fx = dx * inv_dist_force;
                 float fy = dy * inv_dist_force;
@@ -1123,8 +1140,8 @@ def nonbonded_expression(func):
             f"Expected exactly 2 particle index arguments, got {len(index_names)}: {index_names}"
         )
 
-    transpiler = _Transpiler(index_names, parameter_names)
-    cuda_fragment = transpiler.transpile(func_def.body)
+    transpiler = _Transpiler(index_names, parameter_names, distance_name)
+    cuda_fragment, needs_r = transpiler.transpile(func_def.body)
     local_variables = transpiler.local_variables
 
     return NonbondedExpression(
@@ -1136,6 +1153,7 @@ def nonbonded_expression(func):
         distance_name=distance_name,
         cuda_fragment=cuda_fragment,
         local_variables=local_variables,
+        needs_r=needs_r,
     )
 
 
