@@ -33,8 +33,6 @@ class System:
         self._positions_uploaded = False
         self._velocities_uploaded = False
         self._compute_energy = False
-        self._profiling_enabled = False
-        self._profile_data = {}
         self._d_cached_unique_i = None
         self._d_cached_unique_j = None
         self._d_cached_unique_scale = None
@@ -48,46 +46,15 @@ class System:
         self.force_terms.append(term)
         self.gpu.allocate_energy_accumulator(len(self.force_terms))
 
-    def enable_profiling(self):
-        self._profiling_enabled = True
-        self._profile_data = {}
-        for term in self.force_terms:
-            self._profile_data[term.name] = []
-        self._profile_data["integrator"] = []
-
-    def disable_profiling(self):
-        self._profiling_enabled = False
-
-    def dump_profile(self):
-        cp.cuda.Stream.null.synchronize()
-        result = {}
-        for key, pairs in self._profile_data.items():
-            if pairs:
-                times = [cp.cuda.get_elapsed_time(s, e) for s, e in pairs]
-                result[key] = {
-                    "total_ms": sum(times),
-                    "avg_ms": sum(times) / len(times),
-                    "count": len(times),
-                }
-        self._profile_data = {k: [] for k in self._profile_data}
-        return result
-
     def compute_forces(self):
         self.gpu.zero_forces()
         for term_index, term in enumerate(self.force_terms):
-            if self._profiling_enabled:
-                s = cp.cuda.Event()
-                e = cp.cuda.Event()
-                s.record()
             if self._compute_energy == False:
                 term.compute(self.gpu, self.tile_list)
             else:
                 self.gpu.zero_energy()
                 term.compute(self.gpu, self.tile_list)
                 self.gpu.accumulate_energy(term_index)
-            if self._profiling_enabled:
-                e.record()
-                self._profile_data[term.name].append((s, e))
 
     def _emit_step_kernels(self, integrator):
         positions_soa = (
@@ -105,16 +72,11 @@ class System:
             del self._step_graph
             self._step_graph = None
 
-        saved_prof = self._profiling_enabled
-        self._profiling_enabled = False
-        try:
-            s = self._graph_stream
-            with s:
-                s.begin_capture()
-                self._emit_step_kernels(integrator)
-                self._step_graph = s.end_capture()
-        finally:
-            self._profiling_enabled = saved_prof
+        s = self._graph_stream
+        with s:
+            s.begin_capture()
+            self._emit_step_kernels(integrator)
+            self._step_graph = s.end_capture()
 
         self._cached_integrator_id = id(integrator)
         self._graph_needs_capture = False
@@ -229,22 +191,12 @@ class System:
                 self._do_full_rebuild(positions_soa)
             self._capture_step_graph(integrator)
 
-        prof = self._profiling_enabled
-        use_graph = self._step_graph is not None and not prof
+        use_graph = self._step_graph is not None
         for _ in range(number_steps):
-            if prof:
-                cp.cuda.Stream.null.synchronize()
-                s = cp.cuda.Event()
-                e = cp.cuda.Event()
-                s.record()
             if use_graph:
                 self._step_graph.launch(self._graph_stream)
             else:
                 self._emit_step_kernels(integrator)
-            if prof:
-                self._graph_stream.synchronize()
-                e.record()
-                self._profile_data["integrator"].append((s, e))
 
             self._step_count += 1
             self._steps_since_check += 1
