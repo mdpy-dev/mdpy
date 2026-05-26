@@ -105,11 +105,16 @@ class System:
             del self._step_graph
             self._step_graph = None
 
-        s = self._graph_stream
-        with s:
-            s.begin_capture()
-            self._emit_step_kernels(integrator)
-            self._step_graph = s.end_capture()
+        saved_prof = self._profiling_enabled
+        self._profiling_enabled = False
+        try:
+            s = self._graph_stream
+            with s:
+                s.begin_capture()
+                self._emit_step_kernels(integrator)
+                self._step_graph = s.end_capture()
+        finally:
+            self._profiling_enabled = saved_prof
 
         self._cached_integrator_id = id(integrator)
         self._graph_needs_capture = False
@@ -225,17 +230,20 @@ class System:
             self._capture_step_graph(integrator)
 
         prof = self._profiling_enabled
+        use_graph = self._step_graph is not None and not prof
         for _ in range(number_steps):
-            if self._step_graph is not None:
+            if prof:
+                cp.cuda.Stream.null.synchronize()
+                s = cp.cuda.Event()
+                e = cp.cuda.Event()
+                s.record()
+            if use_graph:
                 self._step_graph.launch(self._graph_stream)
             else:
                 self._emit_step_kernels(integrator)
-
             if prof:
-                s = cp.cuda.Event()
-                e = cp.cuda.Event()
-                s.record(self._graph_stream)
-                e.record(self._graph_stream)
+                self._graph_stream.synchronize()
+                e.record()
                 self._profile_data["integrator"].append((s, e))
 
             self._step_count += 1
