@@ -109,21 +109,21 @@ class System:
 
         perm_gpu = tl.d_raw_order
 
-        src_list = [
-            gpu.d_positions_x, gpu.d_positions_y, gpu.d_positions_z,
-            gpu.d_velocities_x, gpu.d_velocities_y, gpu.d_velocities_z,
-            gpu.d_forces_x, gpu.d_forces_y, gpu.d_forces_z,
-            gpu.d_prev_positions_x, gpu.d_prev_positions_y, gpu.d_prev_positions_z,
-            gpu.d_masses,
-        ]
-        name_list = [
-            "d_positions_x", "d_positions_y", "d_positions_z",
-            "d_velocities_x", "d_velocities_y", "d_velocities_z",
-            "d_forces_x", "d_forces_y", "d_forces_z",
-            "d_prev_positions_x", "d_prev_positions_y", "d_prev_positions_z",
-            "d_masses",
-        ]
-        for name, new_arr in tl.permute_mass(perm_gpu, src_list, name_list):
+        for name, new_arr in tl.permute_state_arrays(perm_gpu, [
+            ("d_positions_x", gpu.d_positions_x),
+            ("d_positions_y", gpu.d_positions_y),
+            ("d_positions_z", gpu.d_positions_z),
+            ("d_velocities_x", gpu.d_velocities_x),
+            ("d_velocities_y", gpu.d_velocities_y),
+            ("d_velocities_z", gpu.d_velocities_z),
+            ("d_forces_x", gpu.d_forces_x),
+            ("d_forces_y", gpu.d_forces_y),
+            ("d_forces_z", gpu.d_forces_z),
+            ("d_prev_positions_x", gpu.d_prev_positions_x),
+            ("d_prev_positions_y", gpu.d_prev_positions_y),
+            ("d_prev_positions_z", gpu.d_prev_positions_z),
+            ("d_masses", gpu.d_masses),
+        ]):
             setattr(gpu, name, new_arr)
 
         d_remap = tl.d_pdb_to_sorted

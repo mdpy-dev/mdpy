@@ -327,9 +327,9 @@ void permute_int_array_kernel(
 }
 """
 
-_PERMUTE_MASS_KERNEL = r"""
+_PERMUTE_STATE_ARRAYS_KERNEL = r"""
 extern "C" __global__
-void permute_mass_kernel(
+void permute_state_arrays_kernel(
     const float* __restrict__ src0, const float* __restrict__ src1,
     const float* __restrict__ src2, const float* __restrict__ src3,
     const float* __restrict__ src4, const float* __restrict__ src5,
@@ -764,8 +764,8 @@ def _compile_gpu_kernels():
         "permute_2comp": cp.RawKernel(
             _PERMUTE_ARRAY_2COMP_KERNEL, "permute_array_2comp_kernel"
         ),
-        "permute_mass": cp.RawKernel(
-            _PERMUTE_MASS_KERNEL, "permute_mass_kernel"
+        "permute_state_arrays": cp.RawKernel(
+            _PERMUTE_STATE_ARRAYS_KERNEL, "permute_state_arrays_kernel"
         ),
         "inverse_permute": cp.RawKernel(
             _INVERSE_PERMUTE_KERNEL, "inverse_permute_kernel"
@@ -1043,7 +1043,12 @@ class TileList:
                 )
                 arrays_2comp[name] = dst
 
-    def permute_mass(self, permutation, src_list, name_list):
+    def permute_state_arrays(self, permutation, name_array_pairs):
+        assert len(name_array_pairs) == 13, (
+            f"permute_state_arrays requires 13 arrays, got {len(name_array_pairs)}"
+        )
+        name_list = [p[0] for p in name_array_pairs]
+        src_list = [p[1] for p in name_array_pairs]
         if self.num_particles == 0:
             return
         self._ensure_kernels()
@@ -1051,7 +1056,7 @@ class TileList:
         tpb = 256
         grid = ((N + tpb - 1) // tpb,)
         dst_list = [cp.empty_like(src) for src in src_list]
-        self._kernels["permute_mass"](
+        self._kernels["permute_state_arrays"](
             grid, (tpb,),
             (
                 src_list[0], src_list[1], src_list[2],
@@ -1068,7 +1073,7 @@ class TileList:
                 dst_list[12],
             ),
         )
-        return zip(name_list, dst_list)
+        return list(zip(name_list, dst_list))
 
     def permute_from_sorted(self, sorted_to_pdb, sorted_array):
         if self.num_particles == 0:
