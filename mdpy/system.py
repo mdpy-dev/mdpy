@@ -117,8 +117,13 @@ class System:
     def dump_energy(self):
         if self.gpu.d_energy_accumulator is None:
             return {}
+        self._graph_stream.synchronize()
         self._compute_energy = True
-        self.compute_forces()
+        self.gpu.zero_forces()
+        for term_index, term in enumerate(self.force_terms):
+            self.gpu.zero_energy()
+            term.compute(self.gpu, self.tile_list)
+            self.gpu.accumulate_energy(term_index)
         self._compute_energy = False
         raw = cp.asnumpy(self.gpu.d_energy_accumulator)
         result = {}
