@@ -1359,7 +1359,7 @@ class NonbondedForce(ForceTerm):
             else:
                 arrays_float[name] = src_arr
 
-        tile_list.permute_to_sorted(
+        gpu_context.permute_to_sorted(
             permutation, arrays_float, arrays_2comp=arrays_2comp
         )
 

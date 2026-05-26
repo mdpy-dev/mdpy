@@ -610,9 +610,9 @@ class TestRebuildSortCorrectness:
         import cupy as cp
         tl = system.tile_list
         d_stp = tl.d_sorted_to_pdb
-        pdb_gpu_x = tl.permute_from_sorted(d_stp, system.gpu.d_positions_x)
-        pdb_gpu_y = tl.permute_from_sorted(d_stp, system.gpu.d_positions_y)
-        pdb_gpu_z = tl.permute_from_sorted(d_stp, system.gpu.d_positions_z)
+        pdb_gpu_x = system.gpu.permute_from_sorted(d_stp, system.gpu.d_positions_x)
+        pdb_gpu_y = system.gpu.permute_from_sorted(d_stp, system.gpu.d_positions_y)
+        pdb_gpu_z = system.gpu.permute_from_sorted(d_stp, system.gpu.d_positions_z)
         gpu_pos = np.stack([pdb_gpu_x.get(), pdb_gpu_y.get(), pdb_gpu_z.get()], axis=1)
 
         np.testing.assert_allclose(gpu_pos, pos_after_many, atol=1e-5,

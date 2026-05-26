@@ -186,9 +186,9 @@ class TestBondedForces:
         tl = mdpy_system.tile_list
         gpu = mdpy_system.gpu
         sorted_to_pdb = tl.d_sorted_to_pdb
-        pdb_fx = tl.permute_from_sorted(sorted_to_pdb, gpu.d_forces_x).get()
-        pdb_fy = tl.permute_from_sorted(sorted_to_pdb, gpu.d_forces_y).get()
-        pdb_fz = tl.permute_from_sorted(sorted_to_pdb, gpu.d_forces_z).get()
+        pdb_fx = gpu.permute_from_sorted(sorted_to_pdb, gpu.d_forces_x).get()
+        pdb_fy = gpu.permute_from_sorted(sorted_to_pdb, gpu.d_forces_y).get()
+        pdb_fz = gpu.permute_from_sorted(sorted_to_pdb, gpu.d_forces_z).get()
         return np.stack([pdb_fx, pdb_fy, pdb_fz], axis=1).astype(np.float64)
 
     def test_total_forces_correlation(self, mdpy_system, ref):
@@ -259,9 +259,9 @@ class TestNonbondedForces:
         tl = mdpy_system.tile_list
         gpu = mdpy_system.gpu
         sorted_to_pdb = tl.d_sorted_to_pdb
-        pdb_fx = tl.permute_from_sorted(sorted_to_pdb, gpu.d_forces_x).get()
-        pdb_fy = tl.permute_from_sorted(sorted_to_pdb, gpu.d_forces_y).get()
-        pdb_fz = tl.permute_from_sorted(sorted_to_pdb, gpu.d_forces_z).get()
+        pdb_fx = gpu.permute_from_sorted(sorted_to_pdb, gpu.d_forces_x).get()
+        pdb_fy = gpu.permute_from_sorted(sorted_to_pdb, gpu.d_forces_y).get()
+        pdb_fz = gpu.permute_from_sorted(sorted_to_pdb, gpu.d_forces_z).get()
         return np.stack([pdb_fx, pdb_fy, pdb_fz], axis=1).astype(np.float64)
 
     def test_nonbonded_force_direction(self, mdpy_system, ref):

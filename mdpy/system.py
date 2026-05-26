@@ -106,7 +106,7 @@ class System:
 
         perm_gpu = tl.d_raw_order
 
-        for name, new_arr in tl.permute_state_arrays(perm_gpu, [
+        for name, new_arr in gpu.permute_state_arrays(perm_gpu, [
             ("d_positions_x", gpu.d_positions_x),
             ("d_positions_y", gpu.d_positions_y),
             ("d_positions_z", gpu.d_positions_z),
@@ -237,15 +237,15 @@ class System:
         tl = self.tile_list
         if tl.d_sorted_to_pdb.size > 0 and tl.num_particles > 0:
             sorted_to_pdb = tl.d_sorted_to_pdb
-            pdb_x = tl.permute_from_sorted(sorted_to_pdb, self.gpu.d_positions_x)
-            pdb_y = tl.permute_from_sorted(sorted_to_pdb, self.gpu.d_positions_y)
-            pdb_z = tl.permute_from_sorted(sorted_to_pdb, self.gpu.d_positions_z)
+            pdb_x = self.gpu.permute_from_sorted(sorted_to_pdb, self.gpu.d_positions_x)
+            pdb_y = self.gpu.permute_from_sorted(sorted_to_pdb, self.gpu.d_positions_y)
+            pdb_z = self.gpu.permute_from_sorted(sorted_to_pdb, self.gpu.d_positions_z)
             pos = np.stack([pdb_x.get(), pdb_y.get(), pdb_z.get()], axis=1)
             self.particles.positions[:] = pos
 
-            pdb_vx = tl.permute_from_sorted(sorted_to_pdb, self.gpu.d_velocities_x)
-            pdb_vy = tl.permute_from_sorted(sorted_to_pdb, self.gpu.d_velocities_y)
-            pdb_vz = tl.permute_from_sorted(sorted_to_pdb, self.gpu.d_velocities_z)
+            pdb_vx = self.gpu.permute_from_sorted(sorted_to_pdb, self.gpu.d_velocities_x)
+            pdb_vy = self.gpu.permute_from_sorted(sorted_to_pdb, self.gpu.d_velocities_y)
+            pdb_vz = self.gpu.permute_from_sorted(sorted_to_pdb, self.gpu.d_velocities_z)
             vel = np.stack([pdb_vx.get(), pdb_vy.get(), pdb_vz.get()], axis=1)
             self.particles.velocities[:] = vel
         else:

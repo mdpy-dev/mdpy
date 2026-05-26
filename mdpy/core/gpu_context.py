@@ -4,6 +4,104 @@ import numpy as np
 import cupy as cp
 from mdpy import env
 
+_PERMUTE_ARRAY_KERNEL = r"""
+extern "C" __global__
+void permute_array_kernel(
+    const float* __restrict__ src,
+    const int* __restrict__ permutation,
+    int num_particles,
+    float* __restrict__ dst
+) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= num_particles) return;
+    dst[idx] = src[permutation[idx]];
+}
+"""
+
+_PERMUTE_INT_ARRAY_KERNEL = r"""
+extern "C" __global__
+void permute_int_array_kernel(
+    const int* __restrict__ src,
+    const int* __restrict__ permutation,
+    int num_particles,
+    int* __restrict__ dst
+) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= num_particles) return;
+    dst[idx] = src[permutation[idx]];
+}
+"""
+
+_PERMUTE_ARRAY_2COMP_KERNEL = r"""
+extern "C" __global__
+void permute_array_2comp_kernel(
+    const float* __restrict__ src,
+    const int* __restrict__ permutation,
+    int num_particles,
+    float* __restrict__ dst
+) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= num_particles) return;
+    int src_idx = permutation[idx];
+    dst[idx * 2 + 0] = src[src_idx * 2 + 0];
+    dst[idx * 2 + 1] = src[src_idx * 2 + 1];
+}
+"""
+
+_PERMUTE_STATE_ARRAYS_KERNEL = r"""
+extern "C" __global__
+void permute_state_arrays_kernel(
+    const float* __restrict__ src0, const float* __restrict__ src1,
+    const float* __restrict__ src2, const float* __restrict__ src3,
+    const float* __restrict__ src4, const float* __restrict__ src5,
+    const float* __restrict__ src6, const float* __restrict__ src7,
+    const float* __restrict__ src8, const float* __restrict__ src9,
+    const float* __restrict__ src10, const float* __restrict__ src11,
+    const float* __restrict__ src12,
+    const int* __restrict__ permutation,
+    int num_particles,
+    float* __restrict__ dst0, float* __restrict__ dst1,
+    float* __restrict__ dst2, float* __restrict__ dst3,
+    float* __restrict__ dst4, float* __restrict__ dst5,
+    float* __restrict__ dst6, float* __restrict__ dst7,
+    float* __restrict__ dst8, float* __restrict__ dst9,
+    float* __restrict__ dst10, float* __restrict__ dst11,
+    float* __restrict__ dst12
+) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= num_particles) return;
+    int src_idx = permutation[idx];
+    dst0[idx] = src0[src_idx];
+    dst1[idx] = src1[src_idx];
+    dst2[idx] = src2[src_idx];
+    dst3[idx] = src3[src_idx];
+    dst4[idx] = src4[src_idx];
+    dst5[idx] = src5[src_idx];
+    dst6[idx] = src6[src_idx];
+    dst7[idx] = src7[src_idx];
+    dst8[idx] = src8[src_idx];
+    dst9[idx] = src9[src_idx];
+    dst10[idx] = src10[src_idx];
+    dst11[idx] = src11[src_idx];
+    dst12[idx] = src12[src_idx];
+}
+"""
+
+_INVERSE_PERMUTE_KERNEL = r"""
+extern "C" __global__
+void inverse_permute_kernel(
+    const float* __restrict__ sorted_src,
+    const int* __restrict__ sorted_to_pdb,
+    int num_particles,
+    float* __restrict__ pdb_dst
+) {
+    int sorted_idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (sorted_idx >= num_particles) return;
+    int pdb_idx = sorted_to_pdb[sorted_idx];
+    pdb_dst[pdb_idx] = sorted_src[sorted_idx];
+}
+"""
+
 class GPUContext:
 
     def __init__(self):
@@ -40,6 +138,119 @@ class GPUContext:
         self._inv_box_x = 0.0
         self._inv_box_y = 0.0
         self._inv_box_z = 0.0
+
+        self._permutation_kernels = None
+
+    def _ensure_permutation_kernels(self):
+        if self._permutation_kernels is not None:
+            return
+        self._permutation_kernels = {
+            "permute": cp.RawKernel(_PERMUTE_ARRAY_KERNEL, "permute_array_kernel"),
+            "permute_int": cp.RawKernel(
+                _PERMUTE_INT_ARRAY_KERNEL, "permute_int_array_kernel"
+            ),
+            "permute_2comp": cp.RawKernel(
+                _PERMUTE_ARRAY_2COMP_KERNEL, "permute_array_2comp_kernel"
+            ),
+            "permute_state_arrays": cp.RawKernel(
+                _PERMUTE_STATE_ARRAYS_KERNEL, "permute_state_arrays_kernel"
+            ),
+            "inverse_permute": cp.RawKernel(
+                _INVERSE_PERMUTE_KERNEL, "inverse_permute_kernel"
+            ),
+        }
+
+    def permute_to_sorted(
+        self, permutation, arrays_float, arrays_int=None, arrays_2comp=None
+    ):
+        N = permutation.size
+        if N == 0:
+            return
+        self._ensure_permutation_kernels()
+        tpb = 256
+        grid = ((N + tpb - 1) // tpb,)
+        for name, src in arrays_float.items():
+            dst = cp.empty_like(src)
+            self._permutation_kernels["permute"](
+                grid, (tpb,), (src, permutation, np.int32(N), dst)
+            )
+            arrays_float[name] = dst
+        if arrays_int:
+            for name, src in arrays_int.items():
+                dst = cp.empty_like(src)
+                self._permutation_kernels["permute_int"](
+                    grid, (tpb,), (src, permutation, np.int32(N), dst)
+                )
+                arrays_int[name] = dst
+        if arrays_2comp:
+            for name, src in arrays_2comp.items():
+                dst = cp.empty_like(src)
+                self._permutation_kernels["permute_2comp"](
+                    grid, (tpb,), (src, permutation, np.int32(N), dst)
+                )
+                arrays_2comp[name] = dst
+
+    def permute_state_arrays(self, permutation, name_array_pairs):
+        assert (
+            len(name_array_pairs) == 13
+        ), f"permute_state_arrays requires 13 arrays, got {len(name_array_pairs)}"
+        name_list = [p[0] for p in name_array_pairs]
+        src_list = [p[1] for p in name_array_pairs]
+        N = permutation.size
+        if N == 0:
+            return list(zip(name_list, src_list))
+        self._ensure_permutation_kernels()
+        tpb = 256
+        grid = ((N + tpb - 1) // tpb,)
+        dst_list = [cp.empty_like(src) for src in src_list]
+        self._permutation_kernels["permute_state_arrays"](
+            grid,
+            (tpb,),
+            (
+                src_list[0],
+                src_list[1],
+                src_list[2],
+                src_list[3],
+                src_list[4],
+                src_list[5],
+                src_list[6],
+                src_list[7],
+                src_list[8],
+                src_list[9],
+                src_list[10],
+                src_list[11],
+                src_list[12],
+                permutation,
+                np.int32(N),
+                dst_list[0],
+                dst_list[1],
+                dst_list[2],
+                dst_list[3],
+                dst_list[4],
+                dst_list[5],
+                dst_list[6],
+                dst_list[7],
+                dst_list[8],
+                dst_list[9],
+                dst_list[10],
+                dst_list[11],
+                dst_list[12],
+            ),
+        )
+        return list(zip(name_list, dst_list))
+
+    def permute_from_sorted(self, sorted_to_pdb, sorted_array):
+        N = sorted_array.size
+        if N == 0:
+            return sorted_array
+        self._ensure_permutation_kernels()
+        tpb = 256
+        grid = ((N + tpb - 1) // tpb,)
+        pdb_array = cp.empty_like(sorted_array)
+        self._permutation_kernels["inverse_permute"](
+            grid, (tpb,), (sorted_array, sorted_to_pdb, np.int32(N), pdb_array)
+        )
+        return pdb_array
 
     def initialize(self, topology, pbc_matrix):
         self.number_particles = topology.num_particles
