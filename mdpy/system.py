@@ -228,23 +228,18 @@ class System:
         self.gpu.download_positions(self.particles)
 
     def dump_state(self):
-        if self.tile_list.d_sorted_to_pdb.size > 0 and self.tile_list.num_particles > 0:
-            sorted_to_pdb_gpu = cp.asarray(self._sorted_to_pdb_np())
-            pdb_x = self.tile_list.permute_from_sorted(
-                sorted_to_pdb_gpu, self.gpu.d_positions_x)
-            pdb_y = self.tile_list.permute_from_sorted(
-                sorted_to_pdb_gpu, self.gpu.d_positions_y)
-            pdb_z = self.tile_list.permute_from_sorted(
-                sorted_to_pdb_gpu, self.gpu.d_positions_z)
+        tl = self.tile_list
+        if tl.d_sorted_to_pdb.size > 0 and tl.num_particles > 0:
+            sorted_to_pdb = tl.d_sorted_to_pdb
+            pdb_x = tl.permute_from_sorted(sorted_to_pdb, self.gpu.d_positions_x)
+            pdb_y = tl.permute_from_sorted(sorted_to_pdb, self.gpu.d_positions_y)
+            pdb_z = tl.permute_from_sorted(sorted_to_pdb, self.gpu.d_positions_z)
             pos = np.stack([pdb_x.get(), pdb_y.get(), pdb_z.get()], axis=1)
             self.particles.positions[:] = pos
 
-            pdb_vx = self.tile_list.permute_from_sorted(
-                sorted_to_pdb_gpu, self.gpu.d_velocities_x)
-            pdb_vy = self.tile_list.permute_from_sorted(
-                sorted_to_pdb_gpu, self.gpu.d_velocities_y)
-            pdb_vz = self.tile_list.permute_from_sorted(
-                sorted_to_pdb_gpu, self.gpu.d_velocities_z)
+            pdb_vx = tl.permute_from_sorted(sorted_to_pdb, self.gpu.d_velocities_x)
+            pdb_vy = tl.permute_from_sorted(sorted_to_pdb, self.gpu.d_velocities_y)
+            pdb_vz = tl.permute_from_sorted(sorted_to_pdb, self.gpu.d_velocities_z)
             vel = np.stack([pdb_vx.get(), pdb_vy.get(), pdb_vz.get()], axis=1)
             self.particles.velocities[:] = vel
         else:
