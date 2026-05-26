@@ -28,8 +28,8 @@ CUTOFF = 12.0
 DT_FS = 0.5
 KCAL_PER_INTERNAL = 1.0 / 4.1840286576e-4
 WARMUP_STEPS = 100
-BLOCK_STEPS = 500
-NUM_BLOCKS = 10
+BLOCK_STEPS = 2500
+NUM_BLOCKS = 20
 
 
 def main():
@@ -89,27 +89,42 @@ def main():
 
     print(f"\nBenchmark: {NUM_BLOCKS} x {BLOCK_STEPS} steps (CUDA Graph)")
     print(
-        f"  {'Block':>6s}  {'ms/step':>10s}  {'ns/day':>10s}  {'E_pot (kcal/mol)':>18s}"
+        f"  {'Block':>6s}  {'ms/step':>10s}  {'ns/day':>10s}  {'E_pot (kcal/mol)':>18s}  {'rebuilds':>9s}"
     )
     print(
-        f"  {'------':>6s}  {'----------':>10s}  {'----------':>10s}  {'------------------':>18s}"
+        f"  {'------':>6s}  {'----------':>10s}  {'----------':>10s}  {'------------------':>18s}  {'---------':>9s}"
     )
 
-    block_times = []
-    for i in range(NUM_BLOCKS):
-        cp.cuda.Stream.null.synchronize()
-        t0 = time.perf_counter()
-        system.step(integrator, BLOCK_STEPS)
-        cp.cuda.Stream.null.synchronize()
-        elapsed = time.perf_counter() - t0
+    _orig_capture = system._capture_step_graph
+    _capture_count = [0]
 
-        energy_dict = system.dump_energy()
-        e_total = sum(energy_dict.values())
-        e_kcal = e_total * KCAL_PER_INTERNAL
-        ms_per_step = elapsed / BLOCK_STEPS * 1000
-        ns_day = 86400.0 / (elapsed / BLOCK_STEPS) * DT_FS * 1e-6
-        block_times.append(ms_per_step)
-        print(f"  {i + 1:6d}  {ms_per_step:10.3f}  {ns_day:10.1f}  {e_kcal:18.1f}")
+    def _counting_capture(integrator_):
+        _capture_count[0] += 1
+        _orig_capture(integrator_)
+
+    system._capture_step_graph = _counting_capture
+
+    try:
+        block_times = []
+        for i in range(NUM_BLOCKS):
+            _capture_count[0] = 0
+            cp.cuda.Stream.null.synchronize()
+            t0 = time.perf_counter()
+            system.step(integrator, BLOCK_STEPS)
+            cp.cuda.Stream.null.synchronize()
+            elapsed = time.perf_counter() - t0
+
+            energy_dict = system.dump_energy()
+            e_total = sum(energy_dict.values())
+            e_kcal = e_total * KCAL_PER_INTERNAL
+            ms_per_step = elapsed / BLOCK_STEPS * 1000
+            ns_day = 86400.0 / (elapsed / BLOCK_STEPS) * DT_FS * 1e-6
+            block_times.append(ms_per_step)
+            print(
+                f"  {i + 1:6d}  {ms_per_step:10.3f}  {ns_day:10.1f}  {e_kcal:18.1f}  {_capture_count[0]:9d}"
+            )
+    finally:
+        system._capture_step_graph = _orig_capture
 
     avg = np.mean(block_times)
     med = np.median(block_times)
