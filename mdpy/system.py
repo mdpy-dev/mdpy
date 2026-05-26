@@ -101,13 +101,14 @@ class System:
                 result[term.name] = value
         return result
 
-    def _permute_all_arrays(self, pdb_to_sorted_gpu, pdb_to_sorted_np):
+    def _permute_all_arrays(self):
         N = self.topology.num_particles
         tpb = 256
         grid = ((N + tpb - 1) // tpb,)
         gpu = self.gpu
+        tl = self.tile_list
 
-        perm_gpu = self.tile_list.d_sorted_to_pdb
+        perm_gpu = tl.d_raw_order
 
         for old_arr, name in [
             (gpu.d_positions_x, 'd_positions_x'),
@@ -125,22 +126,11 @@ class System:
             (gpu.d_masses, 'd_masses'),
         ]:
             new_arr = cp.empty_like(old_arr)
-            self.tile_list._kernels['permute'](grid, (tpb,),
+            tl._kernels['permute'](grid, (tpb,),
                 (old_arr, perm_gpu, np.int32(N), new_arr))
             setattr(gpu, name, new_arr)
 
-        if pdb_to_sorted_np is None:
-            pdb_to_sorted_np = cp.asnumpy(pdb_to_sorted_gpu)
-
-        if self._pdb_to_current_sorted is None:
-            self._pdb_to_current_sorted = pdb_to_sorted_np.copy()
-        else:
-            self._pdb_to_current_sorted = pdb_to_sorted_np[self._pdb_to_current_sorted]
-
-        perm_np = cp.asnumpy(perm_gpu)
-        remap = np.empty(N, dtype=np.int32)
-        remap[perm_np] = np.arange(N, dtype=np.int32)
-        self.topology.remap_bonded_indices(remap)
+        d_remap = tl.d_pdb_to_sorted
 
         if self._d_cached_unique_i is not None:
             d_composed_perm = cp.empty(N, dtype=cp.int32)
@@ -162,11 +152,11 @@ class System:
             self._d_cached_unique_j = d_excl_neighbors
             self._d_cached_unique_scale = d_excl_scale
 
-        self.tile_list.set_gpu_exclusion(d_excl_offset, d_excl_neighbors, d_excl_scale)
+        tl.set_gpu_exclusion(d_excl_offset, d_excl_neighbors, d_excl_scale)
 
         for term in self.force_terms:
-            if hasattr(term, 'remap_indices'):
-                term.remap_indices(self.topology)
+            if hasattr(term, 'remap_indices_gpu'):
+                term.remap_indices_gpu(d_remap)
 
     def _sorted_to_pdb_np(self):
         inv = np.empty_like(self._pdb_to_current_sorted)
@@ -203,20 +193,15 @@ class System:
                 self._steps_since_check = 0
 
     def _do_full_rebuild(self, positions_soa):
-        pdb_to_sorted_gpu, pdb_to_sorted_np = self.tile_list.rebuild(
+        self.tile_list.rebuild(
             positions_soa, self.topology,
             self.pbc_matrix, self.pbc_inv,
         )
-        self._permute_all_arrays(pdb_to_sorted_gpu, pdb_to_sorted_np)
+        self._permute_all_arrays()
         self.tile_list.build_tiles(self.topology, self.pbc_matrix)
         for term in self.force_terms:
             if hasattr(term, 'bind_sorted'):
-                s2p = self._sorted_to_pdb_np()
-                term.bind_sorted(
-                    self.topology, self.tile_list, self.gpu,
-                    sorted_to_pdb_np=s2p,
-                    sorted_particle_types=self._particle_types_pdb[s2p],
-                )
+                term.bind_sorted(self.topology, self.tile_list, self.gpu)
 
     def minimize(self, minimizer, number_steps=100):
         if not self._positions_uploaded:
@@ -228,20 +213,15 @@ class System:
 
         positions_soa = self.gpu.get_positions_2d()
         if self.tile_list.check_rebuild(positions_soa):
-            pdb_to_sorted_gpu, pdb_to_sorted_np = self.tile_list.rebuild(
+            self.tile_list.rebuild(
                 positions_soa, self.topology,
                 self.pbc_matrix, self.pbc_inv,
             )
-            self._permute_all_arrays(pdb_to_sorted_gpu, pdb_to_sorted_np)
+            self._permute_all_arrays()
             self.tile_list.build_tiles(self.topology, self.pbc_matrix)
         for term in self.force_terms:
             if hasattr(term, 'bind_sorted'):
-                s2p = self._sorted_to_pdb_np()
-                term.bind_sorted(
-                    self.topology, self.tile_list, self.gpu,
-                    sorted_to_pdb_np=s2p,
-                    sorted_particle_types=self._particle_types_pdb[s2p],
-                )
+                term.bind_sorted(self.topology, self.tile_list, self.gpu)
         self.compute_forces()
         for _ in range(number_steps):
             minimizer.step(self)
