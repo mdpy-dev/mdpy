@@ -191,6 +191,7 @@ class System:
                 e = cp.cuda.Event()
                 s.record()
             integrator.step(self.gpu)
+            self.gpu.refresh_wrapped_positions()
             if prof:
                 e.record()
                 self._profile_data["integrator"].append((s, e))
@@ -247,6 +248,7 @@ class System:
         self.compute_forces()
         for _ in range(number_steps):
             minimizer.step(self)
+            self.gpu.refresh_wrapped_positions()
         self.gpu.download_positions(self.particles)
 
     def dump_state(self):
