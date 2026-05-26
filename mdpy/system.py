@@ -31,8 +31,6 @@ class System:
         self._compute_energy = False
         self._profiling_enabled = False
         self._profile_data = {}
-        self._pdb_to_current_sorted = None
-        self._particle_types_pdb = topology.particle_types.copy()
         self._d_cached_unique_i = None
         self._d_cached_unique_j = None
         self._d_cached_unique_scale = None
@@ -157,11 +155,6 @@ class System:
         for term in self.force_terms:
             if hasattr(term, 'remap_indices_gpu'):
                 term.remap_indices_gpu(d_remap)
-
-    def _sorted_to_pdb_np(self):
-        inv = np.empty_like(self._pdb_to_current_sorted)
-        inv[self._pdb_to_current_sorted] = np.arange(len(self._pdb_to_current_sorted), dtype=inv.dtype)
-        return inv
 
     def step(self, integrator, number_steps=1):
         if not self._positions_uploaded:
