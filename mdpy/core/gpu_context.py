@@ -141,6 +141,22 @@ void pbc_wrap_kernel(
 }
 """
 
+_ZERO_FORCES_KERNEL = r"""
+extern "C" __global__
+void zero_forces_kernel(
+    float* __restrict__ fx,
+    float* __restrict__ fy,
+    float* __restrict__ fz,
+    int number_particles
+) {
+    int index = blockIdx.x * blockDim.x + threadIdx.x;
+    if (index >= number_particles) return;
+    fx[index] = 0.0f;
+    fy[index] = 0.0f;
+    fz[index] = 0.0f;
+}
+"""
+
 
 class GPUContext:
 
@@ -186,11 +202,17 @@ class GPUContext:
         self._wrap_kernel = None
 
         self._permutation_kernels = None
+        self._zero_forces_kernel = None
 
     def _ensure_wrap_kernel(self):
         if self._wrap_kernel is not None:
             return
         self._wrap_kernel = cp.RawKernel(_PBC_WRAP_KERNEL, "pbc_wrap_kernel")
+
+    def _ensure_zero_forces_kernel(self):
+        if self._zero_forces_kernel is not None:
+            return
+        self._zero_forces_kernel = cp.RawKernel(_ZERO_FORCES_KERNEL, "zero_forces_kernel")
 
     def refresh_wrapped_positions(self):
         if self.number_particles == 0:
@@ -421,9 +443,17 @@ class GPUContext:
         particle_table.forces[:] = frc
 
     def zero_forces(self):
-        self.d_forces_x[:] = 0
-        self.d_forces_y[:] = 0
-        self.d_forces_z[:] = 0
+        self._ensure_zero_forces_kernel()
+        N = self.number_particles
+        tpb = 256
+        grid = ((N + tpb - 1) // tpb,)
+        self._zero_forces_kernel(
+            grid, (tpb,),
+            (
+                self.d_forces_x, self.d_forces_y, self.d_forces_z,
+                np.int32(N),
+            ),
+        )
 
     def zero_energy(self):
         self.d_energy[:] = 0
