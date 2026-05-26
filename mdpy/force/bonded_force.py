@@ -486,10 +486,16 @@ class BondedForce(ForceTerm):
         return bonded
 
     def remap_indices_gpu(self, d_remap):
-        for term_data in self._term_data:
-            if term_data['count'] == 0:
-                continue
-            term_data['d_indices'] = d_remap[term_data['d_indices']]
+        active_terms = [td for td in self._term_data if td['count'] > 0]
+        if not active_terms:
+            return
+        all_indices = cp.concatenate([td['d_indices'].ravel() for td in active_terms])
+        remapped = d_remap[all_indices]
+        offset = 0
+        for td in active_terms:
+            n_elem = td['d_indices'].size
+            td['d_indices'] = remapped[offset:offset + n_elem].reshape(td['d_indices'].shape)
+            offset += n_elem
 
     def _ensure_compiled(self):
         if self._kernel is not None:
