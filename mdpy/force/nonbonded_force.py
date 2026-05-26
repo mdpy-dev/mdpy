@@ -1381,9 +1381,9 @@ class NonbondedForce(ForceTerm):
                 grid,
                 (tpb,),
                 (
-                    gpu_context.d_positions_x,
-                    gpu_context.d_positions_y,
-                    gpu_context.d_positions_z,
+                    gpu_context.d_wrapped_positions_x,
+                    gpu_context.d_wrapped_positions_y,
+                    gpu_context.d_wrapped_positions_z,
                     self._d_parameter_arrays["charge"],
                     tile_list.d_block_atoms,
                     np.int32(N),
@@ -1443,9 +1443,9 @@ class NonbondedForce(ForceTerm):
             grid,
             (tpb,),
             (
-                gpu_context.d_positions_x,
-                gpu_context.d_positions_y,
-                gpu_context.d_positions_z,
+                gpu_context.d_wrapped_positions_x,
+                gpu_context.d_wrapped_positions_y,
+                gpu_context.d_wrapped_positions_z,
                 self._d_parameter_arrays["charge"],
                 tile_list.d_block_atoms,
                 np.int32(N),
@@ -1467,9 +1467,9 @@ class NonbondedForce(ForceTerm):
             tpb = 256
             grid = ((total_slots + tpb - 1) // tpb,)
             for src, attr in [
-                (gpu_context.d_positions_x, "_d_sorted_pos_x"),
-                (gpu_context.d_positions_y, "_d_sorted_pos_y"),
-                (gpu_context.d_positions_z, "_d_sorted_pos_z"),
+                (gpu_context.d_wrapped_positions_x, "_d_sorted_pos_x"),
+                (gpu_context.d_wrapped_positions_y, "_d_sorted_pos_y"),
+                (gpu_context.d_wrapped_positions_z, "_d_sorted_pos_z"),
             ]:
                 dst = getattr(self, attr)
                 if dst is None or dst.size != total_slots:
@@ -1560,9 +1560,9 @@ class NonbondedForce(ForceTerm):
                         self._d_sorted_pos_x,
                         self._d_sorted_pos_y,
                         self._d_sorted_pos_z,
-                        gpu_context.d_positions_x,
-                        gpu_context.d_positions_y,
-                        gpu_context.d_positions_z,
+                        gpu_context.d_wrapped_positions_x,
+                        gpu_context.d_wrapped_positions_y,
+                        gpu_context.d_wrapped_positions_z,
                         gpu_context.d_forces_x,
                         gpu_context.d_forces_y,
                         gpu_context.d_forces_z,
@@ -1593,9 +1593,9 @@ class NonbondedForce(ForceTerm):
                         self._d_sorted_pos_x,
                         self._d_sorted_pos_y,
                         self._d_sorted_pos_z,
-                        gpu_context.d_positions_x,
-                        gpu_context.d_positions_y,
-                        gpu_context.d_positions_z,
+                        gpu_context.d_wrapped_positions_x,
+                        gpu_context.d_wrapped_positions_y,
+                        gpu_context.d_wrapped_positions_z,
                         gpu_context.d_forces_x,
                         gpu_context.d_forces_y,
                         gpu_context.d_forces_z,

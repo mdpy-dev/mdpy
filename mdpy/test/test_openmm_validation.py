@@ -44,7 +44,12 @@ def _setup_mdpy_system(psf_path, pdb_path, prm_path, cutoff=12.0):
 
     system.particles.positions[:] = wrapped
     system.gpu.upload_positions(system.particles)
-    positions_2d = system.gpu.get_positions_2d()
+    system.gpu.refresh_wrapped_positions()
+    positions_2d = (
+        system.gpu.d_wrapped_positions_x,
+        system.gpu.d_wrapped_positions_y,
+        system.gpu.d_wrapped_positions_z,
+    )
     system.tile_list.rebuild(
         positions_2d, topology,
         system.pbc_matrix, system.pbc_inv,

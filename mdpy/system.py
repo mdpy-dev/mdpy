@@ -123,6 +123,8 @@ class System:
         ]):
             setattr(gpu, name, new_arr)
 
+        gpu.refresh_wrapped_positions()
+
         d_remap = tl.d_pdb_to_sorted
 
         if self._d_cached_unique_i is not None:
@@ -172,10 +174,15 @@ class System:
         if not self._velocities_uploaded:
             self.gpu.upload_velocities(self.particles)
             self._velocities_uploaded = True
+        self.gpu.refresh_wrapped_positions()
 
         prof = self._profiling_enabled
         for _ in range(number_steps):
-            positions_soa = self.gpu.get_positions_2d()
+            positions_soa = (
+                self.gpu.d_wrapped_positions_x,
+                self.gpu.d_wrapped_positions_y,
+                self.gpu.d_wrapped_positions_z,
+            )
             if self.tile_list.check_rebuild_async(positions_soa):
                 self._do_full_rebuild(positions_soa)
             self.compute_forces()
@@ -191,7 +198,11 @@ class System:
             self._steps_since_check += 1
             if self._steps_since_check >= self.tile_list.rebuild_check_interval:
                 if int(self.tile_list.d_rebuild_flag[0]) == 1:
-                    self._do_full_rebuild(self.gpu.get_positions_2d())
+                    self._do_full_rebuild((
+                        self.gpu.d_wrapped_positions_x,
+                        self.gpu.d_wrapped_positions_y,
+                        self.gpu.d_wrapped_positions_z,
+                    ))
                 self._steps_since_check = 0
 
     def _do_full_rebuild(self, positions_soa):
@@ -214,8 +225,13 @@ class System:
         if not self._velocities_uploaded:
             self.gpu.upload_velocities(self.particles)
             self._velocities_uploaded = True
+        self.gpu.refresh_wrapped_positions()
 
-        positions_soa = self.gpu.get_positions_2d()
+        positions_soa = (
+            self.gpu.d_wrapped_positions_x,
+            self.gpu.d_wrapped_positions_y,
+            self.gpu.d_wrapped_positions_z,
+        )
         if self.tile_list.check_rebuild(positions_soa):
             self.tile_list.rebuild(
                 positions_soa,

@@ -102,6 +102,40 @@ void inverse_permute_kernel(
 }
 """
 
+_PBC_WRAP_KERNEL = r"""
+extern "C" __global__
+void pbc_wrap_kernel(
+    const float* __restrict__ src_x,
+    const float* __restrict__ src_y,
+    const float* __restrict__ src_z,
+    const float* __restrict__ pbc_matrix,
+    const float* __restrict__ pbc_inv,
+    int number_particles,
+    float* __restrict__ dst_x,
+    float* __restrict__ dst_y,
+    float* __restrict__ dst_z
+) {
+    int index = blockIdx.x * blockDim.x + threadIdx.x;
+    if (index >= number_particles) return;
+
+    float px = src_x[index];
+    float py = src_y[index];
+    float pz = src_z[index];
+
+    float fx = px * pbc_inv[0] + py * pbc_inv[3] + pz * pbc_inv[6];
+    float fy = px * pbc_inv[1] + py * pbc_inv[4] + pz * pbc_inv[7];
+    float fz = px * pbc_inv[2] + py * pbc_inv[5] + pz * pbc_inv[8];
+
+    fx = fx - floorf(fx);
+    fy = fy - floorf(fy);
+    fz = fz - floorf(fz);
+
+    dst_x[index] = fx * pbc_matrix[0] + fy * pbc_matrix[3] + fz * pbc_matrix[6];
+    dst_y[index] = fx * pbc_matrix[1] + fy * pbc_matrix[4] + fz * pbc_matrix[7];
+    dst_z[index] = fx * pbc_matrix[2] + fy * pbc_matrix[5] + fz * pbc_matrix[8];
+}
+"""
+
 
 class GPUContext:
 
@@ -140,7 +174,41 @@ class GPUContext:
         self._inv_box_y = 0.0
         self._inv_box_z = 0.0
 
+        self.d_wrapped_positions_x = None
+        self.d_wrapped_positions_y = None
+        self.d_wrapped_positions_z = None
+
+        self._wrap_kernel = None
+
         self._permutation_kernels = None
+
+    def _ensure_wrap_kernel(self):
+        if self._wrap_kernel is not None:
+            return
+        self._wrap_kernel = cp.RawKernel(_PBC_WRAP_KERNEL, "pbc_wrap_kernel")
+
+    def refresh_wrapped_positions(self):
+        if self.number_particles == 0:
+            return
+        self._ensure_wrap_kernel()
+        if self.d_wrapped_positions_x is None:
+            self.d_wrapped_positions_x = cp.empty(self.number_particles, dtype=np.float32)
+            self.d_wrapped_positions_y = cp.empty(self.number_particles, dtype=np.float32)
+            self.d_wrapped_positions_z = cp.empty(self.number_particles, dtype=np.float32)
+        N = self.number_particles
+        tpb = 256
+        grid = ((N + tpb - 1) // tpb,)
+        self._wrap_kernel(
+            grid, (tpb,),
+            (
+                self.d_positions_x, self.d_positions_y, self.d_positions_z,
+                self.d_pbc_matrix, self.d_pbc_inv,
+                np.int32(N),
+                self.d_wrapped_positions_x,
+                self.d_wrapped_positions_y,
+                self.d_wrapped_positions_z,
+            ),
+        )
 
     def _ensure_permutation_kernels(self):
         if self._permutation_kernels is not None:

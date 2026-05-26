@@ -45,7 +45,12 @@ def test_exclusion_data_preserved_across_rebuild():
     tl = system.tile_list
     assert tl._d_excl_offset is not None, "exclusion data should be set after first step"
 
-    positions_soa = system.gpu.get_positions_2d()
+    system.gpu.refresh_wrapped_positions()
+    positions_soa = (
+        system.gpu.d_wrapped_positions_x,
+        system.gpu.d_wrapped_positions_y,
+        system.gpu.d_wrapped_positions_z,
+    )
     if tl.check_rebuild(positions_soa):
         tl.rebuild(positions_soa, system.topology,
                     system.pbc_matrix, system.pbc_inv)

@@ -7,37 +7,6 @@ from mdpy import env
 W = 32
 NUM_ATOMS_SENTINEL = 0x7FFFFFFF
 
-_PBC_WRAP_KERNEL = r"""
-extern "C" __global__
-void pbc_wrap_kernel(
-    float* __restrict__ pos_x,
-    float* __restrict__ pos_y,
-    float* __restrict__ pos_z,
-    const float* __restrict__ pbc_matrix,
-    const float* __restrict__ pbc_inv,
-    int number_particles
-) {
-    int index = blockIdx.x * blockDim.x + threadIdx.x;
-    if (index >= number_particles) return;
-
-    float px = pos_x[index];
-    float py = pos_y[index];
-    float pz = pos_z[index];
-
-    float fx = px * pbc_inv[0] + py * pbc_inv[3] + pz * pbc_inv[6];
-    float fy = px * pbc_inv[1] + py * pbc_inv[4] + pz * pbc_inv[7];
-    float fz = px * pbc_inv[2] + py * pbc_inv[5] + pz * pbc_inv[8];
-
-    fx = fx - floorf(fx);
-    fy = fy - floorf(fy);
-    fz = fz - floorf(fz);
-
-    pos_x[index] = fx * pbc_matrix[0] + fy * pbc_matrix[3] + fz * pbc_matrix[6];
-    pos_y[index] = fx * pbc_matrix[1] + fy * pbc_matrix[4] + fz * pbc_matrix[7];
-    pos_z[index] = fx * pbc_matrix[2] + fy * pbc_matrix[5] + fz * pbc_matrix[8];
-}
-"""
-
 _MORTON_ENCODE_KERNEL = r"""
 __device__ unsigned long long morton_split(unsigned int v) {
     v = v & 0x000003FFu;
@@ -228,6 +197,25 @@ void check_rebuild_kernel(
     dz -= box_z * roundf(dz * inv_box_z);
     if (dx*dx + dy*dy + dz*dz > threshold_sq)
         rebuild_flag[0] = 1;
+}
+"""
+
+_FUSED_COPY3_KERNEL = r"""
+extern "C" __global__
+void fused_copy3_kernel(
+    const float* __restrict__ src0,
+    const float* __restrict__ src1,
+    const float* __restrict__ src2,
+    int num_elements,
+    float* __restrict__ dst0,
+    float* __restrict__ dst1,
+    float* __restrict__ dst2
+) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= num_elements) return;
+    dst0[idx] = src0[idx];
+    dst1[idx] = src1[idx];
+    dst2[idx] = src2[idx];
 }
 """
 
@@ -565,7 +553,6 @@ void classify_tiles_kernel(
 
 def _compile_gpu_kernels():
     return {
-        "wrap": cp.RawKernel(_PBC_WRAP_KERNEL, "pbc_wrap_kernel"),
         "morton": cp.RawKernel(_MORTON_ENCODE_KERNEL, "morton_encode_kernel"),
         "form_blocks": cp.RawKernel(_FORM_BLOCKS_KERNEL, "form_blocks_kernel"),
         "compute_bounds": cp.RawKernel(
@@ -746,16 +733,30 @@ class TileList:
             np.ascontiguousarray(topology.exclusion_scale, dtype=env.NUMPY_FLOAT)
         )
 
+    def fused_copy3(self, src0, src1, src2):
+        N = src0.size
+        self._ensure_kernels()
+        tpb = 256
+        grid = ((N + tpb - 1) // tpb,)
+        dst0 = cp.empty(N, dtype=env.NUMPY_FLOAT)
+        dst1 = cp.empty(N, dtype=env.NUMPY_FLOAT)
+        dst2 = cp.empty(N, dtype=env.NUMPY_FLOAT)
+        self._kernels["fused_copy3"](
+            grid,
+            (tpb,),
+            (src0, src1, src2, np.int32(N), dst0, dst1, dst2),
+        )
+        return dst0, dst1, dst2
+
     def _rebuild_core(self, positions, topology, pbc_matrix, pbc_inv):
         N = topology.num_particles
         self.num_particles = N
         tpb = 256
 
         if isinstance(positions, tuple):
-            px = cp.ascontiguousarray(cp.asarray(positions[0], dtype=env.NUMPY_FLOAT))
-            py = cp.ascontiguousarray(cp.asarray(positions[1], dtype=env.NUMPY_FLOAT))
-            pz = cp.ascontiguousarray(cp.asarray(positions[2], dtype=env.NUMPY_FLOAT))
-            pos_x, pos_y, pos_z = self.fused_copy3(px, py, pz)
+            pos_x = positions[0]
+            pos_y = positions[1]
+            pos_z = positions[2]
         else:
             data = cp.asarray(
                 np.ascontiguousarray(positions.ravel(), dtype=env.NUMPY_FLOAT)
@@ -764,13 +765,6 @@ class TileList:
             pos_y = data[1::3].copy()
             pos_z = data[2::3].copy()
         self._upload_pbc(pbc_matrix, pbc_inv)
-
-        n3 = (N + tpb - 1) // tpb
-        self._kernels["wrap"](
-            (n3,),
-            (tpb,),
-            (pos_x, pos_y, pos_z, self._d_pbc_matrix, self._d_pbc_inv, np.int32(N)),
-        )
 
         morton_codes = cp.empty(N, dtype=np.uint64)
         pbc_2d = np.asarray(pbc_matrix).reshape(3, 3)
