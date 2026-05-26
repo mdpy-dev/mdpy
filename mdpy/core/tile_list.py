@@ -81,8 +81,12 @@ void compute_block_bounds_kernel(
     const float* __restrict__ pos_z,
     const int* __restrict__ block_atoms,
     int num_blocks,
-    float* __restrict__ block_center_out,
-    float* __restrict__ block_size_out
+    float* __restrict__ block_center_x_out,
+    float* __restrict__ block_center_y_out,
+    float* __restrict__ block_center_z_out,
+    float* __restrict__ block_size_x_out,
+    float* __restrict__ block_size_y_out,
+    float* __restrict__ block_size_z_out
 ) {
     int bi = blockIdx.x * blockDim.x + threadIdx.x;
     if (bi >= num_blocks) return;
@@ -97,12 +101,12 @@ void compute_block_bounds_kernel(
         min_y = fminf(min_y, y); max_y = fmaxf(max_y, y);
         min_z = fminf(min_z, z); max_z = fmaxf(max_z, z);
     }
-    block_center_out[bi*3]   = 0.5f*(min_x + max_x);
-    block_center_out[bi*3+1] = 0.5f*(min_y + max_y);
-    block_center_out[bi*3+2] = 0.5f*(min_z + max_z);
-    block_size_out[bi*3]   = 0.5f*(max_x - min_x);
-    block_size_out[bi*3+1] = 0.5f*(max_y - min_y);
-    block_size_out[bi*3+2] = 0.5f*(max_z - min_z);
+    block_center_x_out[bi] = 0.5f * (min_x + max_x);
+    block_center_y_out[bi] = 0.5f * (min_y + max_y);
+    block_center_z_out[bi] = 0.5f * (min_z + max_z);
+    block_size_x_out[bi]   = 0.5f * (max_x - min_x);
+    block_size_y_out[bi]   = 0.5f * (max_y - min_y);
+    block_size_z_out[bi]   = 0.5f * (max_z - min_z);
 }
 """
 
@@ -130,14 +134,22 @@ void build_atom_map_kernel(
 _COMPUTE_LARGE_BLOCK_BOUNDS_KERNEL = r"""
 extern "C" __global__
 void compute_large_block_bounds_kernel(
-    const float* __restrict__ block_center,
-    const float* __restrict__ block_size,
+    const float* __restrict__ block_center_x,
+    const float* __restrict__ block_center_y,
+    const float* __restrict__ block_center_z,
+    const float* __restrict__ block_size_x,
+    const float* __restrict__ block_size_y,
+    const float* __restrict__ block_size_z,
     int num_blocks,
     int num_large_blocks,
     float box_x, float box_y, float box_z,
     float inv_box_x, float inv_box_y, float inv_box_z,
-    float* __restrict__ large_block_center_out,
-    float* __restrict__ large_block_size_out
+    float* __restrict__ large_block_center_x_out,
+    float* __restrict__ large_block_center_y_out,
+    float* __restrict__ large_block_center_z_out,
+    float* __restrict__ large_block_size_x_out,
+    float* __restrict__ large_block_size_y_out,
+    float* __restrict__ large_block_size_z_out
 ) {
     int lb = blockIdx.x * blockDim.x + threadIdx.x;
     if (lb >= num_large_blocks) return;
@@ -149,10 +161,16 @@ void compute_large_block_bounds_kernel(
     float max_x = -1e30f, max_y = -1e30f, max_z = -1e30f;
 
     for (int b = start; b < end; b++) {
-        float bcx = block_center[b*3], bcy = block_center[b*3+1], bcz = block_center[b*3+2];
-        float bsx = block_size[b*3],   bsy = block_size[b*3+1],   bsz = block_size[b*3+2];
+        float bcx = block_center_x[b];
+        float bcy = block_center_y[b];
+        float bcz = block_center_z[b];
+        float bsx = block_size_x[b];
+        float bsy = block_size_y[b];
+        float bsz = block_size_z[b];
         if (b > start) {
-            float ref_x = block_center[start*3], ref_y = block_center[start*3+1], ref_z = block_center[start*3+2];
+            float ref_x = block_center_x[start];
+            float ref_y = block_center_y[start];
+            float ref_z = block_center_z[start];
             float dx = bcx - ref_x, dy = bcy - ref_y, dz = bcz - ref_z;
             dx -= box_x * roundf(dx * inv_box_x);
             dy -= box_y * roundf(dy * inv_box_y);
@@ -163,12 +181,12 @@ void compute_large_block_bounds_kernel(
         max_x = fmaxf(max_x, bcx + bsx); max_y = fmaxf(max_y, bcy + bsy); max_z = fmaxf(max_z, bcz + bsz);
     }
 
-    large_block_center_out[lb*3]   = 0.5f * (min_x + max_x);
-    large_block_center_out[lb*3+1] = 0.5f * (min_y + max_y);
-    large_block_center_out[lb*3+2] = 0.5f * (min_z + max_z);
-    large_block_size_out[lb*3]     = 0.5f * (max_x - min_x);
-    large_block_size_out[lb*3+1]   = 0.5f * (max_y - min_y);
-    large_block_size_out[lb*3+2]   = 0.5f * (max_z - min_z);
+    large_block_center_x_out[lb] = 0.5f * (min_x + max_x);
+    large_block_center_y_out[lb] = 0.5f * (min_y + max_y);
+    large_block_center_z_out[lb] = 0.5f * (min_z + max_z);
+    large_block_size_x_out[lb]   = 0.5f * (max_x - min_x);
+    large_block_size_y_out[lb]   = 0.5f * (max_y - min_y);
+    large_block_size_z_out[lb]   = 0.5f * (max_z - min_z);
 }
 """
 
@@ -226,15 +244,23 @@ void find_interacting_blocks_kernel(
     const float* __restrict__ pos_y,
     const float* __restrict__ pos_z,
     const int* __restrict__ block_atoms,
-    const float* __restrict__ block_center,
-    const float* __restrict__ block_size,
+    const float* __restrict__ block_center_x,
+    const float* __restrict__ block_center_y,
+    const float* __restrict__ block_center_z,
+    const float* __restrict__ block_size_x,
+    const float* __restrict__ block_size_y,
+    const float* __restrict__ block_size_z,
     int num_blocks,
     int num_particles,
     float build_radius_sq,
     float box_x, float box_y, float box_z,
     float inv_box_x, float inv_box_y, float inv_box_z,
-    const float* __restrict__ large_block_center,
-    const float* __restrict__ large_block_size,
+    const float* __restrict__ large_block_center_x,
+    const float* __restrict__ large_block_center_y,
+    const float* __restrict__ large_block_center_z,
+    const float* __restrict__ large_block_size_x,
+    const float* __restrict__ large_block_size_y,
+    const float* __restrict__ large_block_size_z,
     int* __restrict__ tiles_out,
     int* __restrict__ interacting_atoms_out,
     int* __restrict__ interaction_count,
@@ -246,27 +272,47 @@ void find_interacting_blocks_kernel(
 
     if (global_warp >= num_blocks) return;
 
+    __shared__ int bx_atom_idx[8][32];
+    __shared__ float bx_pos_x[8][32];
+    __shared__ float bx_pos_y[8][32];
+    __shared__ float bx_pos_z[8][32];
     __shared__ int buffer[8 * 256];
     int* my_buf = buffer + warp_in_block * 256;
     int nBuf = 0;
 
     int bx = global_warp;
-    float cx = block_center[bx*3], cy = block_center[bx*3+1], cz = block_center[bx*3+2];
-    float sx = block_size[bx*3],   sy = block_size[bx*3+1],   sz = block_size[bx*3+2];
+
+    float cx = block_center_x[bx], cy = block_center_y[bx], cz = block_center_z[bx];
+    float sx = block_size_x[bx],   sy = block_size_y[bx],   sz = block_size_z[bx];
     int my_large_block = bx >> 5;
     int num_large_blocks = (num_blocks + 31) >> 5;
+
+    {
+        int gk = block_atoms[bx * 32 + tgx];
+        int valid = (gk >= 0 && gk < num_particles) ? 1 : 0;
+        bx_atom_idx[warp_in_block][tgx] = (valid) ? gk : -1;
+        if (valid) {
+            bx_pos_x[warp_in_block][tgx] = pos_x[gk];
+            bx_pos_y[warp_in_block][tgx] = pos_y[gk];
+            bx_pos_z[warp_in_block][tgx] = pos_z[gk];
+        } else {
+            bx_pos_x[warp_in_block][tgx] = 0.0f;
+            bx_pos_y[warp_in_block][tgx] = 0.0f;
+            bx_pos_z[warp_in_block][tgx] = 0.0f;
+        }
+    }
 
     for (int lb = my_large_block; lb < num_large_blocks; lb++) {
         bool lb_pass;
         if (lb == my_large_block) {
             lb_pass = true;
         } else {
-            float lcx = large_block_center[lb*3];
-            float lcy = large_block_center[lb*3+1];
-            float lcz = large_block_center[lb*3+2];
-            float lsx = large_block_size[lb*3];
-            float lsy = large_block_size[lb*3+1];
-            float lsz = large_block_size[lb*3+2];
+            float lcx = large_block_center_x[lb];
+            float lcy = large_block_center_y[lb];
+            float lcz = large_block_center_z[lb];
+            float lsx = large_block_size_x[lb];
+            float lsy = large_block_size_y[lb];
+            float lsz = large_block_size_z[lb];
 
             float dx = lcx - cx, dy = lcy - cy, dz = lcz - cz;
             dx -= box_x * roundf(dx * inv_box_x);
@@ -286,12 +332,12 @@ void find_interacting_blocks_kernel(
             bool include_block = false;
 
             if (block2 < num_blocks && block2 > bx) {
-                float bcx2 = block_center[block2*3];
-                float bcy2 = block_center[block2*3+1];
-                float bcz2 = block_center[block2*3+2];
-                float bsx2 = block_size[block2*3];
-                float bsy2 = block_size[block2*3+1];
-                float bsz2 = block_size[block2*3+2];
+                float bcx2 = block_center_x[block2];
+                float bcy2 = block_center_y[block2];
+                float bcz2 = block_center_z[block2];
+                float bsx2 = block_size_x[block2];
+                float bsy2 = block_size_y[block2];
+                float bsz2 = block_size_z[block2];
 
                 float dx = bcx2 - cx, dy = bcy2 - cy, dz = bcz2 - cz;
                 dx -= box_x * roundf(dx * inv_box_x);
@@ -318,11 +364,11 @@ void find_interacting_blocks_kernel(
                     float py_j = pos_y[gj];
                     float pz_j = pos_z[gj];
                     for (int k = 0; k < 32; k++) {
-                        int gk = block_atoms[bx * 32 + k];
+                        int gk = bx_atom_idx[warp_in_block][k];
                         if (gk < 0) continue;
-                        float ddx = px_j - pos_x[gk];
-                        float ddy = py_j - pos_y[gk];
-                        float ddz = pz_j - pos_z[gk];
+                        float ddx = px_j - bx_pos_x[warp_in_block][k];
+                        float ddy = py_j - bx_pos_y[warp_in_block][k];
+                        float ddz = pz_j - bx_pos_z[warp_in_block][k];
                         ddx -= box_x * roundf(ddx * inv_box_x);
                         ddy -= box_y * roundf(ddy * inv_box_y);
                         ddz -= box_z * roundf(ddz * inv_box_z);
@@ -593,8 +639,12 @@ class TileList:
         self._max_tiles = 0
 
         self.d_block_atoms = cp.empty(0, dtype=env.NUMPY_INT)
-        self.d_block_center = cp.empty(0, dtype=env.NUMPY_FLOAT)
-        self.d_block_size = cp.empty(0, dtype=env.NUMPY_FLOAT)
+        self.d_block_center_x = cp.empty(0, dtype=env.NUMPY_FLOAT)
+        self.d_block_center_y = cp.empty(0, dtype=env.NUMPY_FLOAT)
+        self.d_block_center_z = cp.empty(0, dtype=env.NUMPY_FLOAT)
+        self.d_block_size_x = cp.empty(0, dtype=env.NUMPY_FLOAT)
+        self.d_block_size_y = cp.empty(0, dtype=env.NUMPY_FLOAT)
+        self.d_block_size_z = cp.empty(0, dtype=env.NUMPY_FLOAT)
         self.d_atom_to_block = cp.empty(0, dtype=env.NUMPY_INT)
         self.d_atom_to_slot = cp.empty(0, dtype=env.NUMPY_INT)
 
@@ -609,8 +659,12 @@ class TileList:
         self._d_counters = cp.zeros(1, dtype=env.NUMPY_INT)
         self.d_rebuild_flag = cp.zeros(1, dtype=env.NUMPY_INT)
         self.num_large_blocks = 0
-        self.d_large_block_center = cp.empty(0, dtype=env.NUMPY_FLOAT)
-        self.d_large_block_size = cp.empty(0, dtype=env.NUMPY_FLOAT)
+        self.d_large_block_center_x = cp.empty(0, dtype=env.NUMPY_FLOAT)
+        self.d_large_block_center_y = cp.empty(0, dtype=env.NUMPY_FLOAT)
+        self.d_large_block_center_z = cp.empty(0, dtype=env.NUMPY_FLOAT)
+        self.d_large_block_size_x = cp.empty(0, dtype=env.NUMPY_FLOAT)
+        self.d_large_block_size_y = cp.empty(0, dtype=env.NUMPY_FLOAT)
+        self.d_large_block_size_z = cp.empty(0, dtype=env.NUMPY_FLOAT)
         self._d_tile_buf = cp.empty(0, dtype=env.NUMPY_INT)
         self._d_interacting_buf = cp.empty(0, dtype=env.NUMPY_INT)
         self._d_pbc_matrix = None
@@ -655,8 +709,13 @@ class TileList:
 
     @property
     def block_center(self):
-        if self._block_center_np is None and self.d_block_center.size > 0:
-            self._block_center_np = cp.asnumpy(self.d_block_center).reshape(-1, 3)
+        if self._block_center_np is None and self.d_block_center_x.size > 0:
+            n = self.num_blocks
+            arr = np.empty((n, 3), dtype=np.float32)
+            arr[:, 0] = cp.asnumpy(self.d_block_center_x[:n])
+            arr[:, 1] = cp.asnumpy(self.d_block_center_y[:n])
+            arr[:, 2] = cp.asnumpy(self.d_block_center_z[:n])
+            self._block_center_np = arr
         return self._block_center_np
 
     @property
@@ -815,8 +874,12 @@ class TileList:
         block_atoms[:N] = cp.arange(N, dtype=env.NUMPY_INT)
         self.d_block_atoms = block_atoms
 
-        self.d_block_center = cp.empty(num_blocks * 3, dtype=env.NUMPY_FLOAT)
-        self.d_block_size = cp.empty(num_blocks * 3, dtype=env.NUMPY_FLOAT)
+        self.d_block_center_x = cp.empty(num_blocks, dtype=env.NUMPY_FLOAT)
+        self.d_block_center_y = cp.empty(num_blocks, dtype=env.NUMPY_FLOAT)
+        self.d_block_center_z = cp.empty(num_blocks, dtype=env.NUMPY_FLOAT)
+        self.d_block_size_x = cp.empty(num_blocks, dtype=env.NUMPY_FLOAT)
+        self.d_block_size_y = cp.empty(num_blocks, dtype=env.NUMPY_FLOAT)
+        self.d_block_size_z = cp.empty(num_blocks, dtype=env.NUMPY_FLOAT)
         nb = (num_blocks + tpb - 1) // tpb
         self._kernels["compute_bounds"](
             (nb,),
@@ -827,24 +890,34 @@ class TileList:
                 pos_z,
                 self.d_block_atoms,
                 np.int32(num_blocks),
-                self.d_block_center,
-                self.d_block_size,
+                self.d_block_center_x,
+                self.d_block_center_y,
+                self.d_block_center_z,
+                self.d_block_size_x,
+                self.d_block_size_y,
+                self.d_block_size_z,
             ),
         )
 
         num_large_blocks = (num_blocks + 31) // 32
         self.num_large_blocks = num_large_blocks
-        self.d_large_block_center = cp.empty(
-            num_large_blocks * 3, dtype=env.NUMPY_FLOAT
-        )
-        self.d_large_block_size = cp.empty(num_large_blocks * 3, dtype=env.NUMPY_FLOAT)
+        self.d_large_block_center_x = cp.empty(num_large_blocks, dtype=env.NUMPY_FLOAT)
+        self.d_large_block_center_y = cp.empty(num_large_blocks, dtype=env.NUMPY_FLOAT)
+        self.d_large_block_center_z = cp.empty(num_large_blocks, dtype=env.NUMPY_FLOAT)
+        self.d_large_block_size_x = cp.empty(num_large_blocks, dtype=env.NUMPY_FLOAT)
+        self.d_large_block_size_y = cp.empty(num_large_blocks, dtype=env.NUMPY_FLOAT)
+        self.d_large_block_size_z = cp.empty(num_large_blocks, dtype=env.NUMPY_FLOAT)
         nlb = (num_large_blocks + tpb - 1) // tpb
         self._kernels["large_block_bounds"](
             (nlb,),
             (tpb,),
             (
-                self.d_block_center,
-                self.d_block_size,
+                self.d_block_center_x,
+                self.d_block_center_y,
+                self.d_block_center_z,
+                self.d_block_size_x,
+                self.d_block_size_y,
+                self.d_block_size_z,
                 np.int32(num_blocks),
                 np.int32(num_large_blocks),
                 np.float32(box_x),
@@ -853,8 +926,12 @@ class TileList:
                 np.float32(1.0 / box_x),
                 np.float32(1.0 / box_y),
                 np.float32(1.0 / box_z),
-                self.d_large_block_center,
-                self.d_large_block_size,
+                self.d_large_block_center_x,
+                self.d_large_block_center_y,
+                self.d_large_block_center_z,
+                self.d_large_block_size_x,
+                self.d_large_block_size_y,
+                self.d_large_block_size_z,
             ),
         )
 
@@ -904,8 +981,12 @@ class TileList:
                 pos_y,
                 pos_z,
                 self.d_block_atoms,
-                self.d_block_center,
-                self.d_block_size,
+                self.d_block_center_x,
+                self.d_block_center_y,
+                self.d_block_center_z,
+                self.d_block_size_x,
+                self.d_block_size_y,
+                self.d_block_size_z,
                 np.int32(num_blocks),
                 np.int32(self.num_particles),
                 np.float32(build_radius_sq),
@@ -915,8 +996,12 @@ class TileList:
                 np.float32(inv_box_x),
                 np.float32(inv_box_y),
                 np.float32(inv_box_z),
-                self.d_large_block_center,
-                self.d_large_block_size,
+                self.d_large_block_center_x,
+                self.d_large_block_center_y,
+                self.d_large_block_center_z,
+                self.d_large_block_size_x,
+                self.d_large_block_size_y,
+                self.d_large_block_size_z,
                 self._d_tile_buf,
                 self._d_interacting_buf,
                 self._d_counters,
@@ -1202,8 +1287,12 @@ class TileList:
         self.num_tiles = 0
         self.num_particles = 0
         self.d_block_atoms = cp.empty(0, dtype=env.NUMPY_INT)
-        self.d_block_center = cp.empty(0, dtype=env.NUMPY_FLOAT)
-        self.d_block_size = cp.empty(0, dtype=env.NUMPY_FLOAT)
+        self.d_block_center_x = cp.empty(0, dtype=env.NUMPY_FLOAT)
+        self.d_block_center_y = cp.empty(0, dtype=env.NUMPY_FLOAT)
+        self.d_block_center_z = cp.empty(0, dtype=env.NUMPY_FLOAT)
+        self.d_block_size_x = cp.empty(0, dtype=env.NUMPY_FLOAT)
+        self.d_block_size_y = cp.empty(0, dtype=env.NUMPY_FLOAT)
+        self.d_block_size_z = cp.empty(0, dtype=env.NUMPY_FLOAT)
         self.d_atom_to_block = cp.empty(0, dtype=env.NUMPY_INT)
         self.d_atom_to_slot = cp.empty(0, dtype=env.NUMPY_INT)
         self.d_tiles = cp.empty(0, dtype=env.NUMPY_INT)
