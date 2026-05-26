@@ -8,20 +8,20 @@
 
 ## GPU-Only Design Philosophy
 
-mdpy is a GPU-native MD engine. Five hard rules:
+mdpy is a GPU-native MD engine. Four hard rules:
 
 ### 1. Data Stays on GPU
 
 All simulation data (positions, velocities, forces, energies, tile list) resides in GPU memory for the entire simulation. CPU touches data only at two points:
 
 - **Input**: loading structure files (PSF/PDB/PRM) → one-time CPU→GPU upload
-- **Output**: calling `dump_state()` or writing trajectory frames → on-demand GPU→CPU download
+- **Output**: calling `dump_state()` or `dump_energy()` → on-demand GPU→CPU download
 
 Specifically:
-- `compute_forces()` must NOT download forces to CPU — the integrator reads `d_forces` directly on GPU
-- `check_rebuild()` must NOT download all positions — use a GPU reduction kernel to compute max displacement, return bool without CPU readback
-- Energy accumulation should happen on GPU — defer `float(d_energy[0])` readback until output time
-- PBC wrapping should run on GPU, not via numpy in `_wrap_and_upload()`
+- `compute_forces()` accumulates forces on GPU via `atomicAdd` — the integrator reads `d_forces` directly on GPU
+- `check_rebuild()` must NOT download all positions — use a GPU reduction kernel that writes to a device flag
+- Energy accumulation happens on GPU via `d_energy_accumulator` — no `float(d_energy[0])` readback during computation
+- PBC wrapping runs on GPU via `pbc_wrap_kernel`
 
 ### 2. Hard Dependencies, No Probing
 
@@ -39,26 +39,14 @@ There is no CPU execution path. mdpy requires a CUDA-capable GPU.
 
 - No `_rebuild_cpu()` method in TileList
 - No `if self._use_gpu` branches in GPUContext
-- No pure-Python fallbacks for numba kernels
+- No pure-Python fallbacks for numba/cupy kernels
 - `environment.py` does not offer `set_platform('CPU')` — platform is always CUDA
-- The `@njit` CPU kernels currently used during tile list rebuild (`_build_atom_to_block_slot`, `_build_masks_numba`) are acknowledged tech debt — they will be migrated to GPU kernels
 
-### 4. Pure-Python GPU Kernel Strategy
-
-mdpy is a pure-Python MD engine — this is a core selling point. All GPU kernels are written through Python toolchains; no `.cu` files.
-
-- **Default: `numba.cuda.jit`** — bonded forces, integrators, tile list kernels, PBC wrapping, all use `@cuda.jit`
-- **Exception: `cupy.RawKernel` for nonbonded force only** — nonbonded is the computational hotspot (O(N²) pair interaction) and requires CUDA-C-level optimization:
-  - Expression transpiler dynamically converts Python AST to CUDA C for zero-overhead kernel generation
-  - Enables kernel specialization per force expression without runtime branching
-- **When considering `cupy.RawKernel` outside nonbonded**: you MUST explain the reason to the user and get explicit approval before proceeding. `numba.cuda` must always be tried first
-- **New module guideline**: always start with `numba.cuda.jit`; only escalate to `cupy.RawKernel` when `numba.cuda` cannot implement the required feature or cannot meet performance requirements
-
-### 5. No GPU→CPU Transfers in Hot Path (Absolute)
+### 4. No GPU→CPU Transfers in Hot Path
 
 Simulation data is a GPU-side black box during the run loop. The only way to observe GPU state is through explicit output calls.
 
-The following functions — and every function they call directly or indirectly — must NOT transfer any data from GPU to CPU:
+The following functions — and every function they call directly or indirectly — must NOT transfer **bulk data** (arrays, reductions) from GPU to CPU:
 
 - `System.step()` call chain: `check_rebuild()`, `rebuild()`, `compute_forces()`, `integrator.step()`
 - `System.minimize()` inner loop
@@ -67,10 +55,12 @@ The following functions — and every function they call directly or indirectly 
 
 - `cp.asnumpy(array)` — full array download
 - `array.get()` — cupy `.get()` download
-- `float(device_scalar)` / `int(device_scalar)` — scalar readback (causes GPU pipeline stall)
-- `cp.max()` / `cp.sum()` / `cp.min()` followed by immediate CPU readback — GPU reduction with sync
+- `cp.max()`, `cp.sum()`, `cp.min()` followed by CPU readback — GPU reduction with sync
+- Any array readback masked as "debug" or "logging"
 
-**All GPU→CPU transfers must go through explicit output APIs:**
+**Allowed scalar read**: Reading a single-element device array (e.g., `int(d_counter[0])`) to determine allocation size or kernel launch parameters. This is a necessary control-flow operation that does not stall the pipeline for bulk data transfer.
+
+**All GPU→CPU bulk data transfers must go through explicit output APIs:**
 
 | API | Returns | GPU transfers |
 |-----|---------|---------------|
@@ -88,6 +78,57 @@ for i in range(10000):
 ```
 
 **Rationale**: Every GPU→CPU transfer forces the CPU to wait for the entire GPU pipeline to drain. On 95K atoms this costs ~0.5–1 ms per stall — comparable to the actual compute work. Deferring all readback to explicit output points keeps the GPU pipeline saturated.
+
+## Single Responsibility Design
+
+Each class does exactly one thing. This is the architectural soul of mdpy.
+
+### TileList — spatial partitioning only
+
+TileList provides **mapping** — it answers "which atoms are near which atoms". It owns:
+
+- Spatial sort indices (`d_raw_order`, `d_pdb_to_sorted`, `d_sorted_to_pdb`)
+- Block/tile structure (`d_block_atoms`, `d_block_center`, `d_block_size`)
+- Neighbor pair maps (`d_tiles`, `d_interacting_atoms`)
+- Exclusion and scaling masks (`d_exclusion_masks`, `d_scaling_masks`)
+- Classified tile arrays for force kernels (`d_main_tiles`, `d_excl_tiles`, etc.)
+
+What TileList does NOT do:
+- Sort any state arrays (positions, velocities, forces) — that's GPUContext's job
+- Sort any force-term data (parameters, charges, posq) — that's each force term's job
+- Compute forces or energies
+
+### GPUContext — state array owner and sorter
+
+GPUContext owns all per-particle state arrays (\(x\), \(y\), \(z\) for positions, velocities, forces, prev_positions, wrapped_positions, masses). When TileList rebuilds and produces a new sort order, GPUContext executes the permutation of all owned arrays via `permute_state_arrays()`.
+
+What GPUContext does NOT do:
+- Build spatial neighbor lists
+- Compute forces
+- Sort force-term-specific data
+
+### Force Terms — sort their own data
+
+Each `ForceTerm` subclass owns its own parameter arrays and working buffers. When TileList rebuilds:
+
+- **BondedForce**: remaps its own atom index arrays via `remap_indices_gpu(d_remap)`, reads sorted positions directly from GPUContext (indices are already remapped to sorted order)
+- **NonbondedForce**: permutes its own parameter arrays using GPUContext's `permute_to_sorted()`, then packs its own sorted posq buffer via `pack_sorted_posq_kernel` using TileList's `d_block_atoms`
+
+This means:
+- A new force term that needs sorted data MUST implement its own sorting logic
+- GPUContext provides permutation utilities (`permute_to_sorted`, `permute_state_arrays`, `permute_from_sorted`) but does NOT know about force-term-specific buffers
+- TileList tells the system the sort order; it does not apply it to anything
+
+## GPU Kernel Strategy
+
+mdpy is a pure-Python MD engine. All GPU kernels are written through Python toolchains; no `.cu` files.
+
+Both `cupy.RawKernel` and `numba.cuda.jit` are acceptable:
+
+- **`cupy.RawKernel`**: CUDA C strings compiled at runtime. Used for nonbonded force (expression transpiler generates CUDA C), tile list kernels, PBC wrapping, and permutation kernels. Prefer when you need fine control over register usage, shared memory, or warp intrinsics.
+- **`numba.cuda.jit`**: Python-to-PTX compilation. Used for integrators (Verlet, Langevin BAOAB). Prefer when readability of Python kernel code matters more than micro-optimization.
+
+No hard rule about which to use. Choose based on the kernel's needs: `cupy.RawKernel` for shared memory / warp-level control, `numba.cuda.jit` for simplicity and readability. The expression transpiler (bonded and nonbonded) targets CUDA C, so those force kernels are inherently `cupy.RawKernel`.
 
 ## Naming Convention (strict)
 
@@ -212,10 +253,10 @@ mdpy kernel types and their visibility in ncu/nsys:
 
 | Kernel | Toolchain | nsys/ncu visibility |
 |--------|-----------|-------------------|
-| BondedForce (bond/angle/dihed/improper) | `numba.cuda.jit` | Named in timeline |
+| BondedForce (bond/angle/dihed/improper) | `cupy.RawKernel` | Named in timeline |
 | NonbondedForce (self/cross tile) | `cupy.RawKernel` | Named in timeline |
 | Verlet / Langevin integrator | `numba.cuda.jit` | Named in timeline |
-| TileList (Morton/AABB/tile-find) | `cupy` / `numba.cuda` | Named in timeline |
+| TileList (Morton/AABB/tile-find) | `cupy.RawKernel` | Named in timeline |
 
 **nsys timeline (find bottleneck kernels):**
 
@@ -311,7 +352,6 @@ nvtx.range_pop()
 
 - **6-GPU environment**: always set `CUDA_VISIBLE_DEVICES=0` (or target GPU index) to profile the correct device
 - **ncu serializes the GPU**: profiling is ~10-100x slower. Always use `-k` to filter kernels and `--launch-count` to limit iterations
-- **P0 violation detection**: `float(d_energy[0])` readback appears as a gap in nsys CUDA timeline — useful for locating GPU→CPU transfer violations (§5)
 - **Benchmark scripts**: use existing scripts in `benchmark/` as profiling workloads
 
 ## Architecture
@@ -321,19 +361,25 @@ Data flow:
   PSFParser + PDBParser + CharmmTopparParser
     -> CharmmForcefield.create_topology() + create_parameter_table()
     -> System(topology, pbc_matrix, cutoff)
-       -> GPUContext (all device arrays: d_positions, d_velocities, d_forces, d_energy, ...)
-       -> TileList (GPU Morton sort + GPU AABB + GPU tile find; exclusion masks: CPU numba)
-       -> ForceTerms: BondedForce(4x @cuda.jit) + NonbondedForce(CuPy RawKernel)
-       -> Integrator: Verlet / Langevin BAOAB (@cuda.jit)
+       -> GPUContext (owns all d_positions*, d_velocities*, d_forces*, d_masses*)
+       -> TileList (spatial sort + block/tile structure + exclusion masks)
+       -> ForceTerms: BondedForce + NonbondedForce (each owns its own params)
+       -> Integrator: Verlet / Langevin BAOAB
     -> GPU-only simulation loop
-       -> dump_state() only when output needed
+       -> dump_state() / dump_energy() only when output needed
+
+On tile list rebuild:
+  1. TileList.rebuild() sorts positions via Morton code → produces d_raw_order
+  2. System._permute_all_arrays() → GPUContext permutes all state arrays
+  3. TileList.build_tiles() → builds neighbor pair maps and masks
+  4. Per force term: bind_sorted() → each term sorts its own data
 ```
 
-- **GPUContext**: central GPU memory manager, owns all `d_*` device arrays, provides upload/download/zero operations
-- **TileList**: tile-based neighbor list (32 atoms per tile), GPU-accelerated build with CPU mask construction (tech debt)
-- **Force terms**: `ForceTerm` base class → subclasses implement `bind()` + `compute(gpu_context, tile_list)`
+- **GPUContext**: owns all `d_*` state arrays; provides permutation kernels for sorting; handles PBC wrapping
+- **TileList**: spatial sort (Morton code) → blocks → AABB overlap → tile pairs → exclusion masks. Provides mappings only — never sorts state arrays or force-term data
+- **Force terms**: each owns its own parameter arrays. `bind_sorted()` sorts per-term data using GPUContext's permutation utilities and TileList's block structure
 - **Unit system**: internal units only — Å / dalton / fs / e / K; `mdpy.unit` restricted to I/O layer
-- **Precision**: arrays use `env.NUMPY_FLOAT` / `env.NUMPY_INT`, numba signatures use matching types
+- **Precision**: arrays use `env.NUMPY_FLOAT` (float32) / `env.NUMPY_INT` (int32)
 
 ## Key Files
 
@@ -341,11 +387,12 @@ Data flow:
 |------|---------------|
 | `mdpy/environment.py` | Precision config (`env.NUMPY_FLOAT`, `env.NUMPY_INT`); platform always CUDA |
 | `mdpy/system.py` | Top-level simulation driver, orchestrates GPUContext + TileList + ForceTerms |
-| `mdpy/core/gpu_context.py` | GPU memory manager — all `d_*` device arrays, upload/download/zero |
-| `mdpy/core/tile_list.py` | Tile-based neighbor list — GPU kernels (Morton/AABB/tile-find) + CPU mask build |
+| `mdpy/core/gpu_context.py` | GPU memory manager — owns all `d_*` state arrays, permutation kernels, PBC wrap |
+| `mdpy/core/tile_list.py` | Tile-based neighbor list — GPU kernels (Morton/AABB/tile-find/masks); provides mapping only |
 | `mdpy/core/topology.py` | Molecular topology (particles/bonds/angles/dihedrals/impropers), `join()` → compact arrays |
-| `mdpy/force/bonded_force.py` | 4× `@cuda.jit` kernels (bond/angle/dihedral/improper) |
-| `mdpy/force/nonbonded_force.py` | CuPy RawKernel (self/cross tile) + expression transpiler |
+| `mdpy/force/force_term.py` | `ForceTerm` base class — `compute(gpu_context, tile_list)` |
+| `mdpy/force/bonded_force.py` | Single CuPy RawKernel (bond/angle/dihedral/improper); owns indices, remaps via `d_remap` |
+| `mdpy/force/nonbonded_force.py` | CuPy RawKernel (self/cross tile) + expression transpiler; owns sorted posq, params |
 | `mdpy/force/expressions/lennard_jones.py` | LJ expression (returns dV/dr) |
 | `mdpy/force/expressions/coulomb.py` | Coulomb expression with constant `0.13893556595455` |
 | `mdpy/forcefield/charmm_forcefield.py` | PSF+PDB+PRM → Topology + ParameterTable pipeline |
@@ -363,56 +410,43 @@ Data flow:
 ## Development Notes
 
 - All arrays default to `env.NUMPY_FLOAT` (float32) / `env.NUMPY_INT` (int32)
-- GPU kernel strategy: `numba.cuda.jit` is the default for all GPU kernels; `cupy.RawKernel` is reserved exclusively for nonbonded force (computational hotspot) — see §4 Pure-Python GPU Kernel Strategy
+- GPU kernel strategy: both `cupy.RawKernel` and `numba.cuda.jit` are valid; choose based on kernel needs
 - `Topology.join()` must be called before creating a System (`System.__init__` calls it automatically)
-- After each force term's `compute()` returns, `System.compute_forces()` accumulates energy (currently per-term GPU sync — see tech debt below)
 - Coulomb constant in internal units: `0.13893556595455` (= 1/(4πε₀))
 - Boltzmann constant in internal units: `8.314462618e-7`
-- Tile list rebuild: triggered when max atom displacement > skin/2; includes GPU Morton sort + GPU AABB + GPU tile find + CPU exclusion mask construction
-- Expression transpiler: converts Python AST to CUDA C for CuPy RawKernel
+- Tile list rebuild: triggered when max atom displacement > skin/2; runs fully on GPU (Morton sort + block form + AABB + tile find + mask construction + tile classification)
+- Expression transpiler: converts Python AST to CUDA C for CuPy RawKernel (used by both bonded and nonbonded forces)
 
 ## Known CPU Bottlenecks & Tech Debt
 
-### P0 — GPU→CPU Transfer Violations (violates §5)
+### P1 — Scalar Reads in Hot Path (acceptable, but could be cleaner)
 
-Every violation below must be eliminated. No new violations may be introduced.
+Scalar reads for kernel launch sizing and control flow. These are acceptable per §4 but are noted as targets for future device-side control flow:
 
-| Location | Violation | Fix |
-|----------|-----------|-----|
-| `system.py:54` | `download_forces()` copies N×3 forces GPU→CPU every step, but integrator only needs `d_forces` on GPU | Remove from per-step path; only download when user requests forces |
-| `bonded_force.py:427`, `nonbonded_force.py:678` | `float(d_energy[0])` reads energy GPU→CPU per force term, causing 2 pipeline stalls per step | Accumulate energy on GPU via `d_energy_accumulator`; read back only in `dump_energy()` |
-| `tile_list.py:962` | `float(cp.max(diff))` in `check_rebuild()` — GPU reduction + scalar readback every step | GPU reduction kernel with deferred compare; return bool without reading scalar to CPU |
-| `tile_list.py:800-802` | `cp.asnumpy(bin_coords[...])` × 3 in `_rebuild_gpu()` — downloads N×3 int32 for CPU bin aggregation | GPU bin aggregation kernel |
-| `tile_list.py:896-897` | `int(counters[...])` × 2 in `_rebuild_gpu()` — scalar readback for tile counts | Device-side counters; pass to subsequent kernels on GPU |
-| `tile_list.py:958` | `int(d_reverse_offset[N])` in `_build_masks_gpu()` — scalar readback for allocation size | GPU prefix sum + GPU-side allocation |
-| `system.py:108-116` | `potential_energy` / `energies` properties exist on System — energy should only be accessible via `dump_energy()` | Remove properties; implement `dump_energy()` as the sole energy output API |
+| Location | Scalar read | Purpose |
+|----------|------------|---------|
+| `tile_list.py:927` | `int(self._d_counters[0])` | Tile count for array sizing |
+| `tile_list.py:959` | `int(d_rev_offset[-1])` | Reverse map allocation size |
+| `tile_list.py:1062-1063` | `int(d_classify_excl_counter[0])`, `int(d_classify_main_counter[0])` | Exclusion/main tile counts |
+| `system.py:202` | `int(self.tile_list.d_rebuild_flag[0])` | Periodic rebuild check flag |
 
-### P1 — CPU Computation in Hot Path
-
-| Location | Problem | Fix |
-|----------|---------|-----|
-| `system.py:34-41` | `_wrap_and_upload()` does PBC wrapping with CPU numpy + 2 CPU→GPU uploads per batch | GPU PBC wrap kernel; positions never leave GPU during simulation |
-
-### P2 — Tile List Rebuild (periodic, but very slow)
-
-| Location | Problem | Fix |
-|----------|---------|-----|
-| `tile_list.py:958-987` | `_build_exclusion_masks()` runs `numba.njit` on CPU; ~23s for 95K atoms | Migrate to GPU kernel |
-| `tile_list.py:685-711` | `_rebuild_gpu()` downloads bin coords GPU→CPU, processes on CPU, uploads back | Keep bin processing on GPU |
-
-### P3 — Dead Code to Remove
+### P2 — Dead Code to Remove
 
 | Location | What to delete |
 |----------|----------------|
-| `gpu_context.py:6-18` | `_HAS_CUPY` / `_HAS_GPU` / `_use_gpu` — replace with `import cupy as cp` |
-| `gpu_context.py:132-166` | All `if self._use_gpu` / `else` branches — keep only GPU path |
-| `tile_list.py:6-18` | `_HAS_CUPY` / `_HAS_GPU` — replace with `import cupy as cp` |
-| `tile_list.py:790-956` | `_rebuild_cpu()`, `_cut_blocks()`, `_compute_block_aabbs()`, `_find_tiles()` — CPU-only fallbacks |
-| `tile_list.py:359-389` | `_morton_encode()`, `_aabb_min_image_dist_sq()` — CPU-only helpers |
-| `tile_list.py:370-373` | `_to_device()` conditional — simplify to `cp.asarray()` |
-| `tile_list.py:402-548` | Pure Python fallbacks for `_build_atom_to_block_slot` / `_build_masks_numba` (`else` branch) |
-| `environment.py:17-18,39-47` | `set_platform()`, `'CPU'` option, `supported_platforms` — platform is always CUDA |
+| `gpu_context.py` | Any remaining `_HAS_CUPY` / `_HAS_GPU` / `_use_gpu` if present — replace with unconditional `import cupy as cp` |
+| `tile_list.py` | Any remaining `_HAS_CUPY` / `_HAS_GPU` if present — replace with unconditional `import cupy as cp` |
+| `tile_list.py` | `_rebuild_cpu()`, `_cut_blocks()`, `_compute_block_aabbs()`, `_find_tiles()`, `_morton_encode()`, `_aabb_min_image_dist_sq()`, `_to_device()` — CPU-only fallbacks if still present |
+| `tile_list.py` | Pure Python fallbacks for `_build_atom_to_block_slot` / `_build_masks_numba` (`else` branch) if still present |
+| `environment.py` | `set_platform()`, `'CPU'` option, `supported_platforms` — platform is always CUDA |
 | `nonbonded_force.py:672` | `getDeviceProperties(0)` queried every step — cache at bind time |
+
+### P3 — Performance Optimizations
+
+| Location | Problem | Fix |
+|----------|---------|-----|
+| `tile_list.py` tile find | `d_tile_buf` / `d_interacting_buf` are overallocated (max_tiles heuristic) | Dynamic allocation via two-pass (count then fill) |
+| `nonbonded_force.py` | `_refresh_sorted_data` called every compute step, repacks sorted posq even if positions haven't changed | Skip refresh when tile list hasn't rebuilt |
 
 ## Physical Constants (internal units: Å / dalton / fs / e / K)
 
