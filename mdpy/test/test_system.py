@@ -394,6 +394,16 @@ class TestLangevinIntegrator:
         assert np.all(np.isfinite(system.particles.positions))
 
 
+def _get_pdb_to_sorted(system):
+    """Compute PDB→sorted mapping from GPU cumulative d_sorted_to_pdb."""
+    import cupy as cp
+    d_stp = system.tile_list.d_sorted_to_pdb
+    sorted_to_pdb = cp.asnumpy(d_stp)
+    pdb_to_sorted = np.empty_like(sorted_to_pdb)
+    pdb_to_sorted[sorted_to_pdb] = np.arange(len(sorted_to_pdb), dtype=sorted_to_pdb.dtype)
+    return pdb_to_sorted, sorted_to_pdb
+
+
 class TestRebuildSortCorrectness:
 
     def test_positions_preserved_after_rebuild(self):
@@ -422,11 +432,9 @@ class TestRebuildSortCorrectness:
         assert np.all(np.isfinite(pos_after_first))
         assert pos_after_first.shape == (4, 3)
 
-        assert system._pdb_to_current_sorted is not None
-        p2s = system._pdb_to_current_sorted
+        p2s, s2p = _get_pdb_to_sorted(system)
         assert len(np.unique(p2s)) == len(p2s), "pdb_to_sorted is not a permutation"
 
-        s2p = system._sorted_to_pdb_np()
         assert len(np.unique(s2p)) == len(s2p), "sorted_to_pdb is not a permutation"
 
         identity = np.arange(4, dtype=env.NUMPY_INT)
@@ -440,9 +448,8 @@ class TestRebuildSortCorrectness:
         pos_after_30 = system.particles.positions.copy()
         assert np.all(np.isfinite(pos_after_30))
 
-        p2s_2 = system._pdb_to_current_sorted
+        p2s_2, s2p_2 = _get_pdb_to_sorted(system)
         assert len(np.unique(p2s_2)) == len(p2s_2), "pdb_to_sorted not permutation after more steps"
-        s2p_2 = system._sorted_to_pdb_np()
         assert len(np.unique(s2p_2)) == len(s2p_2), "sorted_to_pdb not permutation after more steps"
         np.testing.assert_array_equal(s2p_2[p2s_2], identity,
             err_msg="permutation invariant broken after rebuild")
@@ -485,7 +492,7 @@ class TestRebuildSortCorrectness:
             assert np.all(np.isfinite(pos)), f"step {i}: NaN/Inf in positions"
             assert np.all(np.isfinite(vel)), f"step {i}: NaN/Inf in velocities"
 
-            p2s = system._pdb_to_current_sorted
+            p2s, _ = _get_pdb_to_sorted(system)
             assert len(np.unique(p2s)) == len(p2s), \
                 f"step {i}: pdb_to_sorted is not a valid permutation"
 
@@ -536,9 +543,8 @@ class TestRebuildSortCorrectness:
         assert np.all(np.isfinite(pos_final))
         assert np.all(np.isfinite(vel_final))
 
-        p2s = system._pdb_to_current_sorted
+        p2s, s2p = _get_pdb_to_sorted(system)
         assert len(np.unique(p2s)) == len(p2s), "final pdb_to_sorted not a permutation"
-        s2p = system._sorted_to_pdb_np()
         identity = np.arange(n, dtype=env.NUMPY_INT)
         np.testing.assert_array_equal(s2p[p2s], identity,
             err_msg="permutation invariant broken after 100 steps")
@@ -581,8 +587,7 @@ class TestRebuildSortCorrectness:
         pos_after_first = system.dump_state()[0]
         assert np.all(np.isfinite(pos_after_first))
 
-        p2s_first = system._pdb_to_current_sorted.copy()
-        s2p_first = system._sorted_to_pdb_np()
+        p2s_first, s2p_first = _get_pdb_to_sorted(system)
         identity = np.arange(n, dtype=env.NUMPY_INT)
         np.testing.assert_array_equal(s2p_first[p2s_first], identity,
             err_msg="First rebuild: permutation invariant broken")
@@ -596,22 +601,21 @@ class TestRebuildSortCorrectness:
         assert np.all(np.isfinite(vel_after_many)), \
             "NaN/Inf in velocities after 200 steps"
 
-        p2s_final = system._pdb_to_current_sorted
-        s2p_final = system._sorted_to_pdb_np()
+        p2s_final, s2p_final = _get_pdb_to_sorted(system)
         assert len(np.unique(p2s_final)) == n, "pdb_to_sorted not a permutation after 200 steps"
         assert len(np.unique(s2p_final)) == n, "sorted_to_pdb not a permutation after 200 steps"
         np.testing.assert_array_equal(s2p_final[p2s_final], identity,
             err_msg="Permutation invariant broken after multiple rebuilds")
 
-        gpu_pos_x = system.gpu.d_positions_x.get()
-        gpu_pos_y = system.gpu.d_positions_y.get()
-        gpu_pos_z = system.gpu.d_positions_z.get()
-        gpu_pos = np.stack([gpu_pos_x, gpu_pos_y, gpu_pos_z], axis=1)
+        import cupy as cp
+        tl = system.tile_list
+        d_stp = tl.d_sorted_to_pdb
+        pdb_gpu_x = tl.permute_from_sorted(d_stp, system.gpu.d_positions_x)
+        pdb_gpu_y = tl.permute_from_sorted(d_stp, system.gpu.d_positions_y)
+        pdb_gpu_z = tl.permute_from_sorted(d_stp, system.gpu.d_positions_z)
+        gpu_pos = np.stack([pdb_gpu_x.get(), pdb_gpu_y.get(), pdb_gpu_z.get()], axis=1)
 
-        p2s_gpu = system._pdb_to_current_sorted
-        pdb_gpu_pos = gpu_pos[p2s_gpu]
-
-        np.testing.assert_allclose(pdb_gpu_pos, pos_after_many, atol=1e-5,
+        np.testing.assert_allclose(gpu_pos, pos_after_many, atol=1e-5,
             err_msg="GPU sorted positions don't match dump_state output — "
                      "sorted→PDB mapping is wrong")
 
@@ -782,8 +786,7 @@ class TestAsyncRebuild:
         assert np.all(np.isfinite(pos))
         assert np.all(np.isfinite(vel))
 
-        p2s = system._pdb_to_current_sorted
-        s2p = system._sorted_to_pdb_np()
+        p2s, s2p = _get_pdb_to_sorted(system)
         identity = np.arange(n, dtype=env.NUMPY_INT)
         np.testing.assert_array_equal(s2p[p2s], identity,
             err_msg="permutation invariant broken with async rebuild")
