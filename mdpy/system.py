@@ -89,6 +89,17 @@ class System:
                 e.record()
                 self._profile_data[term.name].append((s, e))
 
+    def _emit_step_kernels(self, integrator):
+        positions_soa = (
+            self.gpu.d_wrapped_positions_x,
+            self.gpu.d_wrapped_positions_y,
+            self.gpu.d_wrapped_positions_z,
+        )
+        self.tile_list.check_rebuild_async(positions_soa)
+        self.compute_forces()
+        integrator.step(self.gpu)
+        self.gpu.refresh_wrapped_positions()
+
     def dump_energy(self):
         if self.gpu.d_energy_accumulator is None:
             return {}
