@@ -327,6 +327,45 @@ void permute_int_array_kernel(
 }
 """
 
+_PERMUTE_MASS_KERNEL = r"""
+extern "C" __global__
+void permute_mass_kernel(
+    const float* __restrict__ src0, const float* __restrict__ src1,
+    const float* __restrict__ src2, const float* __restrict__ src3,
+    const float* __restrict__ src4, const float* __restrict__ src5,
+    const float* __restrict__ src6, const float* __restrict__ src7,
+    const float* __restrict__ src8, const float* __restrict__ src9,
+    const float* __restrict__ src10, const float* __restrict__ src11,
+    const float* __restrict__ src12,
+    const int* __restrict__ permutation,
+    int num_particles,
+    float* __restrict__ dst0, float* __restrict__ dst1,
+    float* __restrict__ dst2, float* __restrict__ dst3,
+    float* __restrict__ dst4, float* __restrict__ dst5,
+    float* __restrict__ dst6, float* __restrict__ dst7,
+    float* __restrict__ dst8, float* __restrict__ dst9,
+    float* __restrict__ dst10, float* __restrict__ dst11,
+    float* __restrict__ dst12
+) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= num_particles) return;
+    int src_idx = permutation[idx];
+    dst0[idx] = src0[src_idx];
+    dst1[idx] = src1[src_idx];
+    dst2[idx] = src2[src_idx];
+    dst3[idx] = src3[src_idx];
+    dst4[idx] = src4[src_idx];
+    dst5[idx] = src5[src_idx];
+    dst6[idx] = src6[src_idx];
+    dst7[idx] = src7[src_idx];
+    dst8[idx] = src8[src_idx];
+    dst9[idx] = src9[src_idx];
+    dst10[idx] = src10[src_idx];
+    dst11[idx] = src11[src_idx];
+    dst12[idx] = src12[src_idx];
+}
+"""
+
 _PERMUTE_ARRAY_2COMP_KERNEL = r"""
 extern "C" __global__
 void permute_array_2comp_kernel(
@@ -725,6 +764,9 @@ def _compile_gpu_kernels():
         "permute_2comp": cp.RawKernel(
             _PERMUTE_ARRAY_2COMP_KERNEL, "permute_array_2comp_kernel"
         ),
+        "permute_mass": cp.RawKernel(
+            _PERMUTE_MASS_KERNEL, "permute_mass_kernel"
+        ),
         "inverse_permute": cp.RawKernel(
             _INVERSE_PERMUTE_KERNEL, "inverse_permute_kernel"
         ),
@@ -1000,6 +1042,33 @@ class TileList:
                     grid, (tpb,), (src, permutation, np.int32(N), dst)
                 )
                 arrays_2comp[name] = dst
+
+    def permute_mass(self, permutation, src_list, name_list):
+        if self.num_particles == 0:
+            return
+        self._ensure_kernels()
+        N = self.num_particles
+        tpb = 256
+        grid = ((N + tpb - 1) // tpb,)
+        dst_list = [cp.empty_like(src) for src in src_list]
+        self._kernels["permute_mass"](
+            grid, (tpb,),
+            (
+                src_list[0], src_list[1], src_list[2],
+                src_list[3], src_list[4], src_list[5],
+                src_list[6], src_list[7], src_list[8],
+                src_list[9], src_list[10], src_list[11],
+                src_list[12],
+                permutation,
+                np.int32(N),
+                dst_list[0], dst_list[1], dst_list[2],
+                dst_list[3], dst_list[4], dst_list[5],
+                dst_list[6], dst_list[7], dst_list[8],
+                dst_list[9], dst_list[10], dst_list[11],
+                dst_list[12],
+            ),
+        )
+        return zip(name_list, dst_list)
 
     def permute_from_sorted(self, sorted_to_pdb, sorted_array):
         if self.num_particles == 0:
