@@ -39,6 +39,10 @@ class System:
         self._d_cached_unique_j = None
         self._d_cached_unique_scale = None
         self._steps_since_check = 0
+        self._step_graph = None
+        self._graph_stream = cp.cuda.Stream(non_blocking=True)
+        self._graph_needs_capture = True
+        self._cached_integrator_id = None
 
     def add_force_term(self, term):
         self.force_terms.append(term)
