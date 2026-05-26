@@ -58,10 +58,10 @@ def _setup_mdpy_system():
     system.particles.positions[:] = wrapped
     system.gpu.upload_positions(system.particles)
     positions_2d = system.gpu.get_positions_2d()
-    pdb_to_sorted_gpu, pdb_to_sorted_np = system.tile_list.rebuild(
+    system.tile_list.rebuild(
         positions_2d, topology, system.pbc_matrix, system.pbc_inv,
     )
-    system._permute_all_arrays(pdb_to_sorted_gpu, pdb_to_sorted_np)
+    system._permute_all_arrays()
     system.tile_list.build_tiles(topology, system.pbc_matrix)
     for term in system.force_terms:
         if hasattr(term, 'bind_sorted'):
