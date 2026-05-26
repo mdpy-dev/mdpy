@@ -366,6 +366,25 @@ void permute_state_arrays_kernel(
 }
 """
 
+_FUSED_COPY3_KERNEL = r"""
+extern "C" __global__
+void fused_copy3_kernel(
+    const float* __restrict__ src0,
+    const float* __restrict__ src1,
+    const float* __restrict__ src2,
+    int num_elements,
+    float* __restrict__ dst0,
+    float* __restrict__ dst1,
+    float* __restrict__ dst2
+) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= num_elements) return;
+    dst0[idx] = src0[idx];
+    dst1[idx] = src1[idx];
+    dst2[idx] = src2[idx];
+}
+"""
+
 _PERMUTE_ARRAY_2COMP_KERNEL = r"""
 extern "C" __global__
 void permute_array_2comp_kernel(
@@ -767,6 +786,9 @@ def _compile_gpu_kernels():
         "permute_state_arrays": cp.RawKernel(
             _PERMUTE_STATE_ARRAYS_KERNEL, "permute_state_arrays_kernel"
         ),
+        "fused_copy3": cp.RawKernel(
+            _FUSED_COPY3_KERNEL, "fused_copy3_kernel"
+        ),
         "inverse_permute": cp.RawKernel(
             _INVERSE_PERMUTE_KERNEL, "inverse_permute_kernel"
         ),
@@ -1075,6 +1097,20 @@ class TileList:
         )
         return list(zip(name_list, dst_list))
 
+    def fused_copy3(self, src0, src1, src2):
+        N = src0.size
+        self._ensure_kernels()
+        tpb = 256
+        grid = ((N + tpb - 1) // tpb,)
+        dst0 = cp.empty(N, dtype=env.NUMPY_FLOAT)
+        dst1 = cp.empty(N, dtype=env.NUMPY_FLOAT)
+        dst2 = cp.empty(N, dtype=env.NUMPY_FLOAT)
+        self._kernels["fused_copy3"](
+            grid, (tpb,),
+            (src0, src1, src2, np.int32(N), dst0, dst1, dst2),
+        )
+        return dst0, dst1, dst2
+
     def permute_from_sorted(self, sorted_to_pdb, sorted_array):
         if self.num_particles == 0:
             return sorted_array
@@ -1094,9 +1130,10 @@ class TileList:
         tpb = 256
 
         if isinstance(positions, tuple):
-            pos_x = cp.asarray(positions[0], dtype=env.NUMPY_FLOAT).copy()
-            pos_y = cp.asarray(positions[1], dtype=env.NUMPY_FLOAT).copy()
-            pos_z = cp.asarray(positions[2], dtype=env.NUMPY_FLOAT).copy()
+            px = cp.ascontiguousarray(cp.asarray(positions[0], dtype=env.NUMPY_FLOAT))
+            py = cp.ascontiguousarray(cp.asarray(positions[1], dtype=env.NUMPY_FLOAT))
+            pz = cp.ascontiguousarray(cp.asarray(positions[2], dtype=env.NUMPY_FLOAT))
+            pos_x, pos_y, pos_z = self.fused_copy3(px, py, pz)
         else:
             data = cp.asarray(
                 np.ascontiguousarray(positions.ravel(), dtype=env.NUMPY_FLOAT)
@@ -1429,9 +1466,8 @@ class TileList:
         self._sorted_positions = positions_soa
 
         pos_x, pos_y, pos_z = positions_soa
-        self.d_positions_at_rebuild_x = pos_x.copy()
-        self.d_positions_at_rebuild_y = pos_y.copy()
-        self.d_positions_at_rebuild_z = pos_z.copy()
+        self.d_positions_at_rebuild_x, self.d_positions_at_rebuild_y, self.d_positions_at_rebuild_z = \
+            self.fused_copy3(pos_x, pos_y, pos_z)
 
         total_slots = self.num_blocks * W
         self.d_sorted_pos_x = cp.zeros(total_slots, dtype=env.NUMPY_FLOAT)
