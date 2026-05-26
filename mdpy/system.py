@@ -70,9 +70,6 @@ class System:
 
     def compute_forces(self):
         self.gpu.zero_forces()
-        self.tile_list.update_sorted_positions(
-            self.gpu.d_positions_x, self.gpu.d_positions_y, self.gpu.d_positions_z
-        )
         for term_index, term in enumerate(self.force_terms):
             if self._profiling_enabled:
                 s = cp.cuda.Event()

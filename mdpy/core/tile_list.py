@@ -231,74 +231,6 @@ void check_rebuild_kernel(
 }
 """
 
-_GATHER_SORTED_KERNEL = r"""
-extern "C" __global__
-void gather_sorted_kernel(
-    const float* __restrict__ src,
-    const int* __restrict__ block_atoms,
-    int total_slots,
-    int num_particles,
-    float* __restrict__ dst
-) {
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (idx >= total_slots) return;
-    int atom_id = block_atoms[idx];
-    float val = 0.0f;
-    if (atom_id >= 0 && atom_id < num_particles) {
-        val = src[atom_id];
-    }
-    dst[idx] = val;
-}
-"""
-
-_GATHER_SORTED_KERNEL_2COMP = r"""
-extern "C" __global__
-void gather_sorted_kernel_2comp(
-    const float* __restrict__ src,
-    const int* __restrict__ block_atoms,
-    int total_slots,
-    int num_particles,
-    float* __restrict__ dst
-) {
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (idx >= total_slots) return;
-    int atom_id = block_atoms[idx];
-    if (atom_id >= 0 && atom_id < num_particles) {
-        dst[idx * 2 + 0] = src[atom_id * 2 + 0];
-        dst[idx * 2 + 1] = src[atom_id * 2 + 1];
-    } else {
-        dst[idx * 2 + 0] = 0.0f;
-        dst[idx * 2 + 1] = 0.0f;
-    }
-}
-"""
-
-_GATHER_SORTED_KERNEL_4COMP = r"""
-extern "C" __global__
-void gather_sorted_kernel_4comp(
-    const float* __restrict__ src,
-    const int* __restrict__ block_atoms,
-    int total_slots,
-    int num_particles,
-    float* __restrict__ dst
-) {
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (idx >= total_slots) return;
-    int atom_id = block_atoms[idx];
-    if (atom_id >= 0 && atom_id < num_particles) {
-        dst[idx * 4 + 0] = src[atom_id * 4 + 0];
-        dst[idx * 4 + 1] = src[atom_id * 4 + 1];
-        dst[idx * 4 + 2] = src[atom_id * 4 + 2];
-        dst[idx * 4 + 3] = src[atom_id * 4 + 3];
-    } else {
-        dst[idx * 4 + 0] = 0.0f;
-        dst[idx * 4 + 1] = 0.0f;
-        dst[idx * 4 + 2] = 0.0f;
-        dst[idx * 4 + 3] = 0.0f;
-    }
-}
-"""
-
 _PERMUTE_ARRAY_KERNEL = r"""
 extern "C" __global__
 void permute_array_kernel(
@@ -766,13 +698,6 @@ def _compile_gpu_kernels():
         "rev_fill": cp.RawKernel(_FILL_REVERSE_KERNEL, "fill_reverse_kernel"),
         "build_masks": cp.RawKernel(_BUILD_MASKS_KERNEL, "build_masks_kernel"),
         "check_rebuild": cp.RawKernel(_CHECK_REBUILD_KERNEL, "check_rebuild_kernel"),
-        "gather_sorted": cp.RawKernel(_GATHER_SORTED_KERNEL, "gather_sorted_kernel"),
-        "gather_sorted_2comp": cp.RawKernel(
-            _GATHER_SORTED_KERNEL_2COMP, "gather_sorted_kernel_2comp"
-        ),
-        "gather_sorted_4comp": cp.RawKernel(
-            _GATHER_SORTED_KERNEL_4COMP, "gather_sorted_kernel_4comp"
-        ),
         "large_block_bounds": cp.RawKernel(
             _COMPUTE_LARGE_BLOCK_BOUNDS_KERNEL, "compute_large_block_bounds_kernel"
         ),
@@ -786,9 +711,7 @@ def _compile_gpu_kernels():
         "permute_state_arrays": cp.RawKernel(
             _PERMUTE_STATE_ARRAYS_KERNEL, "permute_state_arrays_kernel"
         ),
-        "fused_copy3": cp.RawKernel(
-            _FUSED_COPY3_KERNEL, "fused_copy3_kernel"
-        ),
+        "fused_copy3": cp.RawKernel(_FUSED_COPY3_KERNEL, "fused_copy3_kernel"),
         "inverse_permute": cp.RawKernel(
             _INVERSE_PERMUTE_KERNEL, "inverse_permute_kernel"
         ),
@@ -835,10 +758,6 @@ class TileList:
         self._d_interacting_buf = cp.empty(0, dtype=env.NUMPY_INT)
         self._d_pbc_matrix = None
         self._d_pbc_inv = None
-
-        self.d_sorted_pos_x = cp.empty(0, dtype=env.NUMPY_FLOAT)
-        self.d_sorted_pos_y = cp.empty(0, dtype=env.NUMPY_FLOAT)
-        self.d_sorted_pos_z = cp.empty(0, dtype=env.NUMPY_FLOAT)
 
         self._d_excl_offset = None
         self._d_excl_neighbors = None
@@ -957,86 +876,6 @@ class TileList:
             np.ascontiguousarray(topology.exclusion_scale, dtype=env.NUMPY_FLOAT)
         )
 
-    def update_sorted_positions(self, d_pos_x, d_pos_y, d_pos_z):
-        if self.num_blocks == 0:
-            return
-        self._ensure_kernels()
-        total_slots = self.num_blocks * W
-        tpb = 256
-        grid = ((total_slots + tpb - 1) // tpb,)
-        for src, attr in [
-            (d_pos_x, "d_sorted_pos_x"),
-            (d_pos_y, "d_sorted_pos_y"),
-            (d_pos_z, "d_sorted_pos_z"),
-        ]:
-            if getattr(self, attr).size != total_slots:
-                setattr(self, attr, cp.empty(total_slots, dtype=env.NUMPY_FLOAT))
-            self._kernels["gather_sorted"](
-                grid,
-                (tpb,),
-                (
-                    src,
-                    self.d_block_atoms,
-                    np.int32(total_slots),
-                    np.int32(self.num_particles),
-                    getattr(self, attr),
-                ),
-            )
-
-    def gather_sorted_params(self, param_arrays):
-        if self.num_blocks == 0:
-            return
-        self._ensure_kernels()
-        total_slots = self.num_blocks * W
-        tpb = 256
-        grid = ((total_slots + tpb - 1) // tpb,)
-        for name, d_arr in param_arrays.items():
-            num_components = (
-                d_arr.shape[0] // self.num_particles if self.num_particles > 0 else 1
-            )
-            if num_components == 1 or d_arr.shape[0] == total_slots:
-                sorted_arr = cp.empty(total_slots, dtype=env.NUMPY_FLOAT)
-                self._kernels["gather_sorted"](
-                    grid,
-                    (tpb,),
-                    (
-                        d_arr,
-                        self.d_block_atoms,
-                        np.int32(total_slots),
-                        np.int32(self.num_particles),
-                        sorted_arr,
-                    ),
-                )
-            elif num_components == 2:
-                sorted_arr = cp.empty(total_slots * 2, dtype=env.NUMPY_FLOAT)
-                self._kernels["gather_sorted_2comp"](
-                    grid,
-                    (tpb,),
-                    (
-                        d_arr,
-                        self.d_block_atoms,
-                        np.int32(total_slots),
-                        np.int32(self.num_particles),
-                        sorted_arr,
-                    ),
-                )
-            elif num_components == 4:
-                sorted_arr = cp.empty(total_slots * 4, dtype=env.NUMPY_FLOAT)
-                self._kernels["gather_sorted_4comp"](
-                    grid,
-                    (tpb,),
-                    (
-                        d_arr,
-                        self.d_block_atoms,
-                        np.int32(total_slots),
-                        np.int32(self.num_particles),
-                        sorted_arr,
-                    ),
-                )
-            else:
-                raise ValueError(f"Unsupported number of components: {num_components}")
-            setattr(self, f"d_sorted_{name}", sorted_arr)
-
     def permute_to_sorted(
         self, permutation, arrays_float, arrays_int=None, arrays_2comp=None
     ):
@@ -1066,9 +905,9 @@ class TileList:
                 arrays_2comp[name] = dst
 
     def permute_state_arrays(self, permutation, name_array_pairs):
-        assert len(name_array_pairs) == 13, (
-            f"permute_state_arrays requires 13 arrays, got {len(name_array_pairs)}"
-        )
+        assert (
+            len(name_array_pairs) == 13
+        ), f"permute_state_arrays requires 13 arrays, got {len(name_array_pairs)}"
         name_list = [p[0] for p in name_array_pairs]
         src_list = [p[1] for p in name_array_pairs]
         if self.num_particles == 0:
@@ -1079,19 +918,36 @@ class TileList:
         grid = ((N + tpb - 1) // tpb,)
         dst_list = [cp.empty_like(src) for src in src_list]
         self._kernels["permute_state_arrays"](
-            grid, (tpb,),
+            grid,
+            (tpb,),
             (
-                src_list[0], src_list[1], src_list[2],
-                src_list[3], src_list[4], src_list[5],
-                src_list[6], src_list[7], src_list[8],
-                src_list[9], src_list[10], src_list[11],
+                src_list[0],
+                src_list[1],
+                src_list[2],
+                src_list[3],
+                src_list[4],
+                src_list[5],
+                src_list[6],
+                src_list[7],
+                src_list[8],
+                src_list[9],
+                src_list[10],
+                src_list[11],
                 src_list[12],
                 permutation,
                 np.int32(N),
-                dst_list[0], dst_list[1], dst_list[2],
-                dst_list[3], dst_list[4], dst_list[5],
-                dst_list[6], dst_list[7], dst_list[8],
-                dst_list[9], dst_list[10], dst_list[11],
+                dst_list[0],
+                dst_list[1],
+                dst_list[2],
+                dst_list[3],
+                dst_list[4],
+                dst_list[5],
+                dst_list[6],
+                dst_list[7],
+                dst_list[8],
+                dst_list[9],
+                dst_list[10],
+                dst_list[11],
                 dst_list[12],
             ),
         )
@@ -1106,7 +962,8 @@ class TileList:
         dst1 = cp.empty(N, dtype=env.NUMPY_FLOAT)
         dst2 = cp.empty(N, dtype=env.NUMPY_FLOAT)
         self._kernels["fused_copy3"](
-            grid, (tpb,),
+            grid,
+            (tpb,),
             (src0, src1, src2, np.int32(N), dst0, dst1, dst2),
         )
         return dst0, dst1, dst2
@@ -1466,16 +1323,11 @@ class TileList:
         self._sorted_positions = positions_soa
 
         pos_x, pos_y, pos_z = positions_soa
-        self.d_positions_at_rebuild_x, self.d_positions_at_rebuild_y, self.d_positions_at_rebuild_z = \
-            self.fused_copy3(pos_x, pos_y, pos_z)
-
-        total_slots = self.num_blocks * W
-        self.d_sorted_pos_x = cp.zeros(total_slots, dtype=env.NUMPY_FLOAT)
-        self.d_sorted_pos_y = cp.zeros(total_slots, dtype=env.NUMPY_FLOAT)
-        self.d_sorted_pos_z = cp.zeros(total_slots, dtype=env.NUMPY_FLOAT)
-        self.d_sorted_pos_x[:N] = pos_x
-        self.d_sorted_pos_y[:N] = pos_y
-        self.d_sorted_pos_z[:N] = pos_z
+        (
+            self.d_positions_at_rebuild_x,
+            self.d_positions_at_rebuild_y,
+            self.d_positions_at_rebuild_z,
+        ) = self.fused_copy3(pos_x, pos_y, pos_z)
 
         self.d_rebuild_flag[0] = 0
         self._is_initialized = True
@@ -1610,9 +1462,6 @@ class TileList:
         self.d_positions_at_rebuild_x = cp.empty(0, dtype=env.NUMPY_FLOAT)
         self.d_positions_at_rebuild_y = cp.empty(0, dtype=env.NUMPY_FLOAT)
         self.d_positions_at_rebuild_z = cp.empty(0, dtype=env.NUMPY_FLOAT)
-        self.d_sorted_pos_x = cp.empty(0, dtype=env.NUMPY_FLOAT)
-        self.d_sorted_pos_y = cp.empty(0, dtype=env.NUMPY_FLOAT)
-        self.d_sorted_pos_z = cp.empty(0, dtype=env.NUMPY_FLOAT)
         self.d_sorted_to_pdb = cp.empty(0, dtype=env.NUMPY_INT)
         self.d_pdb_to_sorted = cp.empty(0, dtype=env.NUMPY_INT)
         self.d_raw_order = cp.empty(0, dtype=env.NUMPY_INT)
