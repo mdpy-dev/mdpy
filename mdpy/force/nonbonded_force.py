@@ -1239,21 +1239,14 @@ class NonbondedForce(ForceTerm):
     def _use_posq(self):
         return "charge" in self.expression.parameter_names
 
-    def bind_sorted(
-        self,
-        topology,
-        tile_list,
-        gpu_context,
-        sorted_to_pdb_np=None,
-        sorted_particle_types=None,
-    ):
+    def bind_sorted(self, topology, tile_list, gpu_context):
         self._ensure_compiled()
         if not self._d_cached_params:
             self._rebuild_parameter_arrays(topology.particle_types)
             self._upload_parameter_arrays()
             self._d_cached_params = dict(self._d_parameter_arrays)
 
-        permutation = tile_list.d_sorted_to_pdb
+        permutation = tile_list.d_raw_order
         N = tile_list.num_particles
 
         arrays_float = {}
