@@ -1225,25 +1225,25 @@ class NonbondedForce(ForceTerm):
         pt = self._parameter_table
         for param_name in self.expression.parameter_names:
             table_name = _TABLE_PARAM_MAP.get(param_name, param_name)
-            per_atom = pt.expand_to_per_atom(table_name, particle_types)
+            particle = pt.expand_to_particle(table_name, particle_types)
             if param_name == "sigma_half":
-                per_atom = 0.5 * per_atom
+                particle = 0.5 * particle
             elif param_name == "sqrt_epsilon":
-                per_atom = np.sqrt(np.maximum(per_atom, 0.0))
-            self._parameter_arrays[param_name] = per_atom.astype(np.float32)
+                particle = np.sqrt(np.maximum(particle, 0.0))
+            self._parameter_arrays[param_name] = particle.astype(np.float32)
 
             name_14 = param_name + "_14"
             table_name_14 = _TABLE_PARAM_MAP.get(param_name, param_name) + "_14"
-            has_14 = table_name_14 in pt.per_type or table_name_14 in pt.per_atom
+            has_14 = table_name_14 in pt.type_parameters or table_name_14 in pt.particle_parameters
             if has_14:
-                per_atom_14 = pt.expand_to_per_atom(table_name_14, particle_types)
+                particle_14 = pt.expand_to_particle(table_name_14, particle_types)
                 if param_name == "sigma_half":
-                    per_atom_14 = 0.5 * per_atom_14
+                    particle_14 = 0.5 * particle_14
                 elif param_name == "sqrt_epsilon":
-                    per_atom_14 = np.sqrt(np.maximum(per_atom_14, 0.0))
+                    particle_14 = np.sqrt(np.maximum(particle_14, 0.0))
             else:
-                per_atom_14 = per_atom
-            self._parameter_arrays[name_14] = per_atom_14.astype(np.float32)
+                particle_14 = particle
+            self._parameter_arrays[name_14] = particle_14.astype(np.float32)
 
         if (
             "sigma_half" in self.expression.parameter_names

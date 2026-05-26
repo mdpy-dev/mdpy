@@ -18,16 +18,21 @@ DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
 
 
 def _setup_mdpy_system(psf_path, pdb_path, prm_path, cutoff=12.0):
-    from mdpy.forcefield.charmm_forcefield import CharmmForcefield
+    from mdpy.io.psf_parser import PSFParser
+    from mdpy.io.pdb_parser import PDBParser
+    from mdpy.io.charmm_toppar_parser import CharmmTopparParser
+    from mdpy.io.charmm_toppar_parser import create_parameter_table
     from mdpy.force.bonded_force import BondedForce
     from mdpy.force.nonbonded_force import NonbondedForce
     from mdpy.force.expressions.lennard_jones import lennard_jones
     from mdpy.force.expressions.coulomb import coulomb
     from mdpy.system import System
 
-    ff = CharmmForcefield(psf_path, pdb_path, prm_path)
-    topology = ff.create_topology()
-    parameter_table = ff.create_parameter_table()
+    psf = PSFParser(psf_path)
+    pdb = PDBParser(pdb_path)
+    toppar = CharmmTopparParser(prm_path)
+    topology = psf.topology
+    parameter_table = create_parameter_table(topology, toppar)
     pbc_matrix = np.eye(3, dtype=np.float64) * 100.0
     pbc_inv = np.linalg.inv(pbc_matrix)
 
@@ -37,7 +42,7 @@ def _setup_mdpy_system(psf_path, pdb_path, prm_path, cutoff=12.0):
     nb.bind(topology, parameter_table, cutoff)
     system.add_force_term(nb)
 
-    raw_positions = ff._pdb.positions.astype(np.float64)
+    raw_positions = pdb.positions.astype(np.float64)
     frac = raw_positions @ pbc_inv
     frac -= np.floor(frac)
     wrapped = frac @ pbc_matrix

@@ -81,7 +81,7 @@ class ParameterPoorDefinedError(Exception):
     - Topology connections' parameter is not defined in selected parameter file
 
     Used in:
-    - mdpy.forcefield.charmm_forcefield
+    - mdpy.io.charmm_toppar_parser
     '''
     pass
 

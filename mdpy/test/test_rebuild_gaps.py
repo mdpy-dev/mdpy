@@ -2,7 +2,10 @@ import numpy as np
 import pytest
 import cupy as cp
 import os
-from mdpy.forcefield.charmm_forcefield import CharmmForcefield
+from mdpy.io.psf_parser import PSFParser
+from mdpy.io.pdb_parser import PDBParser
+from mdpy.io.charmm_toppar_parser import CharmmTopparParser
+from mdpy.io.charmm_toppar_parser import create_parameter_table
 from mdpy.force.bonded_force import BondedForce
 from mdpy.force.nonbonded_force import NonbondedForce
 from mdpy.force.expressions.lennard_jones import lennard_jones
@@ -14,20 +17,20 @@ DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
 
 
 def _make_system(box=30.0, cutoff=12.0):
-    ff = CharmmForcefield(
-        os.path.join(DATA_DIR, '6PO6.psf'),
-        os.path.join(DATA_DIR, '6PO6.pdb'),
-        [os.path.join(DATA_DIR, 'par_all36_prot.prm'),
-         os.path.join(DATA_DIR, 'toppar_water_ions.str')])
-    topology = ff.create_topology()
-    pt = ff.create_parameter_table()
+    psf = PSFParser(os.path.join(DATA_DIR, '6PO6.psf'))
+    pdb = PDBParser(os.path.join(DATA_DIR, '6PO6.pdb'))
+    toppar = CharmmTopparParser(
+        os.path.join(DATA_DIR, 'par_all36_prot.prm'),
+        os.path.join(DATA_DIR, 'toppar_water_ions.str'))
+    topology = psf.topology
+    pt = create_parameter_table(topology, toppar)
     pbc = np.eye(3, dtype=np.float64) * box
     system = System(topology, pbc, cutoff=cutoff)
     system.add_force_term(BondedForce.charmm(topology, pt))
     nb = NonbondedForce(lennard_jones + coulomb)
     nb.bind(topology, pt, cutoff)
     system.add_force_term(nb)
-    raw = ff._pdb.positions.astype(np.float64)
+    raw = pdb.positions.astype(np.float64)
     pbc_inv = np.linalg.inv(pbc)
     frac = raw @ pbc_inv
     frac -= np.floor(frac)

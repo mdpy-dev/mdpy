@@ -10,7 +10,7 @@ from mdpy.force.nonbonded_force import (
 from mdpy.force.nonbonded_force import NonbondedForce
 from mdpy.force.expressions.lennard_jones import lennard_jones
 from mdpy.force.expressions.coulomb import coulomb
-from mdpy.forcefield.parameters import ParameterTable
+from mdpy.core.parameter_table import ParameterTable
 from mdpy.core.topology import Builder
 from mdpy import env
 
@@ -192,38 +192,38 @@ class TestKernelAssembly:
 
 
 class TestParameterTable:
-    def test_add_per_type(self):
+    def test_add_type_parameter(self):
         table = ParameterTable()
-        table.add_per_type('sigma', [3.4, 2.5])
-        assert len(table.per_type['sigma']) == 2
-        assert table.per_type['sigma'][0] == pytest.approx(3.4)
+        table.add_type_parameter('sigma', [3.4, 2.5])
+        assert len(table.type_parameters['sigma']) == 2
+        assert table.type_parameters['sigma'][0] == pytest.approx(3.4)
 
-    def test_add_per_atom(self):
+    def test_add_particle_parameter(self):
         table = ParameterTable()
-        table.add_per_atom('charge', [-0.3, 0.2])
-        assert len(table.per_atom['charge']) == 2
+        table.add_particle_parameter('charge', [-0.3, 0.2])
+        assert len(table.particle_parameters['charge']) == 2
 
-    def test_expand_per_type(self):
+    def test_expand_type_parameter(self):
         table = ParameterTable()
-        table.add_per_type('sigma', [3.4, 2.5, 3.0])
+        table.add_type_parameter('sigma', [3.4, 2.5, 3.0])
         particle_types = np.array([0, 1, 2, 0], dtype=np.int32)
-        per_atom = table.expand_to_per_atom('sigma', particle_types)
+        per_atom = table.expand_to_particle('sigma', particle_types)
         assert per_atom[0] == pytest.approx(3.4)
         assert per_atom[1] == pytest.approx(2.5)
         assert per_atom[2] == pytest.approx(3.0)
         assert per_atom[3] == pytest.approx(3.4)
 
-    def test_expand_per_atom_passthrough(self):
+    def test_expand_particle_passthrough(self):
         table = ParameterTable()
-        table.add_per_atom('charge', [-0.3, 0.2, 0.1])
+        table.add_particle_parameter('charge', [-0.3, 0.2, 0.1])
         particle_types = np.array([0, 1, 2], dtype=np.int32)
-        per_atom = table.expand_to_per_atom('charge', particle_types)
+        per_atom = table.expand_to_particle('charge', particle_types)
         assert per_atom[0] == pytest.approx(-0.3)
 
     def test_expand_missing_raises(self):
         table = ParameterTable()
         with pytest.raises(KeyError):
-            table.expand_to_per_atom('missing', np.array([0], dtype=np.int32))
+            table.expand_to_particle('missing', np.array([0], dtype=np.int32))
 
 
 class TestEdgeCases:

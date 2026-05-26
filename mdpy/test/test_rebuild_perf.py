@@ -2,7 +2,10 @@ import numpy as np
 import pytest
 import cupy as cp
 import os
-from mdpy.forcefield.charmm_forcefield import CharmmForcefield
+from mdpy.io.psf_parser import PSFParser
+from mdpy.io.pdb_parser import PDBParser
+from mdpy.io.charmm_toppar_parser import CharmmTopparParser
+from mdpy.io.charmm_toppar_parser import create_parameter_table
 from mdpy.force.bonded_force import BondedForce
 from mdpy.force.nonbonded_force import NonbondedForce
 from mdpy.force.expressions.lennard_jones import lennard_jones
@@ -16,20 +19,45 @@ DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
 
 
 def _make_system_6po6():
-    ff = CharmmForcefield(
-        os.path.join(DATA_DIR, '6PO6.psf'),
-        os.path.join(DATA_DIR, '6PO6.pdb'),
-        [os.path.join(DATA_DIR, 'par_all36_prot.prm'),
-         os.path.join(DATA_DIR, 'toppar_water_ions.str')])
-    topology = ff.create_topology()
-    pt = ff.create_parameter_table()
+    psf = PSFParser(os.path.join(DATA_DIR, '6PO6.psf'))
+    pdb = PDBParser(os.path.join(DATA_DIR, '6PO6.pdb'))
+    toppar = CharmmTopparParser(
+        os.path.join(DATA_DIR, 'par_all36_prot.prm'),
+        os.path.join(DATA_DIR, 'toppar_water_ions.str'))
+    topology = psf.topology
+    pt = create_parameter_table(topology, toppar)
     pbc = np.eye(3, dtype=np.float64) * 30.0
     system = System(topology, pbc, cutoff=12.0)
     system.add_force_term(BondedForce.charmm(topology, pt))
     nb = NonbondedForce(lennard_jones + coulomb)
     nb.bind(topology, pt, 12.0)
     system.add_force_term(nb)
-    raw = ff._pdb.positions.astype(np.float64)
+    raw = pdb.positions.astype(np.float64)
+    pbc_inv = np.linalg.inv(pbc)
+    frac = raw @ pbc_inv
+    frac -= np.floor(frac)
+    system.particles.positions[:] = frac @ pbc
+    system.particles.velocities[:] = 0.0
+    system.gpu.upload_positions(system.particles)
+    system.gpu.upload_velocities(system.particles)
+    return system, VerletIntegrator(0.5)
+
+
+def _make_system_1m9z():
+    psf = PSFParser(os.path.join(DATA_DIR, '1M9Z.psf'))
+    pdb = PDBParser(os.path.join(DATA_DIR, '1M9Z_minimized.pdb'))
+    toppar = CharmmTopparParser(
+        os.path.join(DATA_DIR, 'par_all36_prot.prm'),
+        os.path.join(DATA_DIR, 'toppar_water_ions.str'))
+    topology = psf.topology
+    pt = create_parameter_table(topology, toppar)
+    pbc = np.eye(3, dtype=np.float64) * 108.0
+    system = System(topology, pbc, cutoff=12.0)
+    system.add_force_term(BondedForce.charmm(topology, pt))
+    nb = NonbondedForce(lennard_jones + coulomb)
+    nb.bind(topology, pt, 12.0)
+    system.add_force_term(nb)
+    raw = pdb.positions.astype(np.float64)
     pbc_inv = np.linalg.inv(pbc)
     frac = raw @ pbc_inv
     frac -= np.floor(frac)
@@ -121,28 +149,7 @@ def test_rebuild_produces_correct_forces_after_gpu_exclusion():
 
 @pytest.mark.slow
 def test_rebuild_1m9z_correctness():
-    ff = CharmmForcefield(
-        os.path.join(DATA_DIR, '1M9Z.psf'),
-        os.path.join(DATA_DIR, '1M9Z_minimized.pdb'),
-        [os.path.join(DATA_DIR, 'par_all36_prot.prm'),
-         os.path.join(DATA_DIR, 'toppar_water_ions.str')])
-    topology = ff.create_topology()
-    pt = ff.create_parameter_table()
-    pbc = np.eye(3, dtype=np.float64) * 108.0
-    system = System(topology, pbc, cutoff=12.0)
-    system.add_force_term(BondedForce.charmm(topology, pt))
-    nb = NonbondedForce(lennard_jones + coulomb)
-    nb.bind(topology, pt, 12.0)
-    system.add_force_term(nb)
-    raw = ff._pdb.positions.astype(np.float64)
-    pbc_inv = np.linalg.inv(pbc)
-    frac = raw @ pbc_inv
-    frac -= np.floor(frac)
-    system.particles.positions[:] = frac @ pbc
-    system.particles.velocities[:] = 0.0
-    system.gpu.upload_positions(system.particles)
-    system.gpu.upload_velocities(system.particles)
-    integrator = VerletIntegrator(0.5)
+    system, integrator = _make_system_1m9z()
 
     system.step(integrator, 10)
     energies = system.dump_energy()

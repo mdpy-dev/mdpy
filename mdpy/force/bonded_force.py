@@ -452,7 +452,7 @@ class BondedForce(ForceTerm):
             if indices is None or indices.shape[0] == 0:
                 continue
 
-            parameters_matrix = parameter_table.get_per_term(term_name)
+            parameters_matrix = parameter_table.get_term_parameter(term_name)
 
             d_indices = cp.asarray(
                 np.ascontiguousarray(indices.astype(np.int32).ravel())

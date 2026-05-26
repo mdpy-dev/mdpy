@@ -32,13 +32,19 @@ def _minimum_image_vector(pos_i, pos_j, box_size):
 
 
 def _setup_system():
-    from mdpy.forcefield.charmm_forcefield import CharmmForcefield
-    ff = CharmmForcefield(PSF_PATH, PDB_PATH, [PRM_PATH, STR_PATH])
-    topology = ff.create_topology()
-    parameter_table = ff.create_parameter_table()
+    from mdpy.io.psf_parser import PSFParser
+    from mdpy.io.pdb_parser import PDBParser
+    from mdpy.io.charmm_toppar_parser import CharmmTopparParser
+    from mdpy.io.charmm_toppar_parser import create_parameter_table
+
+    psf = PSFParser(PSF_PATH)
+    pdb = PDBParser(PDB_PATH)
+    toppar = CharmmTopparParser(PRM_PATH, STR_PATH)
+    topology = psf.topology
+    parameter_table = create_parameter_table(topology, toppar)
     pbc_matrix = np.eye(3, dtype=np.float64) * BOX_SIZE
     pbc_inv = np.linalg.inv(pbc_matrix)
-    raw_positions = ff._pdb.positions.astype(np.float64)
+    raw_positions = pdb.positions.astype(np.float64)
     frac = raw_positions @ pbc_inv
     frac -= np.floor(frac)
     wrapped = frac @ pbc_matrix
@@ -346,25 +352,25 @@ def main():
     flags = compute_exclusion_scaling_flags(topology, pairs_i, pairs_j)
 
     print("\n[3/5] Bonded forces...")
-    bond_params = parameter_table.get_per_term('bond')
+    bond_params = parameter_table.get_term_parameter('bond')
     bond_forces, bond_energy = compute_bond_forces(
         positions, topology.bond_indices, bond_params, BOX_SIZE,
     )
     print(f"  bond energy: {bond_energy:.6f}")
 
-    angle_params = parameter_table.get_per_term('angle')
+    angle_params = parameter_table.get_term_parameter('angle')
     angle_forces, angle_energy = compute_angle_forces(
         positions, topology.angle_indices, angle_params, BOX_SIZE,
     )
     print(f"  angle energy: {angle_energy:.6f}")
 
-    dihedral_params = parameter_table.get_per_term('dihedral')
+    dihedral_params = parameter_table.get_term_parameter('dihedral')
     dihedral_forces, dihedral_energy = compute_dihedral_forces(
         positions, topology.dihedral_indices, dihedral_params, BOX_SIZE,
     )
     print(f"  dihedral energy: {dihedral_energy:.6f}")
 
-    improper_params = parameter_table.get_per_term('improper')
+    improper_params = parameter_table.get_term_parameter('improper')
     improper_forces, improper_energy = compute_improper_forces(
         positions, topology.improper_indices, improper_params, BOX_SIZE,
     )
@@ -374,12 +380,12 @@ def main():
     bonded_energy_total = bond_energy + angle_energy + dihedral_energy + improper_energy
 
     print("\n[4/5] Nonbonded forces...")
-    charges = parameter_table.per_atom['charge'].astype(np.float64)
-    charges_14 = parameter_table.per_atom.get('charge_14', charges).astype(np.float64)
-    sigma = parameter_table.per_type['sigma'].astype(np.float64)
-    epsilon = parameter_table.per_type['epsilon'].astype(np.float64)
-    sigma_14 = parameter_table.per_type.get('sigma_14', sigma).astype(np.float64)
-    epsilon_14 = parameter_table.per_type.get('epsilon_14', epsilon).astype(np.float64)
+    charges = parameter_table.particle_parameters['charge'].astype(np.float64)
+    charges_14 = parameter_table.particle_parameters.get('charge_14', charges).astype(np.float64)
+    sigma = parameter_table.type_parameters['sigma'].astype(np.float64)
+    epsilon = parameter_table.type_parameters['epsilon'].astype(np.float64)
+    sigma_14 = parameter_table.type_parameters.get('sigma_14', sigma).astype(np.float64)
+    epsilon_14 = parameter_table.type_parameters.get('epsilon_14', epsilon).astype(np.float64)
     particle_types = topology.particle_types
 
     nonbonded_forces, nonbonded_energy = compute_nonbonded_forces(

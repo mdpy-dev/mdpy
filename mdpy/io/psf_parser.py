@@ -78,7 +78,8 @@ class PSFParser:
         for i, j, k, l in self._impropers:
             builder.add_improper(i, j, k, l, 0.0, 0.0)
         builder.build_exclusion_map()
-        return builder.build()
+        topology, _ = builder.build()
+        return topology
 
     def get_matrix_id(self, particle_id):
         return self._particle_ids.index(particle_id)

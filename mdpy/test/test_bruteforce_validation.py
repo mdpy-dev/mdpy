@@ -32,16 +32,21 @@ def _load_reference():
 
 
 def _setup_mdpy_system():
-    from mdpy.forcefield.charmm_forcefield import CharmmForcefield
+    from mdpy.io.psf_parser import PSFParser
+    from mdpy.io.pdb_parser import PDBParser
+    from mdpy.io.charmm_toppar_parser import CharmmTopparParser
+    from mdpy.io.charmm_toppar_parser import create_parameter_table
     from mdpy.force.bonded_force import BondedForce
     from mdpy.force.nonbonded_force import NonbondedForce
     from mdpy.force.expressions.lennard_jones import lennard_jones
     from mdpy.force.expressions.coulomb import coulomb
     from mdpy.system import System
 
-    ff = CharmmForcefield(PSF_PATH, PDB_PATH, [PRM_PATH, STR_PATH])
-    topology = ff.create_topology()
-    parameter_table = ff.create_parameter_table()
+    psf = PSFParser(PSF_PATH)
+    pdb = PDBParser(PDB_PATH)
+    toppar = CharmmTopparParser(PRM_PATH, STR_PATH)
+    topology = psf.topology
+    parameter_table = create_parameter_table(topology, toppar)
     pbc_matrix = np.eye(3, dtype=np.float64) * BOX_SIZE
     pbc_inv = np.linalg.inv(pbc_matrix)
 
@@ -51,7 +56,7 @@ def _setup_mdpy_system():
     nb.bind(topology, parameter_table, CUTOFF)
     system.add_force_term(nb)
 
-    raw = ff._pdb.positions.astype(np.float64)
+    raw = pdb.positions.astype(np.float64)
     frac = raw @ pbc_inv
     frac -= np.floor(frac)
     wrapped = frac @ pbc_matrix

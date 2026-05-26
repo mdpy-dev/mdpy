@@ -6,7 +6,7 @@ from mdpy.core.topology import Builder
 from mdpy.core.gpu_context import GPUContext
 from mdpy.core.particle_table import ParticleTable
 from mdpy.core.tile_list import TileList
-from mdpy.forcefield.parameters import ParameterTable
+from mdpy.core.parameter_table import ParameterTable
 from mdpy.force.bonded_force import BondedForce
 from mdpy.system import System
 from mdpy.integrator.verlet import VerletIntegrator
@@ -20,7 +20,7 @@ def _make_large_pbc():
 def _make_parameter_table(term_params):
     pt = ParameterTable()
     for name, values in term_params.items():
-        pt.add_per_term(name, values)
+        pt.add_term_parameter(name, values)
     return pt
 
 

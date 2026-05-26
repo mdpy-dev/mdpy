@@ -3,7 +3,7 @@ import pytest
 
 from mdpy import env
 from mdpy.core.topology import Builder
-from mdpy.forcefield.parameters import ParameterTable
+from mdpy.core.parameter_table import ParameterTable
 from mdpy.force.bonded_force import BondedForce
 
 
@@ -14,7 +14,7 @@ def _make_large_pbc():
 def _make_parameter_table(term_params):
     pt = ParameterTable()
     for name, values in term_params.items():
-        pt.add_per_term(name, values)
+        pt.add_term_parameter(name, values)
     return pt
 
 

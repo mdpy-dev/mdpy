@@ -2,58 +2,46 @@ import os
 import numpy as np
 import pytest
 from mdpy import env
-from mdpy.forcefield.charmm_forcefield import CharmmForcefield
-from mdpy.forcefield.parameters import ParameterTable
+from mdpy.io.psf_parser import PSFParser
+from mdpy.io.pdb_parser import PDBParser
+from mdpy.io.charmm_toppar_parser import CharmmTopparParser
+from mdpy.io.charmm_toppar_parser import create_parameter_table
+from mdpy.core.parameter_table import ParameterTable
+from mdpy.system import System
+from mdpy.force.bonded_force import BondedForce
+from mdpy.force.nonbonded_force import NonbondedForce
+from mdpy.force.expressions.lennard_jones import lennard_jones
+from mdpy.force.expressions.coulomb import coulomb
 from mdpy.integrator.verlet import VerletIntegrator
 
 DATA_DIR = os.path.join(os.path.dirname(__file__), 'data')
 
 
-class TestCharmmForcefieldTopology:
+class TestTopology:
 
     def test_topology_particle_count(self):
-        forcefield = CharmmForcefield(
-            os.path.join(DATA_DIR, '6PO6.psf'),
-            os.path.join(DATA_DIR, '6PO6.pdb'),
-            os.path.join(DATA_DIR, 'par_all36_prot.prm'),
-        )
-        topology = forcefield.create_topology()
+        psf = PSFParser(os.path.join(DATA_DIR, '6PO6.psf'))
+        topology = psf.topology
         assert topology.num_particles == 49
 
     def test_topology_bond_count(self):
-        forcefield = CharmmForcefield(
-            os.path.join(DATA_DIR, '6PO6.psf'),
-            os.path.join(DATA_DIR, '6PO6.pdb'),
-            os.path.join(DATA_DIR, 'par_all36_prot.prm'),
-        )
-        topology = forcefield.create_topology()
+        psf = PSFParser(os.path.join(DATA_DIR, '6PO6.psf'))
+        topology = psf.topology
         assert topology.num_bonds == 49
 
     def test_topology_angle_count(self):
-        forcefield = CharmmForcefield(
-            os.path.join(DATA_DIR, '6PO6.psf'),
-            os.path.join(DATA_DIR, '6PO6.pdb'),
-            os.path.join(DATA_DIR, 'par_all36_prot.prm'),
-        )
-        topology = forcefield.create_topology()
+        psf = PSFParser(os.path.join(DATA_DIR, '6PO6.psf'))
+        topology = psf.topology
         assert topology.num_angles > 0
 
     def test_topology_dihedral_count(self):
-        forcefield = CharmmForcefield(
-            os.path.join(DATA_DIR, '6PO6.psf'),
-            os.path.join(DATA_DIR, '6PO6.pdb'),
-            os.path.join(DATA_DIR, 'par_all36_prot.prm'),
-        )
-        topology = forcefield.create_topology()
+        psf = PSFParser(os.path.join(DATA_DIR, '6PO6.psf'))
+        topology = psf.topology
         assert topology.num_dihedrals > 0
 
     def test_topology_masses_charges_arrays(self):
-        forcefield = CharmmForcefield(
-            os.path.join(DATA_DIR, '6PO6.psf'),
-            os.path.join(DATA_DIR, '6PO6.pdb'),
-            os.path.join(DATA_DIR, 'par_all36_prot.prm'),
-        )
-        topology = forcefield.create_topology()
+        psf = PSFParser(os.path.join(DATA_DIR, '6PO6.psf'))
+        topology = psf.topology
         assert topology.masses.dtype == env.NUMPY_FLOAT
         assert topology.charges.dtype == env.NUMPY_FLOAT
         assert topology.masses.shape == (49,)
@@ -61,108 +49,125 @@ class TestCharmmForcefieldTopology:
         assert np.all(topology.masses > 0)
 
     def test_topology_type_names(self):
-        forcefield = CharmmForcefield(
-            os.path.join(DATA_DIR, '6PO6.psf'),
-            os.path.join(DATA_DIR, '6PO6.pdb'),
-            os.path.join(DATA_DIR, 'par_all36_prot.prm'),
-        )
-        topology = forcefield.create_topology()
+        psf = PSFParser(os.path.join(DATA_DIR, '6PO6.psf'))
+        topology = psf.topology
         assert len(topology.type_names) == 49
         assert len(topology.particle_names) == 49
 
     def test_exclusion_map_built(self):
-        forcefield = CharmmForcefield(
-            os.path.join(DATA_DIR, '6PO6.psf'),
-            os.path.join(DATA_DIR, '6PO6.pdb'),
-            os.path.join(DATA_DIR, 'par_all36_prot.prm'),
-        )
-        topology = forcefield.create_topology()
+        psf = PSFParser(os.path.join(DATA_DIR, '6PO6.psf'))
+        topology = psf.topology
         assert topology.exclusion_offset.shape == (50,)
         assert len(topology.exclusion_neighbors) > 0
 
 
-class TestCharmmForcefieldParameterTable:
+class TestParameterTable:
 
     def test_parameter_table_has_sigma_epsilon(self):
-        forcefield = CharmmForcefield(
-            os.path.join(DATA_DIR, '6PO6.psf'),
-            os.path.join(DATA_DIR, '6PO6.pdb'),
-            os.path.join(DATA_DIR, 'par_all36_prot.prm'),
-        )
-        table = forcefield.create_parameter_table()
-        assert 'sigma' in table.per_type
-        assert 'epsilon' in table.per_type
-        assert 'charge' in table.per_atom
+        psf = PSFParser(os.path.join(DATA_DIR, '6PO6.psf'))
+        toppar = CharmmTopparParser(os.path.join(DATA_DIR, 'par_all36_prot.prm'))
+        topology = psf.topology
+        table = create_parameter_table(topology, toppar)
+        assert 'sigma' in table.type_parameters
+        assert 'epsilon' in table.type_parameters
+        assert 'charge' in table.particle_parameters
 
     def test_parameter_table_values_positive(self):
-        forcefield = CharmmForcefield(
-            os.path.join(DATA_DIR, '6PO6.psf'),
-            os.path.join(DATA_DIR, '6PO6.pdb'),
-            os.path.join(DATA_DIR, 'par_all36_prot.prm'),
-        )
-        table = forcefield.create_parameter_table()
-        sigma = table.per_type['sigma']
-        epsilon = table.per_type['epsilon']
+        psf = PSFParser(os.path.join(DATA_DIR, '6PO6.psf'))
+        toppar = CharmmTopparParser(os.path.join(DATA_DIR, 'par_all36_prot.prm'))
+        topology = psf.topology
+        table = create_parameter_table(topology, toppar)
+        sigma = table.type_parameters['sigma']
+        epsilon = table.type_parameters['epsilon']
         assert np.all(sigma > 0)
         assert np.all(epsilon > 0)
 
-    def test_parameter_table_charge_per_atom(self):
-        forcefield = CharmmForcefield(
-            os.path.join(DATA_DIR, '6PO6.psf'),
-            os.path.join(DATA_DIR, '6PO6.pdb'),
-            os.path.join(DATA_DIR, 'par_all36_prot.prm'),
-        )
-        table = forcefield.create_parameter_table()
-        charges = table.per_atom['charge']
+    def test_parameter_table_charge_particle(self):
+        psf = PSFParser(os.path.join(DATA_DIR, '6PO6.psf'))
+        toppar = CharmmTopparParser(os.path.join(DATA_DIR, 'par_all36_prot.prm'))
+        topology = psf.topology
+        table = create_parameter_table(topology, toppar)
+        charges = table.particle_parameters['charge']
         assert charges.shape == (49,)
 
     def test_sigma_conversion_factor(self):
-        forcefield = CharmmForcefield(
-            os.path.join(DATA_DIR, '6PO6.psf'),
-            os.path.join(DATA_DIR, '6PO6.pdb'),
-            os.path.join(DATA_DIR, 'par_all36_prot.prm'),
-        )
-        table = forcefield.create_parameter_table()
         from mdpy.io.charmm_toppar_parser import RMIN_TO_SIGMA_FACTOR
         expected_factor = float(2**(-1/6))
         assert abs(float(RMIN_TO_SIGMA_FACTOR) - expected_factor) < 1e-6
 
 
-class TestCharmmForcefieldSystem:
+class TestSystem:
 
     def test_create_system(self):
-        forcefield = CharmmForcefield(
-            os.path.join(DATA_DIR, '6PO6.psf'),
-            os.path.join(DATA_DIR, '6PO6.pdb'),
-            os.path.join(DATA_DIR, 'par_all36_prot.prm'),
-        )
+        psf = PSFParser(os.path.join(DATA_DIR, '6PO6.psf'))
+        pdb = PDBParser(os.path.join(DATA_DIR, '6PO6.pdb'))
+        toppar = CharmmTopparParser(os.path.join(DATA_DIR, 'par_all36_prot.prm'))
+        topology = psf.topology
+        parameter_table = create_parameter_table(topology, toppar)
         pbc_matrix = np.eye(3, dtype=env.NUMPY_FLOAT) * 100.0
-        system = forcefield.create_system(pbc_matrix=pbc_matrix)
+
+        system = System(topology, pbc_matrix)
+        system.add_force_term(BondedForce.charmm(topology, parameter_table))
+        nb = NonbondedForce(lennard_jones + coulomb)
+        nb.bind(topology, parameter_table, system.cutoff)
+        system.add_force_term(nb)
+        pbc_inv = np.linalg.inv(pbc_matrix)
+        raw = pdb.positions.astype(np.float64)
+        frac = raw @ pbc_inv
+        frac -= np.floor(frac)
+        system.particles.positions[:] = frac @ pbc_matrix
+        system.gpu.upload_positions(system.particles)
+
         assert system.topology.num_particles == 49
         assert len(system.force_terms) == 2
         assert np.all(np.isfinite(system.particles.positions))
 
     def test_system_compute_forces(self):
-        forcefield = CharmmForcefield(
-            os.path.join(DATA_DIR, '6PO6.psf'),
-            os.path.join(DATA_DIR, '6PO6.pdb'),
-            os.path.join(DATA_DIR, 'par_all36_prot.prm'),
-        )
+        psf = PSFParser(os.path.join(DATA_DIR, '6PO6.psf'))
+        pdb = PDBParser(os.path.join(DATA_DIR, '6PO6.pdb'))
+        toppar = CharmmTopparParser(os.path.join(DATA_DIR, 'par_all36_prot.prm'))
+        topology = psf.topology
+        parameter_table = create_parameter_table(topology, toppar)
         pbc_matrix = np.eye(3, dtype=env.NUMPY_FLOAT) * 100.0
-        system = forcefield.create_system(pbc_matrix=pbc_matrix)
+
+        system = System(topology, pbc_matrix)
+        system.add_force_term(BondedForce.charmm(topology, parameter_table))
+        nb = NonbondedForce(lennard_jones + coulomb)
+        nb.bind(topology, parameter_table, system.cutoff)
+        system.add_force_term(nb)
+        pbc_inv = np.linalg.inv(pbc_matrix)
+        raw = pdb.positions.astype(np.float64)
+        frac = raw @ pbc_inv
+        frac -= np.floor(frac)
+        system.particles.positions[:] = frac @ pbc_matrix
+        system.gpu.upload_positions(system.particles)
+
         system.compute_forces()
         assert all(np.isfinite(v) for v in system.dump_energy().values())
         assert sum(system.dump_energy().values()) != 0.0
         assert np.all(np.isfinite(system.particles.forces))
 
     def test_system_100_steps(self):
-        forcefield = CharmmForcefield(
-            os.path.join(DATA_DIR, '6PO6.psf'),
-            os.path.join(DATA_DIR, '6PO6.pdb'),
-            os.path.join(DATA_DIR, 'par_all36_prot.prm'),
-        )
+        psf = PSFParser(os.path.join(DATA_DIR, '6PO6.psf'))
+        pdb = PDBParser(os.path.join(DATA_DIR, '6PO6.pdb'))
+        toppar = CharmmTopparParser(os.path.join(DATA_DIR, 'par_all36_prot.prm'))
+        topology = psf.topology
+        parameter_table = create_parameter_table(topology, toppar)
         pbc_matrix = np.eye(3, dtype=env.NUMPY_FLOAT) * 100.0
-        system = forcefield.create_system(pbc_matrix=pbc_matrix)
+
+        system = System(topology, pbc_matrix)
+        system.add_force_term(BondedForce.charmm(topology, parameter_table))
+        nb = NonbondedForce(lennard_jones + coulomb)
+        nb.bind(topology, parameter_table, system.cutoff)
+        system.add_force_term(nb)
+        pbc_inv = np.linalg.inv(pbc_matrix)
+        raw = pdb.positions.astype(np.float64)
+        frac = raw @ pbc_inv
+        frac -= np.floor(frac)
+        system.particles.positions[:] = frac @ pbc_matrix
+        system.gpu.upload_positions(system.particles)
+        system.gpu.upload_velocities(system.particles)
+
         integrator = VerletIntegrator(time_step=0.5)
         energies = []
         for step in range(100):
@@ -172,36 +177,44 @@ class TestCharmmForcefieldSystem:
         assert system.step_count == 100
 
     def test_bond_energy_finite(self):
-        forcefield = CharmmForcefield(
-            os.path.join(DATA_DIR, '6PO6.psf'),
-            os.path.join(DATA_DIR, '6PO6.pdb'),
-            os.path.join(DATA_DIR, 'par_all36_prot.prm'),
-        )
+        psf = PSFParser(os.path.join(DATA_DIR, '6PO6.psf'))
+        pdb = PDBParser(os.path.join(DATA_DIR, '6PO6.pdb'))
+        toppar = CharmmTopparParser(os.path.join(DATA_DIR, 'par_all36_prot.prm'))
+        topology = psf.topology
+        parameter_table = create_parameter_table(topology, toppar)
         pbc_matrix = np.eye(3, dtype=env.NUMPY_FLOAT) * 100.0
-        system = forcefield.create_system(pbc_matrix=pbc_matrix)
+
+        system = System(topology, pbc_matrix)
+        system.add_force_term(BondedForce.charmm(topology, parameter_table))
+        nb = NonbondedForce(lennard_jones + coulomb)
+        nb.bind(topology, parameter_table, system.cutoff)
+        system.add_force_term(nb)
+        pbc_inv = np.linalg.inv(pbc_matrix)
+        raw = pdb.positions.astype(np.float64)
+        frac = raw @ pbc_inv
+        frac -= np.floor(frac)
+        system.particles.positions[:] = frac @ pbc_matrix
+        system.gpu.upload_positions(system.particles)
+
         system.compute_forces()
         energies = system.dump_energy()
         assert 'bonded' in energies
         assert np.isfinite(energies['bonded'])
 
     def test_dihedral_multi_term(self):
-        forcefield = CharmmForcefield(
-            os.path.join(DATA_DIR, '6PO6.psf'),
-            os.path.join(DATA_DIR, '6PO6.pdb'),
-            os.path.join(DATA_DIR, 'par_all36_prot.prm'),
-        )
-        topology = forcefield.create_topology()
-        psf = forcefield._psf
+        psf = PSFParser(os.path.join(DATA_DIR, '6PO6.psf'))
+        toppar = CharmmTopparParser(os.path.join(DATA_DIR, 'par_all36_prot.prm'))
+        topology = psf.topology
         assert topology.num_dihedrals >= psf.num_dihedrals
 
 
-class TestCharmmForcefieldMissingParameters:
+class TestMissingParameters:
 
     def test_missing_bond_skipped(self):
-        forcefield = CharmmForcefield(
-            os.path.join(DATA_DIR, '6PO6.psf'),
-            os.path.join(DATA_DIR, '6PO6.pdb'),
-            os.path.join(DATA_DIR, 'par_all36_prot.prm'),
-        )
-        topology = forcefield.create_topology()
+        psf = PSFParser(os.path.join(DATA_DIR, '6PO6.psf'))
+        toppar = CharmmTopparParser(os.path.join(DATA_DIR, 'par_all36_prot.prm'))
+        topology = psf.topology
+        parameter_table = create_parameter_table(topology, toppar)
+        bond_params = parameter_table.get_term_parameter('bond')
         assert topology.num_bonds > 0
+        assert bond_params.shape[0] == topology.num_bonds
