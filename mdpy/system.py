@@ -145,6 +145,11 @@ class System:
             self._d_cached_unique_j = result[4]
             self._d_cached_unique_scale = result[5]
         else:
+            remap_np = cp.asnumpy(d_remap)
+            for field in ('bond_indices', 'angle_indices', 'dihedral_indices', 'improper_indices'):
+                indices = getattr(self.topology, field, None)
+                if indices is not None and len(indices) > 0:
+                    setattr(self.topology, field, remap_np[indices])
             d_excl_offset, d_excl_neighbors, d_excl_scale, d_unique_i = build_exclusion_map_gpu(self.topology, scale_14=1.0)
             self._d_cached_unique_i = d_unique_i
             self._d_cached_unique_j = d_excl_neighbors
