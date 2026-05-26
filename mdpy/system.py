@@ -100,6 +100,20 @@ class System:
         integrator.step(self.gpu)
         self.gpu.refresh_wrapped_positions()
 
+    def _capture_step_graph(self, integrator):
+        if self._step_graph is not None:
+            del self._step_graph
+            self._step_graph = None
+
+        s = self._graph_stream
+        with s:
+            s.begin_capture()
+            self._emit_step_kernels(integrator)
+            self._step_graph = s.end_capture()
+
+        self._cached_integrator_id = id(integrator)
+        self._graph_needs_capture = False
+
     def dump_energy(self):
         if self.gpu.d_energy_accumulator is None:
             return {}
