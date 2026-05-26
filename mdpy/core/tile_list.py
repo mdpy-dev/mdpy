@@ -231,25 +231,6 @@ void check_rebuild_kernel(
 }
 """
 
-_FUSED_COPY3_KERNEL = r"""
-extern "C" __global__
-void fused_copy3_kernel(
-    const float* __restrict__ src0,
-    const float* __restrict__ src1,
-    const float* __restrict__ src2,
-    int num_elements,
-    float* __restrict__ dst0,
-    float* __restrict__ dst1,
-    float* __restrict__ dst2
-) {
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (idx >= num_elements) return;
-    dst0[idx] = src0[idx];
-    dst1[idx] = src1[idx];
-    dst2[idx] = src2[idx];
-}
-"""
-
 _FIND_INTERACTING_BLOCKS_KERNEL = r"""
 extern "C" __global__ __launch_bounds__(256, 3)
 void find_interacting_blocks_kernel(
@@ -764,21 +745,6 @@ class TileList:
         self._d_excl_scale = cp.asarray(
             np.ascontiguousarray(topology.exclusion_scale, dtype=env.NUMPY_FLOAT)
         )
-
-    def fused_copy3(self, src0, src1, src2):
-        N = src0.size
-        self._ensure_kernels()
-        tpb = 256
-        grid = ((N + tpb - 1) // tpb,)
-        dst0 = cp.empty(N, dtype=env.NUMPY_FLOAT)
-        dst1 = cp.empty(N, dtype=env.NUMPY_FLOAT)
-        dst2 = cp.empty(N, dtype=env.NUMPY_FLOAT)
-        self._kernels["fused_copy3"](
-            grid,
-            (tpb,),
-            (src0, src1, src2, np.int32(N), dst0, dst1, dst2),
-        )
-        return dst0, dst1, dst2
 
     def _rebuild_core(self, positions, topology, pbc_matrix, pbc_inv):
         N = topology.num_particles

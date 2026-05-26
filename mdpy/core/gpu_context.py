@@ -102,6 +102,7 @@ void inverse_permute_kernel(
 }
 """
 
+
 class GPUContext:
 
     def __init__(self):
@@ -275,12 +276,8 @@ class GPUContext:
         self.d_prev_positions_y = cp.zeros(number, dtype=float_dtype)
         self.d_prev_positions_z = cp.zeros(number, dtype=float_dtype)
 
-        self.d_masses = cp.asarray(
-            topology.masses.astype(float_dtype)
-        )
-        self.d_types = cp.asarray(
-            topology.particle_types.astype(int_dtype)
-        )
+        self.d_masses = cp.asarray(topology.masses.astype(float_dtype))
+        self.d_types = cp.asarray(topology.particle_types.astype(int_dtype))
         self.d_energy = cp.zeros(1, dtype=float_dtype)
         self.d_energy_accumulator = None
 
@@ -297,46 +294,51 @@ class GPUContext:
         box_x = abs(float(pbc_2d[0, 0]))
         box_y = abs(float(pbc_2d[1, 1]))
         box_z = abs(float(pbc_2d[2, 2]))
-        self._set_box_dims_once(box_x, box_y, box_z)
+        self.set_box_dims(box_x, box_y, box_z)
 
     def upload_positions(self, particle_table):
-        data = np.ascontiguousarray(
-            particle_table.positions.astype(np.float32)
-        )
+        data = np.ascontiguousarray(particle_table.positions.astype(np.float32))
         self.d_positions_x[:] = cp.asarray(data[:, 0])
         self.d_positions_y[:] = cp.asarray(data[:, 1])
         self.d_positions_z[:] = cp.asarray(data[:, 2])
 
     def upload_velocities(self, particle_table):
-        data = np.ascontiguousarray(
-            particle_table.velocities.astype(np.float32)
-        )
+        data = np.ascontiguousarray(particle_table.velocities.astype(np.float32))
         self.d_velocities_x[:] = cp.asarray(data[:, 0])
         self.d_velocities_y[:] = cp.asarray(data[:, 1])
         self.d_velocities_z[:] = cp.asarray(data[:, 2])
 
     def download_positions(self, particle_table):
-        pos = np.stack([
-            self.d_positions_x.get(),
-            self.d_positions_y.get(),
-            self.d_positions_z.get(),
-        ], axis=1)
+        pos = np.stack(
+            [
+                self.d_positions_x.get(),
+                self.d_positions_y.get(),
+                self.d_positions_z.get(),
+            ],
+            axis=1,
+        )
         particle_table.positions[:] = pos
 
     def download_velocities(self, particle_table):
-        vel = np.stack([
-            self.d_velocities_x.get(),
-            self.d_velocities_y.get(),
-            self.d_velocities_z.get(),
-        ], axis=1)
+        vel = np.stack(
+            [
+                self.d_velocities_x.get(),
+                self.d_velocities_y.get(),
+                self.d_velocities_z.get(),
+            ],
+            axis=1,
+        )
         particle_table.velocities[:] = vel
 
     def download_forces(self, particle_table):
-        frc = np.stack([
-            self.d_forces_x.get(),
-            self.d_forces_y.get(),
-            self.d_forces_z.get(),
-        ], axis=1)
+        frc = np.stack(
+            [
+                self.d_forces_x.get(),
+                self.d_forces_y.get(),
+                self.d_forces_z.get(),
+            ],
+            axis=1,
+        )
         particle_table.forces[:] = frc
 
     def zero_forces(self):
@@ -357,16 +359,20 @@ class GPUContext:
         return (self.d_positions_x, self.d_positions_y, self.d_positions_z)
 
     def set_box_dims(self, box_x, box_y, box_z):
-        self._set_box_dims_once(box_x, box_y, box_z)
-
-    def _set_box_dims_once(self, box_x, box_y, box_z):
         self._box_x = float(box_x)
         self._box_y = float(box_y)
         self._box_z = float(box_z)
         self._inv_box_x = 1.0 / self._box_x
         self._inv_box_y = 1.0 / self._box_y
         self._inv_box_z = 1.0 / self._box_z
-        self.d_box_dims[:] = cp.array([
-            self._box_x, self._box_y, self._box_z,
-            self._inv_box_x, self._inv_box_y, self._inv_box_z
-        ], dtype=np.float32)
+        self.d_box_dims[:] = cp.array(
+            [
+                self._box_x,
+                self._box_y,
+                self._box_z,
+                self._inv_box_x,
+                self._inv_box_y,
+                self._inv_box_z,
+            ],
+            dtype=np.float32,
+        )
