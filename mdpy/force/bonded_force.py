@@ -489,12 +489,12 @@ class BondedForce(ForceTerm):
         active_terms = [td for td in self._term_data if td['count'] > 0]
         if not active_terms:
             return
-        all_indices = cp.concatenate([td['d_indices'].ravel() for td in active_terms])
+        all_indices = cp.concatenate([td['d_indices'] for td in active_terms])
         remapped = d_remap[all_indices]
         offset = 0
         for td in active_terms:
             n_elem = td['d_indices'].size
-            td['d_indices'] = remapped[offset:offset + n_elem].reshape(td['d_indices'].shape)
+            td['d_indices'] = remapped[offset:offset + n_elem].reshape(td['d_indices'].shape).copy()
             offset += n_elem
 
     def _ensure_compiled(self):
