@@ -57,7 +57,8 @@ void permute_state_arrays_kernel(
     const float* __restrict__ src6, const float* __restrict__ src7,
     const float* __restrict__ src8, const float* __restrict__ src9,
     const float* __restrict__ src10, const float* __restrict__ src11,
-    const float* __restrict__ src12,
+    const float* __restrict__ src12, const float* __restrict__ src13,
+    const float* __restrict__ src14, const float* __restrict__ src15,
     const int* __restrict__ permutation,
     int num_particles,
     float* __restrict__ dst0, float* __restrict__ dst1,
@@ -66,7 +67,8 @@ void permute_state_arrays_kernel(
     float* __restrict__ dst6, float* __restrict__ dst7,
     float* __restrict__ dst8, float* __restrict__ dst9,
     float* __restrict__ dst10, float* __restrict__ dst11,
-    float* __restrict__ dst12
+    float* __restrict__ dst12, float* __restrict__ dst13,
+    float* __restrict__ dst14, float* __restrict__ dst15
 ) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= num_particles) return;
@@ -84,6 +86,9 @@ void permute_state_arrays_kernel(
     dst10[idx] = src10[src_idx];
     dst11[idx] = src11[src_idx];
     dst12[idx] = src12[src_idx];
+    dst13[idx] = src13[src_idx];
+    dst14[idx] = src14[src_idx];
+    dst15[idx] = src15[src_idx];
 }
 """
 
@@ -261,8 +266,8 @@ class GPUContext:
 
     def permute_state_arrays(self, permutation, name_array_pairs):
         assert (
-            len(name_array_pairs) == 13
-        ), f"permute_state_arrays requires 13 arrays, got {len(name_array_pairs)}"
+            len(name_array_pairs) == 16
+        ), f"permute_state_arrays requires 16 arrays, got {len(name_array_pairs)}"
         name_list = [p[0] for p in name_array_pairs]
         src_list = [p[1] for p in name_array_pairs]
         N = permutation.size
@@ -289,6 +294,9 @@ class GPUContext:
                 src_list[10],
                 src_list[11],
                 src_list[12],
+                src_list[13],
+                src_list[14],
+                src_list[15],
                 permutation,
                 np.int32(N),
                 dst_list[0],
@@ -304,6 +312,9 @@ class GPUContext:
                 dst_list[10],
                 dst_list[11],
                 dst_list[12],
+                dst_list[13],
+                dst_list[14],
+                dst_list[15],
             ),
         )
         return list(zip(name_list, dst_list))

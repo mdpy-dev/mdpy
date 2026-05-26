@@ -120,10 +120,11 @@ class System:
             ("d_prev_positions_y", gpu.d_prev_positions_y),
             ("d_prev_positions_z", gpu.d_prev_positions_z),
             ("d_masses", gpu.d_masses),
+            ("d_wrapped_positions_x", gpu.d_wrapped_positions_x),
+            ("d_wrapped_positions_y", gpu.d_wrapped_positions_y),
+            ("d_wrapped_positions_z", gpu.d_wrapped_positions_z),
         ]):
             setattr(gpu, name, new_arr)
-
-        gpu.refresh_wrapped_positions()
 
         d_remap = tl.d_pdb_to_sorted
 
