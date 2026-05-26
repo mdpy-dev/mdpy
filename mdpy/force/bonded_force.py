@@ -485,17 +485,11 @@ class BondedForce(ForceTerm):
         bonded.bind(topology, parameter_table)
         return bonded
 
-    def remap_indices(self, topology):
+    def remap_indices_gpu(self, d_remap):
         for term_data in self._term_data:
-            term_name = term_data['name']
-            indices_field = f'{term_name}_indices'
-            indices = getattr(topology, indices_field, None)
-            if indices is None or indices.shape[0] == 0:
+            if term_data['count'] == 0:
                 continue
-            term_data['d_indices'] = cp.asarray(
-                np.ascontiguousarray(indices.astype(np.int32).ravel())
-            )
-            term_data['count'] = indices.shape[0]
+            term_data['d_indices'] = d_remap[term_data['d_indices']]
 
     def _ensure_compiled(self):
         if self._kernel is not None:
