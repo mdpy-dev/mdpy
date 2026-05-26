@@ -320,3 +320,7 @@ class System:
     @property
     def step_count(self):
         return self._step_count
+
+    def __del__(self):
+        if hasattr(self, '_step_graph') and self._step_graph is not None:
+            del self._step_graph
