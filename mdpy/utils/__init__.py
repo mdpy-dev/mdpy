@@ -11,6 +11,7 @@ from mdpy.utils.geometry import generate_rotation_matrix
 from mdpy.utils.pbc import check_pbc_matrix
 from mdpy.utils.pbc import wrap_positions, unwrap_vec
 from mdpy.utils.check_quantity import check_quantity, check_quantity_value
+from mdpy.utils.velocity import generate_velocity_from_temperature
 
 __all__ = [
     'get_unit_vec', 'get_norm_vec',
@@ -21,4 +22,5 @@ __all__ = [
     'check_pbc_matrix',
     'wrap_positions', 'unwrap_vec',
     'check_quantity', 'check_quantity_value',
+    'generate_velocity_from_temperature',
 ]
