@@ -27,6 +27,7 @@ class ParameterTable:
         self.type_parameters = {}
         self.particle_parameters = {}
         self.term_parameters = {}
+        self.type_pair_parameters = {}
 
     def add_type_parameter(self, name, values):
         """Store a parameter indexed by particle type.
@@ -53,6 +54,19 @@ class ParameterTable:
                  (e.g. [force_constant, equilibrium_distance]).
         """
         self.term_parameters[name] = np.asarray(values, dtype=env.NUMPY_FLOAT)
+
+    def add_type_pair_parameter(self, name, values):
+        """Store a parameter indexed by type pair (flattened n_type × n_type matrix).
+
+        name   : str — parameter name, e.g. ``'sigma_ij'``.
+        values : 1D array of shape (num_types * num_types,).
+                 Indexed as ``values[type_i * num_types + type_j]``.
+        """
+        self.type_pair_parameters[name] = np.asarray(values, dtype=env.NUMPY_FLOAT)
+
+    def get_type_pair_parameter(self, name):
+        """Retrieve a type-pair parameter array by name."""
+        return self.type_pair_parameters[name]
 
     def get_term_parameter(self, name):
         """Retrieve a term parameter array by term type name."""

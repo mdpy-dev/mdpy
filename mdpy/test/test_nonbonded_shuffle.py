@@ -44,7 +44,7 @@ class TestExclusionTileKernel:
 
     def test_kernel_has_param_select(self, combined_expr):
         source = combined_expr.assemble_tile_kernel()
-        assert 'sigma_half_i_saved' in source
+        assert 'charge_i_saved' in source
 
 
 class TestNonbondedForceCompute:

@@ -1,14 +1,12 @@
-from mdpy.force.nonbonded_force import nonbonded_expression, Parameter
+from mdpy.force.nonbonded_force import nonbonded_expression, PairParameter
 
 
 @nonbonded_expression
-def lennard_jones(r, atom_i, atom_j, sigma_half=Parameter(), sqrt_epsilon=Parameter()):
-    sigma_ij = sigma_half[atom_i] + sigma_half[atom_j]
-    epsilon_ij = sqrt_epsilon[atom_i] * sqrt_epsilon[atom_j]
-    sr = sigma_ij / r
+def lennard_jones(r, atom_i, atom_j, sigma_ij_pair=PairParameter(), epsilon_ij_pair=PairParameter()):
+    sr = sigma_ij_pair / r
     sr6 = sr**6
     sr12 = sr6 * sr6
     dsr = sr12 - sr6
-    energy = 4.0 * epsilon_ij * (dsr)
-    force_magnitude = -24.0 * epsilon_ij * (dsr + sr12) / r
+    energy = 4.0 * epsilon_ij_pair * (dsr)
+    force_magnitude = -24.0 * epsilon_ij_pair * (dsr + sr12) / r
     return energy, force_magnitude

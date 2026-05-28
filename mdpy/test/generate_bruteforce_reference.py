@@ -286,8 +286,8 @@ def compute_improper_forces(positions, improper_indices, improper_params, box_si
 
 def compute_nonbonded_forces(
     positions, pairs_i, pairs_j, exclusion_flags,
-    charges, charges_14, sigma, epsilon, sigma_14, epsilon_14,
-    particle_types, box_size,
+    charges, charges_14, sigma_ij, epsilon_ij, sigma_ij_14, epsilon_ij_14,
+    particle_types, box_size, n_types,
 ):
     N = len(positions)
     forces = np.zeros((N, 3), dtype=np.float64)
@@ -310,26 +310,24 @@ def compute_nonbonded_forces(
         r = np.linalg.norm(delta)
         if r < 1e-12:
             continue
+        ti = particle_types[i]
+        tj = particle_types[j]
         if flag == 2:
             qi = charges_14[i]
             qj = charges_14[j]
-            ti = particle_types[i]
-            tj = particle_types[j]
-            sig_ij = 0.5 * (sigma_14[ti] + sigma_14[tj])
-            eps_ij = np.sqrt(epsilon_14[ti] * epsilon_14[tj])
+            sig = sigma_ij_14[ti * n_types + tj]
+            eps = epsilon_ij_14[ti * n_types + tj]
         else:
             qi = charges[i]
             qj = charges[j]
-            ti = particle_types[i]
-            tj = particle_types[j]
-            sig_ij = 0.5 * (sigma[ti] + sigma[tj])
-            eps_ij = np.sqrt(epsilon[ti] * epsilon[tj])
-        sr = sig_ij / r
+            sig = sigma_ij[ti * n_types + tj]
+            eps = epsilon_ij[ti * n_types + tj]
+        sr = sig / r
         sr6 = sr ** 6
         sr12 = sr6 * sr6
-        e_lj = 4.0 * eps_ij * (sr12 - sr6)
+        e_lj = 4.0 * eps * (sr12 - sr6)
         e_coul = COULOMB_CONSTANT * qi * qj / r
-        f_lj = -24.0 * eps_ij * (2.0 * sr12 - sr6) / r
+        f_lj = -24.0 * eps * (2.0 * sr12 - sr6) / r
         f_coul = -COULOMB_CONSTANT * qi * qj / (r * r)
         f_total = (f_lj + f_coul) / r * delta
         forces[i] += f_total
@@ -382,16 +380,17 @@ def main():
     print("\n[4/5] Nonbonded forces...")
     charges = parameter_table.particle_parameters['charge'].astype(np.float64)
     charges_14 = parameter_table.particle_parameters.get('charge_14', charges).astype(np.float64)
-    sigma = parameter_table.type_parameters['sigma'].astype(np.float64)
-    epsilon = parameter_table.type_parameters['epsilon'].astype(np.float64)
-    sigma_14 = parameter_table.type_parameters.get('sigma_14', sigma).astype(np.float64)
-    epsilon_14 = parameter_table.type_parameters.get('epsilon_14', epsilon).astype(np.float64)
+    sigma_ij = parameter_table.type_pair_parameters['sigma_ij'].astype(np.float64)
+    epsilon_ij = parameter_table.type_pair_parameters['epsilon_ij'].astype(np.float64)
+    sigma_ij_14 = parameter_table.type_pair_parameters.get('sigma_ij_14', sigma_ij).astype(np.float64)
+    epsilon_ij_14 = parameter_table.type_pair_parameters.get('epsilon_ij_14', epsilon_ij).astype(np.float64)
+    n_types = int(np.sqrt(len(sigma_ij)))
     particle_types = topology.particle_types
 
     nonbonded_forces, nonbonded_energy = compute_nonbonded_forces(
         positions, pairs_i, pairs_j, flags,
-        charges, charges_14, sigma, epsilon, sigma_14, epsilon_14,
-        particle_types, BOX_SIZE,
+        charges, charges_14, sigma_ij, epsilon_ij, sigma_ij_14, epsilon_ij_14,
+        particle_types, BOX_SIZE, n_types,
     )
     print(f"  nonbonded energy: {nonbonded_energy:.6f}")
 

@@ -16,6 +16,11 @@ class Parameter:
         return self
 
 
+class PairParameter:
+    def __getitem__(self, index):
+        return self
+
+
 _MATH_FUNCTIONS = {
     "sqrt": "sqrtf",
     "exp": "expf",
@@ -101,9 +106,10 @@ void pack_sorted_posq_kernel(
 
 
 class _Transpiler(ast.NodeVisitor):
-    def __init__(self, index_names, parameter_names, distance_name):
+    def __init__(self, index_names, parameter_names, pair_parameter_names, distance_name):
         self.index_names = index_names
         self.parameter_names = set(parameter_names)
+        self.pair_parameter_names = set(pair_parameter_names)
         self.distance_name = distance_name
         self.lines = []
         self.local_variables = set()
@@ -203,6 +209,8 @@ class _Transpiler(ast.NodeVisitor):
         if not isinstance(node.value, ast.Name):
             raise NotImplementedError("Only simple name subscripts supported")
         param_name = node.value.id
+        if param_name in self.pair_parameter_names:
+            return param_name
         if param_name not in self.parameter_names:
             raise ValueError(f"{param_name} is not a declared Parameter")
         if not isinstance(node.slice, ast.Name):
@@ -275,6 +283,7 @@ class NonbondedExpression:
         ast_tree,
         index_names,
         parameter_names,
+        pair_parameter_names,
         distance_name,
         cuda_fragment,
         local_variables,
@@ -285,16 +294,24 @@ class NonbondedExpression:
         self.ast_tree = ast_tree
         self.index_names = index_names
         self.parameter_names = parameter_names
+        self.pair_parameter_names = pair_parameter_names
         self.distance_name = distance_name
         self.cuda_fragment = cuda_fragment
         self.local_variables = local_variables
         self.needs_r = needs_r
+
+    @property
+    def per_particle_parameter_names(self):
+        return [p for p in self.parameter_names if p not in self.pair_parameter_names]
 
     def __add__(self, other):
         if not isinstance(other, NonbondedExpression):
             return NotImplemented
         merged_params = list(
             dict.fromkeys(self.parameter_names + other.parameter_names)
+        )
+        merged_pair_params = list(
+            dict.fromkeys(self.pair_parameter_names + other.pair_parameter_names)
         )
         suffix = "_2"
         other_locals = set()
@@ -340,6 +357,7 @@ class NonbondedExpression:
             ast_tree=None,
             index_names=self.index_names,
             parameter_names=merged_params,
+            pair_parameter_names=merged_pair_params,
             distance_name=self.distance_name,
             cuda_fragment=combined_fragment,
             local_variables=combined_locals,
@@ -351,14 +369,14 @@ class NonbondedExpression:
         if "_result_energy_1" not in fragment:
             fragment += "\nfloat energy_val = _result_energy;"
             fragment += "\nfloat force_magnitude = _result_force;"
-        return _assemble_exclusion_tile_kernel(self.parameter_names, fragment, self.needs_r)
+        return _assemble_exclusion_tile_kernel(self.parameter_names, self.pair_parameter_names, fragment, self.needs_r)
 
     def assemble_main_tile_kernel(self):
         fragment = self.cuda_fragment
         if "_result_energy_1" not in fragment:
             fragment += "\nfloat energy_val = _result_energy;"
             fragment += "\nfloat force_magnitude = _result_force;"
-        return _assemble_main_tile_kernel(self.parameter_names, fragment, self.needs_r)
+        return _assemble_main_tile_kernel(self.parameter_names, self.pair_parameter_names, fragment, self.needs_r)
 
 
 def _rename_output_vars(cuda_fragment, tag):
@@ -398,6 +416,14 @@ def _is_parameter_call(node):
         isinstance(node, ast.Call)
         and isinstance(node.func, ast.Name)
         and node.func.id == "Parameter"
+    )
+
+
+def _is_pair_parameter_call(node):
+    return (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "PairParameter"
     )
 
 
@@ -511,6 +537,42 @@ def _generate_parameter_restore_exclusion(parameter_names):
         lines.append(f"if (is_14) {name}_i = {name}_i_saved;")
         lines.append(f"if (is_14) {name}_j = {name}_j_saved;")
     return "\n            ".join(lines)
+
+
+def _generate_pair_parameter_declarations(pair_parameter_names):
+    if not pair_parameter_names:
+        return ""
+    decls = ""
+    for name in pair_parameter_names:
+        decls += f",\n    const float* __restrict__ {name}_arr"
+        decls += f",\n    const float* __restrict__ {name}_14_arr"
+    decls += ",\n    const int* __restrict__ d_types"
+    decls += ",\n    int n_types"
+    return decls
+
+
+def _generate_pair_parameter_load_exclusion(pair_parameter_names):
+    if not pair_parameter_names:
+        return ""
+    lines = []
+    lines.append("int type_i = d_types[gi];")
+    lines.append("int type_j = d_types[atom_indices_shared[tbx + tj]];")
+    for name in pair_parameter_names:
+        lines.append(f"float {name}_v14 = {name}_14_arr[type_i * n_types + type_j];")
+        lines.append(f"float {name}_norm = {name}_arr[type_i * n_types + type_j];")
+        lines.append(f"float {name} = is_14 ? {name}_v14 : {name}_norm;")
+    return "\n                ".join(lines)
+
+
+def _generate_pair_parameter_load_main(pair_parameter_names):
+    if not pair_parameter_names:
+        return ""
+    lines = []
+    lines.append("int type_i = d_types[gi];")
+    lines.append("int type_j = d_types[atom_indices_shared[tbx + tj]];")
+    for name in pair_parameter_names:
+        lines.append(f"float {name} = {name}_arr[type_i * n_types + type_j];")
+    return "\n                ".join(lines)
 
 
 def _generate_parameter_declarations_main_posq(parameter_names):
@@ -760,18 +822,19 @@ def _generate_parameter_load_j_tile_exclusion_posq(parameter_names):
     return "\n        ".join(lines)
 
 
-def _assemble_exclusion_tile_kernel(parameter_names, expression_fragment, needs_r=True):
+def _assemble_exclusion_tile_kernel(parameter_names, pair_parameter_names, expression_fragment, needs_r=True):
     use_posq = "charge" in parameter_names
+    per_particle_names = [p for p in parameter_names if p not in pair_parameter_names]
 
     if use_posq:
-        param_decls = _generate_parameter_declarations_exclusion_posq(parameter_names)
+        param_decls = _generate_parameter_declarations_exclusion_posq(per_particle_names)
         sorted_param_decls = _generate_sorted_parameter_declarations_exclusion_posq(
-            parameter_names
+            per_particle_names
         )
         sorted_param_load_i = _generate_sorted_parameter_load_i_exclusion_posq(
-            parameter_names
+            per_particle_names
         )
-        param_load_j = _generate_parameter_load_j_tile_exclusion_posq(parameter_names)
+        param_load_j = _generate_parameter_load_j_tile_exclusion_posq(per_particle_names)
         pos_args_decl = (
             "    const float4* __restrict__ sorted_posq,\n"
             "    const float4* __restrict__ posq,"
@@ -793,14 +856,14 @@ def _assemble_exclusion_tile_kernel(parameter_names, expression_fragment, needs_
             "        }"
         )
     else:
-        param_decls = _generate_parameter_declarations_exclusion(parameter_names)
+        param_decls = _generate_parameter_declarations_exclusion(per_particle_names)
         sorted_param_decls = _generate_sorted_parameter_declarations_exclusion(
-            parameter_names
+            per_particle_names
         )
         sorted_param_load_i = _generate_sorted_parameter_load_i_exclusion(
-            parameter_names
+            per_particle_names
         )
-        param_load_j = _generate_parameter_load_j_tile_exclusion(parameter_names)
+        param_load_j = _generate_parameter_load_j_tile_exclusion(per_particle_names)
         pos_args_decl = (
             "    const float* __restrict__ sorted_pos_x,\n"
             "    const float* __restrict__ sorted_pos_y,\n"
@@ -823,9 +886,11 @@ def _assemble_exclusion_tile_kernel(parameter_names, expression_fragment, needs_
             "        }"
         )
 
-    shuffle_code = _generate_shuffle_warp_data_exclusion(parameter_names)
-    param_select = _generate_parameter_select_exclusion(parameter_names)
-    param_restore = _generate_parameter_restore_exclusion(parameter_names)
+    shuffle_code = _generate_shuffle_warp_data_exclusion(per_particle_names)
+    param_select = _generate_parameter_select_exclusion(per_particle_names)
+    param_restore = _generate_parameter_restore_exclusion(per_particle_names)
+    pair_param_decls = _generate_pair_parameter_declarations(pair_parameter_names)
+    pair_param_load = _generate_pair_parameter_load_exclusion(pair_parameter_names)
     r_declaration = "                float r = dist_sq * inv_dist;\n" if needs_r else ""
 
     kernel = f"""extern "C" __global__
@@ -844,7 +909,7 @@ void tile_kernel(
     int num_tiles,
     int num_particles,
     float box_x, float box_y, float box_z,
-    float inv_box_x, float inv_box_y, float inv_box_z{param_decls}{sorted_param_decls}
+    float inv_box_x, float inv_box_y, float inv_box_z{param_decls}{sorted_param_decls}{pair_param_decls}
 ) {{
     int total_warps = (blockDim.x * gridDim.x) / 32;
     int warp_id = (blockIdx.x * blockDim.x + threadIdx.x) / 32;
@@ -899,6 +964,7 @@ void tile_kernel(
             if (!excluded && dist_sq > 1.0e-12f && dist_sq <= cutoff_sq && gi >= 0 && gi < num_particles) {{
                 float inv_dist = rsqrtf(dist_sq);
                 {r_declaration}{param_select}
+                {pair_param_load}
                 {expression_fragment}
                 float inv_dist_force = force_magnitude * inv_dist;
                 float fx = dx * inv_dist_force;
@@ -934,18 +1000,19 @@ void tile_kernel(
     return kernel
 
 
-def _assemble_main_tile_kernel(parameter_names, expression_fragment, needs_r=True):
+def _assemble_main_tile_kernel(parameter_names, pair_parameter_names, expression_fragment, needs_r=True):
     use_posq = "charge" in parameter_names
+    per_particle_names = [p for p in parameter_names if p not in pair_parameter_names]
 
     if use_posq:
-        param_decls = _generate_parameter_declarations_main_posq(parameter_names)
+        param_decls = _generate_parameter_declarations_main_posq(per_particle_names)
         sorted_param_decls = _generate_sorted_parameter_declarations_main_posq(
-            parameter_names
+            per_particle_names
         )
         sorted_param_load_i = _generate_sorted_parameter_load_i_main_posq(
-            parameter_names
+            per_particle_names
         )
-        param_load_j = _generate_parameter_load_j_tile_main_posq(parameter_names)
+        param_load_j = _generate_parameter_load_j_tile_main_posq(per_particle_names)
         pos_args_decl = (
             "    const float4* __restrict__ sorted_posq,\n"
             "    const float4* __restrict__ posq,"
@@ -967,12 +1034,12 @@ def _assemble_main_tile_kernel(parameter_names, expression_fragment, needs_r=Tru
             "        }"
         )
     else:
-        param_decls = _generate_parameter_declarations_main(parameter_names)
+        param_decls = _generate_parameter_declarations_main(per_particle_names)
         sorted_param_decls = _generate_sorted_parameter_declarations_main(
-            parameter_names
+            per_particle_names
         )
-        sorted_param_load_i = _generate_sorted_parameter_load_i_main(parameter_names)
-        param_load_j = _generate_parameter_load_j_tile_main(parameter_names)
+        sorted_param_load_i = _generate_sorted_parameter_load_i_main(per_particle_names)
+        param_load_j = _generate_parameter_load_j_tile_main(per_particle_names)
         pos_args_decl = (
             "    const float* __restrict__ sorted_pos_x,\n"
             "    const float* __restrict__ sorted_pos_y,\n"
@@ -995,7 +1062,9 @@ def _assemble_main_tile_kernel(parameter_names, expression_fragment, needs_r=Tru
             "        }"
         )
 
-    shuffle_code = _generate_shuffle_warp_data_main(parameter_names)
+    shuffle_code = _generate_shuffle_warp_data_main(per_particle_names)
+    pair_param_decls = _generate_pair_parameter_declarations(pair_parameter_names)
+    pair_param_load = _generate_pair_parameter_load_main(pair_parameter_names)
     r_declaration = "                float r = dist_sq * inv_dist;\n" if needs_r else ""
 
     kernel = f"""extern "C" __global__
@@ -1012,7 +1081,7 @@ void main_tile_kernel(
     int num_tiles,
     int num_particles,
     float box_x, float box_y, float box_z,
-    float inv_box_x, float inv_box_y, float inv_box_z{param_decls}{sorted_param_decls}
+    float inv_box_x, float inv_box_y, float inv_box_z{param_decls}{sorted_param_decls}{pair_param_decls}
 ) {{
     int total_warps = (blockDim.x * gridDim.x) / 32;
     int warp_id = (blockIdx.x * blockDim.x + threadIdx.x) / 32;
@@ -1058,7 +1127,8 @@ void main_tile_kernel(
 
             if (!excluded && dist_sq > 1.0e-12f && dist_sq <= cutoff_sq && gi >= 0 && gi < num_particles) {{
                 float inv_dist = rsqrtf(dist_sq);
-                {r_declaration}{expression_fragment}
+                {r_declaration}{pair_param_load}
+                {expression_fragment}
                 float inv_dist_force = force_magnitude * inv_dist;
                 float fx = dx * inv_dist_force;
                 float fy = dy * inv_dist_force;
@@ -1117,6 +1187,7 @@ def nonbonded_expression(func):
 
     index_names = []
     parameter_names = []
+    pair_parameter_names = []
     distance_name = None
 
     for position, arg in enumerate(all_args):
@@ -1128,7 +1199,9 @@ def nonbonded_expression(func):
             distance_name = arg_name
         elif has_default:
             default_node = defaults[default_position]
-            if _is_parameter_call(default_node):
+            if _is_pair_parameter_call(default_node):
+                pair_parameter_names.append(arg_name)
+            elif _is_parameter_call(default_node):
                 parameter_names.append(arg_name)
         else:
             index_names.append(arg_name)
@@ -1140,7 +1213,7 @@ def nonbonded_expression(func):
             f"Expected exactly 2 particle index arguments, got {len(index_names)}: {index_names}"
         )
 
-    transpiler = _Transpiler(index_names, parameter_names, distance_name)
+    transpiler = _Transpiler(index_names, parameter_names, pair_parameter_names, distance_name)
     cuda_fragment, needs_r = transpiler.transpile(func_def.body)
     local_variables = transpiler.local_variables
 
@@ -1150,6 +1223,7 @@ def nonbonded_expression(func):
         ast_tree=tree,
         index_names=index_names,
         parameter_names=parameter_names,
+        pair_parameter_names=pair_parameter_names,
         distance_name=distance_name,
         cuda_fragment=cuda_fragment,
         local_variables=local_variables,
@@ -1223,12 +1297,16 @@ class NonbondedForce(ForceTerm):
         self._d_sorted_pos_x = None
         self._d_sorted_pos_y = None
         self._d_sorted_pos_z = None
+        self._n_types = 0
+        self._d_types = None
 
     def bind(self, topology, parameter_table, cutoff):
         self._cutoff = cutoff
         self._cutoff_sq = cutoff * cutoff
         self._num_sm = cp.cuda.runtime.getDeviceProperties(0)["multiProcessorCount"]
         self._parameter_table = parameter_table
+        n_types = len(parameter_table.type_parameters.get("sigma", []))
+        self._n_types = n_types
         self._rebuild_parameter_arrays(topology.particle_types)
         self._upload_parameter_arrays()
         self._d_cached_params = dict(self._d_parameter_arrays)
@@ -1236,12 +1314,28 @@ class NonbondedForce(ForceTerm):
         self._exclusion_kernel_source = self.expression.assemble_tile_kernel()
 
     def _rebuild_parameter_arrays(self, particle_types):
+        pt = self._parameter_table
+        _PAIR_TABLE_MAP = {
+            "sigma_ij_pair": "sigma_ij",
+            "epsilon_ij_pair": "epsilon_ij",
+        }
+        for param_name in self.expression.pair_parameter_names:
+            table_name = _PAIR_TABLE_MAP.get(param_name, param_name)
+            pair_matrix = pt.type_pair_parameters[table_name]
+            self._parameter_arrays[param_name] = pair_matrix.astype(np.float32)
+            name_14 = param_name + "_14"
+            table_name_14 = table_name + "_14"
+            has_14 = table_name_14 in pt.type_pair_parameters
+            if has_14:
+                self._parameter_arrays[name_14] = pt.type_pair_parameters[table_name_14].astype(np.float32)
+            else:
+                self._parameter_arrays[name_14] = pair_matrix.astype(np.float32)
+
         _TABLE_PARAM_MAP = {
             "sigma_half": "sigma",
             "sqrt_epsilon": "epsilon",
         }
-        pt = self._parameter_table
-        for param_name in self.expression.parameter_names:
+        for param_name in self.expression.per_particle_parameter_names:
             table_name = _TABLE_PARAM_MAP.get(param_name, param_name)
             particle = pt.expand_to_particle(table_name, particle_types)
             if param_name == "sigma_half":
@@ -1249,7 +1343,6 @@ class NonbondedForce(ForceTerm):
             elif param_name == "sqrt_epsilon":
                 particle = np.sqrt(np.maximum(particle, 0.0))
             self._parameter_arrays[param_name] = particle.astype(np.float32)
-
             name_14 = param_name + "_14"
             table_name_14 = _TABLE_PARAM_MAP.get(param_name, param_name) + "_14"
             has_14 = table_name_14 in pt.type_parameters or table_name_14 in pt.particle_parameters
@@ -1264,15 +1357,14 @@ class NonbondedForce(ForceTerm):
             self._parameter_arrays[name_14] = particle_14.astype(np.float32)
 
         if (
-            "sigma_half" in self.expression.parameter_names
-            and "sqrt_epsilon" in self.expression.parameter_names
+            "sigma_half" in self.expression.per_particle_parameter_names
+            and "sqrt_epsilon" in self.expression.per_particle_parameter_names
         ):
             N = len(particle_types)
             se = np.empty(N * 2, dtype=np.float32)
             se[0::2] = self._parameter_arrays["sigma_half"]
             se[1::2] = self._parameter_arrays["sqrt_epsilon"]
             self._parameter_arrays["sigma_epsilon"] = se
-
             se_14 = np.empty(N * 2, dtype=np.float32)
             se_14[0::2] = self._parameter_arrays["sigma_half_14"]
             se_14[1::2] = self._parameter_arrays["sqrt_epsilon_14"]
@@ -1303,7 +1395,7 @@ class NonbondedForce(ForceTerm):
             self._d_cached_params = dict(self._d_parameter_arrays)
 
     def _use_posq(self):
-        return "charge" in self.expression.parameter_names
+        return "charge" in self.expression.per_particle_parameter_names
 
     def _ensure_gather_kernels(self):
         if self._gather_kernels is not None:
@@ -1324,7 +1416,7 @@ class NonbondedForce(ForceTerm):
         total_slots = tile_list.num_blocks * 32
         tpb = 256
         grid = ((total_slots + tpb - 1) // tpb,)
-        for arr_name in _unique_gpu_arrays(self.expression.parameter_names):
+        for arr_name in _unique_gpu_arrays(self.expression.per_particle_parameter_names):
             if self._use_posq() and arr_name == "charge":
                 self._gather_one_param(
                     arr_name + "_14", tile_list, total_slots, tpb, grid
@@ -1368,18 +1460,34 @@ class NonbondedForce(ForceTerm):
         permutation = tile_list.d_raw_order
         N = tile_list.num_particles
 
+        pair_param_names = set()
+        for pname in self.expression.pair_parameter_names:
+            pair_param_names.add(pname)
+            pair_param_names.add(pname + "_14")
+
         arrays_float = {}
         arrays_2comp = {}
         for name, src_arr in self._d_cached_params.items():
+            if name in pair_param_names:
+                continue
             n_elem = src_arr.shape[0]
             if n_elem == N * 2:
                 arrays_2comp[name] = src_arr
             else:
                 arrays_float[name] = src_arr
 
+        arrays_int = {}
+        if self.expression.pair_parameter_names:
+            arrays_int["_d_types_temp"] = gpu_context.d_types
+
         gpu_context.permute_to_sorted(
-            permutation, arrays_float, arrays_2comp=arrays_2comp
+            permutation, arrays_float, arrays_int=arrays_int if arrays_int else None, arrays_2comp=arrays_2comp
         )
+
+        if self.expression.pair_parameter_names:
+            self._d_types = arrays_int.pop("_d_types_temp")
+        else:
+            self._d_types = None
 
         for name, arr in arrays_float.items():
             self._d_parameter_arrays[name] = arr
@@ -1411,9 +1519,20 @@ class NonbondedForce(ForceTerm):
                 ),
             )
 
+    def _pair_parameter_arguments(self):
+        if not self.expression.pair_parameter_names:
+            return []
+        args = []
+        for pname in self.expression.pair_parameter_names:
+            args.append(self._d_parameter_arrays[pname])
+            args.append(self._d_parameter_arrays[pname + "_14"])
+        args.append(self._d_types)
+        args.append(np.int32(self._n_types))
+        return args
+
     def _parameter_arguments(self):
         args = []
-        for arr in _unique_gpu_arrays(self.expression.parameter_names):
+        for arr in _unique_gpu_arrays(self.expression.per_particle_parameter_names):
             if self._use_posq() and arr == "charge":
                 args.append(self._d_parameter_arrays[arr + "_14"])
             else:
@@ -1423,7 +1542,7 @@ class NonbondedForce(ForceTerm):
 
     def _main_parameter_arguments(self):
         args = []
-        for arr in _unique_gpu_arrays(self.expression.parameter_names):
+        for arr in _unique_gpu_arrays(self.expression.per_particle_parameter_names):
             if arr == "charge":
                 continue
             if arr in {v[0] for v in _PACKED_PARAMS.values()}:
@@ -1434,7 +1553,7 @@ class NonbondedForce(ForceTerm):
 
     def _main_sorted_parameter_arguments(self):
         args = []
-        for arr in _unique_gpu_arrays(self.expression.parameter_names):
+        for arr in _unique_gpu_arrays(self.expression.per_particle_parameter_names):
             if arr == "charge":
                 continue
             args.append(self._d_sorted_params[arr])
@@ -1442,7 +1561,7 @@ class NonbondedForce(ForceTerm):
 
     def _sorted_parameter_arguments(self):
         args = []
-        for arr in _unique_gpu_arrays(self.expression.parameter_names):
+        for arr in _unique_gpu_arrays(self.expression.per_particle_parameter_names):
             if self._use_posq() and arr == "charge":
                 args.append(self._d_sorted_params["charge_14"])
             else:
@@ -1537,6 +1656,7 @@ class NonbondedForce(ForceTerm):
                     ]
                     + self._main_parameter_arguments()
                     + self._main_sorted_parameter_arguments()
+                    + self._pair_parameter_arguments()
                 )
                 self._kernel((grid_size,), (256,), tuple(main_args))
 
@@ -1568,6 +1688,7 @@ class NonbondedForce(ForceTerm):
                     ]
                     + self._parameter_arguments()
                     + self._sorted_parameter_arguments()
+                    + self._pair_parameter_arguments()
                 )
                 self._exclusion_kernel((excl_grid_size,), (256,), tuple(excl_args))
         else:
@@ -1600,6 +1721,7 @@ class NonbondedForce(ForceTerm):
                     ]
                     + self._main_parameter_arguments()
                     + self._main_sorted_parameter_arguments()
+                    + self._pair_parameter_arguments()
                 )
                 self._kernel((grid_size,), (256,), tuple(main_args))
 
@@ -1635,5 +1757,6 @@ class NonbondedForce(ForceTerm):
                     ]
                     + self._parameter_arguments()
                     + self._sorted_parameter_arguments()
+                    + self._pair_parameter_arguments()
                 )
                 self._exclusion_kernel((excl_grid_size,), (256,), tuple(excl_args))

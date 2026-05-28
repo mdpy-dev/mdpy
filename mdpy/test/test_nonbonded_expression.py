@@ -5,7 +5,7 @@ import pytest
 from math import sqrt as math_sqrt
 
 from mdpy.force.nonbonded_force import (
-    Parameter, NonbondedExpression, nonbonded_expression,
+    Parameter, PairParameter, NonbondedExpression, nonbonded_expression,
 )
 from mdpy.force.nonbonded_force import NonbondedForce
 from mdpy.force.expressions.lennard_jones import lennard_jones
@@ -27,10 +27,23 @@ class TestParameter:
         assert result is parameter
 
 
+class TestPairParameter:
+    def test_getitem_returns_self(self):
+        pp = PairParameter()
+        result = pp[0]
+        assert result is pp
+
+    def test_getitem_with_name(self):
+        pp = PairParameter()
+        result = pp['atom_i']
+        assert result is pp
+
+
 class TestDecorator:
     def test_classifies_lj_arguments(self):
         assert lennard_jones.index_names == ['atom_i', 'atom_j']
-        assert lennard_jones.parameter_names == ['sigma_half', 'sqrt_epsilon']
+        assert lennard_jones.pair_parameter_names == ['sigma_ij_pair', 'epsilon_ij_pair']
+        assert lennard_jones.parameter_names == []
         assert lennard_jones.distance_name == 'r'
 
     def test_classifies_coulomb_arguments(self):
@@ -52,16 +65,25 @@ class TestDecorator:
         assert 'lennard_jones' in lennard_jones.source
         assert 'sigma' in lennard_jones.source
 
+    def test_pair_parameter_classification(self):
+        @nonbonded_expression
+        def pair_test(r, atom_i, atom_j, sigma_ij=PairParameter()):
+            energy = sigma_ij / r
+            force_magnitude = energy / r
+            return energy, force_magnitude
+        assert pair_test.pair_parameter_names == ['sigma_ij']
+        assert pair_test.parameter_names == []
+        assert 'sigma_ij' in pair_test.cuda_fragment
+        assert 'sigma_ij_i' not in pair_test.cuda_fragment
+
 
 class TestTranspiler:
     def test_lj_cuda_fragment(self):
         fragment = lennard_jones.cuda_fragment
-        assert 'float sigma_ij' in fragment
-        assert 'float epsilon_ij' in fragment
-        assert 'sigma_half_i' in fragment
-        assert 'sigma_half_j' in fragment
-        assert 'sqrt_epsilon_i' in fragment
-        assert 'sqrt_epsilon_j' in fragment
+        assert 'sigma_ij_pair' in fragment
+        assert 'epsilon_ij_pair' in fragment
+        assert 'sigma_half_i' not in fragment
+        assert 'sqrt_epsilon_i' not in fragment
         assert 'float _result_energy' in fragment
         assert 'float _result_force' in fragment
 
@@ -97,25 +119,24 @@ class TestTranspiler:
             return energy, force_magnitude
         fragment = add_test.cuda_fragment
         assert '(sigma_i + sigma_j)' in fragment
-        assert '(combined / r)' in fragment
+        assert '(combined * inv_dist)' in fragment
 
     def test_local_variables_tracked(self):
-        assert 'sigma_ij' in lennard_jones.local_variables
-        assert 'epsilon_ij' in lennard_jones.local_variables
         assert 'sr' in lennard_jones.local_variables
         assert 'sr6' in lennard_jones.local_variables
         assert 'sr12' in lennard_jones.local_variables
+        assert 'dsr' in lennard_jones.local_variables
 
     def test_sqrt_transpilation(self):
         assert 'sqrtf((epsilon_i_use * epsilon_j_use))' not in lennard_jones.cuda_fragment
-        assert '(sqrt_epsilon_i * sqrt_epsilon_j)' in lennard_jones.cuda_fragment
+        assert 'epsilon_ij_pair' in lennard_jones.cuda_fragment
 
 
 class TestExpressionCombination:
     def test_combined_parameter_names(self):
         combined = lennard_jones + coulomb
-        assert 'sigma_half' in combined.parameter_names
-        assert 'sqrt_epsilon' in combined.parameter_names
+        assert 'sigma_ij_pair' in combined.pair_parameter_names
+        assert 'epsilon_ij_pair' in combined.pair_parameter_names
         assert 'charge' in combined.parameter_names
 
     def test_combined_deduplicates_parameters(self):
@@ -138,8 +159,8 @@ class TestExpressionCombination:
         kernel = combined.assemble_tile_kernel()
         assert 'extern "C" __global__' in kernel
         assert 'tile_kernel' in kernel
-        assert '__restrict__ sigma_epsilon' in kernel
-        assert 'sigma_epsilon_14' in kernel
+        assert '__restrict__ sigma_ij_pair_arr' in kernel
+        assert 'sigma_ij_pair_14_arr' in kernel
         assert 'charge_14' in kernel
 
     def test_second_expression_locals_renamed(self):
@@ -171,9 +192,9 @@ class TestKernelAssembly:
     def test_combined_kernel_has_all_params(self):
         combined = lennard_jones + coulomb
         kernel = combined.assemble_tile_kernel()
-        assert '__restrict__ sigma_epsilon' in kernel
-        assert 'sigma_half_i' in kernel
-        assert 'sqrt_epsilon_i' in kernel
+        assert '__restrict__ sigma_ij_pair_arr' in kernel
+        assert '__restrict__ epsilon_ij_pair_arr' in kernel
+        assert 'sigma_ij_pair = is_14' in kernel
         assert 'charge_i' in kernel
 
     def test_kernel_has_tiles_and_interacting(self):
@@ -274,19 +295,22 @@ class TestCombinedKernelSource:
         assert 'extern "C" __global__' in kernel
         assert 'void tile_kernel' in kernel
 
-        assert '__restrict__ sigma_epsilon' in kernel
-        assert '__restrict__ sigma_epsilon_14' in kernel
+        assert '__restrict__ sigma_ij_pair_arr' in kernel
+        assert '__restrict__ sigma_ij_pair_14_arr' in kernel
+        assert '__restrict__ epsilon_ij_pair_arr' in kernel
+        assert '__restrict__ epsilon_ij_pair_14_arr' in kernel
         assert 'charge_14' in kernel
 
-        assert 'sigma_half_i' in kernel
-        assert 'sigma_half_i_14' in kernel
-        assert 'sqrt_epsilon_i' in kernel
+        assert 'sigma_ij_pair = is_14' in kernel
+        assert 'epsilon_ij_pair = is_14' in kernel
         assert 'charge_i' in kernel
 
         assert 'rsqrtf' in kernel
         assert 'atomicAdd' in kernel
         assert 'energy_val' in kernel
         assert 'force_magnitude' in kernel
+        assert 'd_types' in kernel
+        assert 'n_types' in kernel
 
         open_count = kernel.count('{')
         close_count = kernel.count('}')

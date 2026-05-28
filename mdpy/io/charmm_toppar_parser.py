@@ -15,8 +15,8 @@ from mdpy.unit import *
 from mdpy.core.parameter_table import ParameterTable
 
 RMIN_TO_SIGMA_FACTOR = env.NUMPY_FLOAT(2 ** (-1 / 6))
-USED_BLOCK_LABELS = ["ATOMS", "BONDS", "ANGLES", "DIHEDRALS", "IMPROPER", "NONBONDED"]
-UNUSED_BLOCK_LABELS = ["CMAP", "NBFIX", "HBOND", "END"]
+USED_BLOCK_LABELS = ["ATOMS", "BONDS", "ANGLES", "DIHEDRALS", "IMPROPER", "NONBONDED", "NBFIX"]
+UNUSED_BLOCK_LABELS = ["CMAP", "HBOND", "END"]
 BLOCK_LABELS = USED_BLOCK_LABELS + UNUSED_BLOCK_LABELS
 
 
@@ -81,6 +81,8 @@ class CharmmTopparParser:
         self._parse_par_dihedral_block(info_dict["DIHEDRALS"])
         self._parse_par_improper_block(info_dict["IMPROPER"])
         self._parse_par_nonbonded_block(info_dict["NONBONDED"])
+        if "NBFIX" in info_dict:
+            self._parse_par_nbfix_block(info_dict["NBFIX"])
 
     @staticmethod
     def _fine_par_info(info):
@@ -278,6 +280,27 @@ class CharmmTopparParser:
                     * RMIN_TO_SIGMA_FACTOR,
                 ]
 
+    def _parse_par_nbfix_block(self, infos):
+        for info in infos:
+            if len(info) >= 4:
+                type_a = info[0]
+                type_b = info[1]
+                rmin_val = Quantity(float(info[3]), angstrom).convert_to(default_length_unit).value
+                eps_val = -Quantity(float(info[2]), kilocalorie_permol).convert_to(default_energy_unit).value
+                rmin_14 = rmin_val
+                eps_14 = eps_val
+                if len(info) >= 6:
+                    rmin_14 = Quantity(float(info[5]), angstrom).convert_to(default_length_unit).value
+                    eps_14 = -Quantity(float(info[4]), kilocalorie_permol).convert_to(default_energy_unit).value
+                sigma_val = rmin_val * RMIN_TO_SIGMA_FACTOR
+                sigma_14_val = rmin_14 * RMIN_TO_SIGMA_FACTOR
+                key_fwd = "%s-%s" % (type_a, type_b)
+                key_rev = "%s-%s" % (type_b, type_a)
+                if "nbfix" not in self._parameters:
+                    self._parameters["nbfix"] = {}
+                self._parameters["nbfix"][key_fwd] = [eps_val, sigma_val, eps_14, sigma_14_val]
+                self._parameters["nbfix"][key_rev] = [eps_val, sigma_val, eps_14, sigma_14_val]
+
     def parse_top_file(self, file_path):
         with open(file_path, "r") as f:
             info = f.read().split("\n")
@@ -331,6 +354,8 @@ class CharmmTopparParser:
         self._parse_par_dihedral_block(par_info_dict["DIHEDRALS"])
         self._parse_par_improper_block(par_info_dict["IMPROPER"])
         self._parse_par_nonbonded_block(par_info_dict["NONBONDED"])
+        if "NBFIX" in par_info_dict:
+            self._parse_par_nbfix_block(par_info_dict["NBFIX"])
 
     def _fine_toppar_info(self, info):
         for i, j in enumerate(info):
@@ -414,6 +439,39 @@ def create_parameter_table(topology, toppar_parser):
     table.add_type_parameter("epsilon_14", epsilon_14_array)
     table.add_particle_parameter("charge", topology.charges.copy())
     table.add_particle_parameter("charge_14", topology.charges.copy())
+
+    def _build_pair_matrix(sigma_arr, epsilon_arr, n):
+        sigma_half = 0.5 * sigma_arr
+        sqrt_eps = np.sqrt(np.maximum(epsilon_arr, 0.0))
+        sigma_ij = sigma_half[:, None] + sigma_half[None, :]
+        epsilon_ij = sqrt_eps[:, None] * sqrt_eps[None, :]
+        return sigma_ij.ravel().astype(env.NUMPY_FLOAT), epsilon_ij.ravel().astype(env.NUMPY_FLOAT)
+
+    sigma_ij, epsilon_ij = _build_pair_matrix(sigma_array, epsilon_array, num_types)
+    sigma_ij_14, epsilon_ij_14 = _build_pair_matrix(sigma_14_array, epsilon_14_array, num_types)
+
+    nbfix_data = parameters.get("nbfix", {})
+    for key, entry in nbfix_data.items():
+        parts = key.split("-")
+        if len(parts) == 2:
+            ti = type_name_to_index.get(parts[0])
+            tj = type_name_to_index.get(parts[1])
+            if ti is not None and tj is not None:
+                eps_val, sig_val = entry[0], entry[1]
+                eps_14_val, sig_14_val = entry[2], entry[3]
+                sigma_ij[ti * num_types + tj] = sig_val
+                sigma_ij[tj * num_types + ti] = sig_val
+                epsilon_ij[ti * num_types + tj] = eps_val
+                epsilon_ij[tj * num_types + ti] = eps_val
+                sigma_ij_14[ti * num_types + tj] = sig_14_val
+                sigma_ij_14[tj * num_types + ti] = sig_14_val
+                epsilon_ij_14[ti * num_types + tj] = eps_14_val
+                epsilon_ij_14[tj * num_types + ti] = eps_14_val
+
+    table.add_type_pair_parameter("sigma_ij", sigma_ij)
+    table.add_type_pair_parameter("epsilon_ij", epsilon_ij)
+    table.add_type_pair_parameter("sigma_ij_14", sigma_ij_14)
+    table.add_type_pair_parameter("epsilon_ij_14", epsilon_ij_14)
 
     table.add_term_parameter(
         "bond",
