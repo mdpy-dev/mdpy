@@ -161,3 +161,4 @@ dmypy.json
 /reference/
 /ROADMAP.md
 /WORKPLAN.md
+*.npz
