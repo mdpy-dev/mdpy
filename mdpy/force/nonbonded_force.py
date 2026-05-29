@@ -542,6 +542,15 @@ def _generate_parameter_restore_exclusion(parameter_names):
 def _generate_pair_parameter_declarations(pair_parameter_names):
     if not pair_parameter_names:
         return ""
+    names_set = set(pair_parameter_names)
+    lj_set = {"sigma_ij_pair", "epsilon_ij_pair"}
+    if lj_set.issubset(names_set):
+        return (
+            ",\n    const float2* __restrict__ lj_pair_arr"
+            ",\n    const float2* __restrict__ lj_pair_14_arr"
+            ",\n    const int* __restrict__ d_types"
+            ",\n    int n_types"
+        )
     decls = ""
     for name in pair_parameter_names:
         decls += f",\n    const float* __restrict__ {name}_arr"
@@ -551,9 +560,29 @@ def _generate_pair_parameter_declarations(pair_parameter_names):
     return decls
 
 
+def _generate_pair_parameter_preload_i(pair_parameter_names):
+    names_set = set(pair_parameter_names)
+    lj_set = {"sigma_ij_pair", "epsilon_ij_pair"}
+    if lj_set.issubset(names_set):
+        return "type_i = d_types[gi];"
+    for name in pair_parameter_names:
+        return f"{name}_i = {name}[gi];"
+    return ""
+
+
 def _generate_pair_parameter_load_exclusion(pair_parameter_names):
     if not pair_parameter_names:
         return ""
+    names_set = set(pair_parameter_names)
+    lj_set = {"sigma_ij_pair", "epsilon_ij_pair"}
+    if lj_set.issubset(names_set):
+        return """\
+int type_j = d_types[atom_indices_shared[tbx + tj]];
+int idx = type_i * n_types + type_j;
+float2 lj_pair_v14 = lj_pair_14_arr[idx];
+float2 lj_pair_norm = lj_pair_arr[idx];
+float sigma_ij_pair = is_14 ? lj_pair_v14.x : lj_pair_norm.x;
+float epsilon_ij_pair = is_14 ? lj_pair_v14.y : lj_pair_norm.y;"""
     lines = []
     lines.append("int type_i = d_types[gi];")
     lines.append("int type_j = d_types[atom_indices_shared[tbx + tj]];")
@@ -567,6 +596,15 @@ def _generate_pair_parameter_load_exclusion(pair_parameter_names):
 def _generate_pair_parameter_load_main(pair_parameter_names):
     if not pair_parameter_names:
         return ""
+    names_set = set(pair_parameter_names)
+    lj_set = {"sigma_ij_pair", "epsilon_ij_pair"}
+    if lj_set.issubset(names_set):
+        return """\
+int type_j = d_types[atom_indices_shared[tbx + tj]];
+int idx = type_i * n_types + type_j;
+float2 lj_pair = lj_pair_arr[idx];
+float sigma_ij_pair = lj_pair.x;
+float epsilon_ij_pair = lj_pair.y;"""
     lines = []
     lines.append("int type_i = d_types[gi];")
     lines.append("int type_j = d_types[atom_indices_shared[tbx + tj]];")
@@ -891,6 +929,7 @@ def _assemble_exclusion_tile_kernel(parameter_names, pair_parameter_names, expre
     param_restore = _generate_parameter_restore_exclusion(per_particle_names)
     pair_param_decls = _generate_pair_parameter_declarations(pair_parameter_names)
     pair_param_load = _generate_pair_parameter_load_exclusion(pair_parameter_names)
+    pair_param_preload_i = _generate_pair_parameter_preload_i(pair_parameter_names)
     r_declaration = "                float r = dist_sq * inv_dist;\n" if needs_r else ""
 
     kernel = f"""extern "C" __global__
@@ -931,6 +970,10 @@ void tile_kernel(
         int gi = block_atoms[block_x * 32 + tgx];
 {i_pos_load}
         {sorted_param_load_i}
+        int type_i = 0;
+        if (gi >= 0 && gi < num_particles) {{
+            {pair_param_preload_i}
+        }}
 
         int gj = interacting_atoms[pos * 32 + tgx];
 {j_pos_load}
@@ -1065,6 +1108,7 @@ def _assemble_main_tile_kernel(parameter_names, pair_parameter_names, expression
     shuffle_code = _generate_shuffle_warp_data_main(per_particle_names)
     pair_param_decls = _generate_pair_parameter_declarations(pair_parameter_names)
     pair_param_load = _generate_pair_parameter_load_main(pair_parameter_names)
+    pair_param_preload_i = _generate_pair_parameter_preload_i(pair_parameter_names)
     r_declaration = "                float r = dist_sq * inv_dist;\n" if needs_r else ""
 
     kernel = f"""extern "C" __global__
@@ -1101,6 +1145,10 @@ void main_tile_kernel(
         int gi = block_atoms[block_x * 32 + tgx];
 {i_pos_load}
         {sorted_param_load_i}
+        int type_i = 0;
+        if (gi >= 0 && gi < num_particles) {{
+            {pair_param_preload_i}
+        }}
 
         int gj = interacting_atoms[pos * 32 + tgx];
 {j_pos_load}
@@ -1123,9 +1171,7 @@ void main_tile_kernel(
             dz -= box_z * roundf(dz * inv_box_z);
             float dist_sq = dx * dx + dy * dy + dz * dz;
 
-            bool excluded = (atom2 < 0 || atom2 >= num_particles);
-
-            if (!excluded && dist_sq > 1.0e-12f && dist_sq <= cutoff_sq && gi >= 0 && gi < num_particles) {{
+            if (atom2 >= 0 && atom2 < num_particles && dist_sq > 1.0e-12f && dist_sq <= cutoff_sq && gi >= 0 && gi < num_particles) {{
                 float inv_dist = rsqrtf(dist_sq);
                 {r_declaration}{pair_param_load}
                 {expression_fragment}
@@ -1313,13 +1359,32 @@ class NonbondedForce(ForceTerm):
         self._kernel_source = self.expression.assemble_main_tile_kernel()
         self._exclusion_kernel_source = self.expression.assemble_tile_kernel()
 
+    _PACKED_PAIR_GROUPS = {
+        frozenset({"sigma_ij_pair", "epsilon_ij_pair"}): "lj_pair",
+    }
+
     def _rebuild_parameter_arrays(self, particle_types):
         pt = self._parameter_table
+        pair_names = set(self.expression.pair_parameter_names)
+
+        for group, table_key in self._PACKED_PAIR_GROUPS.items():
+            if group.issubset(pair_names):
+                lj_pair = pt.type_pair_parameters[table_key]
+                self._parameter_arrays[table_key] = lj_pair.astype(np.float32)
+                table_key_14 = table_key + "_14"
+                if table_key_14 in pt.type_pair_parameters:
+                    self._parameter_arrays[table_key_14] = (
+                        pt.type_pair_parameters[table_key_14].astype(np.float32)
+                    )
+                else:
+                    self._parameter_arrays[table_key_14] = lj_pair.astype(np.float32)
+                pair_names -= group
+
         _PAIR_TABLE_MAP = {
             "sigma_ij_pair": "sigma_ij",
             "epsilon_ij_pair": "epsilon_ij",
         }
-        for param_name in self.expression.pair_parameter_names:
+        for param_name in pair_names:
             table_name = _PAIR_TABLE_MAP.get(param_name, param_name)
             pair_matrix = pt.type_pair_parameters[table_name]
             self._parameter_arrays[param_name] = pair_matrix.astype(np.float32)
@@ -1464,6 +1529,9 @@ class NonbondedForce(ForceTerm):
         for pname in self.expression.pair_parameter_names:
             pair_param_names.add(pname)
             pair_param_names.add(pname + "_14")
+        for table_key in self._PACKED_PAIR_GROUPS.values():
+            pair_param_names.add(table_key)
+            pair_param_names.add(table_key + "_14")
 
         arrays_float = {}
         arrays_2comp = {}
@@ -1478,7 +1546,10 @@ class NonbondedForce(ForceTerm):
 
         arrays_int = {}
         if self.expression.pair_parameter_names:
-            arrays_int["_d_types_temp"] = gpu_context.d_types
+            if self._d_types is not None:
+                arrays_int["_d_types_temp"] = self._d_types
+            else:
+                arrays_int["_d_types_temp"] = gpu_context.d_types
 
         gpu_context.permute_to_sorted(
             permutation, arrays_float, arrays_int=arrays_int if arrays_int else None, arrays_2comp=arrays_2comp
@@ -1522,6 +1593,15 @@ class NonbondedForce(ForceTerm):
     def _pair_parameter_arguments(self):
         if not self.expression.pair_parameter_names:
             return []
+        names_set = set(self.expression.pair_parameter_names)
+        lj_set = {"sigma_ij_pair", "epsilon_ij_pair"}
+        if lj_set.issubset(names_set):
+            return [
+                self._d_parameter_arrays["lj_pair"],
+                self._d_parameter_arrays["lj_pair_14"],
+                self._d_types,
+                np.int32(self._n_types),
+            ]
         args = []
         for pname in self.expression.pair_parameter_names:
             args.append(self._d_parameter_arrays[pname])

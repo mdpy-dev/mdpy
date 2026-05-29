@@ -159,8 +159,8 @@ class TestExpressionCombination:
         kernel = combined.assemble_tile_kernel()
         assert 'extern "C" __global__' in kernel
         assert 'tile_kernel' in kernel
-        assert '__restrict__ sigma_ij_pair_arr' in kernel
-        assert 'sigma_ij_pair_14_arr' in kernel
+        assert '__restrict__ lj_pair_arr' in kernel
+        assert 'lj_pair_14_arr' in kernel
         assert 'charge_14' in kernel
 
     def test_second_expression_locals_renamed(self):
@@ -192,8 +192,8 @@ class TestKernelAssembly:
     def test_combined_kernel_has_all_params(self):
         combined = lennard_jones + coulomb
         kernel = combined.assemble_tile_kernel()
-        assert '__restrict__ sigma_ij_pair_arr' in kernel
-        assert '__restrict__ epsilon_ij_pair_arr' in kernel
+        assert '__restrict__ lj_pair_arr' in kernel
+        assert '__restrict__ lj_pair_14_arr' in kernel
         assert 'sigma_ij_pair = is_14' in kernel
         assert 'charge_i' in kernel
 
@@ -295,10 +295,8 @@ class TestCombinedKernelSource:
         assert 'extern "C" __global__' in kernel
         assert 'void tile_kernel' in kernel
 
-        assert '__restrict__ sigma_ij_pair_arr' in kernel
-        assert '__restrict__ sigma_ij_pair_14_arr' in kernel
-        assert '__restrict__ epsilon_ij_pair_arr' in kernel
-        assert '__restrict__ epsilon_ij_pair_14_arr' in kernel
+        assert '__restrict__ lj_pair_arr' in kernel
+        assert '__restrict__ lj_pair_14_arr' in kernel
         assert 'charge_14' in kernel
 
         assert 'sigma_ij_pair = is_14' in kernel

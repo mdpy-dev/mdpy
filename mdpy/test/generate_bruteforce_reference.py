@@ -286,7 +286,7 @@ def compute_improper_forces(positions, improper_indices, improper_params, box_si
 
 def compute_nonbonded_forces(
     positions, pairs_i, pairs_j, exclusion_flags,
-    charges, charges_14, sigma_ij, epsilon_ij, sigma_ij_14, epsilon_ij_14,
+    charges, charges_14, lj_pair, lj_pair_14,
     particle_types, box_size, n_types,
 ):
     N = len(positions)
@@ -312,16 +312,17 @@ def compute_nonbonded_forces(
             continue
         ti = particle_types[i]
         tj = particle_types[j]
+        pair_idx = ti * n_types + tj
         if flag == 2:
             qi = charges_14[i]
             qj = charges_14[j]
-            sig = sigma_ij_14[ti * n_types + tj]
-            eps = epsilon_ij_14[ti * n_types + tj]
+            sig = lj_pair_14[pair_idx * 2]
+            eps = lj_pair_14[pair_idx * 2 + 1]
         else:
             qi = charges[i]
             qj = charges[j]
-            sig = sigma_ij[ti * n_types + tj]
-            eps = epsilon_ij[ti * n_types + tj]
+            sig = lj_pair[pair_idx * 2]
+            eps = lj_pair[pair_idx * 2 + 1]
         sr = sig / r
         sr6 = sr ** 6
         sr12 = sr6 * sr6
@@ -380,16 +381,14 @@ def main():
     print("\n[4/5] Nonbonded forces...")
     charges = parameter_table.particle_parameters['charge'].astype(np.float64)
     charges_14 = parameter_table.particle_parameters.get('charge_14', charges).astype(np.float64)
-    sigma_ij = parameter_table.type_pair_parameters['sigma_ij'].astype(np.float64)
-    epsilon_ij = parameter_table.type_pair_parameters['epsilon_ij'].astype(np.float64)
-    sigma_ij_14 = parameter_table.type_pair_parameters.get('sigma_ij_14', sigma_ij).astype(np.float64)
-    epsilon_ij_14 = parameter_table.type_pair_parameters.get('epsilon_ij_14', epsilon_ij).astype(np.float64)
-    n_types = int(np.sqrt(len(sigma_ij)))
+    lj_pair = parameter_table.type_pair_parameters['lj_pair'].astype(np.float64)
+    lj_pair_14 = parameter_table.type_pair_parameters.get('lj_pair_14', lj_pair).astype(np.float64)
+    n_types = int(np.sqrt(len(lj_pair) // 2))
     particle_types = topology.particle_types
 
     nonbonded_forces, nonbonded_energy = compute_nonbonded_forces(
         positions, pairs_i, pairs_j, flags,
-        charges, charges_14, sigma_ij, epsilon_ij, sigma_ij_14, epsilon_ij_14,
+        charges, charges_14, lj_pair, lj_pair_14,
         particle_types, BOX_SIZE, n_types,
     )
     print(f"  nonbonded energy: {nonbonded_energy:.6f}")

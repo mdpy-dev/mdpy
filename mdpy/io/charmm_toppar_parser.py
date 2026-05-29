@@ -450,6 +450,14 @@ def create_parameter_table(topology, toppar_parser):
     sigma_ij, epsilon_ij = _build_pair_matrix(sigma_array, epsilon_array, num_types)
     sigma_ij_14, epsilon_ij_14 = _build_pair_matrix(sigma_14_array, epsilon_14_array, num_types)
 
+    n_pair = num_types * num_types
+    lj_pair = np.empty(n_pair * 2, dtype=env.NUMPY_FLOAT)
+    lj_pair[0::2] = sigma_ij
+    lj_pair[1::2] = epsilon_ij
+    lj_pair_14 = np.empty(n_pair * 2, dtype=env.NUMPY_FLOAT)
+    lj_pair_14[0::2] = sigma_ij_14
+    lj_pair_14[1::2] = epsilon_ij_14
+
     nbfix_data = parameters.get("nbfix", {})
     for key, entry in nbfix_data.items():
         parts = key.split("-")
@@ -459,19 +467,19 @@ def create_parameter_table(topology, toppar_parser):
             if ti is not None and tj is not None:
                 eps_val, sig_val = entry[0], entry[1]
                 eps_14_val, sig_14_val = entry[2], entry[3]
-                sigma_ij[ti * num_types + tj] = sig_val
-                sigma_ij[tj * num_types + ti] = sig_val
-                epsilon_ij[ti * num_types + tj] = eps_val
-                epsilon_ij[tj * num_types + ti] = eps_val
-                sigma_ij_14[ti * num_types + tj] = sig_14_val
-                sigma_ij_14[tj * num_types + ti] = sig_14_val
-                epsilon_ij_14[ti * num_types + tj] = eps_14_val
-                epsilon_ij_14[tj * num_types + ti] = eps_14_val
+                idx = ti * num_types + tj
+                idx_rev = tj * num_types + ti
+                lj_pair[idx * 2] = sig_val
+                lj_pair[idx * 2 + 1] = eps_val
+                lj_pair[idx_rev * 2] = sig_val
+                lj_pair[idx_rev * 2 + 1] = eps_val
+                lj_pair_14[idx * 2] = sig_14_val
+                lj_pair_14[idx * 2 + 1] = eps_14_val
+                lj_pair_14[idx_rev * 2] = sig_14_val
+                lj_pair_14[idx_rev * 2 + 1] = eps_14_val
 
-    table.add_type_pair_parameter("sigma_ij", sigma_ij)
-    table.add_type_pair_parameter("epsilon_ij", epsilon_ij)
-    table.add_type_pair_parameter("sigma_ij_14", sigma_ij_14)
-    table.add_type_pair_parameter("epsilon_ij_14", epsilon_ij_14)
+    table.add_type_pair_parameter("lj_pair", lj_pair)
+    table.add_type_pair_parameter("lj_pair_14", lj_pair_14)
 
     table.add_term_parameter(
         "bond",
