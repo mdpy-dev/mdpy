@@ -156,6 +156,9 @@ void find_interacting_blocks_kernel(
     float inv_box_x, float inv_box_y, float inv_box_z,
     int* __restrict__ tiles_out,
     int* __restrict__ interacting_atoms_out,
+    float* __restrict__ shift_x_out,
+    float* __restrict__ shift_y_out,
+    float* __restrict__ shift_z_out,
     int* __restrict__ interaction_count,
     int max_tiles
 ) {
@@ -204,6 +207,22 @@ void find_interacting_blocks_kernel(
                 int ny = (cy_idx + dy + nc_y) % nc_y;
                 int nz = (cz_idx + dz + nc_z) % nc_z;
                 int nc = nx + ny * nc_x + nz * nc_x * nc_y;
+                float sx = 0.0f, sy = 0.0f, sz = 0.0f;
+                {
+                    int raw_nx = cx_idx + dx;
+                    if (raw_nx < 0) sx = -box_x;
+                    else if (raw_nx >= nc_x) sx = box_x;
+                }
+                {
+                    int raw_ny = cy_idx + dy;
+                    if (raw_ny < 0) sy = -box_y;
+                    else if (raw_ny >= nc_y) sy = box_y;
+                }
+                {
+                    int raw_nz = cz_idx + dz;
+                    if (raw_nz < 0) sz = -box_z;
+                    else if (raw_nz >= nc_z) sz = box_z;
+                }
 
                 int b_start = cell_block_offset[nc];
                 int b_count = cell_block_count[nc];
@@ -226,12 +245,9 @@ void find_interacting_blocks_kernel(
                             float bsy2 = block_size_y[bj];
                             float bsz2 = block_size_z[bj];
 
-                            float ddx = bcx2 - mcx;
-                            float ddy = bcy2 - mcy;
-                            float ddz = bcz2 - mcz;
-                            ddx -= box_x * roundf(ddx * inv_box_x);
-                            ddy -= box_y * roundf(ddy * inv_box_y);
-                            ddz -= box_z * roundf(ddz * inv_box_z);
+                            float ddx = (bcx2 + sx) - mcx;
+                            float ddy = (bcy2 + sy) - mcy;
+                            float ddz = (bcz2 + sz) - mcz;
                             ddx = fmaxf(0.0f, fabsf(ddx) - msx - bsx2);
                             ddy = fmaxf(0.0f, fabsf(ddy) - msy - bsy2);
                             ddz = fmaxf(0.0f, fabsf(ddz) - msz - bsz2);
@@ -256,12 +272,9 @@ void find_interacting_blocks_kernel(
                             for (int k = 0; k < 32; k++) {
                                 int gk = s_atom_idx[warp_in_block][k];
                                 if (gk < 0) continue;
-                                float ddx = px_j - s_pos_x[warp_in_block][k];
-                                float ddy = py_j - s_pos_y[warp_in_block][k];
-                                float ddz = pz_j - s_pos_z[warp_in_block][k];
-                                ddx -= box_x * roundf(ddx * inv_box_x);
-                                ddy -= box_y * roundf(ddy * inv_box_y);
-                                ddz -= box_z * roundf(ddz * inv_box_z);
+                                float ddx = (px_j + sx) - s_pos_x[warp_in_block][k];
+                                float ddy = (py_j + sy) - s_pos_y[warp_in_block][k];
+                                float ddz = (pz_j + sz) - s_pos_z[warp_in_block][k];
                                 if (ddx*ddx + ddy*ddy + ddz*ddz <= build_radius_sq) {
                                     interacts = 1; break;
                                 }
@@ -278,7 +291,12 @@ void find_interacting_blocks_kernel(
                             if (tgx == 0) ti = atomicAdd(interaction_count, 1);
                             ti = __shfl_sync(0xffffffff, ti, 0);
                             if (ti < max_tiles) {
-                                if (tgx < 1) tiles_out[ti] = bx;
+                                if (tgx < 1) {
+                                    tiles_out[ti] = bx;
+                                    shift_x_out[ti] = sx;
+                                    shift_y_out[ti] = sy;
+                                    shift_z_out[ti] = sz;
+                                }
                                 interacting_atoms_out[ti * 32 + tgx] = my_buf[tgx];
                             }
                             for (int s = tgx; s < nBuf - 32; s += 32)
@@ -304,7 +322,12 @@ void find_interacting_blocks_kernel(
             if (tgx == 0) ti = atomicAdd(interaction_count, 1);
             ti = __shfl_sync(0xffffffff, ti, 0);
             if (ti < max_tiles) {
-                if (tgx < 1) tiles_out[ti] = bx;
+                if (tgx < 1) {
+                    tiles_out[ti] = bx;
+                    shift_x_out[ti] = 0.0f;
+                    shift_y_out[ti] = 0.0f;
+                    shift_z_out[ti] = 0.0f;
+                }
                 interacting_atoms_out[ti * 32 + tgx] = my_buf[tgx];
             }
             for (int s = tgx; s < nBuf - 32; s += 32)
@@ -318,7 +341,12 @@ void find_interacting_blocks_kernel(
         if (tgx == 0) ti = atomicAdd(interaction_count, 1);
         ti = __shfl_sync(0xffffffff, ti, 0);
         if (ti < max_tiles) {
-            if (tgx < 1) tiles_out[ti] = bx;
+            if (tgx < 1) {
+                tiles_out[ti] = bx;
+                shift_x_out[ti] = 0.0f;
+                shift_y_out[ti] = 0.0f;
+                shift_z_out[ti] = 0.0f;
+            }
             interacting_atoms_out[ti * 32 + tgx] =
                 (tgx < nBuf) ? my_buf[tgx] : 0x7FFFFFFF;
         }
@@ -597,6 +625,9 @@ class BlockList:
 
         self._d_tile_buf = cp.empty(0, dtype=env.NUMPY_INT)
         self._d_interacting_buf = cp.empty(0, dtype=env.NUMPY_INT)
+        self._d_tile_shift_x_buf = cp.empty(0, dtype=env.NUMPY_FLOAT)
+        self._d_tile_shift_y_buf = cp.empty(0, dtype=env.NUMPY_FLOAT)
+        self._d_tile_shift_z_buf = cp.empty(0, dtype=env.NUMPY_FLOAT)
         self._d_counters = cp.zeros(1, dtype=env.NUMPY_INT)
 
         self._d_pbc_matrix = None
@@ -623,6 +654,10 @@ class BlockList:
         self.d_excl_exclusion_masks = cp.empty(0, dtype=np.uint32)
         self.d_excl_scaling_masks = cp.empty(0, dtype=np.uint32)
 
+        self.d_tile_shift_x = cp.empty(0, dtype=env.NUMPY_FLOAT)
+        self.d_tile_shift_y = cp.empty(0, dtype=env.NUMPY_FLOAT)
+        self.d_tile_shift_z = cp.empty(0, dtype=env.NUMPY_FLOAT)
+
         self._d_classify_excl_counter = cp.zeros(1, dtype=env.NUMPY_INT)
         self._d_classify_main_counter = cp.zeros(1, dtype=env.NUMPY_INT)
         self._d_classify_excl_tiles = cp.empty(0, dtype=env.NUMPY_INT)
@@ -631,6 +666,19 @@ class BlockList:
         self._d_classify_excl_scale = cp.empty(0, dtype=np.uint32)
         self._d_classify_main_tiles = cp.empty(0, dtype=env.NUMPY_INT)
         self._d_classify_main_int_atoms = cp.empty(0, dtype=env.NUMPY_INT)
+        self._d_classify_excl_shift_x = cp.empty(0, dtype=env.NUMPY_FLOAT)
+        self._d_classify_excl_shift_y = cp.empty(0, dtype=env.NUMPY_FLOAT)
+        self._d_classify_excl_shift_z = cp.empty(0, dtype=env.NUMPY_FLOAT)
+        self._d_classify_main_shift_x = cp.empty(0, dtype=env.NUMPY_FLOAT)
+        self._d_classify_main_shift_y = cp.empty(0, dtype=env.NUMPY_FLOAT)
+        self._d_classify_main_shift_z = cp.empty(0, dtype=env.NUMPY_FLOAT)
+
+        self.d_main_shift_x = cp.empty(0, dtype=env.NUMPY_FLOAT)
+        self.d_main_shift_y = cp.empty(0, dtype=env.NUMPY_FLOAT)
+        self.d_main_shift_z = cp.empty(0, dtype=env.NUMPY_FLOAT)
+        self.d_excl_shift_x = cp.empty(0, dtype=env.NUMPY_FLOAT)
+        self.d_excl_shift_y = cp.empty(0, dtype=env.NUMPY_FLOAT)
+        self.d_excl_shift_z = cp.empty(0, dtype=env.NUMPY_FLOAT)
 
         self._exclusion_masks_np = None
         self._scaling_masks_np = None
@@ -868,6 +916,9 @@ class BlockList:
         if self._d_tile_buf.size < max_tiles:
             self._d_tile_buf = cp.empty(max_tiles, dtype=env.NUMPY_INT)
             self._d_interacting_buf = cp.empty(max_tiles * W, dtype=env.NUMPY_INT)
+            self._d_tile_shift_x_buf = cp.empty(max_tiles, dtype=env.NUMPY_FLOAT)
+            self._d_tile_shift_y_buf = cp.empty(max_tiles, dtype=env.NUMPY_FLOAT)
+            self._d_tile_shift_z_buf = cp.empty(max_tiles, dtype=env.NUMPY_FLOAT)
             self._max_tiles = max_tiles
         self._d_counters[0] = 0
 
@@ -888,6 +939,7 @@ class BlockList:
                 np.float32(self._box_x), np.float32(self._box_y), np.float32(self._box_z),
                 np.float32(self._inv_box_x), np.float32(self._inv_box_y), np.float32(self._inv_box_z),
                 self._d_tile_buf, self._d_interacting_buf,
+                self._d_tile_shift_x_buf, self._d_tile_shift_y_buf, self._d_tile_shift_z_buf,
                 self._d_counters, np.int32(max_tiles),
             ),
         )
@@ -895,6 +947,9 @@ class BlockList:
         self.num_tiles = int(self._d_counters[0])
         self.d_tiles = self._d_tile_buf
         self.d_interacting_atoms = self._d_interacting_buf
+        self.d_tile_shift_x = self._d_tile_shift_x_buf
+        self.d_tile_shift_y = self._d_tile_shift_y_buf
+        self.d_tile_shift_z = self._d_tile_shift_z_buf
 
         self._build_masks_gpu(topology)
         self._extract_exclusion_tiles()
@@ -1025,6 +1080,15 @@ class BlockList:
             self.d_excl_scaling_masks = cp.empty(0, dtype=np.uint32)
             self.d_main_tiles = cp.empty(0, dtype=env.NUMPY_INT)
             self.d_main_interacting_atoms = cp.empty(0, dtype=env.NUMPY_INT)
+            self.d_tile_shift_x = cp.empty(0, dtype=env.NUMPY_FLOAT)
+            self.d_tile_shift_y = cp.empty(0, dtype=env.NUMPY_FLOAT)
+            self.d_tile_shift_z = cp.empty(0, dtype=env.NUMPY_FLOAT)
+            self.d_main_shift_x = cp.empty(0, dtype=env.NUMPY_FLOAT)
+            self.d_main_shift_y = cp.empty(0, dtype=env.NUMPY_FLOAT)
+            self.d_main_shift_z = cp.empty(0, dtype=env.NUMPY_FLOAT)
+            self.d_excl_shift_x = cp.empty(0, dtype=env.NUMPY_FLOAT)
+            self.d_excl_shift_y = cp.empty(0, dtype=env.NUMPY_FLOAT)
+            self.d_excl_shift_z = cp.empty(0, dtype=env.NUMPY_FLOAT)
             return
 
         nt = self.num_tiles
@@ -1041,6 +1105,12 @@ class BlockList:
             self._d_classify_main_int_atoms = cp.empty(
                 max_tiles * W, dtype=env.NUMPY_INT
             )
+            self._d_classify_excl_shift_x = cp.empty(max_tiles, dtype=env.NUMPY_FLOAT)
+            self._d_classify_excl_shift_y = cp.empty(max_tiles, dtype=env.NUMPY_FLOAT)
+            self._d_classify_excl_shift_z = cp.empty(max_tiles, dtype=env.NUMPY_FLOAT)
+            self._d_classify_main_shift_x = cp.empty(max_tiles, dtype=env.NUMPY_FLOAT)
+            self._d_classify_main_shift_y = cp.empty(max_tiles, dtype=env.NUMPY_FLOAT)
+            self._d_classify_main_shift_z = cp.empty(max_tiles, dtype=env.NUMPY_FLOAT)
 
         self._d_classify_excl_counter[0] = 0
         self._d_classify_main_counter[0] = 0
@@ -1076,6 +1146,12 @@ class BlockList:
         self.d_excl_scaling_masks = self._d_classify_excl_scale
         self.d_main_tiles = self._d_classify_main_tiles
         self.d_main_interacting_atoms = self._d_classify_main_int_atoms
+        self.d_excl_shift_x = self._d_classify_excl_shift_x
+        self.d_excl_shift_y = self._d_classify_excl_shift_y
+        self.d_excl_shift_z = self._d_classify_excl_shift_z
+        self.d_main_shift_x = self._d_classify_main_shift_x
+        self.d_main_shift_y = self._d_classify_main_shift_y
+        self.d_main_shift_z = self._d_classify_main_shift_z
 
     def check_rebuild(self, positions) -> bool:
         if not self._is_initialized:
@@ -1196,6 +1272,15 @@ class BlockList:
         self.d_excl_scaling_masks = cp.empty(0, dtype=np.uint32)
         self.d_main_tiles = cp.empty(0, dtype=env.NUMPY_INT)
         self.d_main_interacting_atoms = cp.empty(0, dtype=env.NUMPY_INT)
+        self.d_tile_shift_x = cp.empty(0, dtype=env.NUMPY_FLOAT)
+        self.d_tile_shift_y = cp.empty(0, dtype=env.NUMPY_FLOAT)
+        self.d_tile_shift_z = cp.empty(0, dtype=env.NUMPY_FLOAT)
+        self.d_main_shift_x = cp.empty(0, dtype=env.NUMPY_FLOAT)
+        self.d_main_shift_y = cp.empty(0, dtype=env.NUMPY_FLOAT)
+        self.d_main_shift_z = cp.empty(0, dtype=env.NUMPY_FLOAT)
+        self.d_excl_shift_x = cp.empty(0, dtype=env.NUMPY_FLOAT)
+        self.d_excl_shift_y = cp.empty(0, dtype=env.NUMPY_FLOAT)
+        self.d_excl_shift_z = cp.empty(0, dtype=env.NUMPY_FLOAT)
         self.d_positions_at_rebuild_x = cp.empty(0, dtype=env.NUMPY_FLOAT)
         self.d_positions_at_rebuild_y = cp.empty(0, dtype=env.NUMPY_FLOAT)
         self.d_positions_at_rebuild_z = cp.empty(0, dtype=env.NUMPY_FLOAT)
