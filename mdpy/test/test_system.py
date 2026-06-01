@@ -5,7 +5,7 @@ from mdpy import env
 from mdpy.core.topology import Builder
 from mdpy.core.gpu_context import GPUContext
 from mdpy.core.particle_table import ParticleTable
-from mdpy.core.tile_list import TileList
+from mdpy.core.block_list import BlockList
 from mdpy.core.parameter_table import ParameterTable
 from mdpy.force.bonded_force import BondedForce
 from mdpy.system import System
@@ -135,7 +135,7 @@ class TestSystem:
         assert system.topology is topology
         assert system.particles.num_particles == 4
         assert isinstance(system.gpu, GPUContext)
-        assert isinstance(system.tile_list, TileList)
+        assert isinstance(system.tile_list, BlockList)
         assert system.cutoff == 12.0
         assert system.dump_energy() == {}
         assert system.step_count == 0

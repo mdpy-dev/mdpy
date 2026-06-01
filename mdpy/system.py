@@ -4,7 +4,7 @@ import cupy as cp
 import numpy as np
 from mdpy import env
 from mdpy.core.particle_table import ParticleTable
-from mdpy.core.tile_list import TileList
+from mdpy.core.block_list import BlockList
 from mdpy.core.topology import build_exclusion_map_gpu, permute_exclusion_pairs_gpu
 from mdpy.core.pbc import compute_pbc_inv
 from mdpy.core.gpu_context import GPUContext
@@ -24,7 +24,7 @@ class System:
         self.gpu = GPUContext()
         self.gpu.initialize(topology, self.pbc_matrix.flatten())
 
-        self.tile_list = TileList(
+        self.tile_list = BlockList(
             cutoff, skin=skin, rebuild_check_interval=rebuild_check_interval
         )
         self.force_terms = []
