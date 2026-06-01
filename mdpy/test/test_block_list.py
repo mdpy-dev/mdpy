@@ -421,3 +421,196 @@ class TestComparisonWithTileList:
         tl_missing = brute - tl_pairs
         assert not bl_missing, f"BlockList missing {len(bl_missing)}/{len(brute)} pairs"
         assert not tl_missing, f"TileList missing {len(tl_missing)}/{len(brute)} pairs"
+
+
+class TestExclusionMasks:
+
+    def test_bond_excluded(self):
+        n = 10
+        builder = Builder()
+        builder.set_particles(
+            masses=np.ones(n, dtype=np.float32),
+            charges=np.zeros(n, dtype=np.float32),
+            particle_types=np.zeros(n, dtype=np.int32),
+        )
+        for i in range(n - 1):
+            builder.add_bond(i, i + 1, k=300.0, r0=1.5)
+        builder.build_exclusion_map()
+        topology, _ = builder.build()
+        positions = np.zeros((n, 3), dtype=np.float32)
+        for i in range(n):
+            positions[i] = [i * 1.0, 0, 0]
+        box = 20.0
+        pbc_matrix = _make_pbc(box)
+        pbc_inv = np.linalg.inv(pbc_matrix)
+        bl = BlockList(cutoff=10.0, skin=2.0)
+        bl.rebuild(positions, topology, pbc_matrix, pbc_inv)
+        bl.build_tiles(topology, pbc_matrix)
+
+        excl = bl.exclusion_masks
+        ia = bl.interacting_atoms
+        atb = cp.asnumpy(bl.d_atom_to_block)
+        ats = cp.asnumpy(bl.d_atom_to_slot)
+        for t in range(bl.num_tiles):
+            bx = bl.tiles[t]
+            for sj in range(W):
+                aj = ia[t, sj]
+                if aj < 0 or aj >= n:
+                    continue
+                if atb[aj] != bx:
+                    continue
+                mask = excl[t, sj]
+                slot_in_block = ats[aj]
+                for s in range(slot_in_block + 1):
+                    assert (mask >> s) & 1, f"triangle bit {s} missing"
+
+    def test_dihedral_scaling(self):
+        n = 10
+        builder = Builder()
+        builder.set_particles(
+            masses=np.ones(n, dtype=np.float32),
+            charges=np.zeros(n, dtype=np.float32),
+            particle_types=np.zeros(n, dtype=np.int32),
+        )
+        for i in range(n - 1):
+            builder.add_bond(i, i + 1, k=300.0, r0=1.5)
+        for i in range(n - 2):
+            builder.add_angle(i, i + 1, i + 2, force_constant=50.0, equilibrium_angle=1.9)
+        for i in range(n - 3):
+            builder.add_dihedral(i, i + 1, i + 2, i + 3, force_constant=0.5, periodicity=3, phase=0.0)
+        builder.build_exclusion_map()
+        topology, _ = builder.build()
+        positions = np.zeros((n, 3), dtype=np.float32)
+        for i in range(n):
+            positions[i] = [i * 1.0, 0, 0]
+        box = 20.0
+        pbc_matrix = _make_pbc(box)
+        pbc_inv = np.linalg.inv(pbc_matrix)
+        bl = BlockList(cutoff=10.0, skin=2.0)
+        bl.rebuild(positions, topology, pbc_matrix, pbc_inv)
+        bl.build_tiles(topology, pbc_matrix)
+
+        excl = bl.exclusion_masks
+        scale = bl.scaling_masks
+        ia = bl.interacting_atoms
+        atb = cp.asnumpy(bl.d_atom_to_block)
+        ats = cp.asnumpy(bl.d_atom_to_slot)
+        found_14 = False
+        for t in range(bl.num_tiles):
+            bx = bl.tiles[t]
+            for sj in range(W):
+                aj = ia[t, sj]
+                if aj < 0 or aj >= n:
+                    continue
+                if atb[aj] != bx:
+                    continue
+                slot_aj = ats[aj]
+                for pair_a, pair_b in [(0, 3), (1, 4), (2, 5)]:
+                    if aj == pair_a and atb[pair_b] == bx:
+                        slot_b = ats[pair_b]
+                        if not ((excl[t, sj] >> slot_b) & 1):
+                            if (scale[t, sj] >> slot_b) & 1:
+                                found_14 = True
+        assert found_14, "expected 1-4 pair in scaling mask"
+
+
+class TestTileClassification:
+
+    def test_classify_splits_tiles(self):
+        n = 10
+        builder = Builder()
+        builder.set_particles(
+            masses=np.ones(n, dtype=np.float32),
+            charges=np.zeros(n, dtype=np.float32),
+            particle_types=np.zeros(n, dtype=np.int32),
+        )
+        for i in range(n - 1):
+            builder.add_bond(i, i + 1, k=300.0, r0=1.5)
+        builder.build_exclusion_map()
+        topology, _ = builder.build()
+        positions = np.zeros((n, 3), dtype=np.float32)
+        for i in range(n):
+            positions[i] = [i * 1.0, 0, 0]
+        box = 20.0
+        pbc_matrix = _make_pbc(box)
+        pbc_inv = np.linalg.inv(pbc_matrix)
+        bl = BlockList(cutoff=10.0, skin=2.0)
+        bl.rebuild(positions, topology, pbc_matrix, pbc_inv)
+        bl.build_tiles(topology, pbc_matrix)
+
+        assert bl.num_main_tiles + bl.num_exclusion_tiles == bl.num_tiles
+        if bl.num_exclusion_tiles > 0:
+            assert bl.d_excl_exclusion_masks.size >= bl.num_exclusion_tiles * W
+            assert bl.d_excl_scaling_masks.size >= bl.num_exclusion_tiles * W
+
+    def test_no_exclusion_all_main(self):
+        n = 20
+        topology = _make_topology(n)
+        positions = _make_positions(n, 30.0, seed=11)
+        pbc_matrix = _make_pbc(30.0)
+        pbc_inv = np.linalg.inv(pbc_matrix)
+        bl = BlockList(cutoff=8.0, skin=2.0)
+        bl.rebuild(positions, topology, pbc_matrix, pbc_inv)
+        bl.build_tiles(topology, pbc_matrix)
+
+        assert bl.num_main_tiles + bl.num_exclusion_tiles == bl.num_tiles
+        excl_masks = bl.exclusion_masks
+        scale_masks = bl.scaling_masks
+        for t in range(bl.num_tiles):
+            for sj in range(W):
+                assert scale_masks[t, sj] == 0, (
+                    "scaling mask should be zero with no bonded topology"
+                )
+
+
+class TestCheckRebuild:
+
+    def test_check_rebuild(self):
+        topology = _make_topology(4)
+        positions = np.array([
+            [0.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+            [2.0, 0.0, 0.0],
+            [3.0, 0.0, 0.0],
+        ], dtype=np.float32)
+        pbc_matrix = _make_pbc(50.0)
+        pbc_inv = np.linalg.inv(pbc_matrix)
+        bl = BlockList(cutoff=10.0, skin=2.0)
+        bl.rebuild(positions, topology, pbc_matrix, pbc_inv)
+
+        for _ in range(19):
+            assert not bl.check_rebuild(positions)
+
+        moved = positions.copy()
+        moved[0, 0] += 2.0
+        assert bl.check_rebuild(moved)
+
+    def test_check_rebuild_uninitialized(self):
+        topology = _make_topology(4)
+        positions = np.zeros((4, 3), dtype=np.float32)
+        bl = BlockList(cutoff=10.0, skin=2.0)
+        assert bl.check_rebuild(positions)
+
+    def test_async_check_sticky_flag(self):
+        n, box = 50, 50.0
+        positions = _make_positions(n, box)
+        topology = _make_topology(n)
+        pbc_matrix = _make_pbc(box)
+        pbc_inv = np.linalg.inv(pbc_matrix)
+        bl = BlockList(cutoff=10.0, skin=2.0)
+        bl.rebuild(positions, topology, pbc_matrix, pbc_inv)
+
+        pos_x = bl.d_positions_at_rebuild_x.copy()
+        pos_y = bl.d_positions_at_rebuild_y.copy()
+        pos_z = bl.d_positions_at_rebuild_z.copy()
+
+        bl.d_rebuild_flag[0] = 0
+        pos_x[:5] += 3.0
+        bl.check_rebuild_async((pos_x, pos_y, pos_z))
+        cp.cuda.Stream.null.synchronize()
+        assert int(bl.d_rebuild_flag[0]) == 1
+
+        pos_x[:5] -= 3.0
+        bl.check_rebuild_async((pos_x, pos_y, pos_z))
+        cp.cuda.Stream.null.synchronize()
+        assert int(bl.d_rebuild_flag[0]) == 1, "flag must stay sticky"
