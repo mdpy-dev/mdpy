@@ -326,6 +326,214 @@ void find_interacting_blocks_kernel(
 }
 """
 
+_BUILD_REVERSE_COUNT_KERNEL = r"""
+extern "C" __global__
+void build_reverse_count_kernel(
+    const int* __restrict__ exclusion_offset,
+    const int* __restrict__ exclusion_neighbors,
+    const int num_particles,
+    int* __restrict__ reverse_offset
+) {
+    int atom_a = blockIdx.x * blockDim.x + threadIdx.x;
+    if (atom_a >= num_particles) return;
+    int start = exclusion_offset[atom_a];
+    int end = exclusion_offset[atom_a + 1];
+    for (int k = start; k < end; k++) {
+        int neighbor = exclusion_neighbors[k];
+        atomicAdd(&reverse_offset[neighbor + 1], 1);
+    }
+}
+"""
+
+_FILL_REVERSE_KERNEL = r"""
+extern "C" __global__
+void fill_reverse_kernel(
+    const int* __restrict__ exclusion_offset,
+    const int* __restrict__ exclusion_neighbors,
+    const float* __restrict__ exclusion_scale,
+    const int* __restrict__ reverse_offset,
+    const int num_particles,
+    int* __restrict__ reverse_neighbors,
+    float* __restrict__ reverse_scale,
+    int* __restrict__ temp_offset
+) {
+    int atom_a = blockIdx.x * blockDim.x + threadIdx.x;
+    if (atom_a >= num_particles) return;
+    int start = exclusion_offset[atom_a];
+    int end = exclusion_offset[atom_a + 1];
+    for (int k = start; k < end; k++) {
+        int neighbor = exclusion_neighbors[k];
+        float scale = exclusion_scale[k];
+        int pos = atomicAdd(&temp_offset[neighbor], 1);
+        reverse_neighbors[pos] = atom_a;
+        reverse_scale[pos] = scale;
+    }
+}
+"""
+
+_BUILD_MASKS_KERNEL = r"""
+extern "C" __global__
+void build_masks_kernel(
+    const int* __restrict__ tiles,
+    const int* __restrict__ interacting_atoms,
+    const int* __restrict__ block_atoms,
+    const int* __restrict__ atom_to_block,
+    const int* __restrict__ atom_to_slot,
+    const int* __restrict__ exclusion_offset,
+    const int* __restrict__ exclusion_neighbors,
+    const float* __restrict__ exclusion_scale,
+    const int* __restrict__ reverse_offset,
+    const int* __restrict__ reverse_neighbors,
+    const float* __restrict__ reverse_scale,
+    int num_tiles,
+    int num_particles,
+    unsigned int* __restrict__ exclusion_masks_out,
+    unsigned int* __restrict__ scaling_masks_out
+) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= num_tiles * 32) return;
+
+    int tile = idx / 32;
+    int slot_j = idx % 32;
+    int block_x = tiles[tile];
+    int atom_j = interacting_atoms[tile * 32 + slot_j];
+
+    unsigned int excl = 0, scale = 0;
+
+    if (atom_j >= 0 && atom_j < num_particles) {
+        int bj = atom_to_block[atom_j];
+        int sj = atom_to_slot[atom_j];
+        if (bj == block_x) {
+            excl |= ((1u << (sj + 1)) - 1);
+        }
+
+        int s = exclusion_offset[atom_j];
+        int e = exclusion_offset[atom_j + 1];
+        for (int k = s; k < e; k++) {
+            int nb = exclusion_neighbors[k];
+            if (nb < 0 || nb >= num_particles) continue;
+            if (atom_to_block[nb] == block_x) {
+                int sn = atom_to_slot[nb];
+                if (exclusion_scale[k] == 0.0f)
+                    excl |= (1u << sn);
+                else
+                    scale |= (1u << sn);
+            }
+        }
+
+        s = reverse_offset[atom_j];
+        e = reverse_offset[atom_j + 1];
+        for (int k = s; k < e; k++) {
+            int nb = reverse_neighbors[k];
+            if (nb < 0 || nb >= num_particles) continue;
+            if (atom_to_block[nb] == block_x) {
+                int sn = atom_to_slot[nb];
+                if (reverse_scale[k] == 0.0f)
+                    excl |= (1u << sn);
+                else
+                    scale |= (1u << sn);
+            }
+        }
+    }
+
+    exclusion_masks_out[idx] = excl;
+    scaling_masks_out[idx] = scale;
+}
+"""
+
+_CLASSIFY_TILES_KERNEL = r"""
+extern "C" __global__
+void classify_tiles_kernel(
+    const unsigned int* __restrict__ excl_masks,
+    const unsigned int* __restrict__ scale_masks,
+    const int* __restrict__ tiles,
+    const int* __restrict__ interacting_atoms,
+    int num_tiles,
+    int* __restrict__ excl_counter,
+    int* __restrict__ main_counter,
+    int* __restrict__ excl_tiles_out,
+    int* __restrict__ excl_int_atoms_out,
+    unsigned int* __restrict__ excl_masks_out,
+    unsigned int* __restrict__ excl_scale_out,
+    int* __restrict__ main_tiles_out,
+    int* __restrict__ main_int_atoms_out
+) {
+    int tile = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tile >= num_tiles) return;
+
+    bool has_mask = false;
+    for (int i = 0; i < 32; i++) {
+        if (excl_masks[tile * 32 + i] != 0 || scale_masks[tile * 32 + i] != 0) {
+            has_mask = true;
+            break;
+        }
+    }
+
+    if (has_mask) {
+        int idx = atomicAdd(excl_counter, 1);
+        excl_tiles_out[idx] = tiles[tile];
+        for (int i = 0; i < 32; i++) {
+            excl_int_atoms_out[idx * 32 + i] = interacting_atoms[tile * 32 + i];
+            excl_masks_out[idx * 32 + i] = excl_masks[tile * 32 + i];
+            excl_scale_out[idx * 32 + i] = scale_masks[tile * 32 + i];
+        }
+    } else {
+        int idx = atomicAdd(main_counter, 1);
+        main_tiles_out[idx] = tiles[tile];
+        for (int i = 0; i < 32; i++) {
+            main_int_atoms_out[idx * 32 + i] = interacting_atoms[tile * 32 + i];
+        }
+    }
+}
+"""
+
+_CHECK_REBUILD_KERNEL = r"""
+extern "C" __global__
+void check_rebuild_kernel(
+    const float* __restrict__ pos_x,
+    const float* __restrict__ pos_y,
+    const float* __restrict__ pos_z,
+    const float* __restrict__ old_pos_x,
+    const float* __restrict__ old_pos_y,
+    const float* __restrict__ old_pos_z,
+    int num_particles,
+    float threshold_sq,
+    float box_x, float box_y, float box_z,
+    float inv_box_x, float inv_box_y, float inv_box_z,
+    int* __restrict__ rebuild_flag
+) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= num_particles) return;
+    float dx = pos_x[idx] - old_pos_x[idx];
+    float dy = pos_y[idx] - old_pos_y[idx];
+    float dz = pos_z[idx] - old_pos_z[idx];
+    dx -= box_x * roundf(dx * inv_box_x);
+    dy -= box_y * roundf(dy * inv_box_y);
+    dz -= box_z * roundf(dz * inv_box_z);
+    if (dx*dx + dy*dy + dz*dz > threshold_sq)
+        rebuild_flag[0] = 1;
+}
+"""
+
+_FUSED_COPY3_KERNEL = r"""
+extern "C" __global__
+void fused_copy3_kernel(
+    const float* __restrict__ src0,
+    const float* __restrict__ src1,
+    const float* __restrict__ src2,
+    int num_elements,
+    float* __restrict__ dst0,
+    float* __restrict__ dst1,
+    float* __restrict__ dst2
+) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= num_elements) return;
+    dst0[idx] = src0[idx];
+    dst1[idx] = src1[idx];
+    dst2[idx] = src2[idx];
+}
+"""
+
 
 def _compile_gpu_kernels():
     return {
@@ -338,16 +546,23 @@ def _compile_gpu_kernels():
         "find_interacting": cp.RawKernel(
             _FIND_INTERACTING_BLOCKS_KERNEL, "find_interacting_blocks_kernel"
         ),
+        "rev_count": cp.RawKernel(_BUILD_REVERSE_COUNT_KERNEL, "build_reverse_count_kernel"),
+        "rev_fill": cp.RawKernel(_FILL_REVERSE_KERNEL, "fill_reverse_kernel"),
+        "build_masks": cp.RawKernel(_BUILD_MASKS_KERNEL, "build_masks_kernel"),
+        "classify_tiles": cp.RawKernel(_CLASSIFY_TILES_KERNEL, "classify_tiles_kernel"),
+        "check_rebuild": cp.RawKernel(_CHECK_REBUILD_KERNEL, "check_rebuild_kernel"),
+        "fused_copy3": cp.RawKernel(_FUSED_COPY3_KERNEL, "fused_copy3_kernel"),
     }
 
 
 class BlockList:
 
-    def __init__(self, cutoff: float, skin: float = 1.0):
+    def __init__(self, cutoff: float, skin: float = 1.0, rebuild_check_interval: int = 10):
         self.cutoff = cutoff
         self.skin = skin
         self.build_radius = cutoff + skin
         self._is_initialized = False
+        self.rebuild_check_interval = rebuild_check_interval
 
         self.num_blocks = 0
         self.num_tiles = 0
@@ -388,6 +603,43 @@ class BlockList:
         self._d_pbc_inv = None
         self._kernels = None
 
+        self._d_excl_offset = None
+        self._d_excl_neighbors = None
+        self._d_excl_scale = None
+        self._d_reverse_offset = None
+        self._d_reverse_neighbors = None
+        self._d_reverse_scale = None
+        self._total_exclusion_pairs = 0
+
+        self.d_exclusion_masks = cp.empty(0, dtype=np.uint32)
+        self.d_scaling_masks = cp.empty(0, dtype=np.uint32)
+
+        self.num_main_tiles = 0
+        self.num_exclusion_tiles = 0
+        self.d_main_tiles = cp.empty(0, dtype=env.NUMPY_INT)
+        self.d_main_interacting_atoms = cp.empty(0, dtype=env.NUMPY_INT)
+        self.d_excl_tiles = cp.empty(0, dtype=env.NUMPY_INT)
+        self.d_excl_interacting_atoms = cp.empty(0, dtype=env.NUMPY_INT)
+        self.d_excl_exclusion_masks = cp.empty(0, dtype=np.uint32)
+        self.d_excl_scaling_masks = cp.empty(0, dtype=np.uint32)
+
+        self._d_classify_excl_counter = cp.zeros(1, dtype=env.NUMPY_INT)
+        self._d_classify_main_counter = cp.zeros(1, dtype=env.NUMPY_INT)
+        self._d_classify_excl_tiles = cp.empty(0, dtype=env.NUMPY_INT)
+        self._d_classify_excl_int_atoms = cp.empty(0, dtype=env.NUMPY_INT)
+        self._d_classify_excl_masks = cp.empty(0, dtype=np.uint32)
+        self._d_classify_excl_scale = cp.empty(0, dtype=np.uint32)
+        self._d_classify_main_tiles = cp.empty(0, dtype=env.NUMPY_INT)
+        self._d_classify_main_int_atoms = cp.empty(0, dtype=env.NUMPY_INT)
+
+        self._exclusion_masks_np = None
+        self._scaling_masks_np = None
+
+        self.d_rebuild_flag = cp.zeros(1, dtype=env.NUMPY_INT)
+        self.d_positions_at_rebuild_x = cp.empty(0, dtype=env.NUMPY_FLOAT)
+        self.d_positions_at_rebuild_y = cp.empty(0, dtype=env.NUMPY_FLOAT)
+        self.d_positions_at_rebuild_z = cp.empty(0, dtype=env.NUMPY_FLOAT)
+
         self._block_atoms_np = None
         self._tiles_np = None
         self._interacting_atoms_np = None
@@ -419,10 +671,28 @@ class BlockList:
             ).reshape(-1, W)
         return self._interacting_atoms_np
 
+    @property
+    def exclusion_masks(self):
+        if self._exclusion_masks_np is None and self.d_exclusion_masks.size > 0:
+            self._exclusion_masks_np = cp.asnumpy(
+                self.d_exclusion_masks[:self.num_tiles * W]
+            ).reshape(-1, W)
+        return self._exclusion_masks_np
+
+    @property
+    def scaling_masks(self):
+        if self._scaling_masks_np is None and self.d_scaling_masks.size > 0:
+            self._scaling_masks_np = cp.asnumpy(
+                self.d_scaling_masks[:self.num_tiles * W]
+            ).reshape(-1, W)
+        return self._scaling_masks_np
+
     def _invalidate_caches(self):
         self._block_atoms_np = None
         self._tiles_np = None
         self._interacting_atoms_np = None
+        self._exclusion_masks_np = None
+        self._scaling_masks_np = None
 
     def _ensure_kernels(self):
         if self._kernels is not None:
@@ -573,7 +843,15 @@ class BlockList:
             ),
         )
 
+        self._d_reverse_offset = None
+        self._d_reverse_neighbors = None
+        self._d_reverse_scale = None
+
         self._is_initialized = True
+
+        self.d_positions_at_rebuild_x, self.d_positions_at_rebuild_y, self.d_positions_at_rebuild_z = self.fused_copy3(pos_x, pos_y, pos_z)
+        self.d_rebuild_flag[0] = 0
+
         return self.d_pdb_to_sorted, None
 
     def build_tiles(self, topology, pbc_matrix):
@@ -618,6 +896,274 @@ class BlockList:
         self.d_tiles = self._d_tile_buf
         self.d_interacting_atoms = self._d_interacting_buf
 
+        self._build_masks_gpu(topology)
+        self._extract_exclusion_tiles()
+
+    def fused_copy3(self, src0, src1, src2):
+        N = src0.size
+        self._ensure_kernels()
+        tpb = 256
+        grid = ((N + tpb - 1) // tpb,)
+        dst0 = cp.empty(N, dtype=env.NUMPY_FLOAT)
+        dst1 = cp.empty(N, dtype=env.NUMPY_FLOAT)
+        dst2 = cp.empty(N, dtype=env.NUMPY_FLOAT)
+        self._kernels["fused_copy3"](
+            grid,
+            (tpb,),
+            (src0, src1, src2, np.int32(N), dst0, dst1, dst2),
+        )
+        return dst0, dst1, dst2
+
+    def set_gpu_exclusion(self, d_offset, d_neighbors, d_scale):
+        self._d_excl_offset = d_offset
+        self._d_excl_neighbors = d_neighbors
+        self._d_excl_scale = d_scale
+        self._d_reverse_offset = None
+        self._d_reverse_neighbors = None
+        self._d_reverse_scale = None
+        self._total_exclusion_pairs = int(d_neighbors.shape[0])
+
+    def _upload_exclusion(self, topology):
+        if self._d_excl_offset is not None:
+            return
+        self._d_excl_offset = cp.asarray(
+            np.ascontiguousarray(topology.exclusion_offset, dtype=env.NUMPY_INT)
+        )
+        self._d_excl_neighbors = cp.asarray(
+            np.ascontiguousarray(topology.exclusion_neighbors, dtype=env.NUMPY_INT)
+        )
+        self._d_excl_scale = cp.asarray(
+            np.ascontiguousarray(topology.exclusion_scale, dtype=env.NUMPY_FLOAT)
+        )
+
+    def _build_masks_gpu(self, topology):
+        if self.num_tiles == 0:
+            self.d_exclusion_masks = cp.empty(0, dtype=np.uint32)
+            self.d_scaling_masks = cp.empty(0, dtype=np.uint32)
+            return
+
+        self._upload_exclusion(topology)
+        N = self.num_particles
+        tpb = 256
+
+        if self._d_reverse_offset is None:
+            d_rev_offset = cp.zeros(N + 1, dtype=env.NUMPY_INT)
+            n1 = (N + tpb - 1) // tpb
+            self._kernels["rev_count"](
+                (n1,),
+                (tpb,),
+                (
+                    self._d_excl_offset,
+                    self._d_excl_neighbors,
+                    np.int32(N),
+                    d_rev_offset,
+                ),
+            )
+
+            d_rev_offset = cp.cumsum(d_rev_offset, dtype=env.NUMPY_INT).astype(env.NUMPY_INT)
+            max_rev = (
+                self._total_exclusion_pairs
+                if self._total_exclusion_pairs > 0
+                else int(d_rev_offset[-1])
+            )
+            d_rev_neighbors = cp.empty(max_rev, dtype=env.NUMPY_INT)
+            d_rev_scale = cp.empty(max_rev, dtype=env.NUMPY_FLOAT)
+            d_temp = d_rev_offset.copy()
+
+            self._kernels["rev_fill"](
+                (n1,),
+                (tpb,),
+                (
+                    self._d_excl_offset,
+                    self._d_excl_neighbors,
+                    self._d_excl_scale,
+                    d_rev_offset,
+                    np.int32(N),
+                    d_rev_neighbors,
+                    d_rev_scale,
+                    d_temp,
+                ),
+            )
+
+            self._d_reverse_offset = d_rev_offset
+            self._d_reverse_neighbors = d_rev_neighbors
+            self._d_reverse_scale = d_rev_scale
+
+        total_work = self.num_tiles * W
+        grid = ((total_work + tpb - 1) // tpb,)
+        self.d_exclusion_masks = cp.empty(total_work, dtype=np.uint32)
+        self.d_scaling_masks = cp.empty(total_work, dtype=np.uint32)
+        self._kernels["build_masks"](
+            grid,
+            (tpb,),
+            (
+                self.d_tiles,
+                self.d_interacting_atoms,
+                self.d_block_atoms,
+                self.d_atom_to_block,
+                self.d_atom_to_slot,
+                self._d_excl_offset,
+                self._d_excl_neighbors,
+                self._d_excl_scale,
+                self._d_reverse_offset,
+                self._d_reverse_neighbors,
+                self._d_reverse_scale,
+                np.int32(self.num_tiles),
+                np.int32(N),
+                self.d_exclusion_masks,
+                self.d_scaling_masks,
+            ),
+        )
+
+    def _extract_exclusion_tiles(self):
+        if self.num_tiles == 0:
+            self.num_exclusion_tiles = 0
+            self.num_main_tiles = 0
+            self.d_excl_tiles = cp.empty(0, dtype=env.NUMPY_INT)
+            self.d_excl_interacting_atoms = cp.empty(0, dtype=env.NUMPY_INT)
+            self.d_excl_exclusion_masks = cp.empty(0, dtype=np.uint32)
+            self.d_excl_scaling_masks = cp.empty(0, dtype=np.uint32)
+            self.d_main_tiles = cp.empty(0, dtype=env.NUMPY_INT)
+            self.d_main_interacting_atoms = cp.empty(0, dtype=env.NUMPY_INT)
+            return
+
+        nt = self.num_tiles
+        max_tiles = nt
+
+        if self._d_classify_excl_tiles.size < max_tiles:
+            self._d_classify_excl_tiles = cp.empty(max_tiles, dtype=env.NUMPY_INT)
+            self._d_classify_excl_int_atoms = cp.empty(
+                max_tiles * W, dtype=env.NUMPY_INT
+            )
+            self._d_classify_excl_masks = cp.empty(max_tiles * W, dtype=np.uint32)
+            self._d_classify_excl_scale = cp.empty(max_tiles * W, dtype=np.uint32)
+            self._d_classify_main_tiles = cp.empty(max_tiles, dtype=env.NUMPY_INT)
+            self._d_classify_main_int_atoms = cp.empty(
+                max_tiles * W, dtype=env.NUMPY_INT
+            )
+
+        self._d_classify_excl_counter[0] = 0
+        self._d_classify_main_counter[0] = 0
+
+        tpb = 256
+        grid = ((nt + tpb - 1) // tpb,)
+        self._kernels["classify_tiles"](
+            grid,
+            (tpb,),
+            (
+                self.d_exclusion_masks,
+                self.d_scaling_masks,
+                self.d_tiles,
+                self.d_interacting_atoms,
+                np.int32(nt),
+                self._d_classify_excl_counter,
+                self._d_classify_main_counter,
+                self._d_classify_excl_tiles,
+                self._d_classify_excl_int_atoms,
+                self._d_classify_excl_masks,
+                self._d_classify_excl_scale,
+                self._d_classify_main_tiles,
+                self._d_classify_main_int_atoms,
+            ),
+        )
+
+        self.num_exclusion_tiles = int(self._d_classify_excl_counter[0])
+        self.num_main_tiles = int(self._d_classify_main_counter[0])
+
+        self.d_excl_tiles = self._d_classify_excl_tiles
+        self.d_excl_interacting_atoms = self._d_classify_excl_int_atoms
+        self.d_excl_exclusion_masks = self._d_classify_excl_masks
+        self.d_excl_scaling_masks = self._d_classify_excl_scale
+        self.d_main_tiles = self._d_classify_main_tiles
+        self.d_main_interacting_atoms = self._d_classify_main_int_atoms
+
+    def check_rebuild(self, positions) -> bool:
+        if not self._is_initialized:
+            return True
+        if self.d_positions_at_rebuild_x.size == 0:
+            return True
+
+        if isinstance(positions, tuple):
+            pos_x, pos_y, pos_z = positions
+        else:
+            data = cp.asarray(
+                np.ascontiguousarray(positions.ravel(), dtype=env.NUMPY_FLOAT)
+            )
+            pos_x = cp.ascontiguousarray(data[0::3])
+            pos_y = cp.ascontiguousarray(data[1::3])
+            pos_z = cp.ascontiguousarray(data[2::3])
+
+        self.d_rebuild_flag[0] = 0
+        threshold_sq = (self.skin * 0.5) ** 2
+        tpb = 256
+        grid = ((self.num_particles + tpb - 1) // tpb,)
+        self._kernels["check_rebuild"](
+            grid,
+            (tpb,),
+            (
+                pos_x,
+                pos_y,
+                pos_z,
+                self.d_positions_at_rebuild_x,
+                self.d_positions_at_rebuild_y,
+                self.d_positions_at_rebuild_z,
+                np.int32(self.num_particles),
+                np.float32(threshold_sq),
+                np.float32(self._box_x),
+                np.float32(self._box_y),
+                np.float32(self._box_z),
+                np.float32(self._inv_box_x),
+                np.float32(self._inv_box_y),
+                np.float32(self._inv_box_z),
+                self.d_rebuild_flag,
+            ),
+        )
+        flag = int(self.d_rebuild_flag[0])
+        return flag == 1
+
+    def check_rebuild_async(self, positions) -> bool:
+        if not self._is_initialized:
+            return True
+        if self.d_positions_at_rebuild_x.size == 0:
+            return True
+
+        if isinstance(positions, tuple):
+            pos_x, pos_y, pos_z = positions
+        else:
+            data = cp.asarray(
+                np.ascontiguousarray(positions.ravel(), dtype=env.NUMPY_FLOAT)
+            )
+            pos_x = cp.ascontiguousarray(data[0::3])
+            pos_y = cp.ascontiguousarray(data[1::3])
+            pos_z = cp.ascontiguousarray(data[2::3])
+
+        self._ensure_kernels()
+        threshold_sq = (self.skin * 0.5) ** 2
+        tpb = 256
+        grid = ((self.num_particles + tpb - 1) // tpb,)
+        self._kernels["check_rebuild"](
+            grid,
+            (tpb,),
+            (
+                pos_x,
+                pos_y,
+                pos_z,
+                self.d_positions_at_rebuild_x,
+                self.d_positions_at_rebuild_y,
+                self.d_positions_at_rebuild_z,
+                np.int32(self.num_particles),
+                np.float32(threshold_sq),
+                np.float32(self._box_x),
+                np.float32(self._box_y),
+                np.float32(self._box_z),
+                np.float32(self._inv_box_x),
+                np.float32(self._inv_box_y),
+                np.float32(self._inv_box_z),
+                self.d_rebuild_flag,
+            ),
+        )
+        return False
+
     def _init_empty(self):
         self.num_blocks = 0
         self.num_tiles = 0
@@ -640,3 +1186,17 @@ class BlockList:
         self.d_pdb_to_sorted = cp.empty(0, dtype=env.NUMPY_INT)
         self.d_sorted_to_pdb = cp.empty(0, dtype=env.NUMPY_INT)
         self._sorted_positions = None
+        self.d_exclusion_masks = cp.empty(0, dtype=np.uint32)
+        self.d_scaling_masks = cp.empty(0, dtype=np.uint32)
+        self.num_exclusion_tiles = 0
+        self.num_main_tiles = 0
+        self.d_excl_tiles = cp.empty(0, dtype=env.NUMPY_INT)
+        self.d_excl_interacting_atoms = cp.empty(0, dtype=env.NUMPY_INT)
+        self.d_excl_exclusion_masks = cp.empty(0, dtype=np.uint32)
+        self.d_excl_scaling_masks = cp.empty(0, dtype=np.uint32)
+        self.d_main_tiles = cp.empty(0, dtype=env.NUMPY_INT)
+        self.d_main_interacting_atoms = cp.empty(0, dtype=env.NUMPY_INT)
+        self.d_positions_at_rebuild_x = cp.empty(0, dtype=env.NUMPY_FLOAT)
+        self.d_positions_at_rebuild_y = cp.empty(0, dtype=env.NUMPY_FLOAT)
+        self.d_positions_at_rebuild_z = cp.empty(0, dtype=env.NUMPY_FLOAT)
+        self._invalidate_caches()
