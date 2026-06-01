@@ -216,8 +216,8 @@ void find_interacting_blocks_kernel(
 
                     if (bj_local < b_count) {
                         bj = b_start + bj_local;
-                        if (is_self && bj <= bx) {
-                            // skip: Newton's 3rd within same cell
+                        if (bj <= bx) {
+                            // skip: Newton's 3rd law — global block ID ordering
                         } else {
                             float bcx2 = block_center_x[bj];
                             float bcy2 = block_center_y[bj];
