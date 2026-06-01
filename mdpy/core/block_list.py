@@ -476,6 +476,9 @@ void classify_tiles_kernel(
     const unsigned int* __restrict__ scale_masks,
     const int* __restrict__ tiles,
     const int* __restrict__ interacting_atoms,
+    const float* __restrict__ shift_x,
+    const float* __restrict__ shift_y,
+    const float* __restrict__ shift_z,
     int num_tiles,
     int* __restrict__ excl_counter,
     int* __restrict__ main_counter,
@@ -484,7 +487,13 @@ void classify_tiles_kernel(
     unsigned int* __restrict__ excl_masks_out,
     unsigned int* __restrict__ excl_scale_out,
     int* __restrict__ main_tiles_out,
-    int* __restrict__ main_int_atoms_out
+    int* __restrict__ main_int_atoms_out,
+    float* __restrict__ excl_shift_x_out,
+    float* __restrict__ excl_shift_y_out,
+    float* __restrict__ excl_shift_z_out,
+    float* __restrict__ main_shift_x_out,
+    float* __restrict__ main_shift_y_out,
+    float* __restrict__ main_shift_z_out
 ) {
     int tile = blockIdx.x * blockDim.x + threadIdx.x;
     if (tile >= num_tiles) return;
@@ -505,12 +514,18 @@ void classify_tiles_kernel(
             excl_masks_out[idx * 32 + i] = excl_masks[tile * 32 + i];
             excl_scale_out[idx * 32 + i] = scale_masks[tile * 32 + i];
         }
+        excl_shift_x_out[idx] = shift_x[tile];
+        excl_shift_y_out[idx] = shift_y[tile];
+        excl_shift_z_out[idx] = shift_z[tile];
     } else {
         int idx = atomicAdd(main_counter, 1);
         main_tiles_out[idx] = tiles[tile];
         for (int i = 0; i < 32; i++) {
             main_int_atoms_out[idx * 32 + i] = interacting_atoms[tile * 32 + i];
         }
+        main_shift_x_out[idx] = shift_x[tile];
+        main_shift_y_out[idx] = shift_y[tile];
+        main_shift_z_out[idx] = shift_z[tile];
     }
 }
 """
@@ -1125,6 +1140,9 @@ class BlockList:
                 self.d_scaling_masks,
                 self.d_tiles,
                 self.d_interacting_atoms,
+                self.d_tile_shift_x,
+                self.d_tile_shift_y,
+                self.d_tile_shift_z,
                 np.int32(nt),
                 self._d_classify_excl_counter,
                 self._d_classify_main_counter,
@@ -1134,6 +1152,12 @@ class BlockList:
                 self._d_classify_excl_scale,
                 self._d_classify_main_tiles,
                 self._d_classify_main_int_atoms,
+                self._d_classify_excl_shift_x,
+                self._d_classify_excl_shift_y,
+                self._d_classify_excl_shift_z,
+                self._d_classify_main_shift_x,
+                self._d_classify_main_shift_y,
+                self._d_classify_main_shift_z,
             ),
         )
 
