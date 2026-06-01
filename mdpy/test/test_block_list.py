@@ -254,6 +254,103 @@ class TestInteractingBlocks:
         bl, *_ = _rebuild_and_build_tiles(n, box, cutoff, skin, positions=positions)
         assert bl.num_tiles < bl.num_blocks ** 2
 
+    def test_shift_nonzero_for_cross_boundary_tiles(self):
+        n = 64
+        box = 20.0
+        cutoff, skin = 4.0, 1.0
+        rng = np.random.RandomState(42)
+        positions = np.zeros((n, 3), dtype=np.float32)
+        positions[:32, 0] = 1.0
+        positions[32:, 0] = box - 1.0
+        positions[:, 1] = 12.5 + rng.uniform(-0.1, 0.1, n)
+        positions[:, 2] = 12.5 + rng.uniform(-0.1, 0.1, n)
+        bl, *_ = _rebuild_and_build_tiles(n, box, cutoff, skin, positions=positions)
+
+        shift_x = cp.asnumpy(bl.d_tile_shift_x[:bl.num_tiles])
+        shift_y = cp.asnumpy(bl.d_tile_shift_y[:bl.num_tiles])
+        shift_z = cp.asnumpy(bl.d_tile_shift_z[:bl.num_tiles])
+
+        total_shift = np.sum(np.abs(shift_x)) + np.sum(np.abs(shift_y)) + np.sum(np.abs(shift_z))
+        assert total_shift > 0, "Expected at least some tiles with nonzero PBC shift"
+
+        tiles = cp.asnumpy(bl.d_tiles[:bl.num_tiles])
+        int_atoms = cp.asnumpy(bl.d_interacting_atoms[:bl.num_tiles * 32]).reshape(bl.num_tiles, 32)
+        block_atoms_np = cp.asnumpy(bl.d_block_atoms).reshape(-1, 32)
+
+        for t in range(bl.num_tiles):
+            bx = tiles[t]
+            j_atoms = int_atoms[t]
+            all_from_self = True
+            for a in j_atoms:
+                if a < 0 or a == NUM_ATOMS_SENTINEL:
+                    continue
+                found_in_self = False
+                for s in range(32):
+                    if block_atoms_np[bx, s] == a:
+                        found_in_self = True
+                        break
+                if not found_in_self:
+                    all_from_self = False
+                    break
+            if all_from_self:
+                assert shift_x[t] == 0.0 and shift_y[t] == 0.0 and shift_z[t] == 0.0, \
+                    f"Self-tile {t} should have zero shift"
+
+    def test_shift_distance_matches_roundf(self):
+        n = 64
+        box = 20.0
+        cutoff, skin = 4.0, 1.0
+        rng = np.random.RandomState(42)
+        positions = np.zeros((n, 3), dtype=np.float32)
+        positions[:32, 0] = 1.0
+        positions[32:, 0] = box - 1.0
+        positions[:, 1] = 12.5 + rng.uniform(-0.1, 0.1, n)
+        positions[:, 2] = 12.5 + rng.uniform(-0.1, 0.1, n)
+        bl, *_ = _rebuild_and_build_tiles(n, box, cutoff, skin, positions=positions)
+
+        pos_x = cp.asnumpy(bl._sorted_positions[0])
+        pos_y = cp.asnumpy(bl._sorted_positions[1])
+        pos_z = cp.asnumpy(bl._sorted_positions[2])
+        box_x, box_y, box_z = bl._box_x, bl._box_y, bl._box_z
+
+        tiles = cp.asnumpy(bl.d_tiles[:bl.num_tiles])
+        shift_x = cp.asnumpy(bl.d_tile_shift_x[:bl.num_tiles])
+        shift_y = cp.asnumpy(bl.d_tile_shift_y[:bl.num_tiles])
+        shift_z = cp.asnumpy(bl.d_tile_shift_z[:bl.num_tiles])
+        int_atoms = cp.asnumpy(bl.d_interacting_atoms[:bl.num_tiles * 32]).reshape(bl.num_tiles, 32)
+        block_atoms_np = cp.asnumpy(bl.d_block_atoms).reshape(-1, 32)
+
+        max_err = 0.0
+        for t in range(bl.num_tiles):
+            bx = tiles[t]
+            sx, sy, sz = shift_x[t], shift_y[t], shift_z[t]
+            for lane in range(32):
+                gj = int_atoms[t, lane]
+                if gj < 0 or gj == NUM_ATOMS_SENTINEL:
+                    continue
+                xj, yj, zj = pos_x[gj], pos_y[gj], pos_z[gj]
+                for k in range(32):
+                    gi = block_atoms_np[bx, k]
+                    if gi < 0:
+                        continue
+                    xi, yi, zi = pos_x[gi], pos_y[gi], pos_z[gi]
+
+                    dx_r = xj - xi
+                    dx_r -= box_x * round(dx_r / box_x)
+                    dy_r = yj - yi
+                    dy_r -= box_y * round(dy_r / box_y)
+                    dz_r = zj - zi
+                    dz_r -= box_z * round(dz_r / box_z)
+
+                    dx_s = (xj + sx) - xi
+                    dy_s = (yj + sy) - yi
+                    dz_s = (zj + sz) - zi
+
+                    err = max(abs(dx_r - dx_s), abs(dy_r - dy_s), abs(dz_r - dz_s))
+                    max_err = max(max_err, err)
+
+        assert max_err < 1e-5, f"Shift distance error {max_err} exceeds tolerance"
+
 
 class TestPBCHandling:
 
