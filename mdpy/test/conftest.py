@@ -7,6 +7,7 @@ test_order = [
     'new_force_term',
     'bonded_force',
     'tile_list',
+    'block_list',
     'system',
     'charmm_forcefield',
     'bruteforce_validation',

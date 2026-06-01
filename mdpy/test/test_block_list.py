@@ -298,3 +298,126 @@ class TestPBCHandling:
             if has_cross:
                 break
         assert has_cross, "No cross-boundary tiles found when expected"
+
+
+from mdpy.core.tile_list import TileList as OldTileList
+
+
+def _brute_force_pairs(positions, box, build_radius):
+    n = len(positions)
+    box_diag = np.array([box, box, box], dtype=np.float32)
+    build_radius_sq = build_radius ** 2
+    pairs = set()
+    for i in range(n):
+        for j in range(i + 1, n):
+            dx = positions[j] - positions[i]
+            dx -= box_diag * np.round(dx / box_diag)
+            dist_sq = np.sum(dx ** 2)
+            if dist_sq <= build_radius_sq:
+                pairs.add((i, j))
+    return pairs
+
+
+def _collect_blocklist_pairs(bl):
+    sorted_to_pdb = cp.asnumpy(bl.d_sorted_to_pdb)
+    ba = bl.block_atoms
+    ia = bl.interacting_atoms
+    pairs = set()
+    for t in range(bl.num_tiles):
+        bx = bl.tiles[t]
+        for sj in range(W):
+            aj = ia[t, sj]
+            if aj < 0 or aj >= bl.num_particles or aj == NUM_ATOMS_SENTINEL:
+                continue
+            aj_pdb = sorted_to_pdb[aj]
+            for sk in range(W):
+                ak = ba[bx, sk]
+                if ak < 0:
+                    continue
+                ak_pdb = sorted_to_pdb[ak]
+                pair = tuple(sorted([aj_pdb, ak_pdb]))
+                if pair[0] != pair[1]:
+                    pairs.add(pair)
+    return pairs
+
+
+def _collect_tilelist_pairs(tl):
+    sorted_to_pdb = cp.asnumpy(tl.d_sorted_to_pdb)
+    ba = tl.block_atoms
+    ia = tl.interacting_atoms
+    pairs = set()
+    for t in range(tl.num_tiles):
+        bx = tl.tiles[t]
+        for sj in range(W):
+            aj = ia[t, sj]
+            if aj < 0 or aj >= tl.num_particles:
+                continue
+            aj_pdb = sorted_to_pdb[aj]
+            for sk in range(W):
+                ak = ba[bx, sk]
+                if ak < 0:
+                    continue
+                ak_pdb = sorted_to_pdb[ak]
+                pair = tuple(sorted([aj_pdb, ak_pdb]))
+                if pair[0] != pair[1]:
+                    pairs.add(pair)
+    return pairs
+
+
+class TestComparisonWithTileList:
+
+    def test_same_pair_coverage_random(self):
+        n, box, seed, cutoff, skin = 200, 50.0, 99, 8.0, 2.0
+        positions = _make_positions(n, box, seed)
+        topology = _make_topology(n)
+        pbc_matrix = _make_pbc(box)
+        pbc_inv = np.linalg.inv(pbc_matrix)
+
+        bl = BlockList(cutoff=cutoff, skin=skin)
+        bl.rebuild(positions, topology, pbc_matrix, pbc_inv)
+        bl.build_tiles(topology, pbc_matrix)
+
+        brute = _brute_force_pairs(positions, box, bl.build_radius)
+        found = _collect_blocklist_pairs(bl)
+        missing = brute - found
+        assert not missing, f"Missing {len(missing)} pairs (out of {len(brute)})"
+
+    def test_same_pair_coverage_dense(self):
+        n, box, seed, cutoff, skin = 100, 20.0, 55, 10.0, 2.0
+        positions = _make_positions(n, box, seed)
+        topology = _make_topology(n)
+        pbc_matrix = _make_pbc(box)
+        pbc_inv = np.linalg.inv(pbc_matrix)
+
+        bl = BlockList(cutoff=cutoff, skin=skin)
+        bl.rebuild(positions, topology, pbc_matrix, pbc_inv)
+        bl.build_tiles(topology, pbc_matrix)
+
+        brute = _brute_force_pairs(positions, box, bl.build_radius)
+        found = _collect_blocklist_pairs(bl)
+        missing = brute - found
+        assert not missing, f"Missing {len(missing)} pairs (out of {len(brute)})"
+
+    def test_consistency_with_old_tilelist(self):
+        n, box, seed, cutoff, skin = 200, 50.0, 99, 8.0, 2.0
+        positions = _make_positions(n, box, seed)
+        topology = _make_topology(n)
+        pbc_matrix = _make_pbc(box)
+        pbc_inv = np.linalg.inv(pbc_matrix)
+
+        bl = BlockList(cutoff=cutoff, skin=skin)
+        bl.rebuild(positions, topology, pbc_matrix, pbc_inv)
+        bl.build_tiles(topology, pbc_matrix)
+
+        tl = OldTileList(cutoff=cutoff, skin=skin)
+        tl.rebuild(positions, topology, pbc_matrix, pbc_inv)
+        tl.build_tiles(topology, pbc_matrix)
+
+        brute = _brute_force_pairs(positions, box, bl.build_radius)
+        bl_pairs = _collect_blocklist_pairs(bl)
+        tl_pairs = _collect_tilelist_pairs(tl)
+
+        bl_missing = brute - bl_pairs
+        tl_missing = brute - tl_pairs
+        assert not bl_missing, f"BlockList missing {len(bl_missing)}/{len(brute)} pairs"
+        assert not tl_missing, f"TileList missing {len(tl_missing)}/{len(brute)} pairs"
