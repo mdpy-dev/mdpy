@@ -735,13 +735,19 @@ def _assemble_exclusion_tile_kernel(parameter_names, pair_parameter_names, expre
     param_load_j = _generate_parameter_load_j_tile_exclusion_posq(per_particle_names)
     pos_args_decl = (
         "    const float4* __restrict__ sorted_posq,\n"
-        "    const float4* __restrict__ posq,"
+        "    const float4* __restrict__ posq,\n"
+        "    const float* __restrict__ shift_x,\n"
+        "    const float* __restrict__ shift_y,\n"
+        "    const float* __restrict__ shift_z,"
     )
     i_pos_load = (
         "        float4 posq_i = sorted_posq[block_x * 32 + tgx];\n"
         "        float px_i = posq_i.x;\n"
         "        float py_i = posq_i.y;\n"
-        "        float pz_i = posq_i.z;"
+        "        float pz_i = posq_i.z;\n"
+        "        float sx = shift_x[pos];\n"
+        "        float sy = shift_y[pos];\n"
+        "        float sz = shift_z[pos];"
     )
     j_pos_load = (
         "        float shfl_px = 0.0f, shfl_py = 0.0f, shfl_pz = 0.0f, _charge_j_posq = 0.0f;\n"
@@ -776,9 +782,8 @@ void tile_kernel(
     const unsigned int* __restrict__ scaling_masks,
     float cutoff_sq,
     int num_tiles,
-    int num_particles,
-    float box_x, float box_y, float box_z,
-    float inv_box_x, float inv_box_y, float inv_box_z{param_decls}{sorted_param_decls}{pair_param_decls}
+    int num_particles
+    {param_decls}{sorted_param_decls}{pair_param_decls}
 ) {{
     int total_warps = (blockDim.x * gridDim.x) / 32;
     int warp_id = (blockIdx.x * blockDim.x + threadIdx.x) / 32;
@@ -822,12 +827,9 @@ void tile_kernel(
             unsigned int scale_j = scale_shared[tbx + tj];
             int atom2 = atom_indices_shared[tbx + tj];
 
-            float dx = shfl_px - px_i;
-            float dy = shfl_py - py_i;
-            float dz = shfl_pz - pz_i;
-            dx -= box_x * roundf(dx * inv_box_x);
-            dy -= box_y * roundf(dy * inv_box_y);
-            dz -= box_z * roundf(dz * inv_box_z);
+            float dx = shfl_px - px_i + sx;
+            float dy = shfl_py - py_i + sy;
+            float dz = shfl_pz - pz_i + sz;
             float dist_sq = dx * dx + dy * dy + dz * dz;
 
             bool excluded = (atom2 < 0 || atom2 >= num_particles)
@@ -886,13 +888,19 @@ def _assemble_main_tile_kernel(parameter_names, pair_parameter_names, expression
     param_load_j = _generate_parameter_load_j_tile_main_posq(per_particle_names)
     pos_args_decl = (
         "    const float4* __restrict__ sorted_posq,\n"
-        "    const float4* __restrict__ posq,"
+        "    const float4* __restrict__ posq,\n"
+        "    const float* __restrict__ shift_x,\n"
+        "    const float* __restrict__ shift_y,\n"
+        "    const float* __restrict__ shift_z,"
     )
     i_pos_load = (
         "        float4 posq_i = sorted_posq[block_x * 32 + tgx];\n"
         "        float px_i = posq_i.x;\n"
         "        float py_i = posq_i.y;\n"
-        "        float pz_i = posq_i.z;"
+        "        float pz_i = posq_i.z;\n"
+        "        float sx = shift_x[pos];\n"
+        "        float sy = shift_y[pos];\n"
+        "        float sz = shift_z[pos];"
     )
     j_pos_load = (
         "        float shfl_px = 0.0f, shfl_py = 0.0f, shfl_pz = 0.0f, _charge_j_posq = 0.0f;\n"
@@ -923,9 +931,8 @@ void main_tile_kernel(
     const int* __restrict__ interacting_atoms,
     float cutoff_sq,
     int num_tiles,
-    int num_particles,
-    float box_x, float box_y, float box_z,
-    float inv_box_x, float inv_box_y, float inv_box_z{param_decls}{sorted_param_decls}{pair_param_decls}
+    int num_particles
+    {param_decls}{sorted_param_decls}{pair_param_decls}
 ) {{
     int total_warps = (blockDim.x * gridDim.x) / 32;
     int warp_id = (blockIdx.x * blockDim.x + threadIdx.x) / 32;
@@ -963,12 +970,9 @@ void main_tile_kernel(
         for (int j = 0; j < 32; j++) {{
             int atom2 = atom_indices_shared[tbx + tj];
 
-            float dx = shfl_px - px_i;
-            float dy = shfl_py - py_i;
-            float dz = shfl_pz - pz_i;
-            dx -= box_x * roundf(dx * inv_box_x);
-            dy -= box_y * roundf(dy * inv_box_y);
-            dz -= box_z * roundf(dz * inv_box_z);
+            float dx = shfl_px - px_i + sx;
+            float dy = shfl_py - py_i + sy;
+            float dz = shfl_pz - pz_i + sz;
             float dist_sq = dx * dx + dy * dy + dz * dz;
 
             if (atom2 >= 0 && atom2 < num_particles && dist_sq > 1.0e-12f && dist_sq <= cutoff_sq && gi >= 0 && gi < num_particles) {{
@@ -1488,6 +1492,9 @@ class NonbondedForce(ForceTerm):
                 [
                     self._d_sorted_posq,
                     self._d_posq,
+                    tile_list.d_main_shift_x,
+                    tile_list.d_main_shift_y,
+                    tile_list.d_main_shift_z,
                     gpu_context.d_forces_x,
                     gpu_context.d_forces_y,
                     gpu_context.d_forces_z,
@@ -1498,12 +1505,6 @@ class NonbondedForce(ForceTerm):
                     np.float32(self._cutoff_sq),
                     np.int32(num_main),
                     np.int32(gpu_context.number_particles),
-                    np.float32(gpu_context._box_x),
-                    np.float32(gpu_context._box_y),
-                    np.float32(gpu_context._box_z),
-                    np.float32(gpu_context._inv_box_x),
-                    np.float32(gpu_context._inv_box_y),
-                    np.float32(gpu_context._inv_box_z),
                 ]
                 + self._main_parameter_arguments()
                 + self._main_sorted_parameter_arguments()
@@ -1518,6 +1519,9 @@ class NonbondedForce(ForceTerm):
                 [
                     self._d_sorted_posq,
                     self._d_posq,
+                    tile_list.d_excl_shift_x,
+                    tile_list.d_excl_shift_y,
+                    tile_list.d_excl_shift_z,
                     gpu_context.d_forces_x,
                     gpu_context.d_forces_y,
                     gpu_context.d_forces_z,
@@ -1530,12 +1534,6 @@ class NonbondedForce(ForceTerm):
                     np.float32(self._cutoff_sq),
                     np.int32(num_excl),
                     np.int32(gpu_context.number_particles),
-                    np.float32(gpu_context._box_x),
-                    np.float32(gpu_context._box_y),
-                    np.float32(gpu_context._box_z),
-                    np.float32(gpu_context._inv_box_x),
-                    np.float32(gpu_context._inv_box_y),
-                    np.float32(gpu_context._inv_box_z),
                 ]
                 + self._parameter_arguments()
                 + self._sorted_parameter_arguments()

@@ -305,6 +305,21 @@ void find_interacting_blocks_kernel(
                         }
                     }
                 }
+                if (nBuf > 0) {
+                    int ti = 0;
+                    if (tgx == 0) ti = atomicAdd(interaction_count, 1);
+                    ti = __shfl_sync(0xffffffff, ti, 0);
+                    if (ti < max_tiles) {
+                        if (tgx < 1) {
+                            tiles_out[ti] = bx;
+                            shift_x_out[ti] = sx;
+                            shift_y_out[ti] = sy;
+                            shift_z_out[ti] = sz;
+                        }
+                        interacting_atoms_out[ti * 32 + tgx] = (tgx < nBuf) ? my_buf[tgx] : -1;
+                    }
+                    nBuf = 0;
+                }
             }
         }
     }
