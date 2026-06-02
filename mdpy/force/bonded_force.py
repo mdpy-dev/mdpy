@@ -16,6 +16,19 @@ _MATH_FUNCTIONS = {
     'ceil': 'ceilf', 'min': 'fminf', 'max': 'fmaxf',
 }
 
+_REMAP_INDICES_KERNEL = r"""
+extern "C" __global__
+void remap_indices_kernel(
+    const int* __restrict__ d_remap,
+    int* __restrict__ d_indices,
+    int num_indices
+) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= num_indices) return;
+    d_indices[i] = d_remap[d_indices[i]];
+}
+"""
+
 
 class BondedExpression:
     def __init__(self, body, parameter_names, geometric_names, cuda_fragment, local_variables):
@@ -428,6 +441,15 @@ def _assemble_kernel(term_specs):
 
 class BondedForce(ForceTerm):
     name = 'bonded'
+    _remap_kernel = None
+
+    @classmethod
+    def _get_remap_kernel(cls):
+        if cls._remap_kernel is None:
+            cls._remap_kernel = cp.RawKernel(
+                _REMAP_INDICES_KERNEL, "remap_indices_kernel"
+            )
+        return cls._remap_kernel
 
     def __init__(self):
         self._term_specs = []
@@ -494,13 +516,13 @@ class BondedForce(ForceTerm):
         active_terms = [td for td in self._term_data if td['count'] > 0]
         if not active_terms:
             return
-        all_indices = cp.concatenate([td['d_indices'] for td in active_terms])
-        remapped = d_remap[all_indices]
-        offset = 0
+        kernel = self._get_remap_kernel()
         for td in active_terms:
-            n_elem = td['d_indices'].size
-            td['d_indices'] = remapped[offset:offset + n_elem].reshape(td['d_indices'].shape).copy()
-            offset += n_elem
+            indices = td['d_indices']
+            n = indices.size
+            tpb = 256
+            grid = ((n + tpb - 1) // tpb,)
+            kernel(grid, (tpb,), (d_remap, indices, np.int32(n)))
 
     def _ensure_compiled(self):
         if self._kernel is not None:

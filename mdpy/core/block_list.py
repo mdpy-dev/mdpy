@@ -606,6 +606,52 @@ void post_argsort_kernel(
 }
 """
 
+_CELL_BINCOUNT_KERNEL = r"""
+extern "C" __global__
+void cell_bincount_kernel(
+    const int* __restrict__ cell_indices_sorted,
+    int number_particles,
+    int nc_total,
+    int* __restrict__ cell_counts
+) {
+    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < number_particles; i += blockDim.x * gridDim.x)
+        atomicAdd(&cell_counts[cell_indices_sorted[i]], 1);
+}
+"""
+
+_CELL_PREFIX_SUM_KERNEL = r"""
+extern "C" __global__
+void cell_prefix_sum_kernel(
+    const int* __restrict__ cell_counts,
+    int nc_total,
+    int* __restrict__ cell_offset,
+    int* __restrict__ cell_block_offset,
+    int* __restrict__ cell_block_count,
+    int* __restrict__ cell_offset_padded,
+    int* __restrict__ num_blocks_out,
+    int* __restrict__ total_padded_out
+) {
+    if (threadIdx.x == 0 && blockIdx.x == 0) {
+        int offset = 0;
+        int block_offset = 0;
+        for (int i = 0; i < nc_total; i++) {
+            cell_offset[i] = offset;
+            int bc = (cell_counts[i] + 31) / 32;
+            cell_block_count[i] = bc;
+            cell_block_offset[i] = block_offset;
+            cell_offset_padded[i] = block_offset * 32;
+            offset += cell_counts[i];
+            block_offset += bc;
+        }
+        cell_offset[nc_total] = offset;
+        cell_block_offset[nc_total] = block_offset;
+        cell_offset_padded[nc_total] = block_offset * 32;
+        *num_blocks_out = block_offset;
+        *total_padded_out = block_offset * 32;
+    }
+}
+"""
+
 _EXPAND_BLOCK_TO_CELL_KERNEL = r"""
 extern "C" __global__
 void expand_block_to_cell_kernel(
@@ -664,6 +710,8 @@ def _compile_gpu_kernels():
         "check_rebuild": cp.RawKernel(_CHECK_REBUILD_KERNEL, "check_rebuild_kernel"),
         "fused_copy3": cp.RawKernel(_FUSED_COPY3_KERNEL, "fused_copy3_kernel"),
         "post_argsort": cp.RawKernel(_POST_ARGSORT_KERNEL, "post_argsort_kernel"),
+        "cell_bincount": cp.RawKernel(_CELL_BINCOUNT_KERNEL, "cell_bincount_kernel"),
+        "cell_prefix_sum": cp.RawKernel(_CELL_PREFIX_SUM_KERNEL, "cell_prefix_sum_kernel"),
         "expand_block_to_cell": cp.RawKernel(
             _EXPAND_BLOCK_TO_CELL_KERNEL, "expand_block_to_cell_kernel"
         ),
@@ -731,6 +779,8 @@ class BlockList:
 
         self.d_exclusion_masks = cp.empty(0, dtype=np.uint32)
         self.d_scaling_masks = cp.empty(0, dtype=np.uint32)
+        self._d_exclusion_masks_buf = cp.empty(0, dtype=np.uint32)
+        self._d_scaling_masks_buf = cp.empty(0, dtype=np.uint32)
 
         self.num_main_tiles = 0
         self.num_exclusion_tiles = 0
@@ -914,25 +964,30 @@ class BlockList:
         pos_x, pos_y, pos_z = sorted_pos_x, sorted_pos_y, sorted_pos_z
         self._sorted_positions = (pos_x, pos_y, pos_z)
 
-        cell_counts_np = np.bincount(
-            cp.asnumpy(cell_indices_sorted), minlength=self.nc_total
-        ).astype(env.NUMPY_INT)
-        cell_offset_np = np.zeros(self.nc_total + 1, dtype=env.NUMPY_INT)
-        np.cumsum(cell_counts_np, out=cell_offset_np[1:])
-        cell_block_count_np = ((cell_counts_np + 31) // 32).astype(env.NUMPY_INT)
-        cell_block_offset_np = np.zeros(self.nc_total + 1, dtype=env.NUMPY_INT)
-        np.cumsum(cell_block_count_np, out=cell_block_offset_np[1:])
-        num_blocks = int(cell_block_count_np.sum())
+        d_cell_counts = cp.zeros(self.nc_total, dtype=env.NUMPY_INT)
+        nb_bc = min((N + 255) // 256, 128)
+        self._kernels["cell_bincount"](
+            (nb_bc,), (256,),
+            (cell_indices_sorted, np.int32(N), np.int32(self.nc_total), d_cell_counts),
+        )
+
+        cell_offset = cp.empty(self.nc_total + 1, dtype=env.NUMPY_INT)
+        cell_block_offset = cp.empty(self.nc_total + 1, dtype=env.NUMPY_INT)
+        cell_block_count = cp.empty(self.nc_total, dtype=env.NUMPY_INT)
+        cell_offset_padded = cp.empty(self.nc_total + 1, dtype=env.NUMPY_INT)
+        d_num_blocks = cp.empty(1, dtype=env.NUMPY_INT)
+        d_total_padded = cp.empty(1, dtype=env.NUMPY_INT)
+        self._kernels["cell_prefix_sum"](
+            (1,), (1,),
+            (
+                d_cell_counts, np.int32(self.nc_total),
+                cell_offset, cell_block_offset, cell_block_count,
+                cell_offset_padded, d_num_blocks, d_total_padded,
+            ),
+        )
+        num_blocks = int(d_num_blocks[0])
         self.num_blocks = num_blocks
-        total_padded = int(cell_block_offset_np[-1]) * W
-
-        cell_offset_padded_np = (cell_block_offset_np * W).astype(env.NUMPY_INT)
-
-        cell_counts = cp.asarray(cell_counts_np)
-        cell_offset = cp.asarray(cell_offset_np)
-        cell_block_count = cp.asarray(cell_block_count_np)
-        cell_block_offset = cp.asarray(cell_block_offset_np)
-        cell_offset_padded = cp.asarray(cell_offset_padded_np)
+        total_padded = int(d_total_padded[0])
 
         self.d_cell_block_offset = cell_block_offset
         self.d_cell_block_count = cell_block_count
@@ -1141,8 +1196,11 @@ class BlockList:
 
         total_work = self.num_tiles * W
         grid = ((total_work + tpb - 1) // tpb,)
-        self.d_exclusion_masks = cp.empty(total_work, dtype=np.uint32)
-        self.d_scaling_masks = cp.empty(total_work, dtype=np.uint32)
+        if self._d_exclusion_masks_buf.size < total_work:
+            self._d_exclusion_masks_buf = cp.empty(total_work, dtype=np.uint32)
+            self._d_scaling_masks_buf = cp.empty(total_work, dtype=np.uint32)
+        self.d_exclusion_masks = self._d_exclusion_masks_buf
+        self.d_scaling_masks = self._d_scaling_masks_buf
         self._kernels["build_masks"](
             grid,
             (tpb,),
@@ -1187,7 +1245,7 @@ class BlockList:
             return
 
         nt = self.num_tiles
-        max_tiles = nt
+        max_tiles = max(nt, self._max_tiles)
 
         if self._d_classify_excl_tiles.size < max_tiles:
             self._d_classify_excl_tiles = cp.empty(max_tiles, dtype=env.NUMPY_INT)

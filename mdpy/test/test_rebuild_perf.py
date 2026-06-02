@@ -278,3 +278,35 @@ def test_gather_three_fusion_matches_cupy():
     np.testing.assert_array_equal(cp.asnumpy(d_offset), cp.asnumpy(gt_offset))
     np.testing.assert_array_equal(cp.asnumpy(d_neighbors), cp.asnumpy(gt_neighbors))
     np.testing.assert_allclose(cp.asnumpy(d_scale), cp.asnumpy(gt_scale), atol=1e-7)
+
+
+def test_remap_indices_gpu_correctness():
+    system, integrator = _make_system_6po6()
+    topology = system.topology
+    bonded_force = system.force_terms[0]
+
+    from mdpy.core.topology import build_exclusion_map_gpu
+    gpu_offset, gpu_neighbors, gpu_scale, gpu_unique_i = build_exclusion_map_gpu(
+        topology, scale_14=1.0
+    )
+
+    rng = np.random.default_rng(77)
+    perm = np.arange(topology.num_particles, dtype=np.int32)
+    rng.shuffle(perm)
+    d_perm = cp.asarray(perm)
+    d_remap = cp.empty(topology.num_particles, dtype=cp.int32)
+    d_remap[d_perm] = cp.arange(topology.num_particles, dtype=cp.int32)
+
+    ref_indices = {}
+    for td in bonded_force._term_data:
+        if td['count'] > 0:
+            ref_indices[id(td)] = cp.asnumpy(td['d_indices']).copy()
+
+    bonded_force.remap_indices_gpu(d_remap)
+
+    for td in bonded_force._term_data:
+        if td['count'] > 0:
+            remap_np = cp.asnumpy(d_remap)
+            expected = remap_np[ref_indices[id(td)]]
+            actual = cp.asnumpy(td['d_indices'])
+            np.testing.assert_array_equal(actual, expected)
