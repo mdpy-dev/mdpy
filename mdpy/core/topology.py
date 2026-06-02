@@ -3,6 +3,16 @@ from __future__ import annotations
 import cupy as cp
 import numpy as np
 from mdpy import env
+from mdpy.core.radix_sort import RadixSorter, fill_constant
+
+_pair_sorter = None
+
+
+def _get_pair_sorter(max_pairs: int) -> RadixSorter:
+    global _pair_sorter
+    if _pair_sorter is None or max_pairs > _pair_sorter._max_elements:
+        _pair_sorter = RadixSorter(max_elements=max_pairs)
+    return _pair_sorter
 
 
 class Topology:
@@ -423,7 +433,8 @@ def permute_exclusion_pairs_gpu(d_cached_i, d_cached_j, d_cached_scale,
         grid, (tpb,),
         (d_new_i, d_new_j, d_new_scale, np.int32(num_pairs), sort_key),
     )
-    order = cp.argsort(sort_key).astype(cp.int32)
+    sorter = _get_pair_sorter(num_pairs)
+    order = sorter.argsort(sort_key.view(np.uint64))
     d_sorted_i = cp.empty(num_pairs, dtype=cp.int32)
     d_sorted_j = cp.empty(num_pairs, dtype=cp.int32)
     d_sorted_scale = cp.empty(num_pairs, dtype=cp.float32)
@@ -436,7 +447,8 @@ def permute_exclusion_pairs_gpu(d_cached_i, d_cached_j, d_cached_scale,
     d_new_j = d_sorted_j
     d_new_scale = d_sorted_scale
 
-    d_offset = cp.full(num_particles + 1, -1, dtype=cp.int32)
+    d_offset = cp.empty(num_particles + 1, dtype=cp.int32)
+    fill_constant(d_offset, -1)
     grid_csr = ((num_pairs + 1 + tpb - 1) // tpb,)
     kernels['parallel_csr'](grid_csr, (tpb,),
         (d_new_i, np.int32(num_pairs),
