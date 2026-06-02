@@ -198,11 +198,15 @@ __device__ __forceinline__ float3 cross_f3(float3 a, float3 b) {
 __device__ __forceinline__ float len_f3(float3 a) {
     return sqrtf(dot_f3(a,a));
 }
-__device__ __forceinline__ float3 pbc_ortho(float3 d, const float* box) {
+__device__ __forceinline__ float3 pbc_wrap_vec(float3 d, const float* pbc_inv, const float* pbc_matrix) {
+    float fx = d.x*pbc_inv[0] + d.y*pbc_inv[3] + d.z*pbc_inv[6];
+    float fy = d.x*pbc_inv[1] + d.y*pbc_inv[4] + d.z*pbc_inv[7];
+    float fz = d.x*pbc_inv[2] + d.y*pbc_inv[5] + d.z*pbc_inv[8];
+    fx -= roundf(fx); fy -= roundf(fy); fz -= roundf(fz);
     return make_float3(
-        d.x - box[0]*roundf(d.x*box[3]),
-        d.y - box[1]*roundf(d.y*box[4]),
-        d.z - box[2]*roundf(d.z*box[5])
+        fx*pbc_matrix[0] + fy*pbc_matrix[3] + fz*pbc_matrix[6],
+        fx*pbc_matrix[1] + fy*pbc_matrix[4] + fz*pbc_matrix[7],
+        fx*pbc_matrix[2] + fy*pbc_matrix[5] + fz*pbc_matrix[8]
     );
 }
 __device__ __forceinline__ float3 load_pos(
@@ -231,7 +235,7 @@ _TWO_BODY_TEMPLATE = r'''
         int a1 = {name}_idx[idx*2];
         int a2 = {name}_idx[idx*2+1];
         {param_loads}
-        float3 delta = pbc_ortho(sub_f3(load_pos(pos_x,pos_y,pos_z,a2), load_pos(pos_x,pos_y,pos_z,a1)), box);
+        float3 delta = pbc_wrap_vec(sub_f3(load_pos(pos_x,pos_y,pos_z,a2), load_pos(pos_x,pos_y,pos_z,a1)), pbc_inv, pbc_matrix);
         float {geo0} = len_f3(delta);
         if ({geo0} < 1e-12f) continue;
         float inv_r = 1.0f / {geo0};
@@ -251,8 +255,8 @@ _THREE_BODY_TEMPLATE = r'''
         int a2 = {name}_idx[idx*3+1];
         int a3 = {name}_idx[idx*3+2];
         {param_loads}
-        float3 r21 = pbc_ortho(sub_f3(load_pos(pos_x,pos_y,pos_z,a1), load_pos(pos_x,pos_y,pos_z,a2)), box);
-        float3 r23 = pbc_ortho(sub_f3(load_pos(pos_x,pos_y,pos_z,a3), load_pos(pos_x,pos_y,pos_z,a2)), box);
+        float3 r21 = pbc_wrap_vec(sub_f3(load_pos(pos_x,pos_y,pos_z,a1), load_pos(pos_x,pos_y,pos_z,a2)), pbc_inv, pbc_matrix);
+        float3 r23 = pbc_wrap_vec(sub_f3(load_pos(pos_x,pos_y,pos_z,a3), load_pos(pos_x,pos_y,pos_z,a2)), pbc_inv, pbc_matrix);
         float l21 = len_f3(r21);
         float l23 = len_f3(r23);
         if (l21 < 1e-12f || l23 < 1e-12f) continue;
@@ -261,7 +265,7 @@ _THREE_BODY_TEMPLATE = r'''
         float ct = dot_f3(r21, r23) * inv_l21 * inv_l23;
         ct = fmaxf(-1.0f, fminf(1.0f, ct));
         float {geo0} = acosf(ct);
-        float3 r13v = pbc_ortho(sub_f3(load_pos(pos_x,pos_y,pos_z,a3), load_pos(pos_x,pos_y,pos_z,a1)), box);
+        float3 r13v = pbc_wrap_vec(sub_f3(load_pos(pos_x,pos_y,pos_z,a3), load_pos(pos_x,pos_y,pos_z,a1)), pbc_inv, pbc_matrix);
         float {geo1} = len_f3(r13v);
         {expression_fragment}
         float neg_dEdtheta = -_result_force_0;
@@ -301,9 +305,9 @@ _FOUR_BODY_TEMPLATE = r'''
         int a3 = {name}_idx[idx*4+2];
         int a4 = {name}_idx[idx*4+3];
         {param_loads}
-        float3 rab = pbc_ortho(sub_f3(load_pos(pos_x,pos_y,pos_z,a2), load_pos(pos_x,pos_y,pos_z,a1)), box);
-        float3 rbc = pbc_ortho(sub_f3(load_pos(pos_x,pos_y,pos_z,a3), load_pos(pos_x,pos_y,pos_z,a2)), box);
-        float3 rcd = pbc_ortho(sub_f3(load_pos(pos_x,pos_y,pos_z,a4), load_pos(pos_x,pos_y,pos_z,a3)), box);
+        float3 rab = pbc_wrap_vec(sub_f3(load_pos(pos_x,pos_y,pos_z,a2), load_pos(pos_x,pos_y,pos_z,a1)), pbc_inv, pbc_matrix);
+        float3 rbc = pbc_wrap_vec(sub_f3(load_pos(pos_x,pos_y,pos_z,a3), load_pos(pos_x,pos_y,pos_z,a2)), pbc_inv, pbc_matrix);
+        float3 rcd = pbc_wrap_vec(sub_f3(load_pos(pos_x,pos_y,pos_z,a4), load_pos(pos_x,pos_y,pos_z,a3)), pbc_inv, pbc_matrix);
         float lab = len_f3(rab), lbc = len_f3(rbc), lcd = len_f3(rcd);
         if (lab < 1e-12f || lbc < 1e-12f || lcd < 1e-12f) continue;
         float3 n1 = cross_f3(rab, rbc);
@@ -347,7 +351,8 @@ void compute_bonded(
     float* __restrict__ f_y,
     float* __restrict__ f_z,
     float* __restrict__ energy_buf,
-    const float* __restrict__ box,
+    const float* __restrict__ pbc_inv,
+    const float* __restrict__ pbc_matrix,
     {kernel_params}
 ) {{
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
@@ -522,7 +527,8 @@ class BondedForce(ForceTerm):
             gpu_context.d_forces_y,
             gpu_context.d_forces_z,
             gpu_context.d_energy,
-            gpu_context.d_box_dims,
+            gpu_context.d_pbc_inv,
+            gpu_context.d_pbc_matrix,
         ]
         for term_data in self._term_data:
             args.append(term_data['d_indices'])

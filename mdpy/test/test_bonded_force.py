@@ -30,12 +30,13 @@ class MockGPUContext:
         self.d_forces_y = cp.zeros(N, dtype=np.float32)
         self.d_forces_z = cp.zeros(N, dtype=np.float32)
         self.d_energy = cp.zeros(1, dtype=np.float32)
-        bx = float(pbc_matrix[0, 0])
-        by = float(pbc_matrix[1, 1])
-        bz = float(pbc_matrix[2, 2])
-        self.d_box_dims = cp.array([
-            bx, by, bz, 1.0/bx, 1.0/by, 1.0/bz
-        ], dtype=np.float32)
+        pbc_inv = np.linalg.inv(pbc_matrix)
+        self.d_pbc_inv = cp.asarray(
+            np.ascontiguousarray(pbc_inv, dtype=np.float32).ravel()
+        )
+        self.d_pbc_matrix = cp.asarray(
+            np.ascontiguousarray(pbc_matrix, dtype=np.float32).ravel()
+        )
 
     @property
     def d_forces(self):

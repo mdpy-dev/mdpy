@@ -311,7 +311,10 @@ class TestInteractingBlocks:
         pos_x = cp.asnumpy(bl._sorted_positions[0])
         pos_y = cp.asnumpy(bl._sorted_positions[1])
         pos_z = cp.asnumpy(bl._sorted_positions[2])
-        box_x, box_y, box_z = bl._box_x, bl._box_y, bl._box_z
+        pbc_2d = cp.asnumpy(bl._d_pbc_matrix).reshape(3, 3)
+        box_x = float(pbc_2d[0, 0])
+        box_y = float(pbc_2d[1, 1])
+        box_z = float(pbc_2d[2, 2])
 
         tiles = cp.asnumpy(bl.d_tiles[:bl.num_tiles])
         shift_x = cp.asnumpy(bl.d_tile_shift_x[:bl.num_tiles])

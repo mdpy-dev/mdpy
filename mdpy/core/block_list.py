@@ -152,8 +152,7 @@ void find_interacting_blocks_kernel(
     int nc_x, int nc_y, int nc_z,
     int num_blocks, int num_particles,
     float build_radius_sq,
-    float box_x, float box_y, float box_z,
-    float inv_box_x, float inv_box_y, float inv_box_z,
+    const float* __restrict__ pbc_matrix,
     int* __restrict__ tiles_out,
     int* __restrict__ interacting_atoms_out,
     float* __restrict__ shift_x_out,
@@ -210,18 +209,18 @@ void find_interacting_blocks_kernel(
                 float sx = 0.0f, sy = 0.0f, sz = 0.0f;
                 {
                     int raw_nx = cx_idx + dx;
-                    if (raw_nx < 0) sx = -box_x;
-                    else if (raw_nx >= nc_x) sx = box_x;
+                    if (raw_nx < 0) { sx -= pbc_matrix[0]; sy -= pbc_matrix[1]; sz -= pbc_matrix[2]; }
+                    else if (raw_nx >= nc_x) { sx += pbc_matrix[0]; sy += pbc_matrix[1]; sz += pbc_matrix[2]; }
                 }
                 {
                     int raw_ny = cy_idx + dy;
-                    if (raw_ny < 0) sy = -box_y;
-                    else if (raw_ny >= nc_y) sy = box_y;
+                    if (raw_ny < 0) { sx -= pbc_matrix[3]; sy -= pbc_matrix[4]; sz -= pbc_matrix[5]; }
+                    else if (raw_ny >= nc_y) { sx += pbc_matrix[3]; sy += pbc_matrix[4]; sz += pbc_matrix[5]; }
                 }
                 {
                     int raw_nz = cz_idx + dz;
-                    if (raw_nz < 0) sz = -box_z;
-                    else if (raw_nz >= nc_z) sz = box_z;
+                    if (raw_nz < 0) { sx -= pbc_matrix[6]; sy -= pbc_matrix[7]; sz -= pbc_matrix[8]; }
+                    else if (raw_nz >= nc_z) { sx += pbc_matrix[6]; sy += pbc_matrix[7]; sz += pbc_matrix[8]; }
                 }
 
                 int b_start = cell_block_offset[nc];
@@ -556,8 +555,8 @@ void check_rebuild_kernel(
     const float* __restrict__ old_pos_z,
     int num_particles,
     float threshold_sq,
-    float box_x, float box_y, float box_z,
-    float inv_box_x, float inv_box_y, float inv_box_z,
+    const float* __restrict__ pbc_inv,
+    const float* __restrict__ pbc_matrix,
     int* __restrict__ rebuild_flag
 ) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -565,9 +564,13 @@ void check_rebuild_kernel(
     float dx = pos_x[idx] - old_pos_x[idx];
     float dy = pos_y[idx] - old_pos_y[idx];
     float dz = pos_z[idx] - old_pos_z[idx];
-    dx -= box_x * roundf(dx * inv_box_x);
-    dy -= box_y * roundf(dy * inv_box_y);
-    dz -= box_z * roundf(dz * inv_box_z);
+    float fx = dx*pbc_inv[0] + dy*pbc_inv[3] + dz*pbc_inv[6];
+    float fy = dx*pbc_inv[1] + dy*pbc_inv[4] + dz*pbc_inv[7];
+    float fz = dx*pbc_inv[2] + dy*pbc_inv[5] + dz*pbc_inv[8];
+    fx -= roundf(fx); fy -= roundf(fy); fz -= roundf(fz);
+    dx = fx*pbc_matrix[0] + fy*pbc_matrix[3] + fz*pbc_matrix[6];
+    dy = fx*pbc_matrix[1] + fy*pbc_matrix[4] + fz*pbc_matrix[7];
+    dz = fx*pbc_matrix[2] + fy*pbc_matrix[5] + fz*pbc_matrix[8];
     if (dx*dx + dy*dy + dz*dz > threshold_sq)
         rebuild_flag[0] = 1;
 }
@@ -722,13 +725,6 @@ class BlockList:
         self._tiles_np = None
         self._interacting_atoms_np = None
 
-        self._box_x = 0.0
-        self._box_y = 0.0
-        self._box_z = 0.0
-        self._inv_box_x = 0.0
-        self._inv_box_y = 0.0
-        self._inv_box_z = 0.0
-
     @property
     def block_atoms(self):
         if self._block_atoms_np is None and self.d_block_atoms.size > 0:
@@ -788,19 +784,16 @@ class BlockList:
 
     def _compute_cell_grid(self, pbc_matrix):
         pbc_2d = np.asarray(pbc_matrix).reshape(3, 3)
-        box_x = abs(float(pbc_2d[0, 0]))
-        box_y = abs(float(pbc_2d[1, 1]))
-        box_z = abs(float(pbc_2d[2, 2]))
-        self._box_x = box_x
-        self._box_y = box_y
-        self._box_z = box_z
-        self._inv_box_x = 1.0 / box_x
-        self._inv_box_y = 1.0 / box_y
-        self._inv_box_z = 1.0 / box_z
+        a_vec = pbc_2d[0]
+        b_vec = pbc_2d[1]
+        c_vec = pbc_2d[2]
+        box_a = float(np.linalg.norm(a_vec))
+        box_b = float(np.linalg.norm(b_vec))
+        box_c = float(np.linalg.norm(c_vec))
         cell_size = self.build_radius
-        self.nc_x = max(1, int(box_x / cell_size))
-        self.nc_y = max(1, int(box_y / cell_size))
-        self.nc_z = max(1, int(box_z / cell_size))
+        self.nc_x = max(1, int(box_a / cell_size))
+        self.nc_y = max(1, int(box_b / cell_size))
+        self.nc_z = max(1, int(box_c / cell_size))
         self.nc_total = self.nc_x * self.nc_y * self.nc_z
 
     def rebuild(self, positions, topology, pbc_matrix, pbc_inv):
@@ -966,8 +959,7 @@ class BlockList:
                 np.int32(self.nc_x), np.int32(self.nc_y), np.int32(self.nc_z),
                 np.int32(num_blocks), np.int32(self.num_particles),
                 np.float32(build_radius_sq),
-                np.float32(self._box_x), np.float32(self._box_y), np.float32(self._box_z),
-                np.float32(self._inv_box_x), np.float32(self._inv_box_y), np.float32(self._inv_box_z),
+                self._d_pbc_matrix,
                 self._d_tile_buf, self._d_interacting_buf,
                 self._d_tile_shift_x_buf, self._d_tile_shift_y_buf, self._d_tile_shift_z_buf,
                 self._d_counters, np.int32(max_tiles),
@@ -1224,12 +1216,8 @@ class BlockList:
                 self.d_positions_at_rebuild_z,
                 np.int32(self.num_particles),
                 np.float32(threshold_sq),
-                np.float32(self._box_x),
-                np.float32(self._box_y),
-                np.float32(self._box_z),
-                np.float32(self._inv_box_x),
-                np.float32(self._inv_box_y),
-                np.float32(self._inv_box_z),
+                self._d_pbc_inv,
+                self._d_pbc_matrix,
                 self.d_rebuild_flag,
             ),
         )
@@ -1268,12 +1256,8 @@ class BlockList:
                 self.d_positions_at_rebuild_z,
                 np.int32(self.num_particles),
                 np.float32(threshold_sq),
-                np.float32(self._box_x),
-                np.float32(self._box_y),
-                np.float32(self._box_z),
-                np.float32(self._inv_box_x),
-                np.float32(self._inv_box_y),
-                np.float32(self._inv_box_z),
+                self._d_pbc_inv,
+                self._d_pbc_matrix,
                 self.d_rebuild_flag,
             ),
         )
