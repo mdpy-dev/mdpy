@@ -257,6 +257,45 @@ void permute_pairs_kernel(
 }
 '''
 
+_BUILD_SORT_KEY_KERNEL = r"""
+extern "C" __global__
+void build_sort_key_kernel(
+    const int* __restrict__ keys_i,
+    const int* __restrict__ keys_j,
+    const float* __restrict__ keys_scale,
+    int num_pairs,
+    long long* __restrict__ sort_key
+) {
+    int p = blockIdx.x * blockDim.x + threadIdx.x;
+    if (p >= num_pairs) return;
+    long long ki = (long long)keys_i[p] * 2000000000LL;
+    long long kj = (long long)keys_j[p] * 2LL;
+    long long ks = (keys_scale[p] > 0.0f) ? 1LL : 0LL;
+    sort_key[p] = ki + kj + ks;
+}
+"""
+
+_GATHER_THREE_KERNEL = r"""
+extern "C" __global__
+void gather_three_kernel(
+    const int* __restrict__ src_i,
+    const int* __restrict__ src_j,
+    const float* __restrict__ src_s,
+    const int* __restrict__ order,
+    int num_pairs,
+    int* __restrict__ dst_i,
+    int* __restrict__ dst_j,
+    float* __restrict__ dst_s
+) {
+    int p = blockIdx.x * blockDim.x + threadIdx.x;
+    if (p >= num_pairs) return;
+    int o = order[p];
+    dst_i[p] = src_i[o];
+    dst_j[p] = src_j[o];
+    dst_s[p] = src_s[o];
+}
+"""
+
 _gpu_kernels = None
 
 
@@ -269,6 +308,8 @@ def _get_gpu_kernels():
             'fill_csr_gaps': cp.RawKernel(_FILL_CSR_GAPS_KERNEL, 'fill_csr_gaps_kernel'),
             'parallel_dedup': cp.RawKernel(_PARALLEL_DEDUP_KERNEL, 'parallel_dedup_kernel'),
             'permute_pairs': cp.RawKernel(_PERMUTE_PAIRS_KERNEL, 'permute_pairs_kernel'),
+            'build_sort_key': cp.RawKernel(_BUILD_SORT_KEY_KERNEL, 'build_sort_key_kernel'),
+            'gather_three': cp.RawKernel(_GATHER_THREE_KERNEL, 'gather_three_kernel'),
         }
     return _gpu_kernels
 
@@ -377,13 +418,23 @@ def permute_exclusion_pairs_gpu(d_cached_i, d_cached_j, d_cached_scale,
          d_composed_perm, np.int32(num_pairs),
          d_new_i, d_new_j, d_new_scale))
 
-    sort_key = (d_new_i.astype(cp.int64) * np.int64(2000000000)
-                + d_new_j.astype(cp.int64) * np.int64(2)
-                + (d_new_scale > 0.0).astype(cp.int64))
-    order = cp.argsort(sort_key)
-    d_new_i = d_new_i[order]
-    d_new_j = d_new_j[order]
-    d_new_scale = d_new_scale[order]
+    sort_key = cp.empty(num_pairs, dtype=cp.int64)
+    kernels['build_sort_key'](
+        grid, (tpb,),
+        (d_new_i, d_new_j, d_new_scale, np.int32(num_pairs), sort_key),
+    )
+    order = cp.argsort(sort_key).astype(cp.int32)
+    d_sorted_i = cp.empty(num_pairs, dtype=cp.int32)
+    d_sorted_j = cp.empty(num_pairs, dtype=cp.int32)
+    d_sorted_scale = cp.empty(num_pairs, dtype=cp.float32)
+    kernels['gather_three'](
+        grid, (tpb,),
+        (d_new_i, d_new_j, d_new_scale, order, np.int32(num_pairs),
+         d_sorted_i, d_sorted_j, d_sorted_scale),
+    )
+    d_new_i = d_sorted_i
+    d_new_j = d_sorted_j
+    d_new_scale = d_sorted_scale
 
     d_offset = cp.full(num_particles + 1, -1, dtype=cp.int32)
     grid_csr = ((num_pairs + 1 + tpb - 1) // tpb,)

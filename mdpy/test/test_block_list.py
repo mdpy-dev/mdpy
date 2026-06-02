@@ -714,3 +714,83 @@ class TestCheckRebuild:
         bl.check_rebuild_async((pos_x, pos_y, pos_z))
         cp.cuda.Stream.null.synchronize()
         assert int(bl.d_rebuild_flag[0]) == 1, "flag must stay sticky"
+
+
+class TestPostArgsortFusion:
+
+    def test_post_argsort_matches_cupy(self):
+        n, box = 1000, 50.0
+        rng = np.random.RandomState(123)
+        positions = rng.uniform(0, box, (n, 3)).astype(np.float32)
+        topology = _make_topology(n)
+        pbc_matrix = _make_pbc(box)
+        pbc_inv = np.linalg.inv(pbc_matrix)
+        bl = BlockList(cutoff=10.0, skin=2.0)
+        bl.rebuild(positions, topology, pbc_matrix, pbc_inv)
+
+        assert bl.d_raw_order.shape == (n,)
+        assert bl.d_pdb_to_sorted.shape == (n,)
+        assert bl.d_sorted_to_pdb.shape == (n,)
+
+        raw = cp.asnumpy(bl.d_raw_order)
+        p2s = cp.asnumpy(bl.d_pdb_to_sorted)
+        s2p = cp.asnumpy(bl.d_sorted_to_pdb)
+
+        assert np.all(p2s[raw] == np.arange(n))
+
+        pos_x = cp.asnumpy(bl._sorted_positions[0])
+        pos_y = cp.asnumpy(bl._sorted_positions[1])
+        pos_z = cp.asnumpy(bl._sorted_positions[2])
+        assert np.allclose(pos_x, positions[:, 0][raw], atol=1e-6)
+        assert np.allclose(pos_y, positions[:, 1][raw], atol=1e-6)
+        assert np.allclose(pos_z, positions[:, 2][raw], atol=1e-6)
+
+
+class TestCellProcessingBatch:
+
+    def test_cell_arrays_match_after_batch(self):
+        n, box = 5000, 50.0
+        rng = np.random.RandomState(456)
+        positions = rng.uniform(0, box, (n, 3)).astype(np.float32)
+        topology = _make_topology(n)
+        pbc_matrix = _make_pbc(box)
+        pbc_inv = np.linalg.inv(pbc_matrix)
+        bl = BlockList(cutoff=10.0, skin=2.0)
+        bl.rebuild(positions, topology, pbc_matrix, pbc_inv)
+
+        assert bl.num_blocks > 0
+        assert bl.d_cell_block_offset is not None
+        assert bl.d_cell_block_count is not None
+        assert bl.d_block_atoms is not None
+
+        block_atoms_np = cp.asnumpy(bl.d_block_atoms)
+        block_atoms_np = block_atoms_np.reshape(-1, 32)
+        real_atoms = block_atoms_np[block_atoms_np >= 0]
+        assert len(np.unique(real_atoms)) == n
+
+        bl.build_tiles(topology, pbc_matrix)
+        assert bl.num_tiles > 0
+
+
+class TestBlockToCellExpand:
+
+    def test_block_to_cell_correct(self):
+        n, box = 5000, 50.0
+        rng = np.random.RandomState(789)
+        positions = rng.uniform(0, box, (n, 3)).astype(np.float32)
+        topology = _make_topology(n)
+        pbc_matrix = _make_pbc(box)
+        pbc_inv = np.linalg.inv(pbc_matrix)
+        bl = BlockList(cutoff=10.0, skin=2.0)
+        bl.rebuild(positions, topology, pbc_matrix, pbc_inv)
+
+        block_to_cell = cp.asnumpy(bl.d_block_to_cell)
+        block_count = cp.asnumpy(bl.d_cell_block_count)
+        block_offset = cp.asnumpy(bl.d_cell_block_offset)
+
+        for c in range(bl.nc_total):
+            for b in range(block_count[c]):
+                bi = block_offset[c] + b
+                assert block_to_cell[bi] == c, (
+                    f"block {bi} should be in cell {c}, got {block_to_cell[bi]}"
+                )

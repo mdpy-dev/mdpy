@@ -576,6 +576,56 @@ void check_rebuild_kernel(
 }
 """
 
+_POST_ARGSORT_KERNEL = r"""
+extern "C" __global__
+void post_argsort_kernel(
+    const int* __restrict__ sorted_indices,
+    int number_particles,
+    int* __restrict__ raw_order,
+    int* __restrict__ pdb_to_sorted,
+    int* __restrict__ sorted_to_pdb,
+    const float* __restrict__ src_x,
+    const float* __restrict__ src_y,
+    const float* __restrict__ src_z,
+    float* __restrict__ dst_x,
+    float* __restrict__ dst_y,
+    float* __restrict__ dst_z,
+    const int* __restrict__ cell_in,
+    int* __restrict__ cell_out
+) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= number_particles) return;
+    int si = sorted_indices[i];
+    raw_order[i] = si;
+    pdb_to_sorted[si] = i;
+    sorted_to_pdb[i] = si;
+    dst_x[i] = src_x[si];
+    dst_y[i] = src_y[si];
+    dst_z[i] = src_z[si];
+    cell_out[i] = cell_in[si];
+}
+"""
+
+_EXPAND_BLOCK_TO_CELL_KERNEL = r"""
+extern "C" __global__
+void expand_block_to_cell_kernel(
+    const int* __restrict__ cell_block_offset,
+    int nc_total,
+    int num_blocks,
+    int* __restrict__ block_to_cell
+) {
+    int bi = blockIdx.x * blockDim.x + threadIdx.x;
+    if (bi >= num_blocks) return;
+    int lo = 0, hi = nc_total - 1;
+    while (lo < hi) {
+        int mid = (lo + hi + 1) / 2;
+        if (cell_block_offset[mid] <= bi) lo = mid;
+        else hi = mid - 1;
+    }
+    block_to_cell[bi] = lo;
+}
+"""
+
 _FUSED_COPY3_KERNEL = r"""
 extern "C" __global__
 void fused_copy3_kernel(
@@ -613,6 +663,10 @@ def _compile_gpu_kernels():
         "classify_tiles": cp.RawKernel(_CLASSIFY_TILES_KERNEL, "classify_tiles_kernel"),
         "check_rebuild": cp.RawKernel(_CHECK_REBUILD_KERNEL, "check_rebuild_kernel"),
         "fused_copy3": cp.RawKernel(_FUSED_COPY3_KERNEL, "fused_copy3_kernel"),
+        "post_argsort": cp.RawKernel(_POST_ARGSORT_KERNEL, "post_argsort_kernel"),
+        "expand_block_to_cell": cp.RawKernel(
+            _EXPAND_BLOCK_TO_CELL_KERNEL, "expand_block_to_cell_kernel"
+        ),
     }
 
 
@@ -840,31 +894,45 @@ class BlockList:
 
         # Sort by (cell_index, within_cell_morton)
         sorted_indices = cp.argsort(sort_keys).astype(env.NUMPY_INT)
-        self.d_raw_order = sorted_indices.copy()
+        self.d_raw_order = cp.empty(N, dtype=env.NUMPY_INT)
         self.d_pdb_to_sorted = cp.empty(N, dtype=env.NUMPY_INT)
-        self.d_pdb_to_sorted[sorted_indices] = cp.arange(N, dtype=env.NUMPY_INT)
-        self.d_sorted_to_pdb = sorted_indices.copy()
-
-        pos_x = pos_x[sorted_indices]
-        pos_y = pos_y[sorted_indices]
-        pos_z = pos_z[sorted_indices]
-        cell_indices_sorted = cell_indices[sorted_indices]
+        self.d_sorted_to_pdb = cp.empty(N, dtype=env.NUMPY_INT)
+        sorted_pos_x = cp.empty(N, dtype=env.NUMPY_FLOAT)
+        sorted_pos_y = cp.empty(N, dtype=env.NUMPY_FLOAT)
+        sorted_pos_z = cp.empty(N, dtype=env.NUMPY_FLOAT)
+        cell_indices_sorted = cp.empty(N, dtype=env.NUMPY_INT)
+        self._kernels["post_argsort"](
+            (nm,), (tpb,),
+            (
+                sorted_indices, np.int32(N),
+                self.d_raw_order, self.d_pdb_to_sorted, self.d_sorted_to_pdb,
+                pos_x, pos_y, pos_z,
+                sorted_pos_x, sorted_pos_y, sorted_pos_z,
+                cell_indices, cell_indices_sorted,
+            ),
+        )
+        pos_x, pos_y, pos_z = sorted_pos_x, sorted_pos_y, sorted_pos_z
         self._sorted_positions = (pos_x, pos_y, pos_z)
 
-        # Cell count + offset (CuPy operations)
-        cell_counts = cp.bincount(cell_indices_sorted, minlength=self.nc_total)
-        cell_offset = cp.cumsum(
-            cp.concatenate([cp.zeros(1, dtype=env.NUMPY_INT), cell_counts])
+        cell_counts_np = np.bincount(
+            cp.asnumpy(cell_indices_sorted), minlength=self.nc_total
         ).astype(env.NUMPY_INT)
-        cell_block_count = ((cell_counts + 31) // 32).astype(env.NUMPY_INT)
-        cell_block_offset = cp.cumsum(
-            cp.concatenate([cp.zeros(1, dtype=env.NUMPY_INT), cell_block_count])
-        ).astype(env.NUMPY_INT)
-        num_blocks = int(cell_block_count.sum())
+        cell_offset_np = np.zeros(self.nc_total + 1, dtype=env.NUMPY_INT)
+        np.cumsum(cell_counts_np, out=cell_offset_np[1:])
+        cell_block_count_np = ((cell_counts_np + 31) // 32).astype(env.NUMPY_INT)
+        cell_block_offset_np = np.zeros(self.nc_total + 1, dtype=env.NUMPY_INT)
+        np.cumsum(cell_block_count_np, out=cell_block_offset_np[1:])
+        num_blocks = int(cell_block_count_np.sum())
         self.num_blocks = num_blocks
-        total_padded = int(cell_block_offset[-1]) * W
+        total_padded = int(cell_block_offset_np[-1]) * W
 
-        cell_offset_padded = cell_block_offset * W
+        cell_offset_padded_np = (cell_block_offset_np * W).astype(env.NUMPY_INT)
+
+        cell_counts = cp.asarray(cell_counts_np)
+        cell_offset = cp.asarray(cell_offset_np)
+        cell_block_count = cp.asarray(cell_block_count_np)
+        cell_block_offset = cp.asarray(cell_block_offset_np)
+        cell_offset_padded = cp.asarray(cell_offset_padded_np)
 
         self.d_cell_block_offset = cell_block_offset
         self.d_cell_block_count = cell_block_count
@@ -880,19 +948,24 @@ class BlockList:
         )
         self.d_block_atoms = block_atoms
 
-        # Block-to-cell mapping
-        cell_block_count_np = cp.asnumpy(cell_block_count)
-        cell_idx_np = np.arange(self.nc_total, dtype=env.NUMPY_INT)
-        self.d_block_to_cell = cp.asarray(np.repeat(cell_idx_np, cell_block_count_np))
+        self.d_block_to_cell = cp.empty(num_blocks, dtype=env.NUMPY_INT)
+        nb = (num_blocks + tpb - 1) // tpb
+        self._kernels["expand_block_to_cell"](
+            (nb,), (tpb,),
+            (
+                cell_block_offset,
+                np.int32(self.nc_total),
+                np.int32(num_blocks),
+                self.d_block_to_cell,
+            ),
+        )
 
-        # K3: Compute block AABB
         self.d_block_center_x = cp.empty(num_blocks, dtype=env.NUMPY_FLOAT)
         self.d_block_center_y = cp.empty(num_blocks, dtype=env.NUMPY_FLOAT)
         self.d_block_center_z = cp.empty(num_blocks, dtype=env.NUMPY_FLOAT)
         self.d_block_size_x = cp.empty(num_blocks, dtype=env.NUMPY_FLOAT)
         self.d_block_size_y = cp.empty(num_blocks, dtype=env.NUMPY_FLOAT)
         self.d_block_size_z = cp.empty(num_blocks, dtype=env.NUMPY_FLOAT)
-        nb = (num_blocks + tpb - 1) // tpb
         self._kernels["compute_bounds"](
             (nb,), (tpb,),
             (

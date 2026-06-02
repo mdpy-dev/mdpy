@@ -198,3 +198,83 @@ def test_permute_fast_path_matches_full_rebuild():
     np.testing.assert_array_equal(ref_offset, cp.asnumpy(gt_offset))
     np.testing.assert_array_equal(ref_neighbors, cp.asnumpy(gt_neighbors))
     np.testing.assert_allclose(ref_scale, cp.asnumpy(gt_scale), atol=1e-7)
+
+
+def test_sort_key_fusion_matches_cupy():
+    system, integrator = _make_system_6po6()
+    topology = system.topology
+    from mdpy.core.topology import build_exclusion_map_gpu, _get_gpu_kernels
+    d_offset, d_neighbors, d_scale, d_unique_i = build_exclusion_map_gpu(
+        topology, scale_14=1.0
+    )
+
+    num_pairs = len(d_unique_i)
+
+    rng = np.random.default_rng(42)
+    perm = np.arange(topology.num_particles, dtype=np.int32)
+    rng.shuffle(perm)
+    d_perm = cp.asarray(perm)
+    d_composed = cp.empty(topology.num_particles, dtype=cp.int32)
+    d_composed[d_perm] = cp.arange(topology.num_particles, dtype=cp.int32)
+
+    from mdpy.core.topology import _PERMUTE_PAIRS_KERNEL
+    kernels = _get_gpu_kernels()
+    d_new_i = cp.empty(num_pairs, dtype=cp.int32)
+    d_new_j = cp.empty(num_pairs, dtype=cp.int32)
+    d_new_scale = cp.empty(num_pairs, dtype=cp.float32)
+    tpb = 256
+    grid = ((num_pairs + tpb - 1) // tpb,)
+    kernels['permute_pairs'](grid, (tpb,),
+        (d_unique_i, d_neighbors, d_scale,
+         d_composed, np.int32(num_pairs),
+         d_new_i, d_new_j, d_new_scale))
+
+    ref_key = (d_new_i.astype(cp.int64) * np.int64(2000000000)
+               + d_new_j.astype(cp.int64) * np.int64(2)
+               + (d_new_scale > 0.0).astype(cp.int64))
+    fused_key = cp.empty(num_pairs, dtype=cp.int64)
+    kernels['build_sort_key'](
+        grid, (tpb,),
+        (d_new_i, d_new_j, d_new_scale, np.int32(num_pairs), fused_key),
+    )
+    np.testing.assert_array_equal(cp.asnumpy(fused_key), cp.asnumpy(ref_key))
+
+
+def test_gather_three_fusion_matches_cupy():
+    system, integrator = _make_system_6po6()
+    topology = system.topology
+    from mdpy.core.topology import (
+        build_exclusion_map_gpu,
+        permute_exclusion_pairs_gpu,
+    )
+
+    gpu_offset, gpu_neighbors, gpu_scale, gpu_unique_i = (
+        build_exclusion_map_gpu(topology, scale_14=1.0)
+    )
+
+    rng = np.random.default_rng(99)
+    perm = np.arange(topology.num_particles, dtype=np.int32)
+    rng.shuffle(perm)
+    d_perm = cp.asarray(perm)
+    d_composed = cp.empty(topology.num_particles, dtype=cp.int32)
+    d_composed[d_perm] = cp.arange(topology.num_particles, dtype=cp.int32)
+
+    result = permute_exclusion_pairs_gpu(
+        gpu_unique_i, gpu_neighbors, gpu_scale,
+        d_composed, topology.num_particles,
+    )
+    d_offset, d_neighbors, d_scale = result[0], result[1], result[2]
+
+    remap = cp.asnumpy(d_composed)
+    topology_remapped = topology
+    topology_remapped.bond_indices = remap[topology_remapped.bond_indices]
+    topology_remapped.angle_indices = remap[topology_remapped.angle_indices]
+    topology_remapped.dihedral_indices = remap[topology_remapped.dihedral_indices]
+    topology_remapped.improper_indices = remap[topology_remapped.improper_indices]
+
+    gt_offset, gt_neighbors, gt_scale, _ = build_exclusion_map_gpu(
+        topology_remapped, scale_14=1.0
+    )
+    np.testing.assert_array_equal(cp.asnumpy(d_offset), cp.asnumpy(gt_offset))
+    np.testing.assert_array_equal(cp.asnumpy(d_neighbors), cp.asnumpy(gt_neighbors))
+    np.testing.assert_allclose(cp.asnumpy(d_scale), cp.asnumpy(gt_scale), atol=1e-7)
