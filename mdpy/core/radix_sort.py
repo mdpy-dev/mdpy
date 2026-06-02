@@ -63,21 +63,45 @@ void radix_scatter_kernel(
     const int* __restrict__ digit_prefix,
     int* __restrict__ block_counters
 ) {
-    __shared__ int shared_counters[16];
+    __shared__ int thread_counts[256][16];
+    __shared__ int base_offset[16];
     int tid = threadIdx.x;
     int block_size = blockDim.x;
     int bid = blockIdx.x;
 
-    if (tid < 16) shared_counters[tid] = 0;
+    for (int d = 0; d < 16; d++) thread_counts[tid][d] = 0;
+    if (tid < 16) base_offset[tid] = digit_prefix[bid * 16 + tid];
     __syncthreads();
 
     for (int i = bid * block_size + tid;
          i < number_elements;
          i += block_size * gridDim.x) {
         int digit = (keys_in[i] >> (pass_idx * 4)) & 0xF;
-        int local_pos = atomicAdd(&shared_counters[digit], 1);
-        int global_base = digit_prefix[bid * 16 + digit];
-        int pos = global_base + local_pos;
+        thread_counts[tid][digit]++;
+    }
+    __syncthreads();
+
+    if (tid == 0) {
+        for (int d = 0; d < 16; d++) {
+            int running = 0;
+            for (int t = 0; t < block_size; t++) {
+                int cnt = thread_counts[t][d];
+                thread_counts[t][d] = running;
+                running += cnt;
+            }
+        }
+    }
+    __syncthreads();
+
+    int local_counter[16];
+    for (int d = 0; d < 16; d++) local_counter[d] = 0;
+
+    for (int i = bid * block_size + tid;
+         i < number_elements;
+         i += block_size * gridDim.x) {
+        int digit = (keys_in[i] >> (pass_idx * 4)) & 0xF;
+        int pos = base_offset[digit] + thread_counts[tid][digit] + local_counter[digit];
+        local_counter[digit]++;
         keys_out[pos] = keys_in[i];
         vals_out[pos] = vals_in[i];
     }
