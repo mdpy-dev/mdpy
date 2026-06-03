@@ -417,3 +417,179 @@ class TestExclusionCorrection:
         assert abs(h_fx[0] + h_fx[1]) < 1e-6, f"F_x not balanced: {h_fx}"
         assert abs(h_fy[0] + h_fy[1]) < 1e-6, f"F_y not balanced: {h_fy}"
         assert abs(h_fz[0] + h_fz[1]) < 1e-6, f"F_z not balanced: {h_fz}"
+
+
+class TestPMEReciprocalForce:
+
+    def test_nonzero_energy_and_forces(self):
+        from mdpy.force.pme_reciprocal_force import PMEReciprocalForce
+        from mdpy.force.pme_parameters import PMEParameters
+        from mdpy.core.gpu_context import GPUContext
+        from mdpy.core.topology import Topology
+        from mdpy.core.parameter_table import ParameterTable
+
+        N = 20
+        box = 40.0
+        cutoff = 10.0
+        pbc = np.eye(3, dtype=np.float32) * box
+
+        topo = Topology()
+        topo.num_particles = N
+        topo.particle_types = np.zeros(N, dtype=np.int32)
+        topo.masses = np.ones(N, dtype=np.float32)
+        topo.exclusion_offset = np.zeros(N + 1, dtype=np.int32)
+        topo.exclusion_neighbors = np.empty(0, dtype=np.int32)
+        topo.exclusion_scale = np.empty(0, dtype=np.float32)
+
+        pt = ParameterTable()
+        np.random.seed(42)
+        pt.particle_parameters['charge'] = np.random.randn(N).astype(np.float32)
+
+        gpu = GPUContext()
+        gpu.initialize(topo, pbc.flatten())
+
+        pos = np.random.uniform(2, box - 2, (N, 3)).astype(np.float32)
+        gpu.d_positions_x[:] = cp.asarray(pos[:, 0])
+        gpu.d_positions_y[:] = cp.asarray(pos[:, 1])
+        gpu.d_positions_z[:] = cp.asarray(pos[:, 2])
+        gpu.refresh_wrapped_positions()
+
+        pme_params = PMEParameters.from_box(box, box, box, cutoff=cutoff)
+        pme = PMEReciprocalForce(pme_params, cutoff)
+        pme.bind(topo, pt, pbc_matrix=pbc)
+
+        gpu.zero_forces()
+        gpu.zero_energy()
+        pme.compute(gpu)
+
+        fx = cp.asnumpy(gpu.d_forces_x)
+        fy = cp.asnumpy(gpu.d_forces_y)
+        fz = cp.asnumpy(gpu.d_forces_z)
+        energy = float(gpu.d_energy[0])
+
+        print(f"PME reciprocal energy: {energy:.6f}")
+        print(f"Max force: {max(np.max(np.abs(fx)), np.max(np.abs(fy)), np.max(np.abs(fz))):.6f}")
+
+        assert abs(energy) > 1e-6, f"Energy should be nonzero, got {energy}"
+        max_force = max(np.max(np.abs(fx)), np.max(np.abs(fy)), np.max(np.abs(fz)))
+        assert max_force > 1e-10, f"Forces should be nonzero, max={max_force}"
+
+    def test_with_exclusion_pairs(self):
+        from mdpy.force.pme_reciprocal_force import PMEReciprocalForce
+        from mdpy.force.pme_parameters import PMEParameters
+        from mdpy.core.gpu_context import GPUContext
+        from mdpy.core.topology import Topology
+        from mdpy.core.parameter_table import ParameterTable
+
+        N = 10
+        box = 30.0
+        cutoff = 8.0
+        pbc = np.eye(3, dtype=np.float32) * box
+
+        topo = Topology()
+        topo.num_particles = N
+        topo.particle_types = np.zeros(N, dtype=np.int32)
+        topo.masses = np.ones(N, dtype=np.float32)
+
+        np.random.seed(99)
+        pt = ParameterTable()
+        pt.particle_parameters['charge'] = np.random.randn(N).astype(np.float32)
+
+        pair_i_list = [0, 1, 2, 3, 4]
+        pair_j_list = [1, 2, 3, 4, 5]
+        pair_scale_list = [0.0, 0.0, 0.8333333, 0.0, 0.0]
+
+        all_neighbors = []
+        all_scales = []
+        offset = np.zeros(N + 1, dtype=np.int32)
+        for i in range(N):
+            offset[i] = len(all_neighbors)
+            for pi, pj, ps in zip(pair_i_list, pair_j_list, pair_scale_list):
+                if pi == i:
+                    all_neighbors.append(pj)
+                    all_scales.append(ps)
+        offset[N] = len(all_neighbors)
+
+        topo.exclusion_offset = offset
+        topo.exclusion_neighbors = np.array(all_neighbors, dtype=np.int32)
+        topo.exclusion_scale = np.array(all_scales, dtype=np.float32)
+
+        gpu = GPUContext()
+        gpu.initialize(topo, pbc.flatten())
+
+        pos = np.random.uniform(2, box - 2, (N, 3)).astype(np.float32)
+        gpu.d_positions_x[:] = cp.asarray(pos[:, 0])
+        gpu.d_positions_y[:] = cp.asarray(pos[:, 1])
+        gpu.d_positions_z[:] = cp.asarray(pos[:, 2])
+        gpu.refresh_wrapped_positions()
+
+        pme_params = PMEParameters.from_box(box, box, box, cutoff=cutoff)
+        pme = PMEReciprocalForce(pme_params, cutoff)
+        pme.bind(topo, pt, pbc_matrix=pbc)
+
+        gpu.zero_forces()
+        gpu.zero_energy()
+        pme.compute(gpu)
+
+        energy = float(gpu.d_energy[0])
+        fx = cp.asnumpy(gpu.d_forces_x)
+        fy = cp.asnumpy(gpu.d_forces_y)
+        fz = cp.asnumpy(gpu.d_forces_z)
+
+        print(f"PME energy with exclusions: {energy:.6f}")
+        print(f"Max force: {max(np.max(np.abs(fx)), np.max(np.abs(fy)), np.max(np.abs(fz))):.6f}")
+
+        assert abs(energy) > 1e-6, "Energy should be nonzero with exclusions"
+        assert pme._num_exclusion_pairs == 5
+
+    def test_reproducibility(self):
+        from mdpy.force.pme_reciprocal_force import PMEReciprocalForce
+        from mdpy.force.pme_parameters import PMEParameters
+        from mdpy.core.gpu_context import GPUContext
+        from mdpy.core.topology import Topology
+        from mdpy.core.parameter_table import ParameterTable
+
+        N = 15
+        box = 35.0
+        cutoff = 9.0
+        pbc = np.eye(3, dtype=np.float32) * box
+
+        topo = Topology()
+        topo.num_particles = N
+        topo.particle_types = np.zeros(N, dtype=np.int32)
+        topo.masses = np.ones(N, dtype=np.float32)
+        topo.exclusion_offset = np.zeros(N + 1, dtype=np.int32)
+        topo.exclusion_neighbors = np.empty(0, dtype=np.int32)
+        topo.exclusion_scale = np.empty(0, dtype=np.float32)
+
+        np.random.seed(7)
+        pt = ParameterTable()
+        pt.particle_parameters['charge'] = np.random.randn(N).astype(np.float32)
+
+        gpu = GPUContext()
+        gpu.initialize(topo, pbc.flatten())
+
+        pos = np.random.uniform(2, box - 2, (N, 3)).astype(np.float32)
+        gpu.d_positions_x[:] = cp.asarray(pos[:, 0])
+        gpu.d_positions_y[:] = cp.asarray(pos[:, 1])
+        gpu.d_positions_z[:] = cp.asarray(pos[:, 2])
+        gpu.refresh_wrapped_positions()
+
+        pme_params = PMEParameters.from_box(box, box, box, cutoff=cutoff)
+        pme = PMEReciprocalForce(pme_params, cutoff)
+        pme.bind(topo, pt, pbc_matrix=pbc)
+
+        gpu.zero_forces()
+        gpu.zero_energy()
+        pme.compute(gpu)
+        energy1 = float(gpu.d_energy[0])
+        fx1 = cp.asnumpy(gpu.d_forces_x).copy()
+
+        gpu.zero_forces()
+        gpu.zero_energy()
+        pme.compute(gpu)
+        energy2 = float(gpu.d_energy[0])
+        fx2 = cp.asnumpy(gpu.d_forces_x).copy()
+
+        assert abs(energy1 - energy2) < 1e-6, f"Energy not reproducible: {energy1} vs {energy2}"
+        np.testing.assert_allclose(fx1, fx2, atol=1e-6)
