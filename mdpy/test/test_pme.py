@@ -6,7 +6,14 @@ import cupy as cp
 import numpy as np
 import pytest
 
-from mdpy.force.pme_bspline import compute_bspline_weights, get_bspline_kernel, get_spread_kernel, precompute_bk_factors
+from mdpy.force.pme_bspline import (
+    compute_bspline_weights,
+    get_bspline_kernel,
+    get_gather_kernel,
+    get_self_energy_kernel,
+    get_spread_kernel,
+    precompute_bk_factors,
+)
 
 
 class TestBSplineWeights:
@@ -211,3 +218,97 @@ class TestBSplineModuli:
     def test_symmetry(self):
         bk = precompute_bk_factors(0.35, 32, 32, 32, 4, 50.0, 50.0, 50.0)
         assert bk.shape == (32, 32, 17), f"Expected (32,32,17), got {bk.shape}"
+
+
+class TestForceGathering:
+
+    def test_net_force_near_zero(self):
+        N = 50
+        np.random.seed(42)
+        order = 4
+        grid_x, grid_y, grid_z = 32, 32, 32
+        box_x, box_y, box_z = 50.0, 50.0, 50.0
+
+        charges = np.random.randn(N).astype(np.float32) * 0.5
+        pos_x = np.random.uniform(1, box_x - 1, N).astype(np.float32)
+        pos_y = np.random.uniform(1, box_y - 1, N).astype(np.float32)
+        pos_z = np.random.uniform(1, box_z - 1, N).astype(np.float32)
+
+        d_charges = cp.asarray(charges)
+        d_pos_x = cp.asarray(pos_x)
+        d_pos_y = cp.asarray(pos_y)
+        d_pos_z = cp.asarray(pos_z)
+
+        d_theta = cp.zeros(N * order * 3, dtype=np.float32)
+        d_dtheta = cp.zeros(N * order * 3, dtype=np.float32)
+        d_grid_idx = cp.zeros(N * 3, dtype=np.int32)
+
+        bspline_k = get_bspline_kernel()
+        bspline_k(
+            (1,), (256,),
+            (d_pos_x, d_pos_y, d_pos_z, np.int32(N),
+             np.float32(1.0 / box_x), np.float32(1.0 / box_y), np.float32(1.0 / box_z),
+             np.int32(grid_x), np.int32(grid_y), np.int32(grid_z), np.int32(order),
+             d_theta, d_dtheta, d_grid_idx),
+        )
+
+        d_charge_grid = cp.zeros(grid_x * grid_y * grid_z, dtype=np.float32)
+        spread_k = get_spread_kernel()
+        spread_k(
+            (1,), (256,),
+            (d_charges, d_grid_idx, d_theta,
+             np.int32(N), np.int32(grid_x), np.int32(grid_y), np.int32(grid_z), np.int32(order),
+             d_charge_grid),
+        )
+
+        alpha = 0.35
+        bk = precompute_bk_factors(alpha, grid_x, grid_y, grid_z, order, box_x, box_y, box_z)
+        d_bk = cp.asarray(bk)
+
+        grid_3d = d_charge_grid.reshape(grid_x, grid_y, grid_z)
+        grid_complex = cp.fft.rfftn(grid_3d)
+        grid_complex = grid_complex * d_bk
+        grid_3d = cp.fft.irfftn(grid_complex, s=(grid_x, grid_y, grid_z))
+        d_phi_grid = grid_3d.ravel()
+
+        d_fx = cp.zeros(N, dtype=np.float32)
+        d_fy = cp.zeros(N, dtype=np.float32)
+        d_fz = cp.zeros(N, dtype=np.float32)
+        d_energy = cp.zeros(1, dtype=np.float32)
+
+        gather_k = get_gather_kernel()
+        gather_k(
+            (1,), (256,),
+            (d_charges, d_grid_idx, d_theta, d_dtheta,
+             np.int32(N), np.int32(grid_x), np.int32(grid_y), np.int32(grid_z), np.int32(order),
+             np.float32(1.0 / box_x), np.float32(1.0 / box_y), np.float32(1.0 / box_z),
+             d_phi_grid, d_fx, d_fy, d_fz, d_energy),
+        )
+
+        net_fx = float(cp.sum(d_fx))
+        net_fy = float(cp.sum(d_fy))
+        net_fz = float(cp.sum(d_fz))
+        max_force = max(
+            float(cp.max(cp.abs(d_fx))),
+            float(cp.max(cp.abs(d_fy))),
+            float(cp.max(cp.abs(d_fz))),
+        )
+
+        assert abs(net_fx) < max_force * 0.05 + 1e-7, f"Net fx={net_fx} too large"
+        assert abs(net_fy) < max_force * 0.05 + 1e-7, f"Net fy={net_fy} too large"
+        assert abs(net_fz) < max_force * 0.05 + 1e-7, f"Net fz={net_fz} too large"
+
+    def test_self_energy(self):
+        charges = np.array([0.5, -0.3, 0.8], dtype=np.float32)
+        alpha = 0.35
+        sq_pi = 1.772453850905516
+        coulomb_const = 0.13893556595455
+
+        expected = -coulomb_const * alpha / sq_pi * float(np.sum(charges ** 2))
+
+        d_energy = cp.zeros(1, dtype=np.float32)
+        self_k = get_self_energy_kernel()
+        self_k((1,), (1,), (np.float32(expected), d_energy))
+
+        assert abs(float(d_energy[0]) - expected) < 1e-6
+        assert expected < 0

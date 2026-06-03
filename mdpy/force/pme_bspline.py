@@ -248,8 +248,98 @@ def precompute_bk_factors(alpha: float, grid_x: int, grid_y: int, grid_z: int,
     return bk
 
 
+_GATHER_KERNEL_SOURCE = r"""
+extern "C" __global__
+void gather_kernel(
+    const float* __restrict__ charges,
+    const int* __restrict__ grid_idx,
+    const float* __restrict__ theta,
+    const float* __restrict__ dtheta,
+    int num_particles,
+    int grid_x, int grid_y, int grid_z,
+    int order,
+    float recip_box_x, float recip_box_y, float recip_box_z,
+    const float* __restrict__ phi_grid,
+    float* __restrict__ forces_x,
+    float* __restrict__ forces_y,
+    float* __restrict__ forces_z,
+    float* __restrict__ energy_buffer
+) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= num_particles) return;
+
+    float q = charges[i];
+    int ix = grid_idx[i * 3 + 0];
+    int iy = grid_idx[i * 3 + 1];
+    int iz = grid_idx[i * 3 + 2];
+
+    float energy = 0.0f;
+    float fx = 0.0f, fy = 0.0f, fz = 0.0f;
+
+    for (int kx = 0; kx < order; kx++) {
+        int gx = (ix + kx) % grid_x;
+        if (gx < 0) gx += grid_x;
+        float tx = theta[i * order * 3 + 0 * order + kx];
+        float dtx = dtheta[i * order * 3 + 0 * order + kx];
+
+        for (int ky = 0; ky < order; ky++) {
+            int gy = (iy + ky) % grid_y;
+            if (gy < 0) gy += grid_y;
+            float ty = theta[i * order * 3 + 1 * order + ky];
+            float dty = dtheta[i * order * 3 + 1 * order + ky];
+
+            for (int kz = 0; kz < order; kz++) {
+                int gz = (iz + kz) % grid_z;
+                if (gz < 0) gz += grid_z;
+                float tz = theta[i * order * 3 + 2 * order + kz];
+                float dtz = dtheta[i * order * 3 + 2 * order + kz];
+
+                int idx = (gx * grid_y + gy) * grid_z + gz;
+                float phi = phi_grid[idx];
+                float txyz = tx * ty * tz;
+
+                energy += txyz * phi;
+                fx += dtx * ty * tz * phi;
+                fy += tx * dty * tz * phi;
+                fz += tx * ty * dtz * phi;
+            }
+        }
+    }
+
+    energy *= 0.5f * q;
+    fx *= -q * grid_x * recip_box_x;
+    fy *= -q * grid_y * recip_box_y;
+    fz *= -q * grid_z * recip_box_z;
+
+    atomicAdd(&forces_x[i], fx);
+    atomicAdd(&forces_y[i], fy);
+    atomicAdd(&forces_z[i], fz);
+
+    for (int offset = 16; offset > 0; offset >>= 1) {
+        energy += __shfl_down_sync(0xffffffff, energy, offset);
+    }
+    if ((threadIdx.x & 31) == 0) {
+        atomicAdd(energy_buffer, energy);
+    }
+}
+"""
+
+_SELF_ENERGY_KERNEL_SOURCE = r"""
+extern "C" __global__
+void self_energy_kernel(
+    float self_energy,
+    float* __restrict__ energy_buffer
+) {
+    if (threadIdx.x == 0 && blockIdx.x == 0) {
+        atomicAdd(energy_buffer, self_energy);
+    }
+}
+"""
+
 _bspline_kernel = None
 _spread_kernel = None
+_gather_kernel = None
+_self_energy_kernel = None
 
 
 def get_bspline_kernel():
@@ -264,3 +354,17 @@ def get_spread_kernel():
     if _spread_kernel is None:
         _spread_kernel = cp.RawKernel(_SPREAD_KERNEL_SOURCE, "spread_kernel")
     return _spread_kernel
+
+
+def get_gather_kernel():
+    global _gather_kernel
+    if _gather_kernel is None:
+        _gather_kernel = cp.RawKernel(_GATHER_KERNEL_SOURCE, "gather_kernel")
+    return _gather_kernel
+
+
+def get_self_energy_kernel():
+    global _self_energy_kernel
+    if _self_energy_kernel is None:
+        _self_energy_kernel = cp.RawKernel(_SELF_ENERGY_KERNEL_SOURCE, "self_energy_kernel")
+    return _self_energy_kernel
