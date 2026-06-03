@@ -397,18 +397,31 @@ void exclusion_kernel(
     float qq = qi * qj;
 
     float alpha_r = alpha * r;
-    float erf_val = erff(alpha_r);
-    float gauss = expf(-alpha_r * alpha_r);
-
     float COULOMB_CONST = 0.13893556595455f;
-    float SQRT_PI = 1.772453850905516f;
+
+    float erf_val = erff(alpha_r);
+
+    float z2 = alpha_r * alpha_r;
+    float z4 = z2 * z2;
+
+    float fd_a = 0.0011193462567257629232f * z4 + 0.11583842382862377919f;
+    float fd_b = 0.014866955030185295499f * z4 + 0.50736591960530292870f;
+    float fd_c = fd_a * z4 + 1.0f;
+    float fd_d = fd_b * z2 + fd_c;
+    float inv_fd = 1.0f / fd_d;
+
+    float fn_a = -1.7357322914161492954e-8f * z4 - 5.3401640219807709149e-5f;
+    float fn_b = 1.4703624142580877519e-6f * z4 + 1.0054721316683106153e-3f;
+    float fn_c = fn_a * z4 - 1.927831726488838059e-2f;
+    float fn_d = fn_b * z4 + 6.9670166153766424023e-2f;
+    float fn_e = fn_c * z4 - 0.75225204789749321333f;
+    float corr = (fn_d * z2 + fn_e) * inv_fd;
+
+    float alpha3 = alpha * alpha * alpha;
 
     float corr_energy = -COULOMB_CONST * one_minus_scale * qq * erf_val * inv_r;
 
-    float corr_fmag = COULOMB_CONST * one_minus_scale * qq * (
-        erf_val * inv_r * inv_r
-        - 2.0f * alpha * gauss * inv_r / SQRT_PI
-    );
+    float corr_fmag = -COULOMB_CONST * one_minus_scale * qq * alpha3 * r * corr;
 
     float fx = corr_fmag * dx * inv_r;
     float fy = corr_fmag * dy * inv_r;
