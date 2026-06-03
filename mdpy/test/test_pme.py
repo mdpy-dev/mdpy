@@ -9,7 +9,6 @@ import pytest
 
 from mdpy.force.pme_bspline import (
     compute_bspline_weights,
-    get_bspline_kernel,
     get_exclusion_kernel,
     get_gather_kernel,
     get_self_energy_kernel,
@@ -61,58 +60,6 @@ class TestBSplineWeights:
                 assert abs(dtheta[k] - numerical) < 1e-4, \
                     f"u={u} k={k}: dtheta={dtheta[k]} numerical={numerical}"
 
-    def test_gpu_matches_cpu(self):
-        N = 100
-        np.random.seed(42)
-        box_x, box_y, box_z = 100.0, 100.0, 100.0
-        grid_x, grid_y, grid_z = 64, 64, 64
-        order = 4
-
-        pos_x = np.random.uniform(0, box_x, N).astype(np.float32)
-        pos_y = np.random.uniform(0, box_y, N).astype(np.float32)
-        pos_z = np.random.uniform(0, box_z, N).astype(np.float32)
-
-        d_pos_x = cp.asarray(pos_x)
-        d_pos_y = cp.asarray(pos_y)
-        d_pos_z = cp.asarray(pos_z)
-        d_theta = cp.zeros(N * order * 3, dtype=np.float32)
-        d_dtheta = cp.zeros(N * order * 3, dtype=np.float32)
-        d_grid_idx = cp.zeros(N * 3, dtype=np.int32)
-
-        kernel = get_bspline_kernel()
-        kernel(
-            (1,), (256,),
-            (d_pos_x, d_pos_y, d_pos_z, np.int32(N),
-             np.float32(1.0 / box_x), np.float32(1.0 / box_y), np.float32(1.0 / box_z),
-             np.int32(grid_x), np.int32(grid_y), np.int32(grid_z), np.int32(order),
-             d_theta, d_dtheta, d_grid_idx),
-        )
-
-        h_theta = cp.asnumpy(d_theta).reshape(N, order * 3)
-        h_dtheta = cp.asnumpy(d_dtheta).reshape(N, order * 3)
-        h_grid_idx = cp.asnumpy(d_grid_idx).reshape(N, 3)
-
-        for i in range(N):
-            fx = pos_x[i] / box_x * grid_x
-            fy = pos_y[i] / box_y * grid_y
-            fz = pos_z[i] / box_z * grid_z
-
-            for dim, (frac, gd) in enumerate([(fx, grid_x), (fy, grid_y), (fz, grid_z)]):
-                u = frac - math.floor(frac)
-                theta_cpu, dtheta_cpu = compute_bspline_weights(u, order=order)
-
-                expected_gidx = int(math.floor(frac)) % gd
-                assert h_grid_idx[i, dim] == expected_gidx, \
-                    f"atom {i} dim {dim}: grid_idx {h_grid_idx[i, dim]} vs {expected_gidx}"
-
-                for k in range(order):
-                    gpu_theta = h_theta[i, dim * order + k]
-                    gpu_dtheta = h_dtheta[i, dim * order + k]
-                    assert abs(gpu_theta - theta_cpu[k]) < 1e-5, \
-                        f"atom {i} dim {dim} k {k}: theta {gpu_theta} vs {theta_cpu[k]}"
-                    assert abs(gpu_dtheta - dtheta_cpu[k]) < 1e-4, \
-                        f"atom {i} dim {dim} k {k}: dtheta {gpu_dtheta} vs {dtheta_cpu[k]}"
-
 
 class TestChargeSpreading:
 
@@ -133,26 +80,15 @@ class TestChargeSpreading:
         d_pos_y = cp.asarray(pos_y)
         d_pos_z = cp.asarray(pos_z)
 
-        d_theta = cp.zeros(N * order * 3, dtype=np.float32)
-        d_dtheta = cp.zeros(N * order * 3, dtype=np.float32)
-        d_grid_idx = cp.zeros(N * 3, dtype=np.int32)
-
-        bspline_kernel = get_bspline_kernel()
-        bspline_kernel(
-            (1,), (256,),
-            (d_pos_x, d_pos_y, d_pos_z, np.int32(N),
-             np.float32(1.0 / box_x), np.float32(1.0 / box_y), np.float32(1.0 / box_z),
-             np.int32(grid_x), np.int32(grid_y), np.int32(grid_z), np.int32(order),
-             d_theta, d_dtheta, d_grid_idx),
-        )
-
         d_charge_grid_fixed = cp.zeros(grid_x * grid_y * grid_z, dtype=cp.int64)
         d_charge_grid = cp.zeros(grid_x * grid_y * grid_z, dtype=np.float32)
         spread_kernel = get_spread_kernel()
         spread_kernel(
             (1,), (256,),
-            (d_charges, d_grid_idx, d_theta,
-             np.int32(N), np.int32(grid_x), np.int32(grid_y), np.int32(grid_z), np.int32(order),
+            (d_pos_x, d_pos_y, d_pos_z, d_charges,
+             np.int32(N),
+             np.float32(1.0 / box_x), np.float32(1.0 / box_y), np.float32(1.0 / box_z),
+             np.int32(grid_x), np.int32(grid_y), np.int32(grid_z), np.int32(order),
              d_charge_grid_fixed),
         )
 
@@ -183,26 +119,15 @@ class TestChargeSpreading:
         d_pos_y = cp.asarray(pos_y)
         d_pos_z = cp.asarray(pos_z)
 
-        d_theta = cp.zeros(1 * order * 3, dtype=np.float32)
-        d_dtheta = cp.zeros(1 * order * 3, dtype=np.float32)
-        d_grid_idx = cp.zeros(1 * 3, dtype=np.int32)
-
-        bspline_kernel = get_bspline_kernel()
-        bspline_kernel(
-            (1,), (256,),
-            (d_pos_x, d_pos_y, d_pos_z, np.int32(1),
-             np.float32(1.0 / box_x), np.float32(1.0 / box_y), np.float32(1.0 / box_z),
-             np.int32(grid_x), np.int32(grid_y), np.int32(grid_z), np.int32(order),
-             d_theta, d_dtheta, d_grid_idx),
-        )
-
         d_charge_grid_fixed = cp.zeros(grid_x * grid_y * grid_z, dtype=cp.int64)
         d_charge_grid = cp.zeros(grid_x * grid_y * grid_z, dtype=np.float32)
         spread_kernel = get_spread_kernel()
         spread_kernel(
             (1,), (256,),
-            (d_charges, d_grid_idx, d_theta,
-             np.int32(1), np.int32(grid_x), np.int32(grid_y), np.int32(grid_z), np.int32(order),
+            (d_pos_x, d_pos_y, d_pos_z, d_charges,
+             np.int32(1),
+             np.float32(1.0 / box_x), np.float32(1.0 / box_y), np.float32(1.0 / box_z),
+             np.int32(grid_x), np.int32(grid_y), np.int32(grid_z), np.int32(order),
              d_charge_grid_fixed),
         )
 
@@ -258,26 +183,15 @@ class TestForceGathering:
         d_pos_y = cp.asarray(pos_y)
         d_pos_z = cp.asarray(pos_z)
 
-        d_theta = cp.zeros(N * order * 3, dtype=np.float32)
-        d_dtheta = cp.zeros(N * order * 3, dtype=np.float32)
-        d_grid_idx = cp.zeros(N * 3, dtype=np.int32)
-
-        bspline_k = get_bspline_kernel()
-        bspline_k(
-            (1,), (256,),
-            (d_pos_x, d_pos_y, d_pos_z, np.int32(N),
-             np.float32(1.0 / box_x), np.float32(1.0 / box_y), np.float32(1.0 / box_z),
-             np.int32(grid_x), np.int32(grid_y), np.int32(grid_z), np.int32(order),
-             d_theta, d_dtheta, d_grid_idx),
-        )
-
         d_charge_grid_fixed = cp.zeros(grid_x * grid_y * grid_z, dtype=cp.int64)
         d_charge_grid = cp.zeros(grid_x * grid_y * grid_z, dtype=np.float32)
         spread_k = get_spread_kernel()
         spread_k(
             (1,), (256,),
-            (d_charges, d_grid_idx, d_theta,
-             np.int32(N), np.int32(grid_x), np.int32(grid_y), np.int32(grid_z), np.int32(order),
+            (d_pos_x, d_pos_y, d_pos_z, d_charges,
+             np.int32(N),
+             np.float32(1.0 / box_x), np.float32(1.0 / box_y), np.float32(1.0 / box_z),
+             np.int32(grid_x), np.int32(grid_y), np.int32(grid_z), np.int32(order),
              d_charge_grid_fixed),
         )
 
@@ -306,9 +220,10 @@ class TestForceGathering:
         gather_k = get_gather_kernel()
         gather_k(
             (1,), (256,),
-            (d_charges, d_grid_idx, d_theta, d_dtheta,
-             np.int32(N), np.int32(grid_x), np.int32(grid_y), np.int32(grid_z), np.int32(order),
+            (d_pos_x, d_pos_y, d_pos_z, d_charges,
+             np.int32(N),
              np.float32(1.0 / box_x), np.float32(1.0 / box_y), np.float32(1.0 / box_z),
+             np.int32(grid_x), np.int32(grid_y), np.int32(grid_z), np.int32(order),
              d_phi_grid, d_fx, d_fy, d_fz, d_energy),
         )
 

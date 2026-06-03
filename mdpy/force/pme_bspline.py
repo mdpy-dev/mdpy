@@ -37,23 +37,19 @@ def compute_bspline_weights(fractional: float, order: int = 4) -> tuple[np.ndarr
     return theta, dtheta
 
 
-_BSPLINE_KERNEL_SOURCE = r"""
+
+_SPREAD_KERNEL_SOURCE = r"""
 extern "C" __global__
-void bspline_kernel(
+void spread_kernel(
     const float* __restrict__ positions_x,
     const float* __restrict__ positions_y,
     const float* __restrict__ positions_z,
+    const float* __restrict__ charges,
     int num_particles,
-    float recip_box_x,
-    float recip_box_y,
-    float recip_box_z,
-    int grid_x,
-    int grid_y,
-    int grid_z,
+    float recip_box_x, float recip_box_y, float recip_box_z,
+    int grid_x, int grid_y, int grid_z,
     int order,
-    float* __restrict__ theta,
-    float* __restrict__ dtheta,
-    int* __restrict__ grid_idx
+    unsigned long long* __restrict__ charge_grid_fixed
 ) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= num_particles) return;
@@ -71,30 +67,22 @@ void bspline_kernel(
     u_arr[1] = fy - floorf(fy);
     u_arr[2] = fz - floorf(fz);
 
-    grid_idx[i * 3 + 0] = ((int) floorf(fx)) % grid_x;
-    grid_idx[i * 3 + 1] = ((int) floorf(fy)) % grid_y;
-    grid_idx[i * 3 + 2] = ((int) floorf(fz)) % grid_z;
+    int grid_start[3];
+    grid_start[0] = ((int)floorf(fx)) % grid_x;
+    grid_start[1] = ((int)floorf(fy)) % grid_y;
+    grid_start[2] = ((int)floorf(fz)) % grid_z;
+    if (grid_start[0] < 0) grid_start[0] += grid_x;
+    if (grid_start[1] < 0) grid_start[1] += grid_y;
+    if (grid_start[2] < 0) grid_start[2] += grid_z;
 
-    int neg[3];
-    neg[0] = grid_idx[i * 3 + 0] < 0 ? grid_x : 0;
-    neg[1] = grid_idx[i * 3 + 1] < 0 ? grid_y : 0;
-    neg[2] = grid_idx[i * 3 + 2] < 0 ? grid_z : 0;
-    grid_idx[i * 3 + 0] += neg[0];
-    grid_idx[i * 3 + 1] += neg[1];
-    grid_idx[i * 3 + 2] += neg[2];
-
-    int stride = order * 3;
-
+    float theta[3][4];
     for (int dim = 0; dim < 3; dim++) {
         float u = u_arr[dim];
-
-        float data[16];
-        for (int k = 0; k < order; k++) data[k] = 0.0f;
-
-        data[order - 1] = 0.0f;
-        data[1] = u;
+        float data[4];
         data[0] = 1.0f - u;
-
+        data[1] = u;
+        data[2] = 0.0f;
+        data[3] = 0.0f;
         for (int j = 3; j < order; j++) {
             float div = 1.0f / (float)(j - 1);
             data[j - 1] = div * u * data[j - 2];
@@ -103,70 +91,38 @@ void bspline_kernel(
             }
             data[0] = div * (1.0f - u) * data[0];
         }
-
-        float ddata[16];
-        ddata[0] = -data[0];
-        for (int k = 1; k < order; k++) {
-            ddata[k] = data[k - 1] - data[k];
-        }
-
         float scale = 1.0f / (float)(order - 1);
         data[order - 1] = scale * u * data[order - 2];
         for (int j = 1; j < order - 1; j++) {
             data[order - j - 1] = scale * ((u + (float)j) * data[order - j - 2] + ((float)(order - j) - u) * data[order - j - 1]);
         }
         data[0] = scale * (1.0f - u) * data[0];
-
-        int base = i * stride + dim * order;
-        for (int k = 0; k < order; k++) {
-            theta[base + k] = data[k];
-            dtheta[base + k] = ddata[k];
-        }
+        for (int k = 0; k < order; k++) theta[dim][k] = data[k];
     }
-}
-"""
-
-_SPREAD_KERNEL_SOURCE = r"""
-extern "C" __global__
-void spread_kernel(
-    const float* __restrict__ charges,
-    const int* __restrict__ grid_idx,
-    const float* __restrict__ theta,
-    int num_particles,
-    int grid_x, int grid_y, int grid_z,
-    int order,
-    long long* __restrict__ charge_grid_fixed
-) {
-    int i = blockIdx.x * blockDim.x + threadIdx.x;
-    if (i >= num_particles) return;
 
     float q = charges[i];
-    int ix = grid_idx[i * 3 + 0];
-    int iy = grid_idx[i * 3 + 1];
-    int iz = grid_idx[i * 3 + 2];
-
     const float SCALE = 16777216.0f;
 
     for (int kx = 0; kx < order; kx++) {
-        int gx = (ix + kx) % grid_x;
+        int gx = (grid_start[0] + kx) % grid_x;
         if (gx < 0) gx += grid_x;
-        float tx = theta[i * order * 3 + 0 * order + kx];
+        float tx = theta[0][kx];
 
         for (int ky = 0; ky < order; ky++) {
-            int gy = (iy + ky) % grid_y;
+            int gy = (grid_start[1] + ky) % grid_y;
             if (gy < 0) gy += grid_y;
-            float ty = theta[i * order * 3 + 1 * order + ky];
+            float ty = theta[1][ky];
 
             for (int kz = 0; kz < order; kz++) {
-                int gz = (iz + kz) % grid_z;
+                int gz = (grid_start[2] + kz) % grid_z;
                 if (gz < 0) gz += grid_z;
-                float tz = theta[i * order * 3 + 2 * order + kz];
+                float tz = theta[2][kz];
 
                 float contribution = q * tx * ty * tz * SCALE;
                 int idx = (gx * grid_y + gy) * grid_z + gz;
                 long long ll_val = (long long)(contribution > 0.0f ? contribution + 0.5f : contribution - 0.5f);
                 unsigned long long ul_val = (unsigned long long)ll_val;
-                atomicAdd((unsigned long long*)&charge_grid_fixed[idx], ul_val);
+                atomicAdd(&charge_grid_fixed[idx], ul_val);
             }
         }
     }
@@ -268,14 +224,14 @@ def precompute_bk_factors(alpha: float, grid_x: int, grid_y: int, grid_z: int,
 _GATHER_KERNEL_SOURCE = r"""
 extern "C" __global__
 void gather_kernel(
+    const float* __restrict__ positions_x,
+    const float* __restrict__ positions_y,
+    const float* __restrict__ positions_z,
     const float* __restrict__ charges,
-    const int* __restrict__ grid_idx,
-    const float* __restrict__ theta,
-    const float* __restrict__ dtheta,
     int num_particles,
+    float recip_box_x, float recip_box_y, float recip_box_z,
     int grid_x, int grid_y, int grid_z,
     int order,
-    float recip_box_x, float recip_box_y, float recip_box_z,
     const float* __restrict__ phi_grid,
     float* __restrict__ forces_x,
     float* __restrict__ forces_y,
@@ -285,52 +241,97 @@ void gather_kernel(
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= num_particles) return;
 
-    float q = charges[i];
-    int ix = grid_idx[i * 3 + 0];
-    int iy = grid_idx[i * 3 + 1];
-    int iz = grid_idx[i * 3 + 2];
+    float px = positions_x[i];
+    float py = positions_y[i];
+    float pz = positions_z[i];
 
+    float fx = px * recip_box_x * grid_x;
+    float fy = py * recip_box_y * grid_y;
+    float fz = pz * recip_box_z * grid_z;
+
+    float u_arr[3];
+    u_arr[0] = fx - floorf(fx);
+    u_arr[1] = fy - floorf(fy);
+    u_arr[2] = fz - floorf(fz);
+
+    int grid_start[3];
+    grid_start[0] = ((int)floorf(fx)) % grid_x;
+    grid_start[1] = ((int)floorf(fy)) % grid_y;
+    grid_start[2] = ((int)floorf(fz)) % grid_z;
+    if (grid_start[0] < 0) grid_start[0] += grid_x;
+    if (grid_start[1] < 0) grid_start[1] += grid_y;
+    if (grid_start[2] < 0) grid_start[2] += grid_z;
+
+    float theta[3][4];
+    float dtheta[3][4];
+    for (int dim = 0; dim < 3; dim++) {
+        float u = u_arr[dim];
+        float data[4];
+        data[0] = 1.0f - u;
+        data[1] = u;
+        data[2] = 0.0f;
+        data[3] = 0.0f;
+        for (int j = 3; j < order; j++) {
+            float div = 1.0f / (float)(j - 1);
+            data[j - 1] = div * u * data[j - 2];
+            for (int k = 1; k < j - 1; k++) {
+                data[j - k - 1] = div * ((u + (float)k) * data[j - k - 2] + ((float)(j - k) - u) * data[j - k - 1]);
+            }
+            data[0] = div * (1.0f - u) * data[0];
+        }
+        dtheta[dim][0] = -data[0];
+        for (int k = 1; k < order; k++) dtheta[dim][k] = data[k - 1] - data[k];
+        float scale = 1.0f / (float)(order - 1);
+        data[order - 1] = scale * u * data[order - 2];
+        for (int j = 1; j < order - 1; j++) {
+            data[order - j - 1] = scale * ((u + (float)j) * data[order - j - 2] + ((float)(order - j) - u) * data[order - j - 1]);
+        }
+        data[0] = scale * (1.0f - u) * data[0];
+        for (int k = 0; k < order; k++) theta[dim][k] = data[k];
+    }
+
+    float q = charges[i];
     float energy = 0.0f;
-    float fx = 0.0f, fy = 0.0f, fz = 0.0f;
+    float ffx = 0.0f, ffy = 0.0f, ffz = 0.0f;
 
     for (int kx = 0; kx < order; kx++) {
-        int gx = (ix + kx) % grid_x;
+        int gx = (grid_start[0] + kx) % grid_x;
         if (gx < 0) gx += grid_x;
-        float tx = theta[i * order * 3 + 0 * order + kx];
-        float dtx = dtheta[i * order * 3 + 0 * order + kx];
+        float tx = theta[0][kx];
+        float dtx = dtheta[0][kx];
 
         for (int ky = 0; ky < order; ky++) {
-            int gy = (iy + ky) % grid_y;
+            int gy = (grid_start[1] + ky) % grid_y;
             if (gy < 0) gy += grid_y;
-            float ty = theta[i * order * 3 + 1 * order + ky];
-            float dty = dtheta[i * order * 3 + 1 * order + ky];
+            float ty = theta[1][ky];
+            float dty = dtheta[1][ky];
 
             for (int kz = 0; kz < order; kz++) {
-                int gz = (iz + kz) % grid_z;
+                int gz = (grid_start[2] + kz) % grid_z;
                 if (gz < 0) gz += grid_z;
-                float tz = theta[i * order * 3 + 2 * order + kz];
-                float dtz = dtheta[i * order * 3 + 2 * order + kz];
+                float tz = theta[2][kz];
+                float dtz = dtheta[2][kz];
 
                 int idx = (gx * grid_y + gy) * grid_z + gz;
                 float phi = phi_grid[idx];
                 float txyz = tx * ty * tz;
 
                 energy += txyz * phi;
-                fx += dtx * ty * tz * phi;
-                fy += tx * dty * tz * phi;
-                fz += tx * ty * dtz * phi;
+                ffx += dtx * ty * tz * phi;
+                ffy += tx * dty * tz * phi;
+                ffz += tx * ty * dtz * phi;
             }
         }
     }
 
     energy *= 0.5f * q;
-    fx *= -q * grid_x * recip_box_x;
-    fy *= -q * grid_y * recip_box_y;
-    fz *= -q * grid_z * recip_box_z;
+    ffx *= -q * grid_x * recip_box_x;
+    ffy *= -q * grid_y * recip_box_y;
+    ffz *= -q * grid_z * recip_box_z;
 
-    atomicAdd(&forces_x[i], fx);
-    atomicAdd(&forces_y[i], fy);
-    atomicAdd(&forces_z[i], fz);
+    forces_x[i] = ffx;
+    forces_y[i] = ffy;
+    forces_z[i] = ffz;
 
     for (int offset = 16; offset > 0; offset >>= 1) {
         energy += __shfl_down_sync(0xffffffff, energy, offset);
@@ -429,19 +430,11 @@ void exclusion_kernel(
 }
 """
 
-_bspline_kernel = None
 _spread_kernel = None
 _finish_spread_kernel = None
 _gather_kernel = None
 _self_energy_kernel = None
 _exclusion_kernel = None
-
-
-def get_bspline_kernel():
-    global _bspline_kernel
-    if _bspline_kernel is None:
-        _bspline_kernel = cp.RawKernel(_BSPLINE_KERNEL_SOURCE, "bspline_kernel")
-    return _bspline_kernel
 
 
 def get_spread_kernel():
