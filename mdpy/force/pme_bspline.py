@@ -126,7 +126,51 @@ void bspline_kernel(
 }
 """
 
+_SPREAD_KERNEL_SOURCE = r"""
+extern "C" __global__
+void spread_kernel(
+    const float* __restrict__ charges,
+    const int* __restrict__ grid_idx,
+    const float* __restrict__ theta,
+    int num_particles,
+    int grid_x, int grid_y, int grid_z,
+    int order,
+    float* __restrict__ charge_grid
+) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= num_particles) return;
+
+    float q = charges[i];
+    int ix = grid_idx[i * 3 + 0];
+    int iy = grid_idx[i * 3 + 1];
+    int iz = grid_idx[i * 3 + 2];
+
+    for (int kx = 0; kx < order; kx++) {
+        int gx = (ix + kx) % grid_x;
+        if (gx < 0) gx += grid_x;
+        float tx = theta[i * order * 3 + 0 * order + kx];
+
+        for (int ky = 0; ky < order; ky++) {
+            int gy = (iy + ky) % grid_y;
+            if (gy < 0) gy += grid_y;
+            float ty = theta[i * order * 3 + 1 * order + ky];
+
+            for (int kz = 0; kz < order; kz++) {
+                int gz = (iz + kz) % grid_z;
+                if (gz < 0) gz += grid_z;
+                float tz = theta[i * order * 3 + 2 * order + kz];
+
+                float contribution = q * tx * ty * tz;
+                int idx = (gx * grid_y + gy) * grid_z + gz;
+                atomicAdd(&charge_grid[idx], contribution);
+            }
+        }
+    }
+}
+"""
+
 _bspline_kernel = None
+_spread_kernel = None
 
 
 def get_bspline_kernel():
@@ -134,3 +178,10 @@ def get_bspline_kernel():
     if _bspline_kernel is None:
         _bspline_kernel = cp.RawKernel(_BSPLINE_KERNEL_SOURCE, "bspline_kernel")
     return _bspline_kernel
+
+
+def get_spread_kernel():
+    global _spread_kernel
+    if _spread_kernel is None:
+        _spread_kernel = cp.RawKernel(_SPREAD_KERNEL_SOURCE, "spread_kernel")
+    return _spread_kernel
