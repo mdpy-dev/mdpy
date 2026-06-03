@@ -21,6 +21,10 @@ class PairParameter:
         return self
 
 
+class Scalar:
+    pass
+
+
 _MATH_FUNCTIONS = {
     "sqrt": "sqrtf",
     "exp": "expf",
@@ -290,6 +294,7 @@ class NonbondedExpression:
         cuda_fragment,
         local_variables,
         needs_r=True,
+        scalar_names=None,
     ):
         self.func = func
         self.source = source
@@ -301,6 +306,7 @@ class NonbondedExpression:
         self.cuda_fragment = cuda_fragment
         self.local_variables = local_variables
         self.needs_r = needs_r
+        self.scalar_names = scalar_names if scalar_names is not None else []
 
     @property
     def per_particle_parameter_names(self):
@@ -314,6 +320,9 @@ class NonbondedExpression:
         )
         merged_pair_params = list(
             dict.fromkeys(self.pair_parameter_names + other.pair_parameter_names)
+        )
+        merged_scalars = list(
+            dict.fromkeys(self.scalar_names + other.scalar_names)
         )
         suffix = "_2"
         other_locals = set()
@@ -364,6 +373,7 @@ class NonbondedExpression:
             cuda_fragment=combined_fragment,
             local_variables=combined_locals,
             needs_r=self.needs_r or other.needs_r,
+            scalar_names=merged_scalars,
         )
 
     def assemble_tile_kernel(self):
@@ -371,14 +381,14 @@ class NonbondedExpression:
         if "_result_energy_1" not in fragment:
             fragment += "\nfloat energy_val = _result_energy;"
             fragment += "\nfloat force_magnitude = _result_force;"
-        return _assemble_exclusion_tile_kernel(self.parameter_names, self.pair_parameter_names, fragment, self.needs_r)
+        return _assemble_exclusion_tile_kernel(self.parameter_names, self.pair_parameter_names, fragment, self.needs_r, self.scalar_names)
 
     def assemble_main_tile_kernel(self):
         fragment = self.cuda_fragment
         if "_result_energy_1" not in fragment:
             fragment += "\nfloat energy_val = _result_energy;"
             fragment += "\nfloat force_magnitude = _result_force;"
-        return _assemble_main_tile_kernel(self.parameter_names, self.pair_parameter_names, fragment, self.needs_r)
+        return _assemble_main_tile_kernel(self.parameter_names, self.pair_parameter_names, fragment, self.needs_r, self.scalar_names)
 
 
 def _rename_output_vars(cuda_fragment, tag):
@@ -426,6 +436,14 @@ def _is_pair_parameter_call(node):
         isinstance(node, ast.Call)
         and isinstance(node.func, ast.Name)
         and node.func.id == "PairParameter"
+    )
+
+
+def _is_scalar_call(node):
+    return (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "Scalar"
     )
 
 
@@ -724,7 +742,9 @@ def _generate_parameter_load_j_tile_exclusion_posq(parameter_names):
     return "\n        ".join(lines)
 
 
-def _assemble_exclusion_tile_kernel(parameter_names, pair_parameter_names, expression_fragment, needs_r=True):
+def _assemble_exclusion_tile_kernel(parameter_names, pair_parameter_names, expression_fragment, needs_r=True, scalar_names=None):
+    if scalar_names is None:
+        scalar_names = []
     per_particle_names = [p for p in parameter_names if p not in pair_parameter_names]
 
     param_decls = _generate_parameter_declarations_exclusion_posq(per_particle_names)
@@ -770,6 +790,10 @@ def _assemble_exclusion_tile_kernel(parameter_names, pair_parameter_names, expre
     pair_param_preload_i = _generate_pair_parameter_preload_i(pair_parameter_names)
     r_declaration = "                float r = dist_sq * inv_dist;\n" if needs_r else ""
 
+    scalar_decls = ""
+    for name in scalar_names:
+        scalar_decls += f",\n    float {name}"
+
     kernel = f"""extern "C" __global__
 void tile_kernel(
 {pos_args_decl}
@@ -785,7 +809,7 @@ void tile_kernel(
     float cutoff_sq,
     int num_tiles,
     int num_particles
-    {param_decls}{sorted_param_decls}{pair_param_decls}
+    {param_decls}{sorted_param_decls}{pair_param_decls}{scalar_decls}
 ) {{
     int total_warps = (blockDim.x * gridDim.x) / 32;
     int warp_id = (blockIdx.x * blockDim.x + threadIdx.x) / 32;
@@ -877,7 +901,9 @@ void tile_kernel(
     return kernel
 
 
-def _assemble_main_tile_kernel(parameter_names, pair_parameter_names, expression_fragment, needs_r=True):
+def _assemble_main_tile_kernel(parameter_names, pair_parameter_names, expression_fragment, needs_r=True, scalar_names=None):
+    if scalar_names is None:
+        scalar_names = []
     per_particle_names = [p for p in parameter_names if p not in pair_parameter_names]
 
     param_decls = _generate_parameter_declarations_main_posq(per_particle_names)
@@ -921,6 +947,10 @@ def _assemble_main_tile_kernel(parameter_names, pair_parameter_names, expression
     pair_param_preload_i = _generate_pair_parameter_preload_i(pair_parameter_names)
     r_declaration = "                float r = dist_sq * inv_dist;\n" if needs_r else ""
 
+    scalar_decls = ""
+    for name in scalar_names:
+        scalar_decls += f",\n    float {name}"
+
     kernel = f"""extern "C" __global__
 void main_tile_kernel(
 {pos_args_decl}
@@ -934,7 +964,7 @@ void main_tile_kernel(
     float cutoff_sq,
     int num_tiles,
     int num_particles
-    {param_decls}{sorted_param_decls}{pair_param_decls}
+    {param_decls}{sorted_param_decls}{pair_param_decls}{scalar_decls}
 ) {{
     int total_warps = (blockDim.x * gridDim.x) / 32;
     int warp_id = (blockIdx.x * blockDim.x + threadIdx.x) / 32;
@@ -1040,6 +1070,7 @@ def nonbonded_expression(func):
     index_names = []
     parameter_names = []
     pair_parameter_names = []
+    scalar_names = []
     distance_name = None
 
     for position, arg in enumerate(all_args):
@@ -1055,6 +1086,8 @@ def nonbonded_expression(func):
                 pair_parameter_names.append(arg_name)
             elif _is_parameter_call(default_node):
                 parameter_names.append(arg_name)
+            elif _is_scalar_call(default_node):
+                scalar_names.append(arg_name)
         else:
             index_names.append(arg_name)
 
@@ -1080,6 +1113,7 @@ def nonbonded_expression(func):
         cuda_fragment=cuda_fragment,
         local_variables=local_variables,
         needs_r=needs_r,
+        scalar_names=scalar_names,
     )
 
 
@@ -1149,7 +1183,8 @@ class NonbondedForce(ForceTerm):
         self._n_types = 0
         self._d_types = None
 
-    def bind(self, topology, parameter_table, cutoff):
+    def bind(self, topology, parameter_table, cutoff, **scalars):
+        self._scalars = scalars
         self._cutoff = cutoff
         self._cutoff_sq = cutoff * cutoff
         self._num_sm = cp.cuda.runtime.getDeviceProperties(0)["multiProcessorCount"]
@@ -1511,6 +1546,7 @@ class NonbondedForce(ForceTerm):
                 + self._main_parameter_arguments()
                 + self._main_sorted_parameter_arguments()
                 + self._pair_parameter_arguments()
+                + [np.float32(getattr(self, '_scalars', {}).get(name, 0.0)) for name in self.expression.scalar_names]
             )
             self._kernel((grid_size,), (256,), tuple(main_args))
 
@@ -1540,5 +1576,6 @@ class NonbondedForce(ForceTerm):
                 + self._parameter_arguments()
                 + self._sorted_parameter_arguments()
                 + self._pair_parameter_arguments()
+                + [np.float32(getattr(self, '_scalars', {}).get(name, 0.0)) for name in self.expression.scalar_names]
             )
             self._exclusion_kernel((excl_grid_size,), (256,), tuple(excl_args))
