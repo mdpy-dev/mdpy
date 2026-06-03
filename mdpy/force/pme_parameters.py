@@ -3,6 +3,8 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 
+from scipy.special import erfc
+
 
 @dataclass
 class PMEParameters:
@@ -11,6 +13,17 @@ class PMEParameters:
     grid_y: int
     grid_z: int
     order: int = 4
+
+    @staticmethod
+    def _calc_ewald_coefficient(cutoff: float, rtol: float = 1e-5) -> float:
+        lo, hi = 0.0, 10.0
+        for _ in range(200):
+            mid = (lo + hi) / 2.0
+            if erfc(mid * cutoff) > rtol:
+                lo = mid
+            else:
+                hi = mid
+        return (lo + hi) / 2.0
 
     @staticmethod
     def _next_fft_friendly_size(n: int) -> int:
@@ -30,14 +43,15 @@ class PMEParameters:
         box_y: float,
         box_z: float,
         cutoff: float,
-        tolerance: float = 1e-5,
         order: int = 4,
+        ewald_rtol: float = 1e-5,
+        fourier_spacing: float = 1.2,
     ) -> PMEParameters:
-        alpha = math.sqrt(-math.log(tolerance)) / cutoff
+        alpha = cls._calc_ewald_coefficient(cutoff, ewald_rtol)
 
         def grid_dim(box_dim: float) -> int:
-            raw = 2.0 * alpha * box_dim / (3.0 * tolerance ** 0.2)
-            return cls._next_fft_friendly_size(max(order, int(math.ceil(raw))))
+            nmin = max(order, math.ceil(box_dim / fourier_spacing))
+            return cls._next_fft_friendly_size(nmin)
 
         return cls(
             alpha=alpha,
