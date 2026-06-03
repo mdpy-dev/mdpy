@@ -3,19 +3,7 @@ from __future__ import annotations
 import cupy as cp
 import numpy as np
 from mdpy import env
-from mdpy.core.radix_sort import RadixSorter, fill_constant
 
-_pair_sorter = None
-
-
-def _get_pair_sorter(max_pairs: int, num_particles: int) -> RadixSorter:
-    global _pair_sorter
-    if _pair_sorter is None or max_pairs > _pair_sorter._max_elements:
-        max_key = num_particles * 2_000_000_000
-        num_bits = max(40, (max_key).bit_length())
-        num_bits = ((num_bits + 3) // 4) * 4
-        _pair_sorter = RadixSorter(max_elements=max_pairs, num_bits=num_bits)
-    return _pair_sorter
 
 
 class Topology:
@@ -270,42 +258,37 @@ void permute_pairs_kernel(
 }
 '''
 
-_BUILD_SORT_KEY_KERNEL = r"""
+_COUNT_ROW_KERNEL = r"""
 extern "C" __global__
-void build_sort_key_kernel(
-    const int* __restrict__ keys_i,
-    const int* __restrict__ keys_j,
-    const float* __restrict__ keys_scale,
+void count_row_kernel(
+    const int* __restrict__ pair_i,
     int num_pairs,
-    long long* __restrict__ sort_key
+    int* __restrict__ count
 ) {
-    int p = blockIdx.x * blockDim.x + threadIdx.x;
-    if (p >= num_pairs) return;
-    long long ki = (long long)keys_i[p] * 2000000000LL;
-    long long kj = (long long)keys_j[p] * 2LL;
-    long long ks = (keys_scale[p] > 0.0f) ? 1LL : 0LL;
-    sort_key[p] = ki + kj + ks;
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tid >= num_pairs) return;
+    atomicAdd(&count[pair_i[tid] + 1], 1);
 }
 """
 
-_GATHER_THREE_KERNEL = r"""
+_SCATTER_PAIRS_KERNEL = r"""
 extern "C" __global__
-void gather_three_kernel(
-    const int* __restrict__ src_i,
-    const int* __restrict__ src_j,
-    const float* __restrict__ src_s,
-    const int* __restrict__ order,
+void scatter_pairs_kernel(
+    const int* __restrict__ pair_i,
+    const int* __restrict__ pair_j,
+    const float* __restrict__ pair_scale,
+    const int* __restrict__ offset,
     int num_pairs,
-    int* __restrict__ dst_i,
-    int* __restrict__ dst_j,
-    float* __restrict__ dst_s
+    int* __restrict__ neighbors_out,
+    float* __restrict__ scale_out,
+    int* __restrict__ temp_offset
 ) {
-    int p = blockIdx.x * blockDim.x + threadIdx.x;
-    if (p >= num_pairs) return;
-    int o = order[p];
-    dst_i[p] = src_i[o];
-    dst_j[p] = src_j[o];
-    dst_s[p] = src_s[o];
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tid >= num_pairs) return;
+    int i = pair_i[tid];
+    int pos = atomicAdd(&temp_offset[i], 1);
+    neighbors_out[pos] = pair_j[tid];
+    scale_out[pos] = pair_scale[tid];
 }
 """
 
@@ -321,8 +304,8 @@ def _get_gpu_kernels():
             'fill_csr_gaps': cp.RawKernel(_FILL_CSR_GAPS_KERNEL, 'fill_csr_gaps_kernel'),
             'parallel_dedup': cp.RawKernel(_PARALLEL_DEDUP_KERNEL, 'parallel_dedup_kernel'),
             'permute_pairs': cp.RawKernel(_PERMUTE_PAIRS_KERNEL, 'permute_pairs_kernel'),
-            'build_sort_key': cp.RawKernel(_BUILD_SORT_KEY_KERNEL, 'build_sort_key_kernel'),
-            'gather_three': cp.RawKernel(_GATHER_THREE_KERNEL, 'gather_three_kernel'),
+            'count_row': cp.RawKernel(_COUNT_ROW_KERNEL, 'count_row_kernel'),
+            'scatter_pairs': cp.RawKernel(_SCATTER_PAIRS_KERNEL, 'scatter_pairs_kernel'),
         }
     return _gpu_kernels
 
@@ -431,37 +414,22 @@ def permute_exclusion_pairs_gpu(d_cached_i, d_cached_j, d_cached_scale,
          d_composed_perm, np.int32(num_pairs),
          d_new_i, d_new_j, d_new_scale))
 
-    sort_key = cp.empty(num_pairs, dtype=cp.int64)
-    kernels['build_sort_key'](
-        grid, (tpb,),
-        (d_new_i, d_new_j, d_new_scale, np.int32(num_pairs), sort_key),
-    )
-    sorter = _get_pair_sorter(num_pairs, num_particles)
-    order = sorter.argsort(sort_key.view(np.uint64))
-    d_sorted_i = cp.empty(num_pairs, dtype=cp.int32)
-    d_sorted_j = cp.empty(num_pairs, dtype=cp.int32)
-    d_sorted_scale = cp.empty(num_pairs, dtype=cp.float32)
-    kernels['gather_three'](
-        grid, (tpb,),
-        (d_new_i, d_new_j, d_new_scale, order, np.int32(num_pairs),
-         d_sorted_i, d_sorted_j, d_sorted_scale),
-    )
-    d_new_i = d_sorted_i
-    d_new_j = d_sorted_j
-    d_new_scale = d_sorted_scale
+    d_count = cp.zeros(num_particles + 1, dtype=cp.int32)
+    kernels['count_row'](grid, (tpb,),
+        (d_new_i, np.int32(num_pairs), d_count))
 
-    d_offset = cp.empty(num_particles + 1, dtype=cp.int32)
-    fill_constant(d_offset, -1)
-    grid_csr = ((num_pairs + 1 + tpb - 1) // tpb,)
-    kernels['parallel_csr'](grid_csr, (tpb,),
-        (d_new_i, np.int32(num_pairs),
-         np.int32(num_particles), d_offset))
+    d_offset = cp.cumsum(d_count, dtype=cp.int32).astype(cp.int32)
 
-    grid_fill = ((num_particles + tpb - 1) // tpb,)
-    kernels['fill_csr_gaps'](grid_fill, (tpb,),
-        (d_offset, np.int32(num_particles)))
+    d_neighbors = cp.empty(num_pairs, dtype=cp.int32)
+    d_scale_out = cp.empty(num_pairs, dtype=cp.float32)
+    d_temp = d_offset.copy()
 
-    return d_offset, d_new_j, d_new_scale, d_new_i, d_new_j, d_new_scale
+    kernels['scatter_pairs'](grid, (tpb,),
+        (d_new_i, d_new_j, d_new_scale, d_offset,
+         np.int32(num_pairs),
+         d_neighbors, d_scale_out, d_temp))
+
+    return d_offset, d_neighbors, d_scale_out, d_new_i, d_new_j, d_new_scale
 
 
 class Builder:

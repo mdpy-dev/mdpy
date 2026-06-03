@@ -18,6 +18,24 @@ from mdpy.core.topology import Builder
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
 
 
+def _assert_csr_equal(d_offset_a, d_neighbors_a, d_scale_a,
+                       d_offset_b, d_neighbors_b, d_scale_b):
+    offset_a = cp.asnumpy(d_offset_a)
+    offset_b = cp.asnumpy(d_offset_b)
+    neighbors_a = cp.asnumpy(d_neighbors_a)
+    neighbors_b = cp.asnumpy(d_neighbors_b)
+    scale_a = cp.asnumpy(d_scale_a)
+    scale_b = cp.asnumpy(d_scale_b)
+    np.testing.assert_array_equal(offset_a, offset_b)
+    N = len(offset_a) - 1
+    for i in range(N):
+        sa, ea = offset_a[i], offset_a[i + 1]
+        sb, eb = offset_b[i], offset_b[i + 1]
+        pairs_a = set(zip(neighbors_a[sa:ea].tolist(), scale_a[sa:ea].tolist()))
+        pairs_b = set(zip(neighbors_b[sb:eb].tolist(), scale_b[sb:eb].tolist()))
+        assert pairs_a == pairs_b, f"CSR mismatch at atom {i}: {pairs_a} vs {pairs_b}"
+
+
 def _make_system_6po6():
     psf = PSFParser(os.path.join(DATA_DIR, '6PO6.psf'))
     pdb = PDBParser(os.path.join(DATA_DIR, '6PO6.pdb'))
@@ -192,52 +210,11 @@ def test_permute_fast_path_matches_full_rebuild():
     ref_offset, ref_neighbors, ref_scale = _build_reference_exclusion_map(topology_remapped, scale_14=1.0)
     gt_offset, gt_neighbors, gt_scale, _ = build_exclusion_map_gpu(topology_remapped, scale_14=1.0)
 
-    np.testing.assert_array_equal(cp.asnumpy(d_offset), cp.asnumpy(gt_offset))
-    np.testing.assert_array_equal(cp.asnumpy(d_neighbors), cp.asnumpy(gt_neighbors))
-    np.testing.assert_allclose(cp.asnumpy(d_scale), cp.asnumpy(gt_scale), atol=1e-7)
-    np.testing.assert_array_equal(ref_offset, cp.asnumpy(gt_offset))
-    np.testing.assert_array_equal(ref_neighbors, cp.asnumpy(gt_neighbors))
-    np.testing.assert_allclose(ref_scale, cp.asnumpy(gt_scale), atol=1e-7)
-
-
-def test_sort_key_fusion_matches_cupy():
-    system, integrator = _make_system_6po6()
-    topology = system.topology
-    from mdpy.core.topology import build_exclusion_map_gpu, _get_gpu_kernels
-    d_offset, d_neighbors, d_scale, d_unique_i = build_exclusion_map_gpu(
-        topology, scale_14=1.0
-    )
-
-    num_pairs = len(d_unique_i)
-
-    rng = np.random.default_rng(42)
-    perm = np.arange(topology.num_particles, dtype=np.int32)
-    rng.shuffle(perm)
-    d_perm = cp.asarray(perm)
-    d_composed = cp.empty(topology.num_particles, dtype=cp.int32)
-    d_composed[d_perm] = cp.arange(topology.num_particles, dtype=cp.int32)
-
-    from mdpy.core.topology import _PERMUTE_PAIRS_KERNEL
-    kernels = _get_gpu_kernels()
-    d_new_i = cp.empty(num_pairs, dtype=cp.int32)
-    d_new_j = cp.empty(num_pairs, dtype=cp.int32)
-    d_new_scale = cp.empty(num_pairs, dtype=cp.float32)
-    tpb = 256
-    grid = ((num_pairs + tpb - 1) // tpb,)
-    kernels['permute_pairs'](grid, (tpb,),
-        (d_unique_i, d_neighbors, d_scale,
-         d_composed, np.int32(num_pairs),
-         d_new_i, d_new_j, d_new_scale))
-
-    ref_key = (d_new_i.astype(cp.int64) * np.int64(2000000000)
-               + d_new_j.astype(cp.int64) * np.int64(2)
-               + (d_new_scale > 0.0).astype(cp.int64))
-    fused_key = cp.empty(num_pairs, dtype=cp.int64)
-    kernels['build_sort_key'](
-        grid, (tpb,),
-        (d_new_i, d_new_j, d_new_scale, np.int32(num_pairs), fused_key),
-    )
-    np.testing.assert_array_equal(cp.asnumpy(fused_key), cp.asnumpy(ref_key))
+    _assert_csr_equal(d_offset, d_neighbors, d_scale,
+                      gt_offset, gt_neighbors, gt_scale)
+    _assert_csr_equal(cp.asarray(ref_offset), cp.asarray(ref_neighbors),
+                      cp.asarray(ref_scale),
+                      gt_offset, gt_neighbors, gt_scale)
 
 
 def test_gather_three_fusion_matches_cupy():
@@ -275,9 +252,8 @@ def test_gather_three_fusion_matches_cupy():
     gt_offset, gt_neighbors, gt_scale, _ = build_exclusion_map_gpu(
         topology_remapped, scale_14=1.0
     )
-    np.testing.assert_array_equal(cp.asnumpy(d_offset), cp.asnumpy(gt_offset))
-    np.testing.assert_array_equal(cp.asnumpy(d_neighbors), cp.asnumpy(gt_neighbors))
-    np.testing.assert_allclose(cp.asnumpy(d_scale), cp.asnumpy(gt_scale), atol=1e-7)
+    _assert_csr_equal(d_offset, d_neighbors, d_scale,
+                      gt_offset, gt_neighbors, gt_scale)
 
 
 def test_remap_indices_gpu_correctness():
