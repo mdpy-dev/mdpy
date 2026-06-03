@@ -336,10 +336,87 @@ void self_energy_kernel(
 }
 """
 
+_EXCLUSION_KERNEL_SOURCE = r"""
+extern "C" __global__
+void exclusion_kernel(
+    const float* __restrict__ positions_x,
+    const float* __restrict__ positions_y,
+    const float* __restrict__ positions_z,
+    const float* __restrict__ charges,
+    const int* __restrict__ pair_i,
+    const int* __restrict__ pair_j,
+    const float* __restrict__ pair_scale,
+    int num_pairs,
+    float alpha,
+    float box_x, float box_y, float box_z,
+    float* __restrict__ forces_x,
+    float* __restrict__ forces_y,
+    float* __restrict__ forces_z,
+    float* __restrict__ energy_buffer
+) {
+    int p = blockIdx.x * blockDim.x + threadIdx.x;
+    if (p >= num_pairs) return;
+
+    int i = pair_i[p];
+    int j = pair_j[p];
+    float scale = pair_scale[p];
+    float one_minus_scale = 1.0f - scale;
+
+    float dx = positions_x[i] - positions_x[j];
+    float dy = positions_y[i] - positions_y[j];
+    float dz = positions_z[i] - positions_z[j];
+
+    dx -= roundf(dx / box_x) * box_x;
+    dy -= roundf(dy / box_y) * box_y;
+    dz -= roundf(dz / box_z) * box_z;
+
+    float r_sq = dx*dx + dy*dy + dz*dz;
+    float r = sqrtf(r_sq);
+    float inv_r = 1.0f / r;
+
+    float qi = charges[i];
+    float qj = charges[j];
+    float qq = qi * qj;
+
+    float alpha_r = alpha * r;
+    float erf_val = erff(alpha_r);
+    float gauss = expf(-alpha_r * alpha_r);
+
+    float COULOMB_CONST = 0.13893556595455f;
+    float SQRT_PI = 1.772453850905516f;
+
+    float corr_energy = -COULOMB_CONST * one_minus_scale * qq * erf_val * inv_r;
+
+    float corr_fmag = COULOMB_CONST * one_minus_scale * qq * (
+        erf_val * inv_r * inv_r
+        - 2.0f * alpha * gauss * inv_r / SQRT_PI
+    );
+
+    float fx = corr_fmag * dx * inv_r;
+    float fy = corr_fmag * dy * inv_r;
+    float fz = corr_fmag * dz * inv_r;
+
+    atomicAdd(&forces_x[i], fx);
+    atomicAdd(&forces_y[i], fy);
+    atomicAdd(&forces_z[i], fz);
+    atomicAdd(&forces_x[j], -fx);
+    atomicAdd(&forces_y[j], -fy);
+    atomicAdd(&forces_z[j], -fz);
+
+    for (int offset = 16; offset > 0; offset >>= 1) {
+        corr_energy += __shfl_down_sync(0xffffffff, corr_energy, offset);
+    }
+    if ((threadIdx.x & 31) == 0) {
+        atomicAdd(energy_buffer, corr_energy);
+    }
+}
+"""
+
 _bspline_kernel = None
 _spread_kernel = None
 _gather_kernel = None
 _self_energy_kernel = None
+_exclusion_kernel = None
 
 
 def get_bspline_kernel():
@@ -368,3 +445,10 @@ def get_self_energy_kernel():
     if _self_energy_kernel is None:
         _self_energy_kernel = cp.RawKernel(_SELF_ENERGY_KERNEL_SOURCE, "self_energy_kernel")
     return _self_energy_kernel
+
+
+def get_exclusion_kernel():
+    global _exclusion_kernel
+    if _exclusion_kernel is None:
+        _exclusion_kernel = cp.RawKernel(_EXCLUSION_KERNEL_SOURCE, "exclusion_kernel")
+    return _exclusion_kernel

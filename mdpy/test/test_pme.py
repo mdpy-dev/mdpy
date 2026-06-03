@@ -9,6 +9,7 @@ import pytest
 from mdpy.force.pme_bspline import (
     compute_bspline_weights,
     get_bspline_kernel,
+    get_exclusion_kernel,
     get_gather_kernel,
     get_self_energy_kernel,
     get_spread_kernel,
@@ -312,3 +313,107 @@ class TestForceGathering:
 
         assert abs(float(d_energy[0]) - expected) < 1e-6
         assert expected < 0
+
+
+class TestExclusionCorrection:
+
+    def test_produces_nonzero_energy(self):
+        N = 4
+        box_x, box_y, box_z = 20.0, 20.0, 20.0
+        alpha = 0.35
+
+        charges = np.array([0.5, -0.3, 0.8, -0.6], dtype=np.float32)
+        pos_x = np.array([5.0, 6.0, 10.0, 15.0], dtype=np.float32)
+        pos_y = np.array([5.0, 5.0, 10.0, 10.0], dtype=np.float32)
+        pos_z = np.array([5.0, 5.0, 10.0, 10.0], dtype=np.float32)
+
+        pair_i = np.array([0, 2], dtype=np.int32)
+        pair_j = np.array([1, 3], dtype=np.int32)
+        pair_scale = np.array([0.0, 0.8333333], dtype=np.float32)
+
+        d_pos_x = cp.asarray(pos_x)
+        d_pos_y = cp.asarray(pos_y)
+        d_pos_z = cp.asarray(pos_z)
+        d_charges = cp.asarray(charges)
+        d_pair_i = cp.asarray(pair_i)
+        d_pair_j = cp.asarray(pair_j)
+        d_pair_scale = cp.asarray(pair_scale)
+
+        d_fx = cp.zeros(N, dtype=np.float32)
+        d_fy = cp.zeros(N, dtype=np.float32)
+        d_fz = cp.zeros(N, dtype=np.float32)
+        d_energy = cp.zeros(1, dtype=np.float32)
+
+        excl_k = get_exclusion_kernel()
+        excl_k((1,), (256,),
+            (d_pos_x, d_pos_y, d_pos_z, d_charges,
+             d_pair_i, d_pair_j, d_pair_scale,
+             np.int32(2), np.float32(alpha),
+             np.float32(box_x), np.float32(box_y), np.float32(box_z),
+             d_fx, d_fy, d_fz, d_energy))
+
+        h_fx = cp.asnumpy(d_fx)
+        h_fy = cp.asnumpy(d_fy)
+        h_fz = cp.asnumpy(d_fz)
+        energy = float(d_energy[0])
+
+        print(f"Exclusion energy: {energy:.6f}")
+        print(f"Forces x: {h_fx}")
+        print(f"Forces y: {h_fy}")
+        print(f"Forces z: {h_fz}")
+
+        assert abs(energy) > 1e-6, "Exclusion energy should be nonzero"
+
+        assert np.max(np.abs(h_fx)) > 1e-6 or np.max(np.abs(h_fy)) > 1e-6 or np.max(np.abs(h_fz)) > 1e-6
+
+        net_fx = float(np.sum(h_fx))
+        net_fy = float(np.sum(h_fy))
+        net_fz = float(np.sum(h_fz))
+        max_force = max(float(np.max(np.abs(h_fx))), float(np.max(np.abs(h_fy))), float(np.max(np.abs(h_fz))))
+        if max_force > 1e-10:
+            assert abs(net_fx) < max_force * 0.01
+            assert abs(net_fy) < max_force * 0.01
+            assert abs(net_fz) < max_force * 0.01
+
+    def test_newtons_third_law(self):
+        N = 2
+        box_x, box_y, box_z = 20.0, 20.0, 20.0
+        alpha = 0.35
+
+        charges = np.array([1.0, -1.0], dtype=np.float32)
+        pos_x = np.array([5.0, 7.0], dtype=np.float32)
+        pos_y = np.array([5.0, 5.0], dtype=np.float32)
+        pos_z = np.array([5.0, 5.0], dtype=np.float32)
+
+        pair_i = np.array([0], dtype=np.int32)
+        pair_j = np.array([1], dtype=np.int32)
+        pair_scale = np.array([0.0], dtype=np.float32)
+
+        d_pos_x = cp.asarray(pos_x)
+        d_pos_y = cp.asarray(pos_y)
+        d_pos_z = cp.asarray(pos_z)
+        d_charges = cp.asarray(charges)
+        d_pair_i = cp.asarray(pair_i)
+        d_pair_j = cp.asarray(pair_j)
+        d_pair_scale = cp.asarray(pair_scale)
+
+        d_fx = cp.zeros(N, dtype=np.float32)
+        d_fy = cp.zeros(N, dtype=np.float32)
+        d_fz = cp.zeros(N, dtype=np.float32)
+        d_energy = cp.zeros(1, dtype=np.float32)
+
+        excl_k = get_exclusion_kernel()
+        excl_k((1,), (256,),
+            (d_pos_x, d_pos_y, d_pos_z, d_charges,
+             d_pair_i, d_pair_j, d_pair_scale,
+             np.int32(1), np.float32(alpha),
+             np.float32(box_x), np.float32(box_y), np.float32(box_z),
+             d_fx, d_fy, d_fz, d_energy))
+
+        h_fx = cp.asnumpy(d_fx)
+        h_fy = cp.asnumpy(d_fy)
+        h_fz = cp.asnumpy(d_fz)
+
+        assert abs(h_fx[0] + h_fx[1]) < 1e-6, f"F_x not balanced: {h_fx}"
+        assert abs(h_fy[0] + h_fy[1]) < 1e-6, f"F_y not balanced: {h_fy}"
+        assert abs(h_fz[0] + h_fz[1]) < 1e-6, f"F_z not balanced: {h_fz}"
