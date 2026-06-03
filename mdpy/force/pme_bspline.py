@@ -329,9 +329,9 @@ void gather_kernel(
     ffy *= -q * grid_y * recip_box_y;
     ffz *= -q * grid_z * recip_box_z;
 
-    forces_x[i] = ffx;
-    forces_y[i] = ffy;
-    forces_z[i] = ffz;
+    atomicAdd(&forces_x[i], ffx);
+    atomicAdd(&forces_y[i], ffy);
+    atomicAdd(&forces_z[i], ffz);
 
     for (int offset = 16; offset > 0; offset >>= 1) {
         energy += __shfl_down_sync(0xffffffff, energy, offset);
