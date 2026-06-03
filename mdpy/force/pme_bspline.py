@@ -135,7 +135,7 @@ void spread_kernel(
     int num_particles,
     int grid_x, int grid_y, int grid_z,
     int order,
-    float* __restrict__ charge_grid
+    long long* __restrict__ charge_grid_fixed
 ) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= num_particles) return;
@@ -144,6 +144,8 @@ void spread_kernel(
     int ix = grid_idx[i * 3 + 0];
     int iy = grid_idx[i * 3 + 1];
     int iz = grid_idx[i * 3 + 2];
+
+    const float SCALE = 16777216.0f;
 
     for (int kx = 0; kx < order; kx++) {
         int gx = (ix + kx) % grid_x;
@@ -160,12 +162,27 @@ void spread_kernel(
                 if (gz < 0) gz += grid_z;
                 float tz = theta[i * order * 3 + 2 * order + kz];
 
-                float contribution = q * tx * ty * tz;
+                float contribution = q * tx * ty * tz * SCALE;
                 int idx = (gx * grid_y + gy) * grid_z + gz;
-                atomicAdd(&charge_grid[idx], contribution);
+                long long ll_val = (long long)(contribution > 0.0f ? contribution + 0.5f : contribution - 0.5f);
+                unsigned long long ul_val = (unsigned long long)ll_val;
+                atomicAdd((unsigned long long*)&charge_grid_fixed[idx], ul_val);
             }
         }
     }
+}
+"""
+
+_FINISH_SPREAD_KERNEL_SOURCE = r"""
+extern "C" __global__
+void finish_spread_kernel(
+    const long long* __restrict__ charge_grid_fixed,
+    float* __restrict__ charge_grid,
+    int grid_size
+) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= grid_size) return;
+    charge_grid[idx] = (float)charge_grid_fixed[idx] * 5.960464477539063e-08f;
 }
 """
 
@@ -414,6 +431,7 @@ void exclusion_kernel(
 
 _bspline_kernel = None
 _spread_kernel = None
+_finish_spread_kernel = None
 _gather_kernel = None
 _self_energy_kernel = None
 _exclusion_kernel = None
@@ -431,6 +449,13 @@ def get_spread_kernel():
     if _spread_kernel is None:
         _spread_kernel = cp.RawKernel(_SPREAD_KERNEL_SOURCE, "spread_kernel")
     return _spread_kernel
+
+
+def get_finish_spread_kernel():
+    global _finish_spread_kernel
+    if _finish_spread_kernel is None:
+        _finish_spread_kernel = cp.RawKernel(_FINISH_SPREAD_KERNEL_SOURCE, "finish_spread_kernel")
+    return _finish_spread_kernel
 
 
 def get_gather_kernel():

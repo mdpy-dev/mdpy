@@ -8,6 +8,7 @@ from mdpy.force.pme_parameters import PMEParameters
 from mdpy.force.pme_bspline import (
     get_bspline_kernel,
     get_spread_kernel,
+    get_finish_spread_kernel,
     get_gather_kernel,
     get_self_energy_kernel,
     get_exclusion_kernel,
@@ -36,6 +37,7 @@ class PMEReciprocalForce(ForceTerm):
         self._d_dtheta = None
         self._d_grid_idx = None
         self._d_charge_grid = None
+        self._d_charge_grid_fixed = None
         self._self_energy_factor = 0.0
 
         self._d_pair_i = None
@@ -64,6 +66,7 @@ class PMEReciprocalForce(ForceTerm):
 
         grid_size = self.grid_x * self.grid_y * self.grid_z
         self._d_charge_grid = cp.zeros(grid_size, dtype=np.float32)
+        self._d_charge_grid_fixed = cp.zeros(grid_size, dtype=cp.int64)
 
         if pbc_matrix is not None:
             pbc_2d = np.asarray(pbc_matrix, dtype=np.float64).reshape(3, 3)
@@ -150,13 +153,19 @@ class PMEReciprocalForce(ForceTerm):
              np.int32(gx), np.int32(gy), np.int32(gz), np.int32(order),
              self._d_theta, self._d_dtheta, self._d_grid_idx))
 
-        self._d_charge_grid[:] = 0
+        self._d_charge_grid_fixed[:] = 0
 
         spread_k = get_spread_kernel()
         spread_k(grid_1d, (tpb,),
             (self._d_charges, self._d_grid_idx, self._d_theta,
              np.int32(N), np.int32(gx), np.int32(gy), np.int32(gz), np.int32(order),
-             self._d_charge_grid))
+             self._d_charge_grid_fixed))
+
+        grid_total = gx * gy * gz
+        finish_grid_1d = ((grid_total + tpb - 1) // tpb,)
+        finish_spread_k = get_finish_spread_kernel()
+        finish_spread_k(finish_grid_1d, (tpb,),
+            (self._d_charge_grid_fixed, self._d_charge_grid, np.int32(grid_total)))
 
         grid_3d = self._d_charge_grid.reshape(gx, gy, gz)
         grid_complex = cp.fft.rfftn(grid_3d)
