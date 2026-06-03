@@ -376,19 +376,19 @@ class NonbondedExpression:
             scalar_names=merged_scalars,
         )
 
-    def assemble_tile_kernel(self):
+    def assemble_tile_kernel(self, force_only=False):
         fragment = self.cuda_fragment
         if "_result_energy_1" not in fragment:
             fragment += "\nfloat energy_val = _result_energy;"
             fragment += "\nfloat force_magnitude = _result_force;"
-        return _assemble_exclusion_tile_kernel(self.parameter_names, self.pair_parameter_names, fragment, self.needs_r, self.scalar_names)
+        return _assemble_exclusion_tile_kernel(self.parameter_names, self.pair_parameter_names, fragment, self.needs_r, self.scalar_names, compute_energy=not force_only)
 
-    def assemble_main_tile_kernel(self):
+    def assemble_main_tile_kernel(self, force_only=False):
         fragment = self.cuda_fragment
         if "_result_energy_1" not in fragment:
             fragment += "\nfloat energy_val = _result_energy;"
             fragment += "\nfloat force_magnitude = _result_force;"
-        return _assemble_main_tile_kernel(self.parameter_names, self.pair_parameter_names, fragment, self.needs_r, self.scalar_names)
+        return _assemble_main_tile_kernel(self.parameter_names, self.pair_parameter_names, fragment, self.needs_r, self.scalar_names, compute_energy=not force_only)
 
 
 def _rename_output_vars(cuda_fragment, tag):
@@ -742,10 +742,26 @@ def _generate_parameter_load_j_tile_exclusion_posq(parameter_names):
     return "\n        ".join(lines)
 
 
-def _assemble_exclusion_tile_kernel(parameter_names, pair_parameter_names, expression_fragment, needs_r=True, scalar_names=None):
+def _assemble_exclusion_tile_kernel(parameter_names, pair_parameter_names, expression_fragment, needs_r=True, scalar_names=None, compute_energy=True):
     if scalar_names is None:
         scalar_names = []
     per_particle_names = [p for p in parameter_names if p not in pair_parameter_names]
+
+    if compute_energy:
+        energy_buffer_arg = "    float* __restrict__ energy_buffer,"
+        energy_init = "    float total_energy = 0.0f;"
+        energy_accum = "                total_energy += energy_val;"
+        energy_reduce = """
+    for (int offset = 16; offset > 0; offset >>= 1) {{
+        total_energy += __shfl_down_sync(0xffffffff, total_energy, offset);
+    }}
+    if (tgx == 0) atomicAdd(energy_buffer, total_energy);
+"""
+    else:
+        energy_buffer_arg = ""
+        energy_init = ""
+        energy_accum = ""
+        energy_reduce = ""
 
     param_decls = _generate_parameter_declarations_exclusion_posq(per_particle_names)
     sorted_param_decls = _generate_sorted_parameter_declarations_exclusion_posq(
@@ -800,7 +816,7 @@ void tile_kernel(
     float* __restrict__ f_x,
     float* __restrict__ f_y,
     float* __restrict__ f_z,
-    float* __restrict__ energy_buffer,
+{energy_buffer_arg}
     const int* __restrict__ block_atoms,
     const int* __restrict__ tiles,
     const int* __restrict__ interacting_atoms,
@@ -819,8 +835,7 @@ void tile_kernel(
     int pos = (int)((long long)warp_id * num_tiles / total_warps);
     int end = (int)((long long)(warp_id + 1) * num_tiles / total_warps);
 
-    float total_energy = 0.0f;
-
+{energy_init}
     __shared__ int atom_indices_shared[256];
     __shared__ unsigned int excl_shared[256];
     __shared__ unsigned int scale_shared[256];
@@ -873,7 +888,7 @@ void tile_kernel(
                 float fz = dz * inv_dist_force;
                 force_x += fx; force_y += fy; force_z += fz;
                 shfl_fx -= fx; shfl_fy -= fy; shfl_fz -= fz;
-                total_energy += energy_val;
+{energy_accum}
                 {param_restore}
             }}
             {shuffle_code}
@@ -892,19 +907,31 @@ void tile_kernel(
             atomicAdd(&f_z[gj_out], shfl_fz);
         }}
     }}
-
-    for (int offset = 16; offset > 0; offset >>= 1) {{
-        total_energy += __shfl_down_sync(0xffffffff, total_energy, offset);
-    }}
-    if (tgx == 0) atomicAdd(energy_buffer, total_energy);
+{energy_reduce}
 }}"""
     return kernel
 
 
-def _assemble_main_tile_kernel(parameter_names, pair_parameter_names, expression_fragment, needs_r=True, scalar_names=None):
+def _assemble_main_tile_kernel(parameter_names, pair_parameter_names, expression_fragment, needs_r=True, scalar_names=None, compute_energy=True):
     if scalar_names is None:
         scalar_names = []
     per_particle_names = [p for p in parameter_names if p not in pair_parameter_names]
+
+    if compute_energy:
+        energy_buffer_arg = "    float* __restrict__ energy_buffer,"
+        energy_init = "    float total_energy = 0.0f;"
+        energy_accum = "                total_energy += energy_val;"
+        energy_reduce = """
+    for (int offset = 16; offset > 0; offset >>= 1) {{
+        total_energy += __shfl_down_sync(0xffffffff, total_energy, offset);
+    }}
+    if (tgx == 0) atomicAdd(energy_buffer, total_energy);
+"""
+    else:
+        energy_buffer_arg = ""
+        energy_init = ""
+        energy_accum = ""
+        energy_reduce = ""
 
     param_decls = _generate_parameter_declarations_main_posq(per_particle_names)
     sorted_param_decls = _generate_sorted_parameter_declarations_main_posq(
@@ -957,7 +984,7 @@ void main_tile_kernel(
     float* __restrict__ f_x,
     float* __restrict__ f_y,
     float* __restrict__ f_z,
-    float* __restrict__ energy_buffer,
+{energy_buffer_arg}
     const int* __restrict__ block_atoms,
     const int* __restrict__ tiles,
     const int* __restrict__ interacting_atoms,
@@ -974,8 +1001,7 @@ void main_tile_kernel(
     int pos = (int)((long long)warp_id * num_tiles / total_warps);
     int end = (int)((long long)(warp_id + 1) * num_tiles / total_warps);
 
-    float total_energy = 0.0f;
-
+{energy_init}
     __shared__ int atom_indices_shared[256];
 
     for (; pos < end; pos++) {{
@@ -1017,7 +1043,7 @@ void main_tile_kernel(
                 float fz = dz * inv_dist_force;
                 force_x += fx; force_y += fy; force_z += fz;
                 shfl_fx -= fx; shfl_fy -= fy; shfl_fz -= fz;
-                total_energy += energy_val;
+{energy_accum}
             }}
             {shuffle_code}
             tj = (tj + 1) & 31;
@@ -1035,11 +1061,7 @@ void main_tile_kernel(
             atomicAdd(&f_z[gj_out], shfl_fz);
         }}
     }}
-
-    for (int offset = 16; offset > 0; offset >>= 1) {{
-        total_energy += __shfl_down_sync(0xffffffff, total_energy, offset);
-    }}
-    if (tgx == 0) atomicAdd(energy_buffer, total_energy);
+{energy_reduce}
 }}"""
     return kernel
 
@@ -1167,8 +1189,12 @@ class NonbondedForce(ForceTerm):
         self.expression = expression
         self._kernel = None
         self._exclusion_kernel = None
+        self._kernel_force_only = None
+        self._exclusion_kernel_force_only = None
         self._kernel_source = None
         self._exclusion_kernel_source = None
+        self._kernel_source_force_only = None
+        self._exclusion_kernel_source_force_only = None
         self._d_parameter_arrays = {}
         self._parameter_arrays = {}
         self._d_cached_params = {}
@@ -1196,6 +1222,8 @@ class NonbondedForce(ForceTerm):
         self._d_cached_params = dict(self._d_parameter_arrays)
         self._kernel_source = self.expression.assemble_main_tile_kernel()
         self._exclusion_kernel_source = self.expression.assemble_tile_kernel()
+        self._kernel_source_force_only = self.expression.assemble_main_tile_kernel(force_only=True)
+        self._exclusion_kernel_source_force_only = self.expression.assemble_tile_kernel(force_only=True)
 
     _PACKED_PAIR_GROUPS = {
         frozenset({"sigma_ij_pair", "epsilon_ij_pair"}): "lj_pair",
@@ -1283,6 +1311,13 @@ class NonbondedForce(ForceTerm):
         self._kernel = cp.RawKernel(self._kernel_source, "main_tile_kernel")
         self._exclusion_kernel = cp.RawKernel(
             self._exclusion_kernel_source.replace(
+                "void tile_kernel(", "void exclusion_tile_kernel("
+            ),
+            "exclusion_tile_kernel",
+        )
+        self._kernel_force_only = cp.RawKernel(self._kernel_source_force_only, "main_tile_kernel")
+        self._exclusion_kernel_force_only = cp.RawKernel(
+            self._exclusion_kernel_source_force_only.replace(
                 "void tile_kernel(", "void exclusion_tile_kernel("
             ),
             "exclusion_tile_kernel",
@@ -1512,7 +1547,7 @@ class NonbondedForce(ForceTerm):
             return
         self._refresh_posq(gpu_context, tile_list)
 
-    def compute(self, gpu_context, tile_list=None):
+    def compute(self, gpu_context, tile_list=None, compute_energy=True):
         self._ensure_compiled()
 
         if tile_list is None or tile_list.num_tiles == 0:
@@ -1523,59 +1558,72 @@ class NonbondedForce(ForceTerm):
         num_sm = self._num_sm
         grid_size = 16 * num_sm
 
+        if compute_energy:
+            main_kernel = self._kernel
+            excl_kernel = self._exclusion_kernel
+        else:
+            main_kernel = self._kernel_force_only
+            excl_kernel = self._exclusion_kernel_force_only
+
         num_main = getattr(tile_list, "num_main_tiles", 0)
         if num_main > 0:
-            main_args = (
-                [
-                    self._d_sorted_posq,
-                    self._d_posq,
-                    tile_list.d_main_shift_x,
-                    tile_list.d_main_shift_y,
-                    tile_list.d_main_shift_z,
-                    gpu_context.d_forces_x,
-                    gpu_context.d_forces_y,
-                    gpu_context.d_forces_z,
-                    gpu_context.d_energy,
-                    tile_list.d_block_atoms,
-                    tile_list.d_main_tiles,
-                    tile_list.d_main_interacting_atoms,
-                    np.float32(self._cutoff_sq),
-                    np.int32(num_main),
-                    np.int32(gpu_context.number_particles),
-                ]
-                + self._main_parameter_arguments()
+            main_args_prefix = [
+                self._d_sorted_posq,
+                self._d_posq,
+                tile_list.d_main_shift_x,
+                tile_list.d_main_shift_y,
+                tile_list.d_main_shift_z,
+                gpu_context.d_forces_x,
+                gpu_context.d_forces_y,
+                gpu_context.d_forces_z,
+            ]
+            if compute_energy:
+                main_args_prefix.append(gpu_context.d_energy)
+            main_args_prefix.extend([
+                tile_list.d_block_atoms,
+                tile_list.d_main_tiles,
+                tile_list.d_main_interacting_atoms,
+                np.float32(self._cutoff_sq),
+                np.int32(num_main),
+                np.int32(gpu_context.number_particles),
+            ])
+            main_args = tuple(main_args_prefix) + tuple(
+                self._main_parameter_arguments()
                 + self._main_sorted_parameter_arguments()
                 + self._pair_parameter_arguments()
                 + [np.float32(getattr(self, '_scalars', {}).get(name, 0.0)) for name in self.expression.scalar_names]
             )
-            self._kernel((grid_size,), (256,), tuple(main_args))
+            main_kernel((grid_size,), (256,), main_args)
 
         num_excl = getattr(tile_list, "num_exclusion_tiles", 0)
         if num_excl > 0:
             excl_grid_size = max(grid_size, (num_excl + 7) // 8)
-            excl_args = (
-                [
-                    self._d_sorted_posq,
-                    self._d_posq,
-                    tile_list.d_excl_shift_x,
-                    tile_list.d_excl_shift_y,
-                    tile_list.d_excl_shift_z,
-                    gpu_context.d_forces_x,
-                    gpu_context.d_forces_y,
-                    gpu_context.d_forces_z,
-                    gpu_context.d_energy,
-                    tile_list.d_block_atoms,
-                    tile_list.d_excl_tiles,
-                    tile_list.d_excl_interacting_atoms,
-                    tile_list.d_excl_exclusion_masks,
-                    tile_list.d_excl_scaling_masks,
-                    np.float32(self._cutoff_sq),
-                    np.int32(num_excl),
-                    np.int32(gpu_context.number_particles),
-                ]
-                + self._parameter_arguments()
+            excl_args_prefix = [
+                self._d_sorted_posq,
+                self._d_posq,
+                tile_list.d_excl_shift_x,
+                tile_list.d_excl_shift_y,
+                tile_list.d_excl_shift_z,
+                gpu_context.d_forces_x,
+                gpu_context.d_forces_y,
+                gpu_context.d_forces_z,
+            ]
+            if compute_energy:
+                excl_args_prefix.append(gpu_context.d_energy)
+            excl_args_prefix.extend([
+                tile_list.d_block_atoms,
+                tile_list.d_excl_tiles,
+                tile_list.d_excl_interacting_atoms,
+                tile_list.d_excl_exclusion_masks,
+                tile_list.d_excl_scaling_masks,
+                np.float32(self._cutoff_sq),
+                np.int32(num_excl),
+                np.int32(gpu_context.number_particles),
+            ])
+            excl_args = tuple(excl_args_prefix) + tuple(
+                self._parameter_arguments()
                 + self._sorted_parameter_arguments()
                 + self._pair_parameter_arguments()
                 + [np.float32(getattr(self, '_scalars', {}).get(name, 0.0)) for name in self.expression.scalar_names]
             )
-            self._exclusion_kernel((excl_grid_size,), (256,), tuple(excl_args))
+            excl_kernel((excl_grid_size,), (256,), excl_args)
