@@ -596,6 +596,86 @@ class TestPMEReciprocalForce:
         np.testing.assert_allclose(fx1, fx2, atol=1e-6)
 
 
+class TestGridSizing:
+
+    def test_ewald_coefficient_erfc_bound(self):
+        from mdpy.force.pme_parameters import PMEParameters
+        from scipy.special import erfc
+
+        cutoff = 12.0
+        rtol = 1e-5
+        alpha = PMEParameters._calc_ewald_coefficient(cutoff, rtol)
+        actual = erfc(alpha * cutoff)
+        assert actual <= rtol, f"erfc({alpha:.4f}*{cutoff}) = {actual:.2e} > {rtol}"
+        alpha_minus = alpha - 0.001
+        assert erfc(alpha_minus * cutoff) > rtol, "Should be tight bound"
+
+    def test_ewald_coefficient_various_cutoffs(self):
+        from mdpy.force.pme_parameters import PMEParameters
+        from scipy.special import erfc
+
+        for cutoff in [8.0, 10.0, 12.0, 15.0]:
+            alpha = PMEParameters._calc_ewald_coefficient(cutoff)
+            assert erfc(alpha * cutoff) <= 1e-5 * (1 + 1e-10)
+            assert 0.1 < alpha < 1.0
+
+    def test_next_fft_friendly_size_basic(self):
+        from mdpy.force.pme_parameters import PMEParameters
+
+        assert PMEParameters._next_fft_friendly_size(1) == 1
+        assert PMEParameters._next_fft_friendly_size(2) == 2
+        assert PMEParameters._next_fft_friendly_size(7) == 7
+        assert PMEParameters._next_fft_friendly_size(8) == 8
+        assert PMEParameters._next_fft_friendly_size(9) == 9
+        assert PMEParameters._next_fft_friendly_size(11) == 12
+        assert PMEParameters._next_fft_friendly_size(13) == 14
+        assert PMEParameters._next_fft_friendly_size(90) == 90
+
+    def test_from_box_1m9z(self):
+        from mdpy.force.pme_parameters import PMEParameters
+
+        p = PMEParameters.from_box(108, 108, 108, cutoff=12)
+        assert p.grid_x == 90
+        assert p.grid_y == 90
+        assert p.grid_z == 90
+        assert abs(108.0 / p.grid_x - 1.2) < 0.05
+        assert p.order == 4
+
+    def test_from_box_6po6(self):
+        from mdpy.force.pme_parameters import PMEParameters
+
+        p = PMEParameters.from_box(100, 100, 100, cutoff=10)
+        assert p.grid_x == 84
+        assert p.grid_y == 84
+        assert p.grid_z == 84
+
+    def test_from_box_rectangular(self):
+        from mdpy.force.pme_parameters import PMEParameters
+
+        p = PMEParameters.from_box(80, 60, 40, cutoff=10)
+        assert p.grid_x != p.grid_y or p.grid_y != p.grid_z
+        assert p.grid_x >= 80 / 1.2 * 0.95
+        assert p.grid_y >= 60 / 1.2 * 0.95
+        assert p.grid_z >= 40 / 1.2 * 0.95
+
+    def test_from_box_custom_spacing(self):
+        from mdpy.force.pme_parameters import PMEParameters
+
+        p_default = PMEParameters.from_box(108, 108, 108, cutoff=12)
+        p_fine = PMEParameters.from_box(108, 108, 108, cutoff=12, fourier_spacing=0.8)
+        assert p_fine.grid_x > p_default.grid_x
+
+    def test_from_box_custom_rtol(self):
+        from mdpy.force.pme_parameters import PMEParameters
+        from scipy.special import erfc
+
+        p_loose = PMEParameters.from_box(108, 108, 108, cutoff=12, ewald_rtol=1e-3)
+        p_tight = PMEParameters.from_box(108, 108, 108, cutoff=12, ewald_rtol=1e-8)
+        assert p_loose.alpha < p_tight.alpha
+        assert erfc(p_loose.alpha * 12) <= 1e-3 * (1 + 1e-10)
+        assert erfc(p_tight.alpha * 12) <= 1e-8 * (1 + 1e-10)
+
+
 class TestPMEIntegration6PO6:
 
     @pytest.fixture(autouse=True)
