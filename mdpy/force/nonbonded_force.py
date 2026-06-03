@@ -29,6 +29,8 @@ _MATH_FUNCTIONS = {
     "sin": "sinf",
     "cos": "cosf",
     "tan": "tanf",
+    "erfc": "erfcf",
+    "erf": "erff",
 }
 
 _PACKED_PARAMS = {
