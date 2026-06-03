@@ -13,7 +13,6 @@ from mdpy.force.pme_bspline import (
     get_gather_kernel,
     get_self_energy_kernel,
     get_spread_kernel,
-    get_finish_spread_kernel,
     precompute_bk_factors,
 )
 
@@ -80,7 +79,6 @@ class TestChargeSpreading:
         d_pos_y = cp.asarray(pos_y)
         d_pos_z = cp.asarray(pos_z)
 
-        d_charge_grid_fixed = cp.zeros(grid_x * grid_y * grid_z, dtype=cp.int64)
         d_charge_grid = cp.zeros(grid_x * grid_y * grid_z, dtype=np.float32)
         spread_kernel = get_spread_kernel()
         spread_kernel(
@@ -89,15 +87,8 @@ class TestChargeSpreading:
              np.int32(N),
              np.float32(1.0 / box_x), np.float32(1.0 / box_y), np.float32(1.0 / box_z),
              np.int32(grid_x), np.int32(grid_y), np.int32(grid_z), np.int32(order),
-             d_charge_grid_fixed),
+             d_charge_grid),
         )
-
-        tpb = 256
-        grid_total = grid_x * grid_y * grid_z
-        finish_grid_1d = ((grid_total + tpb - 1) // tpb,)
-        finish_spread_k = get_finish_spread_kernel()
-        finish_spread_k(finish_grid_1d, (tpb,),
-            (d_charge_grid_fixed, d_charge_grid, np.int32(grid_total)))
 
         grid_sum = float(cp.sum(d_charge_grid))
         charge_sum = float(np.sum(charges))
@@ -119,7 +110,6 @@ class TestChargeSpreading:
         d_pos_y = cp.asarray(pos_y)
         d_pos_z = cp.asarray(pos_z)
 
-        d_charge_grid_fixed = cp.zeros(grid_x * grid_y * grid_z, dtype=cp.int64)
         d_charge_grid = cp.zeros(grid_x * grid_y * grid_z, dtype=np.float32)
         spread_kernel = get_spread_kernel()
         spread_kernel(
@@ -128,15 +118,8 @@ class TestChargeSpreading:
              np.int32(1),
              np.float32(1.0 / box_x), np.float32(1.0 / box_y), np.float32(1.0 / box_z),
              np.int32(grid_x), np.int32(grid_y), np.int32(grid_z), np.int32(order),
-             d_charge_grid_fixed),
+             d_charge_grid),
         )
-
-        tpb = 256
-        grid_total = grid_x * grid_y * grid_z
-        finish_grid_1d = ((grid_total + tpb - 1) // tpb,)
-        finish_spread_k = get_finish_spread_kernel()
-        finish_spread_k(finish_grid_1d, (tpb,),
-            (d_charge_grid_fixed, d_charge_grid, np.int32(grid_total)))
 
         h_grid = cp.asnumpy(d_charge_grid).reshape(grid_x, grid_y, grid_z)
         total = np.sum(h_grid)
@@ -183,7 +166,6 @@ class TestForceGathering:
         d_pos_y = cp.asarray(pos_y)
         d_pos_z = cp.asarray(pos_z)
 
-        d_charge_grid_fixed = cp.zeros(grid_x * grid_y * grid_z, dtype=cp.int64)
         d_charge_grid = cp.zeros(grid_x * grid_y * grid_z, dtype=np.float32)
         spread_k = get_spread_kernel()
         spread_k(
@@ -192,15 +174,8 @@ class TestForceGathering:
              np.int32(N),
              np.float32(1.0 / box_x), np.float32(1.0 / box_y), np.float32(1.0 / box_z),
              np.int32(grid_x), np.int32(grid_y), np.int32(grid_z), np.int32(order),
-             d_charge_grid_fixed),
+             d_charge_grid),
         )
-
-        tpb = 256
-        grid_total = grid_x * grid_y * grid_z
-        finish_grid_1d = ((grid_total + tpb - 1) // tpb,)
-        finish_spread_k = get_finish_spread_kernel()
-        finish_spread_k(finish_grid_1d, (tpb,),
-            (d_charge_grid_fixed, d_charge_grid, np.int32(grid_total)))
 
         alpha = 0.35
         bk = precompute_bk_factors(alpha, grid_x, grid_y, grid_z, order, box_x, box_y, box_z)
