@@ -8,10 +8,13 @@ from mdpy.core.radix_sort import RadixSorter, fill_constant
 _pair_sorter = None
 
 
-def _get_pair_sorter(max_pairs: int) -> RadixSorter:
+def _get_pair_sorter(max_pairs: int, num_particles: int) -> RadixSorter:
     global _pair_sorter
     if _pair_sorter is None or max_pairs > _pair_sorter._max_elements:
-        _pair_sorter = RadixSorter(max_elements=max_pairs)
+        max_key = num_particles * 2_000_000_000
+        num_bits = max(40, (max_key).bit_length())
+        num_bits = ((num_bits + 3) // 4) * 4
+        _pair_sorter = RadixSorter(max_elements=max_pairs, num_bits=num_bits)
     return _pair_sorter
 
 
@@ -433,7 +436,7 @@ def permute_exclusion_pairs_gpu(d_cached_i, d_cached_j, d_cached_scale,
         grid, (tpb,),
         (d_new_i, d_new_j, d_new_scale, np.int32(num_pairs), sort_key),
     )
-    sorter = _get_pair_sorter(num_pairs)
+    sorter = _get_pair_sorter(num_pairs, num_particles)
     order = sorter.argsort(sort_key.view(np.uint64))
     d_sorted_i = cp.empty(num_pairs, dtype=cp.int32)
     d_sorted_j = cp.empty(num_pairs, dtype=cp.int32)
