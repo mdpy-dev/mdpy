@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 import cupy as cp
 from mdpy import env
-from mdpy.core.radix_sort import RadixSorter, fill_constant
+from mdpy.core.radix_sort import fill_constant
 
 W = 32
 NUM_ATOMS_SENTINEL = 0x7FFFFFFF
@@ -727,7 +727,6 @@ class BlockList:
         self.build_radius = cutoff + skin
         self._is_initialized = False
         self.rebuild_check_interval = rebuild_check_interval
-        self._sorter = None
 
         self.num_blocks = 0
         self.num_tiles = 0
@@ -944,10 +943,7 @@ class BlockList:
             ),
         )
 
-        # Sort by (cell_index, within_cell_morton)
-        if self._sorter is None or N > self._sorter._max_elements:
-            self._sorter = RadixSorter(max_elements=N)
-        sorted_indices = self._sorter.argsort(sort_keys)
+        sorted_indices = cp.argsort(sort_keys).astype(env.NUMPY_INT)
         self.d_raw_order = cp.empty(N, dtype=env.NUMPY_INT)
         self.d_pdb_to_sorted = cp.empty(N, dtype=env.NUMPY_INT)
         self.d_sorted_to_pdb = cp.empty(N, dtype=env.NUMPY_INT)
