@@ -6,7 +6,7 @@ import cupy as cp
 import numpy as np
 import pytest
 
-from mdpy.force.pme_bspline import compute_bspline_weights, get_bspline_kernel, get_spread_kernel
+from mdpy.force.pme_bspline import compute_bspline_weights, get_bspline_kernel, get_spread_kernel, precompute_bk_factors
 
 
 class TestBSplineWeights:
@@ -191,3 +191,23 @@ class TestChargeSpreading:
         total = np.sum(h_grid)
         assert abs(total - 1.0) < 1e-5, f"Total charge={total}"
         assert np.sum(h_grid > 0) > 1, "Charge should spread to multiple grid points"
+
+
+class TestBSplineModuli:
+
+    def test_dc_component_zero(self):
+        bk = precompute_bk_factors(0.35, 32, 32, 32, 4, 50.0, 50.0, 50.0)
+        assert abs(bk[0, 0, 0]) < 1e-10, f"DC component should be ~0, got {bk[0,0,0]}"
+
+    def test_nonzero_terms_positive(self):
+        bk = precompute_bk_factors(0.35, 32, 32, 32, 4, 50.0, 50.0, 50.0)
+        for ix, iy, iz in [(1, 0, 0), (0, 1, 0), (0, 0, 1), (1, 1, 1), (5, 5, 5)]:
+            if iz < bk.shape[2]:
+                val = bk[ix, iy, iz]
+                assert abs(val.imag) < abs(val.real) * 1e-6 + 1e-10, \
+                    f"bk[{ix},{iy},{iz}] should be real: {val}"
+                assert val.real > 0, f"bk[{ix},{iy},{iz}] should be positive: {val.real}"
+
+    def test_symmetry(self):
+        bk = precompute_bk_factors(0.35, 32, 32, 32, 4, 50.0, 50.0, 50.0)
+        assert bk.shape == (32, 32, 17), f"Expected (32,32,17), got {bk.shape}"

@@ -169,6 +169,85 @@ void spread_kernel(
 }
 """
 
+def _compute_bspline_moduli(grid_dim: int, order: int) -> np.ndarray:
+    data = [0.0] * order
+    data[order - 1] = 0.0
+    data[1] = 0.0
+    data[0] = 1.0
+    for k in range(3, order):
+        div = 1.0 / (k - 1.0)
+        data[k - 1] = 0.0
+        for l in range(1, k - 1):
+            data[k - l - 1] = div * (l * data[k - l - 2] + (k - l) * data[k - l - 1])
+        data[0] = div * data[0]
+
+    ddata = [0.0] * order
+    ddata[0] = -data[0]
+    for k in range(1, order):
+        ddata[k] = data[k - 1] - data[k]
+
+    div = 1.0 / (order - 1)
+    data[order - 1] = 0.0
+    for l in range(1, order - 1):
+        data[order - l - 1] = div * (l * data[order - l - 2] + (order - l) * data[order - l - 1])
+    data[0] = div * data[0]
+
+    bsplines_data = np.zeros(grid_dim, dtype=np.float64)
+    for i in range(1, min(order + 1, grid_dim)):
+        bsplines_data[i] = data[i - 1]
+
+    dft = np.fft.fft(bsplines_data)
+    moduli = np.abs(dft) ** 2
+
+    for i in range(grid_dim):
+        if moduli[i] < 1e-7:
+            moduli[i] = (moduli[(i - 1 + grid_dim) % grid_dim] + moduli[(i + 1) % grid_dim]) * 0.5
+
+    return moduli
+
+
+def precompute_bk_factors(alpha: float, grid_x: int, grid_y: int, grid_z: int,
+                          order: int, box_x: float, box_y: float, box_z: float) -> np.ndarray:
+    moduli_x = _compute_bspline_moduli(grid_x, order)
+    moduli_y = _compute_bspline_moduli(grid_y, order)
+    moduli_z = _compute_bspline_moduli(grid_z, order)
+
+    volume = box_x * box_y * box_z
+    scale_factor = math.pi * volume
+    recip_exp_factor = math.pi ** 2 / (alpha ** 2)
+
+    recip_x = 1.0 / box_x
+    recip_y = 1.0 / box_y
+    recip_z = 1.0 / box_z
+
+    nz_half = grid_z // 2 + 1
+    bk = np.zeros((grid_x, grid_y, nz_half), dtype=np.float32)
+
+    firstz = 1
+    for kx in range(grid_x):
+        mx = kx if kx < (grid_x + 1) // 2 else kx - grid_x
+        mhx = mx * recip_x
+        bx = scale_factor * moduli_x[kx]
+
+        for ky in range(grid_y):
+            my = ky if ky < (grid_y + 1) // 2 else ky - grid_y
+            mhy = my * recip_y
+            mhx2y2 = mhx * mhx + mhy * mhy
+            bxby = bx * moduli_y[ky]
+
+            for kz in range(firstz, nz_half):
+                mz = kz if kz < (grid_z + 1) // 2 else kz - grid_z
+                mhz = mz * recip_z
+                bz = moduli_z[kz]
+                m2 = mhx2y2 + mhz * mhz
+                denom = m2 * bxby * bz
+                bk[kx, ky, kz] = math.exp(-recip_exp_factor * m2) / denom
+
+            firstz = 0
+
+    return bk
+
+
 _bspline_kernel = None
 _spread_kernel = None
 
