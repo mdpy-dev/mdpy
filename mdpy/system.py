@@ -32,7 +32,6 @@ class System:
         self._step_count = 0
         self._positions_uploaded = False
         self._velocities_uploaded = False
-        self._compute_energy = False
         self._d_cached_unique_i = None
         self._d_cached_unique_j = None
         self._d_cached_unique_scale = None
@@ -49,12 +48,7 @@ class System:
     def compute_forces(self):
         self.gpu.zero_forces()
         for term_index, term in enumerate(self.force_terms):
-            if self._compute_energy == False:
-                term.compute(self.gpu, self.tile_list)
-            else:
-                self.gpu.zero_energy()
-                term.compute(self.gpu, self.tile_list)
-                self.gpu.accumulate_energy(term_index)
+            term.compute(self.gpu, self.tile_list, compute_energy=False)
 
     def _emit_step_kernels(self, integrator):
         positions_soa = (
@@ -85,13 +79,11 @@ class System:
         if self.gpu.d_energy_accumulator is None:
             return {}
         self._graph_stream.synchronize()
-        self._compute_energy = True
         self.gpu.zero_forces()
         for term_index, term in enumerate(self.force_terms):
             self.gpu.zero_energy()
-            term.compute(self.gpu, self.tile_list)
+            term.compute(self.gpu, self.tile_list, compute_energy=True)
             self.gpu.accumulate_energy(term_index)
-        self._compute_energy = False
         raw = cp.asnumpy(self.gpu.d_energy_accumulator)
         result = {}
         for term_index, term in enumerate(self.force_terms):

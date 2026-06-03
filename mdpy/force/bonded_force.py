@@ -531,7 +531,7 @@ class BondedForce(ForceTerm):
         if self._num_sm is None:
             self._num_sm = cp.cuda.runtime.getDeviceProperties(0)['multiProcessorCount']
 
-    def compute(self, gpu_context, tile_list=None):
+    def compute(self, gpu_context, tile_list=None, compute_energy=True):
         if not self._term_data:
             return
         self._ensure_compiled()
