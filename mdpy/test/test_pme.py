@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import os
 
 import cupy as cp
 import numpy as np
@@ -593,3 +594,129 @@ class TestPMEReciprocalForce:
 
         assert abs(energy1 - energy2) < 1e-6, f"Energy not reproducible: {energy1} vs {energy2}"
         np.testing.assert_allclose(fx1, fx2, atol=1e-6)
+
+
+class TestPMEIntegration6PO6:
+
+    @pytest.fixture(autouse=True)
+    def setup(self):
+        from mdpy.io.psf_parser import PSFParser
+        from mdpy.io.pdb_parser import PDBParser
+        from mdpy.io.charmm_toppar_parser import CharmmTopparParser
+        from mdpy.io.charmm_toppar_parser import create_parameter_table
+
+        data_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
+
+        psf = PSFParser(os.path.join(data_dir, '6PO6.psf'))
+        pdb = PDBParser(os.path.join(data_dir, '6PO6.pdb'))
+        toppar = CharmmTopparParser(os.path.join(data_dir, 'par_all36_prot.prm'))
+
+        self.topology = psf.topology
+        self.parameter_table = create_parameter_table(self.topology, toppar)
+        self.positions = pdb.positions.astype(np.float32)
+        self.N = self.topology.num_particles
+        self.box = 100.0
+        self.cutoff = 10.0
+
+    def _build_pme_system(self):
+        from mdpy.force.bonded_force import BondedForce
+        from mdpy.force.nonbonded_force import NonbondedForce
+        from mdpy.force.expressions.lennard_jones import lennard_jones
+        from mdpy.force.expressions.screened_coulomb import screened_coulomb
+        from mdpy.force.pme_parameters import PMEParameters
+        from mdpy.force.pme_reciprocal_force import PMEReciprocalForce
+        from mdpy.system import System
+
+        pbc_matrix = np.eye(3, dtype=np.float32) * self.box
+        pme_params = PMEParameters.from_box(self.box, self.box, self.box, cutoff=self.cutoff)
+
+        system = System(self.topology, pbc_matrix, cutoff=self.cutoff)
+
+        system.add_force_term(BondedForce.charmm(self.topology, self.parameter_table))
+
+        nb = NonbondedForce(lennard_jones + screened_coulomb)
+        nb.bind(self.topology, self.parameter_table, self.cutoff, alpha=pme_params.alpha)
+        system.add_force_term(nb)
+
+        pme = PMEReciprocalForce(pme_params, self.cutoff)
+        pme.bind(self.topology, self.parameter_table, pbc_matrix=pbc_matrix)
+        system.add_force_term(pme)
+
+        pbc_inv = np.linalg.inv(pbc_matrix.astype(np.float64))
+        raw_positions = self.positions.astype(np.float64)
+        frac = raw_positions @ pbc_inv
+        frac -= np.floor(frac)
+        wrapped = (frac @ pbc_matrix).astype(np.float32)
+
+        system.particles.positions[:] = wrapped
+        system.gpu.upload_positions(system.particles)
+        system.gpu.refresh_wrapped_positions()
+
+        positions_2d = (
+            system.gpu.d_wrapped_positions_x,
+            system.gpu.d_wrapped_positions_y,
+            system.gpu.d_wrapped_positions_z,
+        )
+        system.tile_list.rebuild(
+            positions_2d, self.topology,
+            system.pbc_matrix, system.pbc_inv,
+        )
+        system._permute_all_arrays()
+        system.tile_list.build_tiles(self.topology, system.pbc_matrix)
+        for term in system.force_terms:
+            if hasattr(term, 'bind_sorted'):
+                term.bind_sorted(self.topology, system.tile_list, system.gpu)
+
+        return system, pme_params
+
+    def test_pme_system_nonzero_energy(self):
+        system, pme_params = self._build_pme_system()
+
+        system.compute_forces()
+
+        from cupy import asnumpy
+        fx = asnumpy(system.gpu.d_forces_x)
+        fy = asnumpy(system.gpu.d_forces_y)
+        fz = asnumpy(system.gpu.d_forces_z)
+
+        max_force = max(np.max(np.abs(fx)), np.max(np.abs(fy)), np.max(np.abs(fz)))
+
+        print(f"6PO6 N={self.N}")
+        print(f"PME params: alpha={pme_params.alpha:.4f}, grid={pme_params.grid_shape}")
+        print(f"Max force: {max_force:.6f}")
+
+        assert max_force > 1e-6, "Forces should be nonzero"
+
+        net_fx = np.sum(fx)
+        net_fy = np.sum(fy)
+        net_fz = np.sum(fz)
+        print(f"Net force: ({net_fx:.6f}, {net_fy:.6f}, {net_fz:.6f})")
+        assert abs(net_fx) < max_force * 0.01, f"Net fx too large: {net_fx}"
+        assert abs(net_fy) < max_force * 0.01, f"Net fy too large: {net_fy}"
+        assert abs(net_fz) < max_force * 0.01, f"Net fz too large: {net_fz}"
+
+    def test_pme_energy_nonzero(self):
+        system, pme_params = self._build_pme_system()
+
+        energies = system.dump_energy()
+        print(f"PME energies: {energies}")
+
+        assert 'bonded' in energies
+        assert 'nonbonded' in energies
+        assert 'pme_reciprocal' in energies
+
+        assert abs(energies['pme_reciprocal']) > 1e-6, \
+            f"PME reciprocal energy should be nonzero: {energies['pme_reciprocal']}"
+
+    def test_pme_self_energy_negative(self):
+        from mdpy.force.pme_parameters import PMEParameters
+
+        pme_params = PMEParameters.from_box(self.box, self.box, self.box, cutoff=self.cutoff)
+
+        charges = self.parameter_table.particle_parameters['charge'].astype(np.float64)
+        COULOMB_CONST = 0.13893556595455
+        SQRT_PI = 1.772453850905516
+
+        self_energy = -COULOMB_CONST * pme_params.alpha / SQRT_PI * np.sum(charges ** 2)
+        print(f"Self-energy: {self_energy:.6f}")
+        assert self_energy < 0, "Self-energy should be negative"
