@@ -17,15 +17,16 @@ DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
 
 
 def _run_steps(system, integrator, n):
-    for _ in range(n):
-        system.check_and_rebuild()
+    for i in range(n):
+        system.update_neighbor_list(force_check=(i == 0))
         system.compute_forces()
         integrator.step(system)
         system.gpu.refresh_wrapped_positions()
 
 
 def _ensure_ready(system):
-    system.ensure_uploaded()
+    system.upload_positions()
+    system.upload_velocities()
     system.gpu.refresh_wrapped_positions()
 
 
@@ -62,7 +63,7 @@ def test_exclusion_data_preserved_across_rebuild():
     bl = system.block_list
     assert bl._d_excl_offset is not None, "exclusion data should be set after first step"
 
-    system.check_and_rebuild()
+    system.update_neighbor_list(force_check=True)
 
     assert bl._d_excl_offset is not None, "exclusion data should survive rebuild"
 

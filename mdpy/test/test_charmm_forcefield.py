@@ -18,8 +18,8 @@ DATA_DIR = os.path.join(os.path.dirname(__file__), 'data')
 
 
 def _run_steps(system, integrator, n):
-    for _ in range(n):
-        system.check_and_rebuild()
+    for i in range(n):
+        system.update_neighbor_list(force_check=(i == 0))
         system.compute_forces()
         integrator.step(system)
         system.gpu.refresh_wrapped_positions()
@@ -178,7 +178,8 @@ class TestSystem:
         system.gpu.upload_velocities(system.particles)
 
         integrator = VerletIntegrator(time_step=0.5)
-        system.ensure_uploaded()
+        system.upload_positions()
+        system.upload_velocities()
         system.gpu.refresh_wrapped_positions()
         energies = []
         for step in range(100):
