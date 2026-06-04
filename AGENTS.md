@@ -64,14 +64,17 @@ The following functions — and every function they call directly or indirectly 
 
 | API | Returns | GPU transfers |
 |-----|---------|---------------|
+| `System.upload_positions(positions)` | — | CPU→GPU upload of `(N,3)` array |
+| `System.upload_velocities(velocities)` | — | CPU→GPU upload of `(N,3)` array |
 | `System.dump_state()` | `(positions, velocities)` as numpy arrays | `download_positions()` + `download_velocities()` |
+| `System.dump_forces()` | `forces` as `(N,3)` numpy array | `download_forces()` |
 | `System.dump_energy()` | `dict[str, float]` of per-term energies | `cp.asnumpy(d_energy_accumulator)` |
 
 There are no `potential_energy` or `energies` properties on System. Energy is not "queryable state" — it is "output you explicitly request". Callers who need state during a loop collect it at explicit checkpoints:
 
 ```python
-system.upload_positions()
-system.upload_velocities()
+system.upload_positions(positions)       # (N,3) numpy array
+system.upload_velocities(velocities)     # (N,3) numpy array
 system.gpu.refresh_wrapped_positions()
 for i in range(10000):
     system.update_neighbor_list(sync_interval=10)
@@ -392,7 +395,7 @@ On tile list rebuild:
 | File | Responsibility |
 |------|---------------|
 | `mdpy/environment.py` | Precision config (`env.NUMPY_FLOAT`, `env.NUMPY_INT`); platform always CUDA |
-| `mdpy/system.py` | Simulation driver with public atomic operations: `upload_positions()`, `upload_velocities()`, `update_neighbor_list()`, `compute_forces()`, `dump_state()`, `dump_energy()` |
+| `mdpy/system.py` | Simulation driver with public atomic operations: `upload_positions(array)`, `upload_velocities(array)`, `update_neighbor_list()`, `compute_forces()`, `dump_state()`, `dump_forces()`, `dump_energy()` |
 | `mdpy/core/gpu_context.py` | GPU memory manager — owns all `d_*` state arrays, permutation kernels, PBC wrap |
 | `mdpy/core/tile_list.py` | Tile-based neighbor list — GPU kernels (Morton/AABB/tile-find/masks); provides mapping only |
 | `mdpy/core/topology.py` | Molecular topology (particles/bonds/angles/dihedrals/impropers), `join()` → compact arrays |
