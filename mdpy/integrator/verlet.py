@@ -75,14 +75,26 @@ void verlet_kernel(
     float ny = 2.0f*cy - py + ay*dt_sq;
     float nz = 2.0f*cz - pz + az*dt_sq;
 
+    // Minimum-image correction on delta for velocity
+    float dx = nx - px;
+    float dy = ny - py;
+    float dz = nz - pz;
+    float sx = dx*pbc_inv[0] + dy*pbc_inv[3] + dz*pbc_inv[6];
+    float sy = dx*pbc_inv[1] + dy*pbc_inv[4] + dz*pbc_inv[7];
+    float sz = dx*pbc_inv[2] + dy*pbc_inv[5] + dz*pbc_inv[8];
+    sx -= roundf(sx); sy -= roundf(sy); sz -= roundf(sz);
+    dx = sx*pbc_matrix[0] + sy*pbc_matrix[3] + sz*pbc_matrix[6];
+    dy = sx*pbc_matrix[1] + sy*pbc_matrix[4] + sz*pbc_matrix[7];
+    dz = sx*pbc_matrix[2] + sy*pbc_matrix[5] + sz*pbc_matrix[8];
     float inv_2dt = 0.5f / dt;
-    vel_x[index] = (nx - px) * inv_2dt;
-    vel_y[index] = (ny - py) * inv_2dt;
-    vel_z[index] = (nz - pz) * inv_2dt;
+    vel_x[index] = dx * inv_2dt;
+    vel_y[index] = dy * inv_2dt;
+    vel_z[index] = dz * inv_2dt;
 
-    float sx = nx*pbc_inv[0] + ny*pbc_inv[3] + nz*pbc_inv[6];
-    float sy = nx*pbc_inv[1] + ny*pbc_inv[4] + nz*pbc_inv[7];
-    float sz = nx*pbc_inv[2] + ny*pbc_inv[5] + nz*pbc_inv[8];
+    // PBC wrap new position
+    sx = nx*pbc_inv[0] + ny*pbc_inv[3] + nz*pbc_inv[6];
+    sy = nx*pbc_inv[1] + ny*pbc_inv[4] + nz*pbc_inv[7];
+    sz = nx*pbc_inv[2] + ny*pbc_inv[5] + nz*pbc_inv[8];
     sx -= roundf(sx); sy -= roundf(sy); sz -= roundf(sz);
     nx = sx*pbc_matrix[0] + sy*pbc_matrix[3] + sz*pbc_matrix[6];
     ny = sx*pbc_matrix[1] + sy*pbc_matrix[4] + sz*pbc_matrix[7];
