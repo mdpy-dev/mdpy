@@ -110,18 +110,19 @@ class VerletIntegrator:
         self.dt_sq = self.dt * self.dt
         self._initialized = False
 
-    def step(self, gpu_context):
-        number = gpu_context.number_particles
+    def step(self, system):
+        gpu = system.gpu
+        number = gpu.number_particles
         block = 256
         grid = (number + block - 1) // block
 
         if not self._initialized:
             _kernels['init']((grid,), (block,), (
-                gpu_context.d_positions_x, gpu_context.d_positions_y, gpu_context.d_positions_z,
-                gpu_context.d_velocities_x, gpu_context.d_velocities_y, gpu_context.d_velocities_z,
-                gpu_context.d_forces_x, gpu_context.d_forces_y, gpu_context.d_forces_z,
-                gpu_context.d_masses,
-                gpu_context.d_prev_positions_x, gpu_context.d_prev_positions_y, gpu_context.d_prev_positions_z,
+                gpu.d_positions_x, gpu.d_positions_y, gpu.d_positions_z,
+                gpu.d_velocities_x, gpu.d_velocities_y, gpu.d_velocities_z,
+                gpu.d_forces_x, gpu.d_forces_y, gpu.d_forces_z,
+                gpu.d_masses,
+                gpu.d_prev_positions_x, gpu.d_prev_positions_y, gpu.d_prev_positions_z,
                 np.float32(self.dt),
                 np.float32(self.dt_sq),
                 np.int32(number),
@@ -129,12 +130,12 @@ class VerletIntegrator:
             self._initialized = True
 
         _kernels['step']((grid,), (block,), (
-            gpu_context.d_positions_x, gpu_context.d_positions_y, gpu_context.d_positions_z,
-            gpu_context.d_prev_positions_x, gpu_context.d_prev_positions_y, gpu_context.d_prev_positions_z,
-            gpu_context.d_forces_x, gpu_context.d_forces_y, gpu_context.d_forces_z,
-            gpu_context.d_masses,
-            gpu_context.d_velocities_x, gpu_context.d_velocities_y, gpu_context.d_velocities_z,
-            gpu_context.d_pbc_matrix, gpu_context.d_pbc_inv,
+            gpu.d_positions_x, gpu.d_positions_y, gpu.d_positions_z,
+            gpu.d_prev_positions_x, gpu.d_prev_positions_y, gpu.d_prev_positions_z,
+            gpu.d_forces_x, gpu.d_forces_y, gpu.d_forces_z,
+            gpu.d_masses,
+            gpu.d_velocities_x, gpu.d_velocities_y, gpu.d_velocities_z,
+            gpu.d_pbc_matrix, gpu.d_pbc_inv,
             np.float32(self.dt),
             np.float32(self.dt_sq),
             np.int32(number),
