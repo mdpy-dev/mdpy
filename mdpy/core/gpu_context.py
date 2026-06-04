@@ -103,6 +103,31 @@ void inverse_permute_kernel(
 """
 
 
+_PBC_WRAP_INPLACE_KERNEL = r"""
+extern "C" __global__
+void pbc_wrap_inplace_kernel(
+    float* __restrict__ pos_x,
+    float* __restrict__ pos_y,
+    float* __restrict__ pos_z,
+    const float* __restrict__ pbc_matrix,
+    const float* __restrict__ pbc_inv,
+    int number_particles
+) {
+    int index = blockIdx.x * blockDim.x + threadIdx.x;
+    if (index >= number_particles) return;
+    float px = pos_x[index];
+    float py = pos_y[index];
+    float pz = pos_z[index];
+    float fx = px*pbc_inv[0] + py*pbc_inv[3] + pz*pbc_inv[6];
+    float fy = px*pbc_inv[1] + py*pbc_inv[4] + pz*pbc_inv[7];
+    float fz = px*pbc_inv[2] + py*pbc_inv[5] + pz*pbc_inv[8];
+    fx -= floorf(fx); fy -= floorf(fy); fz -= floorf(fz);
+    pos_x[index] = fx*pbc_matrix[0] + fy*pbc_matrix[3] + fz*pbc_matrix[6];
+    pos_y[index] = fx*pbc_matrix[1] + fy*pbc_matrix[4] + fz*pbc_matrix[7];
+    pos_z[index] = fx*pbc_matrix[2] + fy*pbc_matrix[5] + fz*pbc_matrix[8];
+}
+"""
+
 _ZERO_FORCES_KERNEL = r"""
 extern "C" __global__
 void zero_forces_kernel(
@@ -161,11 +186,39 @@ class GPUContext:
 
         self._permutation_kernels = None
         self._zero_forces_kernel = None
+        self._wrap_kernel = None
+
+    def _ensure_wrap_kernel(self):
+        if self._wrap_kernel is not None:
+            return
+        self._wrap_kernel = cp.RawKernel(
+            _PBC_WRAP_INPLACE_KERNEL, "pbc_wrap_inplace_kernel"
+        )
+
+    def _wrap_positions_inplace(self):
+        self._ensure_wrap_kernel()
+        N = self.number_particles
+        tpb = 256
+        grid = ((N + tpb - 1) // tpb,)
+        self._wrap_kernel(
+            grid,
+            (tpb,),
+            (
+                self.d_positions_x,
+                self.d_positions_y,
+                self.d_positions_z,
+                self.d_pbc_matrix,
+                self.d_pbc_inv,
+                np.int32(N),
+            ),
+        )
 
     def _ensure_zero_forces_kernel(self):
         if self._zero_forces_kernel is not None:
             return
-        self._zero_forces_kernel = cp.RawKernel(_ZERO_FORCES_KERNEL, "zero_forces_kernel")
+        self._zero_forces_kernel = cp.RawKernel(
+            _ZERO_FORCES_KERNEL, "zero_forces_kernel"
+        )
 
     def _ensure_permutation_kernels(self):
         if self._permutation_kernels is not None:
@@ -326,6 +379,7 @@ class GPUContext:
         self.d_positions_x[:] = cp.asarray(data[:, 0])
         self.d_positions_y[:] = cp.asarray(data[:, 1])
         self.d_positions_z[:] = cp.asarray(data[:, 2])
+        self._wrap_positions_inplace()
 
     def upload_velocities(self, velocities):
         data = np.ascontiguousarray(np.asarray(velocities, dtype=np.float32))
@@ -335,13 +389,21 @@ class GPUContext:
 
     def download_positions(self):
         return np.stack(
-            [self.d_positions_x.get(), self.d_positions_y.get(), self.d_positions_z.get()],
+            [
+                self.d_positions_x.get(),
+                self.d_positions_y.get(),
+                self.d_positions_z.get(),
+            ],
             axis=1,
         )
 
     def download_velocities(self):
         return np.stack(
-            [self.d_velocities_x.get(), self.d_velocities_y.get(), self.d_velocities_z.get()],
+            [
+                self.d_velocities_x.get(),
+                self.d_velocities_y.get(),
+                self.d_velocities_z.get(),
+            ],
             axis=1,
         )
 
@@ -357,9 +419,12 @@ class GPUContext:
         tpb = 256
         grid = ((N + tpb - 1) // tpb,)
         self._zero_forces_kernel(
-            grid, (tpb,),
+            grid,
+            (tpb,),
             (
-                self.d_forces_x, self.d_forces_y, self.d_forces_z,
+                self.d_forces_x,
+                self.d_forces_y,
+                self.d_forces_z,
                 np.int32(N),
             ),
         )

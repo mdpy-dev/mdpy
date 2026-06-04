@@ -600,7 +600,9 @@ class TestRebuildSortCorrectness:
             assert len(np.unique(p2s)) == len(p2s), \
                 f"step {i}: pdb_to_sorted is not a valid permutation"
 
-            dists = np.linalg.norm(pos - prev_pos, axis=1)
+            delta = pos - prev_pos
+            delta -= np.round(delta / 100.0) * 100.0
+            dists = np.linalg.norm(delta, axis=1)
             assert np.all(dists < 5.0), \
                 f"step {i}: atom jumped too far (max={dists.max():.2f}), likely wrong PDB mapping"
 
