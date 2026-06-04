@@ -63,9 +63,9 @@ class System:
     def update_neighbor_list(self, sync_interval=10):
         self._ensure_uploaded()
         positions_soa = (
-            self.gpu.d_wrapped_positions_x,
-            self.gpu.d_wrapped_positions_y,
-            self.gpu.d_wrapped_positions_z,
+            self.gpu.d_positions_x,
+            self.gpu.d_positions_y,
+            self.gpu.d_positions_z,
         )
         needs_sync = self.block_list.check_rebuild_async(positions_soa)
         if needs_sync:
@@ -156,12 +156,11 @@ class System:
 
     def minimize(self, minimizer, number_steps=100):
         self._ensure_uploaded()
-        self.gpu.refresh_wrapped_positions()
 
         positions_soa = (
-            self.gpu.d_wrapped_positions_x,
-            self.gpu.d_wrapped_positions_y,
-            self.gpu.d_wrapped_positions_z,
+            self.gpu.d_positions_x,
+            self.gpu.d_positions_y,
+            self.gpu.d_positions_z,
         )
         if self.block_list.check_rebuild(positions_soa):
             self.block_list.rebuild(
@@ -178,7 +177,6 @@ class System:
         self.compute_forces()
         for _ in range(number_steps):
             minimizer.step(self)
-            self.gpu.refresh_wrapped_positions()
 
     def _permute_all_arrays(self):
         N = self.topology.num_particles
@@ -201,9 +199,6 @@ class System:
             ("d_prev_positions_y", gpu.d_prev_positions_y),
             ("d_prev_positions_z", gpu.d_prev_positions_z),
             ("d_masses", gpu.d_masses),
-            ("d_wrapped_positions_x", gpu.d_wrapped_positions_x),
-            ("d_wrapped_positions_y", gpu.d_wrapped_positions_y),
-            ("d_wrapped_positions_z", gpu.d_wrapped_positions_z),
         ]):
             setattr(gpu, name, new_arr)
 
