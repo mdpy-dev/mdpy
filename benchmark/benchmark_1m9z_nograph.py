@@ -1,10 +1,6 @@
-"""mdpy 1M9Z PME benchmark WITHOUT CUDA Graph — for nsys kernel-level profiling.
+"""mdpy 1M9Z benchmark WITHOUT CUDA Graph — for nsys kernel-level profiling.
 
-Forces the non-graph path so every kernel (B-spline, spread, FFT, gather,
-exclusion correction) appears individually in nsys timeline.
-
-Usage:
-    conda run -n md_analysis python benchmark/benchmark_1m9z_pme_nograph.py
+Forces the non-graph path so every kernel appears individually in nsys timeline.
 """
 
 import sys
@@ -39,9 +35,7 @@ def main():
     from mdpy.force.bonded_force import BondedForce
     from mdpy.force.nonbonded_force import NonbondedForce
     from mdpy.force.expressions.lennard_jones import lennard_jones
-    from mdpy.force.expressions.screened_coulomb import screened_coulomb
-    from mdpy.force.pme_parameters import PMEParameters
-    from mdpy.force.pme_reciprocal_force import PMEReciprocalForce
+    from mdpy.force.expressions.coulomb import coulomb
     from mdpy.integrator.verlet import VerletIntegrator
     from mdpy.system import System
 
@@ -54,18 +48,11 @@ def main():
     pbc_matrix = np.eye(3, dtype=np.float64) * BOX_SIZE
     pbc_inv = np.linalg.inv(pbc_matrix)
 
-    pme_params = PMEParameters.from_box(BOX_SIZE, BOX_SIZE, BOX_SIZE, cutoff=CUTOFF)
-
     system = System(topology, pbc_matrix, cutoff=CUTOFF)
     system.add_force_term(BondedForce.charmm(topology, parameter_table))
-
-    nb = NonbondedForce(lennard_jones + screened_coulomb)
-    nb.bind(topology, parameter_table, CUTOFF, alpha=pme_params.alpha)
+    nb = NonbondedForce(lennard_jones + coulomb)
+    nb.bind(topology, parameter_table, CUTOFF)
     system.add_force_term(nb)
-
-    pme = PMEReciprocalForce(pme_params, CUTOFF)
-    pme.bind(topology, parameter_table, pbc_matrix=pbc_matrix)
-    system.add_force_term(pme)
 
     raw = pdb.positions.astype(np.float64)
     frac = raw @ pbc_inv
@@ -78,15 +65,12 @@ def main():
 
     integrator = VerletIntegrator(DT_FS)
 
-    print("mdpy 1M9Z PME benchmark (NO CUDA Graph)")
+    print("mdpy 1M9Z benchmark (NO CUDA Graph)")
     print(f"  Atoms:      {topology.num_particles}")
     print(f"  Box:        {BOX_SIZE} A")
     print(f"  Cutoff:     {CUTOFF} A")
     print(f"  dt:         {DT_FS} fs")
     print(f"  Integrator: Verlet (no constraints)")
-    print(f"  PME alpha:  {pme_params.alpha:.4f}")
-    print(f"  PME grid:   {pme_params.grid_x} x {pme_params.grid_y} x {pme_params.grid_z}")
-    print(f"  PME order:  {pme_params.order}")
     print()
 
     print(f"Warmup ({WARMUP_STEPS} steps)...")
@@ -97,6 +81,9 @@ def main():
     t_warm = time.perf_counter() - t0
     print(f"  {t_warm:.1f}s ({t_warm / WARMUP_STEPS * 1000:.2f} ms/step)")
 
+    # Bypass step() entirely — manually implement the step loop on the
+    # default stream with correct synchronisation so rebuilds work properly
+    # and no CUDA graph is ever captured.
     steps_since_check = 0
     rebuild_interval = system.block_list.rebuild_check_interval
 
@@ -125,7 +112,6 @@ def main():
     )
 
     block_times = []
-    energy_dict = {}
     for i in range(NUM_BLOCKS):
         cp.cuda.Stream.null.synchronize()
         t0 = time.perf_counter()
@@ -152,11 +138,11 @@ def main():
     print()
     print("Per-term energies (last block, kcal/mol):")
     for name, val in energy_dict.items():
-        print(f"  {name:>16s}: {val * KCAL_PER_INTERNAL:18.1f}")
+        print(f"  {name:>12s}: {val * KCAL_PER_INTERNAL:18.1f}")
 
     print()
     print("Note: dt=0.5fs required because mdpy has no bond constraints.")
-    print("      Electrostatics: PME (screened Coulomb direct + reciprocal grid)")
+    print("      OpenMM uses HBond constraints allowing dt=2fs.")
     print("      CUDA Graph DISABLED — all kernels emit individually.")
 
 
