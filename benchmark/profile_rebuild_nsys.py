@@ -65,12 +65,13 @@ def main():
 
     integrator = VerletIntegrator(DT_FS)
 
-    system.ensure_uploaded()
+    system.upload_positions()
+    system.upload_velocities()
     system.gpu.refresh_wrapped_positions()
 
     nvtx.push_range("warmup")
     for _ in range(50):
-        system.check_and_rebuild()
+        system.update_neighbor_list(force_check=True)
         system.compute_forces()
         integrator.step(system)
         system.gpu.refresh_wrapped_positions()
@@ -79,7 +80,7 @@ def main():
 
     nvtx.push_range("profiled")
     for _ in range(250):
-        system.check_and_rebuild()
+        system.update_neighbor_list(force_check=True)
         system.compute_forces()
         integrator.step(system)
         system.gpu.refresh_wrapped_positions()

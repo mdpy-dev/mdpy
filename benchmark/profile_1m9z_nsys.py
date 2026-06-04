@@ -60,9 +60,10 @@ def main():
 
     integrator = VerletIntegrator(DT_FS)
 
-    system.ensure_uploaded()
+    system.upload_positions()
+    system.upload_velocities()
     system.gpu.refresh_wrapped_positions()
-    system.check_and_rebuild()
+    system.update_neighbor_list(force_check=True)
 
     bonded = system.force_terms[0]
     nonbonded = system.force_terms[1]
@@ -71,7 +72,7 @@ def main():
 
     nvtx.push_range("warmup")
     for _ in range(10):
-        system.check_and_rebuild()
+        system.update_neighbor_list(force_check=True)
         system.compute_forces()
         integrator.step(system)
         system.gpu.refresh_wrapped_positions()
@@ -87,7 +88,7 @@ def main():
         nvtx.pop_range()
 
         nvtx.push_range("check_rebuild")
-        system.check_and_rebuild()
+        system.update_neighbor_list(force_check=True)
         nvtx.pop_range()
 
         nvtx.push_range("zero_forces")

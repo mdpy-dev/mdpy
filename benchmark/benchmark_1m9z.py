@@ -67,12 +67,13 @@ def main():
 
     integrator = VerletIntegrator(DT_FS)
 
-    system.ensure_uploaded()
+    system.upload_positions()
+    system.upload_velocities()
     system.gpu.refresh_wrapped_positions()
 
-    def _run_steps(n):
-        for _ in range(n):
-            system.check_and_rebuild()
+    def _run_steps(n, sync_interval=10):
+        for i in range(n):
+            system.update_neighbor_list(force_check=(i % sync_interval == 0))
             system.compute_forces()
             integrator.step(system)
             system.gpu.refresh_wrapped_positions()

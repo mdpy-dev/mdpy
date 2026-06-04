@@ -47,12 +47,13 @@ system.particles.velocities[:] = 0.0
 
     integrator = LangevinBAOABIntegrator(2.0, 300.0, 1.0)
 
-    system.ensure_uploaded()
+    system.upload_positions()
+    system.upload_velocities()
     system.gpu.refresh_wrapped_positions()
 
-    def _run_steps(n):
-        for _ in range(n):
-            system.check_and_rebuild()
+    def _run_steps(n, sync_interval=10):
+        for i in range(n):
+            system.update_neighbor_list(force_check=(i % sync_interval == 0))
             system.compute_forces()
             integrator.step(system)
             system.gpu.refresh_wrapped_positions()
