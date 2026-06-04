@@ -320,6 +320,7 @@ class TestMultiStepConsistency:
 
         gpu = mdpy_system.gpu
         cp.add(gpu.d_positions_x, np.float32(0.5), out=gpu.d_positions_x)
+        gpu.refresh_wrapped_positions()
 
         mdpy_system.compute_forces()
         energies_2 = mdpy_system.dump_energy()
