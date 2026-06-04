@@ -123,12 +123,12 @@ class TestSystem:
         raw = pdb.positions.astype(np.float64)
         frac = raw @ pbc_inv
         frac -= np.floor(frac)
-        system.particles.positions[:] = frac @ pbc_matrix
-        system.upload_positions()
+        positions = (frac @ pbc_matrix).astype(np.float32)
+        system.upload_positions(positions)
 
         assert system.topology.num_particles == 49
         assert len(system.force_terms) == 2
-        assert np.all(np.isfinite(system.particles.positions))
+        assert np.all(np.isfinite(positions))
 
     def test_system_compute_forces(self):
         psf = PSFParser(os.path.join(DATA_DIR, '6PO6.psf'))
@@ -147,15 +147,16 @@ class TestSystem:
         raw = pdb.positions.astype(np.float64)
         frac = raw @ pbc_inv
         frac -= np.floor(frac)
-        system.particles.positions[:] = frac @ pbc_matrix
-        system.upload_positions()
-        system.upload_velocities()
+        positions = (frac @ pbc_matrix).astype(np.float32)
+        system.upload_positions(positions)
+        velocities = np.zeros_like(positions)
+        system.upload_velocities(velocities)
 
         system.compute_forces()
-        system.gpu.download_forces(system.particles)
         assert all(np.isfinite(v) for v in system.dump_energy().values())
         assert sum(system.dump_energy().values()) != 0.0
-        assert np.all(np.isfinite(system.particles.forces))
+        forces = system.dump_forces()
+        assert np.all(np.isfinite(forces))
 
     def test_system_100_steps(self):
         psf = PSFParser(os.path.join(DATA_DIR, '6PO6.psf'))
@@ -174,9 +175,10 @@ class TestSystem:
         raw = pdb.positions.astype(np.float64)
         frac = raw @ pbc_inv
         frac -= np.floor(frac)
-        system.particles.positions[:] = frac @ pbc_matrix
-        system.upload_positions()
-        system.upload_velocities()
+        positions = (frac @ pbc_matrix).astype(np.float32)
+        system.upload_positions(positions)
+        velocities = np.zeros_like(positions)
+        system.upload_velocities(velocities)
         system.gpu.refresh_wrapped_positions()
         integrator = VerletIntegrator(time_step=0.5)
         energies = []
@@ -202,9 +204,10 @@ class TestSystem:
         raw = pdb.positions.astype(np.float64)
         frac = raw @ pbc_inv
         frac -= np.floor(frac)
-        system.particles.positions[:] = frac @ pbc_matrix
-        system.upload_positions()
-        system.upload_velocities()
+        positions = (frac @ pbc_matrix).astype(np.float32)
+        system.upload_positions(positions)
+        velocities = np.zeros_like(positions)
+        system.upload_velocities(velocities)
 
         system.compute_forces()
         energies = system.dump_energy()

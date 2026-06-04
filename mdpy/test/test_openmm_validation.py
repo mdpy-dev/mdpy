@@ -47,9 +47,8 @@ def _setup_mdpy_system(psf_path, pdb_path, prm_path, cutoff=12.0):
     frac -= np.floor(frac)
     wrapped = frac @ pbc_matrix
 
-    system.particles.positions[:] = wrapped
-    system.upload_positions()
-    system.upload_velocities()
+    system.upload_positions(wrapped.astype(np.float32))
+    system.upload_velocities(np.zeros((topology.num_particles, 3), dtype=np.float32))
     system.gpu.refresh_wrapped_positions()
     positions_2d = (
         system.gpu.d_wrapped_positions_x,
@@ -74,7 +73,8 @@ def _setup_mdpy_system(psf_path, pdb_path, prm_path, cutoff=12.0):
         gpu.permute_from_sorted(sorted_to_pdb, gpu.d_forces_y).get(),
         gpu.permute_from_sorted(sorted_to_pdb, gpu.d_forces_z).get(),
     ], axis=1)
-    system.particles.forces[:] = frc
+    system._validation_forces = frc
+    system._validation_positions = wrapped.astype(np.float32)
     return system
 
 
@@ -111,7 +111,7 @@ class TestOpenMMValidation6PO6:
 
     def test_positions_match(self, mdpy_6po6, ref_6po6):
         ref_pos = ref_6po6['positions']
-        mdpy_pos = mdpy_6po6.particles.positions
+        mdpy_pos = mdpy_6po6._validation_positions
         pbc_matrix = np.eye(3, dtype=np.float64) * 100.0
         pbc_inv = np.linalg.inv(pbc_matrix)
         frac = ref_pos.astype(np.float64) @ pbc_inv
@@ -148,7 +148,7 @@ class TestOpenMMValidation6PO6:
 
     def test_force_direction_correlation(self, mdpy_6po6, ref_6po6):
         ref_f = ref_6po6['forces'].flatten()
-        mdpy_f = mdpy_6po6.particles.forces.flatten()
+        mdpy_f = mdpy_6po6._validation_forces.flatten()
         mask = np.abs(ref_f) > 1e-8
         if not np.any(mask):
             return
@@ -157,7 +157,7 @@ class TestOpenMMValidation6PO6:
 
     def test_forces_magnitude_order(self, mdpy_6po6, ref_6po6):
         ref_forces = ref_6po6['forces']
-        mdpy_forces = mdpy_6po6.particles.forces
+        mdpy_forces = mdpy_6po6._validation_forces
         ref_norms = np.linalg.norm(ref_forces, axis=1)
         mdpy_norms = np.linalg.norm(mdpy_forces, axis=1)
         correlation = np.corrcoef(ref_norms, mdpy_norms)[0, 1]

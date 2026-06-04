@@ -4,7 +4,6 @@ import pytest
 from mdpy import env
 from mdpy.core.topology import Builder
 from mdpy.core.gpu_context import GPUContext
-from mdpy.core.particle_table import ParticleTable
 from mdpy.core.block_list import BlockList
 from mdpy.core.parameter_table import ParameterTable
 from mdpy.force.bonded_force import BondedForce
@@ -22,8 +21,6 @@ def _run_steps(system, integrator, n, sync_interval=10):
 
 
 def _ensure_ready(system):
-    system.upload_positions()
-    system.upload_velocities()
     system.gpu.refresh_wrapped_positions()
 
 
@@ -100,24 +97,17 @@ class TestGPUContext:
         ctx = GPUContext()
         ctx.initialize(topology, pbc_matrix.flatten())
 
-        table = ParticleTable(4)
-        table.positions[:] = _four_particle_positions()
-        table.velocities[:] = np.random.randn(4, 3).astype(env.NUMPY_FLOAT)
+        original_positions = _four_particle_positions()
+        original_velocities = np.random.randn(4, 3).astype(env.NUMPY_FLOAT)
 
-        original_positions = table.positions.copy()
-        original_velocities = table.velocities.copy()
+        ctx.upload_positions(original_positions)
+        ctx.upload_velocities(original_velocities)
 
-        ctx.upload_positions(table)
-        ctx.upload_velocities(table)
+        downloaded_positions = ctx.download_positions()
+        downloaded_velocities = ctx.download_velocities()
 
-        table.positions[:] = 999.0
-        table.velocities[:] = 999.0
-
-        ctx.download_positions(table)
-        ctx.download_velocities(table)
-
-        np.testing.assert_allclose(table.positions, original_positions, atol=1e-6)
-        np.testing.assert_allclose(table.velocities, original_velocities, atol=1e-6)
+        np.testing.assert_allclose(downloaded_positions, original_positions, atol=1e-6)
+        np.testing.assert_allclose(downloaded_velocities, original_velocities, atol=1e-6)
 
     def test_zero_forces_energy(self):
         topology, _ = _build_four_particle()
@@ -147,7 +137,7 @@ class TestSystem:
         system = System(topology, pbc_matrix, cutoff=12.0)
 
         assert system.topology is topology
-        assert system.particles.num_particles == 4
+        assert system.num_particles == 4
         assert isinstance(system.gpu, GPUContext)
         assert isinstance(system.block_list, BlockList)
         assert system.cutoff == 12.0
@@ -172,14 +162,13 @@ class TestSystem:
         bonded = BondedForce.charmm(topology, parameter_table)
         system.add_force_term(bonded)
 
-        system.particles.positions[:] = np.array([
+        system.upload_positions(np.array([
             [0.0, 0.0, 0.0],
             [1.6, 0.0, 0.0],
             [2.8, 0.5, 0.0],
             [4.5, 0.0, 1.0],
-        ], dtype=env.NUMPY_FLOAT)
-        system.upload_positions()
-        system.upload_velocities()
+        ], dtype=env.NUMPY_FLOAT))
+        system.upload_velocities(np.zeros((4, 3), dtype=env.NUMPY_FLOAT))
 
         system.compute_forces()
 
@@ -187,8 +176,8 @@ class TestSystem:
         assert all(np.isfinite(v) for v in system.dump_energy().values())
         assert 'bonded' in system.dump_energy()
 
-        system.gpu.download_forces(system.particles)
-        assert not np.all(system.particles.forces == 0)
+        forces = system.dump_forces()
+        assert not np.all(forces == 0)
 
     def test_system_single_step_verlet(self):
         topology, term_params = _build_simple_bond()
@@ -199,13 +188,14 @@ class TestSystem:
         bonded = BondedForce.charmm(topology, parameter_table)
         system.add_force_term(bonded)
 
-        system.particles.positions[:] = np.array([
+        positions = np.array([
             [0.0, 0.0, 0.0],
             [1.6, 0.0, 0.0],
         ], dtype=env.NUMPY_FLOAT)
-        system.particles.velocities[:] = 0.0
+        system.upload_positions(positions)
+        system.upload_velocities(np.zeros((2, 3), dtype=env.NUMPY_FLOAT))
 
-        initial_positions = system.particles.positions.copy()
+        initial_positions = positions.copy()
 
         integrator = VerletIntegrator(time_step=0.5)
         _ensure_ready(system)
@@ -224,11 +214,11 @@ class TestSystem:
         bonded = BondedForce.charmm(topology, parameter_table)
         system.add_force_term(bonded)
 
-        system.particles.positions[:] = np.array([
+        system.upload_positions(np.array([
             [0.0, 0.0, 0.0],
             [1.6, 0.0, 0.0],
-        ], dtype=env.NUMPY_FLOAT)
-        system.particles.velocities[:] = 0.0
+        ], dtype=env.NUMPY_FLOAT))
+        system.upload_velocities(np.zeros((2, 3), dtype=env.NUMPY_FLOAT))
 
         integrator = VerletIntegrator(time_step=0.1)
         _ensure_ready(system)
@@ -248,11 +238,11 @@ class TestSystem:
         bonded = BondedForce.charmm(topology, parameter_table)
         system.add_force_term(bonded)
 
-        system.particles.positions[:] = np.array([
+        system.upload_positions(np.array([
             [0.0, 0.0, 0.0],
             [1.5, 0.0, 0.0],
-        ], dtype=env.NUMPY_FLOAT)
-        system.particles.velocities[:] = 0.0
+        ], dtype=env.NUMPY_FLOAT))
+        system.upload_velocities(np.zeros((2, 3), dtype=env.NUMPY_FLOAT))
 
         integrator = VerletIntegrator(time_step=0.1)
         _ensure_ready(system)
@@ -270,14 +260,14 @@ class TestVerletIntegrator:
         pbc_matrix = _make_large_pbc()
         system = System(topology, pbc_matrix)
 
-        system.particles.positions[:] = np.array([
+        system.upload_positions(np.array([
             [10.0, 10.0, 10.0],
             [11.5, 10.0, 10.0],
-        ], dtype=env.NUMPY_FLOAT)
-        system.particles.velocities[:] = np.array([
+        ], dtype=env.NUMPY_FLOAT))
+        system.upload_velocities(np.array([
             [0.01, 0.0, 0.0],
             [-0.01, 0.0, 0.0],
-        ], dtype=env.NUMPY_FLOAT)
+        ], dtype=env.NUMPY_FLOAT))
 
         integrator = VerletIntegrator(time_step=1.0)
         _ensure_ready(system)
@@ -300,11 +290,11 @@ class TestVerletIntegrator:
         bonded = BondedForce.charmm(topology, parameter_table)
         system.add_force_term(bonded)
 
-        system.particles.positions[:] = np.array([
+        system.upload_positions(np.array([
             [0.0, 0.0, 0.0],
             [1.6, 0.0, 0.0],
-        ], dtype=env.NUMPY_FLOAT)
-        system.particles.velocities[:] = 0.0
+        ], dtype=env.NUMPY_FLOAT))
+        system.upload_velocities(np.zeros((2, 3), dtype=env.NUMPY_FLOAT))
 
         integrator = VerletIntegrator(time_step=0.05)
         _ensure_ready(system)
@@ -332,11 +322,11 @@ class TestLangevinIntegrator:
         bonded = BondedForce.charmm(topology, parameter_table)
         system.add_force_term(bonded)
 
-        system.particles.positions[:] = np.array([
+        system.upload_positions(np.array([
             [0.0, 0.0, 0.0],
             [1.6, 0.0, 0.0],
-        ], dtype=env.NUMPY_FLOAT)
-        system.particles.velocities[:] = 0.0
+        ], dtype=env.NUMPY_FLOAT))
+        system.upload_velocities(np.zeros((2, 3), dtype=env.NUMPY_FLOAT))
 
         integrator = LangevinBAOABIntegrator(
             time_step=0.1, temperature=300.0, friction=0.1
@@ -355,11 +345,11 @@ class TestLangevinIntegrator:
         bonded = BondedForce.charmm(topology, parameter_table)
         system.add_force_term(bonded)
 
-        system.particles.positions[:] = np.array([
+        system.upload_positions(np.array([
             [0.0, 0.0, 0.0],
             [1.5, 0.0, 0.0],
-        ], dtype=env.NUMPY_FLOAT)
-        system.particles.velocities[:] = 0.0
+        ], dtype=env.NUMPY_FLOAT))
+        system.upload_velocities(np.zeros((2, 3), dtype=env.NUMPY_FLOAT))
 
         target_temperature = 300.0
         integrator = LangevinBAOABIntegrator(
@@ -390,11 +380,11 @@ class TestLangevinIntegrator:
         bonded = BondedForce.charmm(topology, parameter_table)
         system.add_force_term(bonded)
 
-        system.particles.positions[:] = np.array([
+        system.upload_positions(np.array([
             [0.0, 0.0, 0.0],
             [1.6, 0.0, 0.0],
-        ], dtype=env.NUMPY_FLOAT)
-        system.particles.velocities[:] = 0.0
+        ], dtype=env.NUMPY_FLOAT))
+        system.upload_velocities(np.zeros((2, 3), dtype=env.NUMPY_FLOAT))
 
         integrator = VerletIntegrator(time_step=0.1)
         _ensure_ready(system)
@@ -404,7 +394,6 @@ class TestLangevinIntegrator:
 
 
 def _get_pdb_to_sorted(system):
-    """Compute PDB→sorted mapping from GPU cumulative d_sorted_to_pdb."""
     import cupy as cp
     d_stp = system.block_list.d_sorted_to_pdb
     sorted_to_pdb = cp.asnumpy(d_stp)
@@ -429,8 +418,8 @@ class TestRebuildSortCorrectness:
             [3.0, 0.0, 0.0],
             [4.5, 0.0, 0.0],
         ], dtype=env.NUMPY_FLOAT)
-        system.particles.positions[:] = positions
-        system.particles.velocities[:] = 0.0
+        system.upload_positions(positions)
+        system.upload_velocities(np.zeros((4, 3), dtype=env.NUMPY_FLOAT))
 
         integrator = VerletIntegrator(time_step=0.1)
         _ensure_ready(system)
@@ -482,8 +471,8 @@ class TestRebuildSortCorrectness:
             [0.01, 0.0, 0.0],
             [-0.01, 0.0, 0.0],
         ], dtype=env.NUMPY_FLOAT)
-        system.particles.positions[:] = positions
-        system.particles.velocities[:] = velocities
+        system.upload_positions(positions)
+        system.upload_velocities(velocities)
 
         integrator = VerletIntegrator(time_step=0.1)
         _ensure_ready(system)
@@ -533,8 +522,8 @@ class TestRebuildSortCorrectness:
         rng = np.random.RandomState(42)
         positions = rng.uniform(10, 70, (n, 3)).astype(env.NUMPY_FLOAT)
         velocities = rng.randn(n, 3).astype(env.NUMPY_FLOAT) * 0.01
-        system.particles.positions[:] = positions.copy()
-        system.particles.velocities[:] = velocities.copy()
+        system.upload_positions(positions)
+        system.upload_velocities(velocities)
 
         integrator = VerletIntegrator(time_step=0.5)
         _ensure_ready(system)
@@ -584,8 +573,8 @@ class TestRebuildSortCorrectness:
         rng = np.random.RandomState(42)
         positions = rng.uniform(10, 70, (n, 3)).astype(env.NUMPY_FLOAT)
         velocities = rng.randn(n, 3).astype(env.NUMPY_FLOAT) * 0.001
-        system.particles.positions[:] = positions.copy()
-        system.particles.velocities[:] = velocities.copy()
+        system.upload_positions(positions)
+        system.upload_velocities(velocities)
 
         integrator = VerletIntegrator(time_step=0.5)
 
@@ -618,7 +607,7 @@ class TestRebuildSortCorrectness:
 
         import cupy as cp
         bl = system.block_list
-        d_stp =     bl.d_sorted_to_pdb
+        d_stp = bl.d_sorted_to_pdb
         pdb_gpu_x = system.gpu.permute_from_sorted(d_stp, system.gpu.d_positions_x)
         pdb_gpu_y = system.gpu.permute_from_sorted(d_stp, system.gpu.d_positions_y)
         pdb_gpu_z = system.gpu.permute_from_sorted(d_stp, system.gpu.d_positions_z)
@@ -639,13 +628,11 @@ class TestLazyEnergy:
         bonded = BondedForce.charmm(topology, parameter_table)
         system.add_force_term(bonded)
 
-        system.particles.positions[:] = np.array([
+        system.upload_positions(np.array([
             [0.0, 0.0, 0.0],
             [1.6, 0.0, 0.0],
-        ], dtype=env.NUMPY_FLOAT)
-        system.particles.velocities[:] = 0.0
-        system.upload_positions()
-        system.upload_velocities()
+        ], dtype=env.NUMPY_FLOAT))
+        system.upload_velocities(np.zeros((2, 3), dtype=env.NUMPY_FLOAT))
         system.compute_forces()
         energy = system.dump_energy()
         assert 'bonded' in energy
@@ -660,11 +647,11 @@ class TestLazyEnergy:
         bonded = BondedForce.charmm(topology, parameter_table)
         system.add_force_term(bonded)
 
-        system.particles.positions[:] = np.array([
+        system.upload_positions(np.array([
             [0.0, 0.0, 0.0],
             [1.6, 0.0, 0.0],
-        ], dtype=env.NUMPY_FLOAT)
-        system.particles.velocities[:] = 0.0
+        ], dtype=env.NUMPY_FLOAT))
+        system.upload_velocities(np.zeros((2, 3), dtype=env.NUMPY_FLOAT))
 
         integrator = VerletIntegrator(time_step=0.1)
         _ensure_ready(system)
@@ -685,11 +672,11 @@ class TestLazyEnergy:
         bonded = BondedForce.charmm(topology, parameter_table)
         system.add_force_term(bonded)
 
-        system.particles.positions[:] = np.array([
+        system.upload_positions(np.array([
             [0.0, 0.0, 0.0],
             [1.6, 0.0, 0.0],
-        ], dtype=env.NUMPY_FLOAT)
-        system.particles.velocities[:] = 0.0
+        ], dtype=env.NUMPY_FLOAT))
+        system.upload_velocities(np.zeros((2, 3), dtype=env.NUMPY_FLOAT))
 
         integrator = VerletIntegrator(time_step=0.1)
         _ensure_ready(system)
@@ -713,24 +700,20 @@ class TestAsyncRebuild:
         system_a = System(topology, pbc_matrix, cutoff=12.0, skin=1.0)
         bonded = BondedForce.charmm(topology, parameter_table)
         system_a.add_force_term(bonded)
-        system_a.particles.positions[:] = np.array([
+        shared_positions = np.array([
             [0.0, 0.0, 0.0],
             [1.5, 0.0, 0.0],
             [3.0, 0.0, 0.0],
             [4.5, 0.0, 0.0],
         ], dtype=env.NUMPY_FLOAT)
-        system_a.particles.velocities[:] = 0.0
+        system_a.upload_positions(shared_positions)
+        system_a.upload_velocities(np.zeros((4, 3), dtype=env.NUMPY_FLOAT))
 
         system_b = System(topology, pbc_matrix, cutoff=12.0, skin=1.0)
         bonded_b = BondedForce.charmm(topology, parameter_table)
         system_b.add_force_term(bonded_b)
-        system_b.particles.positions[:] = np.array([
-            [0.0, 0.0, 0.0],
-            [1.5, 0.0, 0.0],
-            [3.0, 0.0, 0.0],
-            [4.5, 0.0, 0.0],
-        ], dtype=env.NUMPY_FLOAT)
-        system_b.particles.velocities[:] = 0.0
+        system_b.upload_positions(shared_positions)
+        system_b.upload_velocities(np.zeros((4, 3), dtype=env.NUMPY_FLOAT))
 
         integrator_a = VerletIntegrator(time_step=0.1)
         integrator_b = VerletIntegrator(time_step=0.1)
@@ -755,13 +738,13 @@ class TestAsyncRebuild:
         system = System(topology, pbc_matrix, cutoff=12.0, skin=1.0)
         bonded = BondedForce.charmm(topology, parameter_table)
         system.add_force_term(bonded)
-        system.particles.positions[:] = np.array([
+        system.upload_positions(np.array([
             [0.0, 0.0, 0.0],
             [1.5, 0.0, 0.0],
             [3.0, 0.0, 0.0],
             [4.5, 0.0, 0.0],
-        ], dtype=env.NUMPY_FLOAT)
-        system.particles.velocities[:] = 0.0
+        ], dtype=env.NUMPY_FLOAT))
+        system.upload_velocities(np.zeros((4, 3), dtype=env.NUMPY_FLOAT))
 
         integrator = VerletIntegrator(time_step=0.1)
         _ensure_ready(system)
@@ -789,8 +772,8 @@ class TestAsyncRebuild:
         system.add_force_term(bonded)
 
         rng = np.random.RandomState(42)
-        system.particles.positions[:] = rng.uniform(10, 70, (n, 3)).astype(env.NUMPY_FLOAT)
-        system.particles.velocities[:] = rng.randn(n, 3).astype(env.NUMPY_FLOAT) * 0.001
+        system.upload_positions(rng.uniform(10, 70, (n, 3)).astype(env.NUMPY_FLOAT))
+        system.upload_velocities(rng.randn(n, 3).astype(env.NUMPY_FLOAT) * 0.001)
 
         integrator = VerletIntegrator(time_step=0.5)
         _ensure_ready(system)
@@ -812,18 +795,18 @@ class TestAsyncRebuild:
         system = System(topology, pbc_matrix, cutoff=12.0, skin=0.5)
         bonded = BondedForce.charmm(topology, parameter_table)
         system.add_force_term(bonded)
-        system.particles.positions[:] = np.array([
+        system.upload_positions(np.array([
             [0.0, 0.0, 0.0],
             [1.5, 0.0, 0.0],
             [3.0, 0.0, 0.0],
             [4.5, 0.0, 0.0],
-        ], dtype=env.NUMPY_FLOAT)
-        system.particles.velocities[:] = np.array([
+        ], dtype=env.NUMPY_FLOAT))
+        system.upload_velocities(np.array([
             [0.0, 0.0, 0.0],
             [2.0, 0.0, 0.0],
             [0.0, 0.0, 0.0],
             [-2.0, 0.0, 0.0],
-        ], dtype=env.NUMPY_FLOAT)
+        ], dtype=env.NUMPY_FLOAT))
 
         integrator = VerletIntegrator(time_step=2.0)
         _ensure_ready(system)
@@ -839,13 +822,13 @@ class TestAsyncRebuild:
         system = System(topology, pbc_matrix, cutoff=12.0, skin=1.0)
         bonded = BondedForce.charmm(topology, parameter_table)
         system.add_force_term(bonded)
-        system.particles.positions[:] = np.array([
+        system.upload_positions(np.array([
             [0.0, 0.0, 0.0],
             [1.6, 0.0, 0.0],
             [3.0, 0.5, 0.0],
             [4.5, 0.0, 1.0],
-        ], dtype=env.NUMPY_FLOAT)
-        system.particles.velocities[:] = 0.0
+        ], dtype=env.NUMPY_FLOAT))
+        system.upload_velocities(np.zeros((4, 3), dtype=env.NUMPY_FLOAT))
 
         integrator = LangevinBAOABIntegrator(
             time_step=0.1, temperature=300.0, friction=0.1
@@ -865,13 +848,13 @@ class TestAsyncRebuild:
                         rebuild_check_interval=3)
         bonded = BondedForce.charmm(topology, parameter_table)
         system.add_force_term(bonded)
-        system.particles.positions[:] = np.array([
+        system.upload_positions(np.array([
             [0.0, 0.0, 0.0],
             [1.5, 0.0, 0.0],
             [3.0, 0.0, 0.0],
             [4.5, 0.0, 0.0],
-        ], dtype=env.NUMPY_FLOAT)
-        system.particles.velocities[:] = 0.0
+        ], dtype=env.NUMPY_FLOAT))
+        system.upload_velocities(np.zeros((4, 3), dtype=env.NUMPY_FLOAT))
 
         integrator = VerletIntegrator(time_step=0.1)
         _ensure_ready(system)

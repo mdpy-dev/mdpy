@@ -739,9 +739,8 @@ class TestPMEIntegration6PO6:
         frac -= np.floor(frac)
         wrapped = (frac @ pbc_matrix).astype(np.float32)
 
-        system.particles.positions[:] = wrapped
-        system.upload_positions()
-        system.upload_velocities()
+        system.upload_positions(wrapped.astype(np.float32))
+        system.upload_velocities(np.zeros((self.N, 3), dtype=np.float32))
         system.gpu.refresh_wrapped_positions()
 
         positions_2d = (

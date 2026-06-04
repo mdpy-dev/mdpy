@@ -27,8 +27,6 @@ def _run_steps(system, integrator, n):
 
 
 def _ensure_ready(system):
-    system.upload_positions()
-    system.upload_velocities()
     system.gpu.refresh_wrapped_positions()
 
 
@@ -68,10 +66,8 @@ def _make_system_6po6():
     pbc_inv = np.linalg.inv(pbc)
     frac = raw @ pbc_inv
     frac -= np.floor(frac)
-    system.particles.positions[:] = frac @ pbc
-    system.particles.velocities[:] = 0.0
-    system.upload_positions()
-    system.upload_velocities()
+    system.upload_positions((frac @ pbc).astype(env.NUMPY_FLOAT))
+    system.upload_velocities(np.zeros((topology.num_particles, 3), dtype=env.NUMPY_FLOAT))
     return system, VerletIntegrator(0.5)
 
 
@@ -93,10 +89,8 @@ def _make_system_1m9z():
     pbc_inv = np.linalg.inv(pbc)
     frac = raw @ pbc_inv
     frac -= np.floor(frac)
-    system.particles.positions[:] = frac @ pbc
-    system.particles.velocities[:] = 0.0
-    system.upload_positions()
-    system.upload_velocities()
+    system.upload_positions((frac @ pbc).astype(env.NUMPY_FLOAT))
+    system.upload_velocities(np.zeros((topology.num_particles, 3), dtype=env.NUMPY_FLOAT))
     return system, VerletIntegrator(0.5)
 
 

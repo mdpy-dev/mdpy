@@ -60,9 +60,8 @@ def _setup_mdpy_system():
     frac = raw @ pbc_inv
     frac -= np.floor(frac)
     wrapped = frac @ pbc_matrix
-    system.particles.positions[:] = wrapped
-    system.upload_positions()
-    system.upload_velocities()
+    system.upload_positions(wrapped.astype(np.float32))
+    system.upload_velocities(np.zeros((topology.num_particles, 3), dtype=np.float32))
     system.gpu.refresh_wrapped_positions()
     positions_2d = (
         system.gpu.d_wrapped_positions_x,

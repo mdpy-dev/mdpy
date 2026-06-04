@@ -69,15 +69,11 @@ def main():
     frac = raw @ pbc_inv
     frac -= np.floor(frac)
     wrapped = frac @ pbc_matrix
-    system.particles.positions[:] = wrapped
-    system.particles.velocities[:] = 0.0
-    system.gpu.upload_positions(system.particles)
-    system.gpu.upload_velocities(system.particles)
+    system.upload_positions(wrapped.astype(np.float32))
+    system.upload_velocities(np.zeros((topology.num_particles, 3), dtype=np.float32))
 
     integrator = VerletIntegrator(DT_FS)
 
-    system.upload_positions()
-    system.upload_velocities()
     system.gpu.refresh_wrapped_positions()
 
     def _run_steps(n, sync_interval=10):
