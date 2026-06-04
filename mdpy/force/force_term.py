@@ -2,5 +2,5 @@ class ForceTerm:
 
     name: str = ''
 
-    def compute(self, gpu_context, tile_list=None):
+    def compute(self, gpu_context, block_list=None):
         raise NotImplementedError

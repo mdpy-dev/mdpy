@@ -120,7 +120,7 @@ class PMEReciprocalForce(ForceTerm):
         cp.fft.irfftn(fft, s=(self.grid_x, self.grid_y, self.grid_z))
         self._fft_warmed = True
 
-    def compute(self, gpu_context, tile_list=None, compute_energy=True):
+    def compute(self, gpu_context, block_list=None, compute_energy=True):
         N = self._N
         order = self.order
         gx, gy, gz = self.grid_x, self.grid_y, self.grid_z
@@ -134,34 +134,34 @@ class PMEReciprocalForce(ForceTerm):
         self._d_charge_grid[:] = 0
 
         use_cell_spread = (
-            tile_list is not None
-            and hasattr(tile_list, 'nc_total')
-            and tile_list.nc_total > 0
-            and hasattr(tile_list, '_sorted_positions')
-            and tile_list._sorted_positions is not None
+            block_list is not None
+            and hasattr(block_list, 'nc_total')
+            and block_list.nc_total > 0
+            and hasattr(block_list, '_sorted_positions')
+            and block_list._sorted_positions is not None
         )
 
         if use_cell_spread:
             if not self._subgrid_initialized:
-                tile_list.compute_pme_subgrid_dims(gx, gy, gz, order)
+                block_list.compute_pme_subgrid_dims(gx, gy, gz, order)
                 self._subgrid_initialized = True
 
-            sorted_pos_x, sorted_pos_y, sorted_pos_z = tile_list._sorted_positions
-            sorted_charges = self._d_charges[tile_list.d_sorted_to_pdb]
+            sorted_pos_x, sorted_pos_y, sorted_pos_z = block_list._sorted_positions
+            sorted_charges = self._d_charges[block_list.d_sorted_to_pdb]
 
             cell_spread_k = get_cell_spread_kernel()
-            shmem = tile_list._subgrid_total * 4
+            shmem = block_list._subgrid_total * 4
             cell_spread_k(
-                (tile_list.nc_total,), (tpb,),
+                (block_list.nc_total,), (tpb,),
                 (sorted_pos_x, sorted_pos_y, sorted_pos_z, sorted_charges,
-                 tile_list.d_cell_block_offset, tile_list.d_cell_block_count, tile_list.d_block_atoms,
+                 block_list.d_cell_block_offset, block_list.d_cell_block_count, block_list.d_block_atoms,
                  np.int32(N),
                  np.float32(gpu_context._inv_box_x),
                  np.float32(gpu_context._inv_box_y),
                  np.float32(gpu_context._inv_box_z),
                  np.int32(gx), np.int32(gy), np.int32(gz),
-                 np.int32(tile_list.nc_x), np.int32(tile_list.nc_y), np.int32(tile_list.nc_z),
-                 np.int32(tile_list._subgrid_dx), np.int32(tile_list._subgrid_dy), np.int32(tile_list._subgrid_dz),
+                 np.int32(block_list.nc_x), np.int32(block_list.nc_y), np.int32(block_list.nc_z),
+                 np.int32(block_list._subgrid_dx), np.int32(block_list._subgrid_dy), np.int32(block_list._subgrid_dz),
                  np.int32(order),
                  self._d_charge_grid),
                 shared_mem=shmem,
