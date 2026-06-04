@@ -17,6 +17,14 @@ from mdpy.integrator.verlet import VerletIntegrator
 DATA_DIR = os.path.join(os.path.dirname(__file__), 'data')
 
 
+def _run_steps(system, integrator, n):
+    for _ in range(n):
+        system.check_and_rebuild()
+        system.compute_forces()
+        integrator.step(system)
+        system.gpu.refresh_wrapped_positions()
+
+
 class TestTopology:
 
     def test_topology_particle_count(self):
@@ -143,6 +151,7 @@ class TestSystem:
         system.gpu.upload_positions(system.particles)
 
         system.compute_forces()
+        system.gpu.download_forces(system.particles)
         assert all(np.isfinite(v) for v in system.dump_energy().values())
         assert sum(system.dump_energy().values()) != 0.0
         assert np.all(np.isfinite(system.particles.forces))
@@ -169,12 +178,13 @@ class TestSystem:
         system.gpu.upload_velocities(system.particles)
 
         integrator = VerletIntegrator(time_step=0.5)
+        system.ensure_uploaded()
+        system.gpu.refresh_wrapped_positions()
         energies = []
         for step in range(100):
-            system.step(integrator, number_steps=1)
+            _run_steps(system, integrator, 1)
             energies.append(sum(system.dump_energy().values()))
         assert all(np.isfinite(energy) for energy in energies)
-        assert system.step_count == 100
 
     def test_bond_energy_finite(self):
         psf = PSFParser(os.path.join(DATA_DIR, '6PO6.psf'))

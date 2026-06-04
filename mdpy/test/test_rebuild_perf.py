@@ -18,6 +18,19 @@ from mdpy.core.topology import Builder
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
 
 
+def _run_steps(system, integrator, n):
+    for _ in range(n):
+        system.check_and_rebuild()
+        system.compute_forces()
+        integrator.step(system)
+        system.gpu.refresh_wrapped_positions()
+
+
+def _ensure_ready(system):
+    system.ensure_uploaded()
+    system.gpu.refresh_wrapped_positions()
+
+
 def _assert_csr_equal(d_offset_a, d_neighbors_a, d_scale_a,
                        d_offset_b, d_neighbors_b, d_scale_b):
     offset_a = cp.asnumpy(d_offset_a)
@@ -137,7 +150,8 @@ def test_exclusion_map_after_remap():
     system, integrator = _make_system_6po6()
     topology = system.topology
 
-    system.step(integrator, 1)
+    _ensure_ready(system)
+    _run_steps(system, integrator, 1)
 
     ref_offset, ref_neighbors, ref_scale = _build_reference_exclusion_map(topology, scale_14=1.0)
 
@@ -151,11 +165,12 @@ def test_exclusion_map_after_remap():
 
 def test_rebuild_produces_correct_forces_after_gpu_exclusion():
     system, integrator = _make_system_6po6()
-    system.step(integrator, 1)
+    _ensure_ready(system)
+    _run_steps(system, integrator, 1)
     e1 = system.dump_energy()
     pos1, vel1 = system.dump_state()
 
-    system.step(integrator, 5)
+    _run_steps(system, integrator, 5)
     e2 = system.dump_energy()
     pos2, vel2 = system.dump_state()
 
@@ -169,7 +184,8 @@ def test_rebuild_produces_correct_forces_after_gpu_exclusion():
 def test_rebuild_1m9z_correctness():
     system, integrator = _make_system_1m9z()
 
-    system.step(integrator, 10)
+    _ensure_ready(system)
+    _run_steps(system, integrator, 10)
     energies = system.dump_energy()
     pos, vel = system.dump_state()
 

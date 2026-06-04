@@ -16,6 +16,19 @@ from mdpy.system import System
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
 
 
+def _run_steps(system, integrator, n):
+    for _ in range(n):
+        system.check_and_rebuild()
+        system.compute_forces()
+        integrator.step(system)
+        system.gpu.refresh_wrapped_positions()
+
+
+def _ensure_ready(system):
+    system.ensure_uploaded()
+    system.gpu.refresh_wrapped_positions()
+
+
 def _make_system(box=30.0, cutoff=12.0):
     psf = PSFParser(os.path.join(DATA_DIR, '6PO6.psf'))
     pdb = PDBParser(os.path.join(DATA_DIR, '6PO6.pdb'))
@@ -43,26 +56,17 @@ def _make_system(box=30.0, cutoff=12.0):
 
 def test_exclusion_data_preserved_across_rebuild():
     system, integrator = _make_system()
-    system.step(integrator, 1)
+    _ensure_ready(system)
+    _run_steps(system, integrator, 1)
 
     bl = system.block_list
     assert bl._d_excl_offset is not None, "exclusion data should be set after first step"
 
-    system.gpu.refresh_wrapped_positions()
-    positions_soa = (
-        system.gpu.d_wrapped_positions_x,
-        system.gpu.d_wrapped_positions_y,
-        system.gpu.d_wrapped_positions_z,
-    )
-    if bl.check_rebuild(positions_soa):
-        bl.rebuild(positions_soa, system.topology,
-                    system.pbc_matrix, system.pbc_inv)
-        system._permute_all_arrays()
-        bl.build_block_pairs(system.topology, system.pbc_matrix)
+    system.check_and_rebuild()
 
     assert bl._d_excl_offset is not None, "exclusion data should survive rebuild"
 
-    system.step(integrator, 5)
+    _run_steps(system, integrator, 5)
     pos, vel = system.dump_state()
     assert not np.any(np.isnan(pos))
     assert not np.any(np.isnan(vel))

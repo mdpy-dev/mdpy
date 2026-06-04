@@ -20,6 +20,19 @@ PRM = os.path.join(DATA_DIR, 'par_all36_prot.prm')
 STR = os.path.join(DATA_DIR, 'toppar_water_ions.str')
 
 
+def _run_steps(system, integrator, n):
+    for _ in range(n):
+        system.check_and_rebuild()
+        system.compute_forces()
+        integrator.step(system)
+        system.gpu.refresh_wrapped_positions()
+
+
+def _ensure_ready(system):
+    system.ensure_uploaded()
+    system.gpu.refresh_wrapped_positions()
+
+
 def _make_system():
     psf = PSFParser(PSF)
     pdb = PDBParser(PDB)
@@ -45,7 +58,8 @@ def _make_system():
 
 def test_gpu_block_pair_classification():
     system, integrator = _make_system()
-    system.step(integrator, 1)
+    _ensure_ready(system)
+    _run_steps(system, integrator, 1)
     bl = system.block_list
     assert bl.num_exclusion_block_pairs + bl.num_main_block_pairs == bl.num_block_pairs
     assert bl.num_exclusion_block_pairs > 0
