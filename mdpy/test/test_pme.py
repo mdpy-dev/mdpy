@@ -741,6 +741,7 @@ class TestPMEIntegration6PO6:
 
         system.particles.positions[:] = wrapped
         system.upload_positions()
+        system.upload_velocities()
         system.gpu.refresh_wrapped_positions()
 
         positions_2d = (
