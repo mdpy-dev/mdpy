@@ -178,7 +178,8 @@ class TestSystem:
             [2.8, 0.5, 0.0],
             [4.5, 0.0, 1.0],
         ], dtype=env.NUMPY_FLOAT)
-        system.gpu.upload_positions(system.particles)
+        system.upload_positions()
+        system.upload_velocities()
 
         system.compute_forces()
 
@@ -643,8 +644,8 @@ class TestLazyEnergy:
             [1.6, 0.0, 0.0],
         ], dtype=env.NUMPY_FLOAT)
         system.particles.velocities[:] = 0.0
-        system.gpu.upload_positions(system.particles)
-
+        system.upload_positions()
+        system.upload_velocities()
         system.compute_forces()
         energy = system.dump_energy()
         assert 'bonded' in energy

@@ -124,7 +124,7 @@ class TestSystem:
         frac = raw @ pbc_inv
         frac -= np.floor(frac)
         system.particles.positions[:] = frac @ pbc_matrix
-        system.gpu.upload_positions(system.particles)
+        system.upload_positions()
 
         assert system.topology.num_particles == 49
         assert len(system.force_terms) == 2
@@ -148,7 +148,8 @@ class TestSystem:
         frac = raw @ pbc_inv
         frac -= np.floor(frac)
         system.particles.positions[:] = frac @ pbc_matrix
-        system.gpu.upload_positions(system.particles)
+        system.upload_positions()
+        system.upload_velocities()
 
         system.compute_forces()
         system.gpu.download_forces(system.particles)
@@ -174,13 +175,10 @@ class TestSystem:
         frac = raw @ pbc_inv
         frac -= np.floor(frac)
         system.particles.positions[:] = frac @ pbc_matrix
-        system.gpu.upload_positions(system.particles)
-        system.gpu.upload_velocities(system.particles)
-
-        integrator = VerletIntegrator(time_step=0.5)
         system.upload_positions()
         system.upload_velocities()
         system.gpu.refresh_wrapped_positions()
+        integrator = VerletIntegrator(time_step=0.5)
         energies = []
         for step in range(100):
             _run_steps(system, integrator, 1)
@@ -205,7 +203,8 @@ class TestSystem:
         frac = raw @ pbc_inv
         frac -= np.floor(frac)
         system.particles.positions[:] = frac @ pbc_matrix
-        system.gpu.upload_positions(system.particles)
+        system.upload_positions()
+        system.upload_velocities()
 
         system.compute_forces()
         energies = system.dump_energy()
