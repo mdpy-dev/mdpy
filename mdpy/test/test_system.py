@@ -13,16 +13,17 @@ from mdpy.integrator.verlet import VerletIntegrator
 from mdpy.integrator.langevin import LangevinBAOABIntegrator
 
 
-def _run_steps(system, integrator, n):
-    for _ in range(n):
-        system.check_and_rebuild()
+def _run_steps(system, integrator, n, sync_interval=10):
+    for i in range(n):
+        system.update_neighbor_list(force_check=(i % sync_interval == 0))
         system.compute_forces()
         integrator.step(system)
         system.gpu.refresh_wrapped_positions()
 
 
 def _ensure_ready(system):
-    system.ensure_uploaded()
+    system.upload_positions()
+    system.upload_velocities()
     system.gpu.refresh_wrapped_positions()
 
 
