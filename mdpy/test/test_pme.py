@@ -7,7 +7,9 @@ import cupy as cp
 import numpy as np
 import pytest
 
-from mdpy.force.pme_bspline import (
+from mdpy.force.pme_reciprocal_force import (
+    _calc_ewald_coefficient,
+    _next_fft_friendly_size,
     compute_bspline_weights,
     get_exclusion_kernel,
     get_gather_kernel,
@@ -130,7 +132,7 @@ class TestChargeSpreading:
 class TestCellBasedChargeSpreading:
 
     def _run_cell_spread(self, N, grid_x, grid_y, grid_z, box_x, box_y, box_z, order=4, seed=123):
-        from mdpy.force.pme_bspline import get_cell_spread_kernel
+        from mdpy.force.pme_reciprocal_force import get_cell_spread_kernel
         from mdpy.core.block_list import BlockList
 
         np.random.seed(seed)
@@ -435,7 +437,6 @@ class TestPMEReciprocalForce:
 
     def test_nonzero_energy_and_forces(self):
         from mdpy.force.pme_reciprocal_force import PMEReciprocalForce
-        from mdpy.force.pme_parameters import PMEParameters
         from mdpy.core.gpu_context import GPUContext
         from mdpy.core.topology import Topology
         from mdpy.core.parameter_table import ParameterTable
@@ -465,8 +466,7 @@ class TestPMEReciprocalForce:
         gpu.d_positions_y[:] = cp.asarray(pos[:, 1])
         gpu.d_positions_z[:] = cp.asarray(pos[:, 2])
 
-        pme_params = PMEParameters.from_box(box, box, box, cutoff=cutoff)
-        pme = PMEReciprocalForce(pme_params, cutoff)
+        pme = PMEReciprocalForce(cutoff)
         pme.bind(topo, pt, pbc_matrix=pbc)
 
         gpu.zero_forces()
@@ -487,7 +487,6 @@ class TestPMEReciprocalForce:
 
     def test_with_exclusion_pairs(self):
         from mdpy.force.pme_reciprocal_force import PMEReciprocalForce
-        from mdpy.force.pme_parameters import PMEParameters
         from mdpy.core.gpu_context import GPUContext
         from mdpy.core.topology import Topology
         from mdpy.core.parameter_table import ParameterTable
@@ -533,8 +532,7 @@ class TestPMEReciprocalForce:
         gpu.d_positions_y[:] = cp.asarray(pos[:, 1])
         gpu.d_positions_z[:] = cp.asarray(pos[:, 2])
 
-        pme_params = PMEParameters.from_box(box, box, box, cutoff=cutoff)
-        pme = PMEReciprocalForce(pme_params, cutoff)
+        pme = PMEReciprocalForce(cutoff)
         pme.bind(topo, pt, pbc_matrix=pbc)
 
         gpu.zero_forces()
@@ -554,7 +552,6 @@ class TestPMEReciprocalForce:
 
     def test_reproducibility(self):
         from mdpy.force.pme_reciprocal_force import PMEReciprocalForce
-        from mdpy.force.pme_parameters import PMEParameters
         from mdpy.core.gpu_context import GPUContext
         from mdpy.core.topology import Topology
         from mdpy.core.parameter_table import ParameterTable
@@ -584,8 +581,7 @@ class TestPMEReciprocalForce:
         gpu.d_positions_y[:] = cp.asarray(pos[:, 1])
         gpu.d_positions_z[:] = cp.asarray(pos[:, 2])
 
-        pme_params = PMEParameters.from_box(box, box, box, cutoff=cutoff)
-        pme = PMEReciprocalForce(pme_params, cutoff)
+        pme = PMEReciprocalForce(cutoff)
         pme.bind(topo, pt, pbc_matrix=pbc)
 
         gpu.zero_forces()
@@ -607,81 +603,153 @@ class TestPMEReciprocalForce:
 class TestGridSizing:
 
     def test_ewald_coefficient_erfc_bound(self):
-        from mdpy.force.pme_parameters import PMEParameters
         from scipy.special import erfc
 
         cutoff = 12.0
         rtol = 1e-5
-        alpha = PMEParameters._calc_ewald_coefficient(cutoff, rtol)
+        alpha = _calc_ewald_coefficient(cutoff, rtol)
         actual = erfc(alpha * cutoff)
         assert actual <= rtol, f"erfc({alpha:.4f}*{cutoff}) = {actual:.2e} > {rtol}"
         alpha_minus = alpha - 0.001
         assert erfc(alpha_minus * cutoff) > rtol, "Should be tight bound"
 
     def test_ewald_coefficient_various_cutoffs(self):
-        from mdpy.force.pme_parameters import PMEParameters
         from scipy.special import erfc
 
         for cutoff in [8.0, 10.0, 12.0, 15.0]:
-            alpha = PMEParameters._calc_ewald_coefficient(cutoff)
+            alpha = _calc_ewald_coefficient(cutoff)
             assert erfc(alpha * cutoff) <= 1e-5 * (1 + 1e-10)
             assert 0.1 < alpha < 1.0
 
     def test_next_fft_friendly_size_basic(self):
-        from mdpy.force.pme_parameters import PMEParameters
-
-        assert PMEParameters._next_fft_friendly_size(1) == 1
-        assert PMEParameters._next_fft_friendly_size(2) == 2
-        assert PMEParameters._next_fft_friendly_size(7) == 7
-        assert PMEParameters._next_fft_friendly_size(8) == 8
-        assert PMEParameters._next_fft_friendly_size(9) == 9
-        assert PMEParameters._next_fft_friendly_size(11) == 12
-        assert PMEParameters._next_fft_friendly_size(13) == 14
-        assert PMEParameters._next_fft_friendly_size(90) == 90
+        assert _next_fft_friendly_size(1) == 1
+        assert _next_fft_friendly_size(2) == 2
+        assert _next_fft_friendly_size(7) == 7
+        assert _next_fft_friendly_size(8) == 8
+        assert _next_fft_friendly_size(9) == 9
+        assert _next_fft_friendly_size(11) == 12
+        assert _next_fft_friendly_size(13) == 14
+        assert _next_fft_friendly_size(90) == 90
 
     def test_from_box_1m9z(self):
-        from mdpy.force.pme_parameters import PMEParameters
+        from mdpy.core.topology import Topology
+        from mdpy.core.parameter_table import ParameterTable
 
-        p = PMEParameters.from_box(108, 108, 108, cutoff=12)
-        assert p.grid_x == 90
-        assert p.grid_y == 90
-        assert p.grid_z == 90
-        assert abs(108.0 / p.grid_x - 1.2) < 0.05
-        assert p.order == 4
+        box = 108.0
+        cutoff = 12.0
+        N = 1
+        topo = Topology()
+        topo.num_particles = N
+        topo.particle_types = np.zeros(N, dtype=np.int32)
+        topo.exclusion_offset = np.zeros(N + 1, dtype=np.int32)
+        topo.exclusion_neighbors = np.empty(0, dtype=np.int32)
+        topo.exclusion_scale = np.empty(0, dtype=np.float32)
+        pt = ParameterTable()
+        pt.particle_parameters['charge'] = np.zeros(N, dtype=np.float32)
+        pbc = np.eye(3, dtype=np.float32) * box
+        from mdpy.force.pme_reciprocal_force import PMEReciprocalForce
+        pme = PMEReciprocalForce(cutoff)
+        pme.bind(topo, pt, pbc_matrix=pbc)
+        assert pme.grid_x == 90
+        assert pme.grid_y == 90
+        assert pme.grid_z == 90
+        assert pme.order == 4
 
     def test_from_box_6po6(self):
-        from mdpy.force.pme_parameters import PMEParameters
+        from mdpy.core.topology import Topology
+        from mdpy.core.parameter_table import ParameterTable
+        from mdpy.force.pme_reciprocal_force import PMEReciprocalForce
 
-        p = PMEParameters.from_box(100, 100, 100, cutoff=10)
-        assert p.grid_x == 84
-        assert p.grid_y == 84
-        assert p.grid_z == 84
+        box = 100.0
+        cutoff = 10.0
+        N = 1
+        topo = Topology()
+        topo.num_particles = N
+        topo.particle_types = np.zeros(N, dtype=np.int32)
+        topo.exclusion_offset = np.zeros(N + 1, dtype=np.int32)
+        topo.exclusion_neighbors = np.empty(0, dtype=np.int32)
+        topo.exclusion_scale = np.empty(0, dtype=np.float32)
+        pt = ParameterTable()
+        pt.particle_parameters['charge'] = np.zeros(N, dtype=np.float32)
+        pbc = np.eye(3, dtype=np.float32) * box
+        pme = PMEReciprocalForce(cutoff)
+        pme.bind(topo, pt, pbc_matrix=pbc)
+        assert pme.grid_x == 84
+        assert pme.grid_y == 84
+        assert pme.grid_z == 84
 
     def test_from_box_rectangular(self):
-        from mdpy.force.pme_parameters import PMEParameters
+        from mdpy.core.topology import Topology
+        from mdpy.core.parameter_table import ParameterTable
+        from mdpy.force.pme_reciprocal_force import PMEReciprocalForce
 
-        p = PMEParameters.from_box(80, 60, 40, cutoff=10)
-        assert p.grid_x != p.grid_y or p.grid_y != p.grid_z
-        assert p.grid_x >= 80 / 1.2 * 0.95
-        assert p.grid_y >= 60 / 1.2 * 0.95
-        assert p.grid_z >= 40 / 1.2 * 0.95
+        box_x, box_y, box_z = 80.0, 60.0, 40.0
+        cutoff = 10.0
+        N = 1
+        topo = Topology()
+        topo.num_particles = N
+        topo.particle_types = np.zeros(N, dtype=np.int32)
+        topo.exclusion_offset = np.zeros(N + 1, dtype=np.int32)
+        topo.exclusion_neighbors = np.empty(0, dtype=np.int32)
+        topo.exclusion_scale = np.empty(0, dtype=np.float32)
+        pt = ParameterTable()
+        pt.particle_parameters['charge'] = np.zeros(N, dtype=np.float32)
+        pbc = np.diag(np.array([box_x, box_y, box_z], dtype=np.float32))
+        pme = PMEReciprocalForce(cutoff)
+        pme.bind(topo, pt, pbc_matrix=pbc)
+        assert pme.grid_x != pme.grid_y or pme.grid_y != pme.grid_z
+        assert pme.grid_x >= box_x / 1.2 * 0.95
+        assert pme.grid_y >= box_y / 1.2 * 0.95
+        assert pme.grid_z >= box_z / 1.2 * 0.95
 
     def test_from_box_custom_spacing(self):
-        from mdpy.force.pme_parameters import PMEParameters
+        from mdpy.core.topology import Topology
+        from mdpy.core.parameter_table import ParameterTable
+        from mdpy.force.pme_reciprocal_force import PMEReciprocalForce
 
-        p_default = PMEParameters.from_box(108, 108, 108, cutoff=12)
-        p_fine = PMEParameters.from_box(108, 108, 108, cutoff=12, fourier_spacing=0.8)
-        assert p_fine.grid_x > p_default.grid_x
+        box = 108.0
+        cutoff = 12.0
+        N = 1
+        topo = Topology()
+        topo.num_particles = N
+        topo.particle_types = np.zeros(N, dtype=np.int32)
+        topo.exclusion_offset = np.zeros(N + 1, dtype=np.int32)
+        topo.exclusion_neighbors = np.empty(0, dtype=np.int32)
+        topo.exclusion_scale = np.empty(0, dtype=np.float32)
+        pt = ParameterTable()
+        pt.particle_parameters['charge'] = np.zeros(N, dtype=np.float32)
+        pbc = np.eye(3, dtype=np.float32) * box
+        pme_default = PMEReciprocalForce(cutoff)
+        pme_default.bind(topo, pt, pbc_matrix=pbc)
+        pme_fine = PMEReciprocalForce(cutoff, fourier_spacing=0.8)
+        pme_fine.bind(topo, pt, pbc_matrix=pbc)
+        assert pme_fine.grid_x > pme_default.grid_x
 
     def test_from_box_custom_rtol(self):
-        from mdpy.force.pme_parameters import PMEParameters
+        from mdpy.core.topology import Topology
+        from mdpy.core.parameter_table import ParameterTable
+        from mdpy.force.pme_reciprocal_force import PMEReciprocalForce
         from scipy.special import erfc
 
-        p_loose = PMEParameters.from_box(108, 108, 108, cutoff=12, ewald_rtol=1e-3)
-        p_tight = PMEParameters.from_box(108, 108, 108, cutoff=12, ewald_rtol=1e-8)
-        assert p_loose.alpha < p_tight.alpha
-        assert erfc(p_loose.alpha * 12) <= 1e-3 * (1 + 1e-10)
-        assert erfc(p_tight.alpha * 12) <= 1e-8 * (1 + 1e-10)
+        box = 108.0
+        cutoff = 12.0
+        N = 1
+        topo = Topology()
+        topo.num_particles = N
+        topo.particle_types = np.zeros(N, dtype=np.int32)
+        topo.exclusion_offset = np.zeros(N + 1, dtype=np.int32)
+        topo.exclusion_neighbors = np.empty(0, dtype=np.int32)
+        topo.exclusion_scale = np.empty(0, dtype=np.float32)
+        pt = ParameterTable()
+        pt.particle_parameters['charge'] = np.zeros(N, dtype=np.float32)
+        pbc = np.eye(3, dtype=np.float32) * box
+        pme_loose = PMEReciprocalForce(cutoff, ewald_rtol=1e-3)
+        pme_loose.bind(topo, pt, pbc_matrix=pbc)
+        pme_tight = PMEReciprocalForce(cutoff, ewald_rtol=1e-8)
+        pme_tight.bind(topo, pt, pbc_matrix=pbc)
+        assert pme_loose.alpha < pme_tight.alpha
+        assert erfc(pme_loose.alpha * 12) <= 1e-3 * (1 + 1e-10)
+        assert erfc(pme_tight.alpha * 12) <= 1e-8 * (1 + 1e-10)
 
 
 class TestPMEIntegration6PO6:
@@ -711,22 +779,21 @@ class TestPMEIntegration6PO6:
         from mdpy.force.nonbonded_force import NonbondedForce
         from mdpy.force.expressions.lennard_jones import lennard_jones
         from mdpy.force.expressions.screened_coulomb import screened_coulomb
-        from mdpy.force.pme_parameters import PMEParameters
-        from mdpy.force.pme_reciprocal_force import PMEReciprocalForce
+        from mdpy.force.pme_reciprocal_force import PMEReciprocalForce, _calc_ewald_coefficient
         from mdpy.system import System
 
         pbc_matrix = np.eye(3, dtype=np.float32) * self.box
-        pme_params = PMEParameters.from_box(self.box, self.box, self.box, cutoff=self.cutoff)
+        alpha = _calc_ewald_coefficient(self.cutoff)
 
         system = System(self.topology, pbc_matrix, cutoff=self.cutoff)
 
         system.add_force_term(BondedForce.charmm(self.topology, self.parameter_table))
 
         nb = NonbondedForce(lennard_jones + screened_coulomb)
-        nb.bind(self.topology, self.parameter_table, self.cutoff, alpha=pme_params.alpha)
+        nb.bind(self.topology, self.parameter_table, self.cutoff, alpha=alpha)
         system.add_force_term(nb)
 
-        pme = PMEReciprocalForce(pme_params, self.cutoff)
+        pme = PMEReciprocalForce(self.cutoff)
         pme.bind(self.topology, self.parameter_table, pbc_matrix=pbc_matrix)
         system.add_force_term(pme)
 
@@ -754,10 +821,10 @@ class TestPMEIntegration6PO6:
             if hasattr(term, 'bind_sorted'):
                 term.bind_sorted(self.topology, system.block_list, system.gpu)
 
-        return system, pme_params
+        return system, pme
 
     def test_pme_system_nonzero_energy(self):
-        system, pme_params = self._build_pme_system()
+        system, pme = self._build_pme_system()
 
         system.compute_forces()
 
@@ -769,7 +836,7 @@ class TestPMEIntegration6PO6:
         max_force = max(np.max(np.abs(fx)), np.max(np.abs(fy)), np.max(np.abs(fz)))
 
         print(f"6PO6 N={self.N}")
-        print(f"PME params: alpha={pme_params.alpha:.4f}, grid={pme_params.grid_shape}")
+        print(f"PME params: alpha={pme.alpha:.4f}, grid=({pme.grid_x}, {pme.grid_y}, {pme.grid_z})")
         print(f"Max force: {max_force:.6f}")
 
         assert max_force > 1e-6, "Forces should be nonzero"
@@ -783,7 +850,7 @@ class TestPMEIntegration6PO6:
         assert abs(net_fz) < max_force * 0.01, f"Net fz too large: {net_fz}"
 
     def test_pme_energy_nonzero(self):
-        system, pme_params = self._build_pme_system()
+        system, pme = self._build_pme_system()
 
         energies = system.dump_energy()
         print(f"PME energies: {energies}")
@@ -796,14 +863,14 @@ class TestPMEIntegration6PO6:
             f"PME reciprocal energy should be nonzero: {energies['pme_reciprocal']}"
 
     def test_pme_self_energy_negative(self):
-        from mdpy.force.pme_parameters import PMEParameters
+        from mdpy.force.pme_reciprocal_force import _calc_ewald_coefficient
 
-        pme_params = PMEParameters.from_box(self.box, self.box, self.box, cutoff=self.cutoff)
+        alpha = _calc_ewald_coefficient(self.cutoff)
 
         charges = self.parameter_table.particle_parameters['charge'].astype(np.float64)
         COULOMB_CONST = 0.13893556595455
         SQRT_PI = 1.772453850905516
 
-        self_energy = -COULOMB_CONST * pme_params.alpha / SQRT_PI * np.sum(charges ** 2)
+        self_energy = -COULOMB_CONST * alpha / SQRT_PI * np.sum(charges ** 2)
         print(f"Self-energy: {self_energy:.6f}")
         assert self_energy < 0, "Self-energy should be negative"
