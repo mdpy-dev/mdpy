@@ -3,7 +3,6 @@ from __future__ import annotations
 import cupy as cp
 import numpy as np
 from mdpy import env
-from mdpy.core.particle_table import ParticleTable
 from mdpy.core.block_list import BlockList
 from mdpy.core.topology import build_exclusion_map_gpu, permute_exclusion_pairs_gpu
 from mdpy.core.pbc import compute_pbc_inv
@@ -16,7 +15,7 @@ class System:
         self, topology, pbc_matrix, cutoff=12.0, skin=1.0, rebuild_check_interval=10
     ):
         self.topology = topology
-        self.particles = ParticleTable(topology.num_particles)
+        self.num_particles = topology.num_particles
         self.pbc_matrix = np.ascontiguousarray(pbc_matrix, dtype=env.NUMPY_FLOAT)
         self.pbc_inv = compute_pbc_inv(self.pbc_matrix)
         self.cutoff = cutoff
@@ -40,12 +39,12 @@ class System:
         self.force_terms.append(term)
         self.gpu.allocate_energy_accumulator(len(self.force_terms))
 
-    def upload_positions(self):
-        self.gpu.upload_positions(self.particles)
+    def upload_positions(self, positions):
+        self.gpu.upload_positions(positions)
         self._positions_uploaded = True
 
-    def upload_velocities(self):
-        self.gpu.upload_velocities(self.particles)
+    def upload_velocities(self, velocities):
+        self.gpu.upload_velocities(velocities)
         self._velocities_uploaded = True
 
     def _ensure_uploaded(self):
@@ -139,9 +138,24 @@ class System:
             ], axis=1)
         return pos, vel
 
+    def dump_forces(self):
+        bl = self.block_list
+        gpu = self.gpu
+        if bl.d_sorted_to_pdb.size > 0 and bl.num_particles > 0:
+            sorted_to_pdb = bl.d_sorted_to_pdb
+            return np.stack([
+                gpu.permute_from_sorted(sorted_to_pdb, gpu.d_forces_x).get(),
+                gpu.permute_from_sorted(sorted_to_pdb, gpu.d_forces_y).get(),
+                gpu.permute_from_sorted(sorted_to_pdb, gpu.d_forces_z).get(),
+            ], axis=1)
+        return np.stack([
+            gpu.d_forces_x.get(),
+            gpu.d_forces_y.get(),
+            gpu.d_forces_z.get(),
+        ], axis=1)
+
     def minimize(self, minimizer, number_steps=100):
-        self.upload_positions()
-        self.upload_velocities()
+        self._ensure_uploaded()
         self.gpu.refresh_wrapped_positions()
 
         positions_soa = (

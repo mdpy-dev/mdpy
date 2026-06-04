@@ -397,50 +397,35 @@ class GPUContext:
         box_z = abs(float(pbc_2d[2, 2]))
         self.set_box_dims(box_x, box_y, box_z)
 
-    def upload_positions(self, particle_table):
-        data = np.ascontiguousarray(particle_table.positions.astype(np.float32))
+    def upload_positions(self, positions):
+        data = np.ascontiguousarray(np.asarray(positions, dtype=np.float32))
         self.d_positions_x[:] = cp.asarray(data[:, 0])
         self.d_positions_y[:] = cp.asarray(data[:, 1])
         self.d_positions_z[:] = cp.asarray(data[:, 2])
 
-    def upload_velocities(self, particle_table):
-        data = np.ascontiguousarray(particle_table.velocities.astype(np.float32))
+    def upload_velocities(self, velocities):
+        data = np.ascontiguousarray(np.asarray(velocities, dtype=np.float32))
         self.d_velocities_x[:] = cp.asarray(data[:, 0])
         self.d_velocities_y[:] = cp.asarray(data[:, 1])
         self.d_velocities_z[:] = cp.asarray(data[:, 2])
 
-    def download_positions(self, particle_table):
-        pos = np.stack(
-            [
-                self.d_positions_x.get(),
-                self.d_positions_y.get(),
-                self.d_positions_z.get(),
-            ],
+    def download_positions(self):
+        return np.stack(
+            [self.d_positions_x.get(), self.d_positions_y.get(), self.d_positions_z.get()],
             axis=1,
         )
-        particle_table.positions[:] = pos
 
-    def download_velocities(self, particle_table):
-        vel = np.stack(
-            [
-                self.d_velocities_x.get(),
-                self.d_velocities_y.get(),
-                self.d_velocities_z.get(),
-            ],
+    def download_velocities(self):
+        return np.stack(
+            [self.d_velocities_x.get(), self.d_velocities_y.get(), self.d_velocities_z.get()],
             axis=1,
         )
-        particle_table.velocities[:] = vel
 
-    def download_forces(self, particle_table):
-        frc = np.stack(
-            [
-                self.d_forces_x.get(),
-                self.d_forces_y.get(),
-                self.d_forces_z.get(),
-            ],
+    def download_forces(self):
+        return np.stack(
+            [self.d_forces_x.get(), self.d_forces_y.get(), self.d_forces_z.get()],
             axis=1,
         )
-        particle_table.forces[:] = frc
 
     def zero_forces(self):
         self._ensure_zero_forces_kernel()
