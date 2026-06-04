@@ -74,7 +74,7 @@ system.upload_positions()
 system.upload_velocities()
 system.gpu.refresh_wrapped_positions()
 for i in range(10000):
-    system.update_neighbor_list(force_check=(i % 10 == 0))
+    system.update_neighbor_list(sync_interval=10)
     system.compute_forces()
     integrator.step(system)
     system.gpu.refresh_wrapped_positions()
