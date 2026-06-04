@@ -127,6 +127,102 @@ class TestChargeSpreading:
         assert np.sum(h_grid > 0) > 1, "Charge should spread to multiple grid points"
 
 
+class TestCellBasedChargeSpreading:
+
+    def _run_cell_spread(self, N, grid_x, grid_y, grid_z, box_x, box_y, box_z, order=4, seed=123):
+        from mdpy.force.pme_bspline import get_cell_spread_kernel
+        from mdpy.core.block_list import BlockList
+
+        np.random.seed(seed)
+        charges = np.random.randn(N).astype(np.float32) * 0.5
+        pos_x = np.random.uniform(0, box_x, N).astype(np.float32)
+        pos_y = np.random.uniform(0, box_y, N).astype(np.float32)
+        pos_z = np.random.uniform(0, box_z, N).astype(np.float32)
+
+        d_pos_x = cp.asarray(pos_x)
+        d_pos_y = cp.asarray(pos_y)
+        d_pos_z = cp.asarray(pos_z)
+        d_charges = cp.asarray(charges)
+
+        d_grid_ref = cp.zeros(grid_x * grid_y * grid_z, dtype=np.float32)
+        spread_k = get_spread_kernel()
+        spread_k(
+            ((N + 255) // 256,), (256,),
+            (d_pos_x, d_pos_y, d_pos_z, d_charges,
+             np.int32(N),
+             np.float32(1.0 / box_x), np.float32(1.0 / box_y), np.float32(1.0 / box_z),
+             np.int32(grid_x), np.int32(grid_y), np.int32(grid_z), np.int32(order),
+             d_grid_ref),
+        )
+
+        bl = BlockList(cutoff=12.0, skin=1.0)
+        pbc = np.eye(3, dtype=np.float64) * max(box_x, box_y, box_z)
+        pbc_inv = np.linalg.inv(pbc)
+        positions = np.stack([pos_x, pos_y, pos_z], axis=1).astype(np.float64)
+        topo = type('T', (), {'num_particles': N, 'particle_types': np.zeros(N, dtype=np.int32)})()
+        bl.rebuild(positions, topo, pbc, pbc_inv)
+
+        bl.compute_pme_subgrid_dims(grid_x, grid_y, grid_z, order)
+
+        sorted_pos_x, sorted_pos_y, sorted_pos_z = bl._sorted_positions
+        sorted_charges = d_charges[bl.d_sorted_to_pdb]
+
+        d_grid_cell = cp.zeros(grid_x * grid_y * grid_z, dtype=np.float32)
+        cell_spread_k = get_cell_spread_kernel()
+        shmem = bl._subgrid_total * 4
+        cell_spread_k(
+            (bl.nc_total,), (256,),
+            (sorted_pos_x, sorted_pos_y, sorted_pos_z, sorted_charges,
+             bl.d_cell_block_offset, bl.d_cell_block_count, bl.d_block_atoms,
+             np.int32(N),
+             np.float32(1.0 / box_x), np.float32(1.0 / box_y), np.float32(1.0 / box_z),
+             np.int32(grid_x), np.int32(grid_y), np.int32(grid_z),
+             np.int32(bl.nc_x), np.int32(bl.nc_y), np.int32(bl.nc_z),
+             np.int32(bl._subgrid_dx), np.int32(bl._subgrid_dy), np.int32(bl._subgrid_dz),
+             np.int32(order),
+             d_grid_cell),
+            shared_mem=shmem,
+        )
+
+        return d_grid_ref, d_grid_cell, charges
+
+    def test_charge_conservation(self):
+        d_ref, d_cell, charges = self._run_cell_spread(50, 32, 32, 32, 50.0, 50.0, 50.0)
+        ref_sum = float(cp.sum(d_ref))
+        cell_sum = float(cp.sum(d_cell))
+        expected = float(np.sum(charges))
+        assert abs(ref_sum - expected) < abs(expected) * 1e-4 + 1e-5, f"ref_sum={ref_sum}"
+        assert abs(cell_sum - expected) < abs(expected) * 1e-4 + 1e-5, f"cell_sum={cell_sum}"
+
+    def test_matches_per_particle_spread(self):
+        d_ref, d_cell, _ = self._run_cell_spread(50, 32, 32, 32, 50.0, 50.0, 50.0)
+        ref = cp.asnumpy(d_ref)
+        cell = cp.asnumpy(d_cell)
+        nonzero = np.abs(ref) > 1e-10
+        if np.any(nonzero):
+            rel_err = np.max(np.abs(ref[nonzero] - cell[nonzero]) / (np.abs(ref[nonzero]) + 1e-10))
+            assert rel_err < 1e-3, f"Max relative error: {rel_err}"
+        abs_err = np.max(np.abs(ref - cell))
+        assert abs_err < 1e-4, f"Max absolute error: {abs_err}"
+
+    def test_matches_large_system(self):
+        d_ref, d_cell, _ = self._run_cell_spread(500, 64, 64, 64, 80.0, 80.0, 80.0, seed=42)
+        ref = cp.asnumpy(d_ref)
+        cell = cp.asnumpy(d_cell)
+        nonzero = np.abs(ref) > 1e-10
+        if np.any(nonzero):
+            rel_err = np.max(np.abs(ref[nonzero] - cell[nonzero]) / (np.abs(ref[nonzero]) + 1e-10))
+            assert rel_err < 1e-2, f"Max relative error: {rel_err}"
+        abs_err = np.max(np.abs(ref - cell))
+        assert abs_err < 1e-3, f"Max absolute error: {abs_err}"
+
+    def test_single_atom(self):
+        d_ref, d_cell, _ = self._run_cell_spread(1, 32, 32, 32, 32.0, 32.0, 32.0)
+        ref = cp.asnumpy(d_ref)
+        cell = cp.asnumpy(d_cell)
+        np.testing.assert_allclose(cell, ref, atol=1e-5)
+
+
 class TestBSplineModuli:
 
     def test_dc_component_zero(self):
