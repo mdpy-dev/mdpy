@@ -7,6 +7,7 @@ from mdpy.force.force_term import ForceTerm
 from mdpy.force.pme_parameters import PMEParameters
 from mdpy.force.pme_bspline import (
     get_spread_kernel,
+    get_cell_spread_kernel,
     get_gather_kernel,
     get_self_energy_kernel,
     get_exclusion_kernel,
@@ -45,6 +46,7 @@ class PMEReciprocalForce(ForceTerm):
 
         self._N = 0
         self._fft_warmed = False
+        self._subgrid_initialized = False
 
     def bind(self, topology, parameter_table, pbc_matrix=None):
         N = topology.num_particles
@@ -131,18 +133,52 @@ class PMEReciprocalForce(ForceTerm):
 
         self._d_charge_grid[:] = 0
 
-        spread_k = get_spread_kernel()
-        spread_k(grid_1d, (tpb,),
-            (gpu_context.d_wrapped_positions_x,
-             gpu_context.d_wrapped_positions_y,
-             gpu_context.d_wrapped_positions_z,
-             self._d_charges,
-             np.int32(N),
-             np.float32(gpu_context._inv_box_x),
-             np.float32(gpu_context._inv_box_y),
-             np.float32(gpu_context._inv_box_z),
-             np.int32(gx), np.int32(gy), np.int32(gz), np.int32(order),
-             self._d_charge_grid))
+        use_cell_spread = (
+            tile_list is not None
+            and hasattr(tile_list, 'nc_total')
+            and tile_list.nc_total > 0
+            and hasattr(tile_list, '_sorted_positions')
+            and tile_list._sorted_positions is not None
+        )
+
+        if use_cell_spread:
+            if not self._subgrid_initialized:
+                tile_list.compute_pme_subgrid_dims(gx, gy, gz, order)
+                self._subgrid_initialized = True
+
+            sorted_pos_x, sorted_pos_y, sorted_pos_z = tile_list._sorted_positions
+            sorted_charges = self._d_charges[tile_list.d_sorted_to_pdb]
+
+            cell_spread_k = get_cell_spread_kernel()
+            shmem = tile_list._subgrid_total * 4
+            cell_spread_k(
+                (tile_list.nc_total,), (tpb,),
+                (sorted_pos_x, sorted_pos_y, sorted_pos_z, sorted_charges,
+                 tile_list.d_cell_block_offset, tile_list.d_cell_block_count, tile_list.d_block_atoms,
+                 np.int32(N),
+                 np.float32(gpu_context._inv_box_x),
+                 np.float32(gpu_context._inv_box_y),
+                 np.float32(gpu_context._inv_box_z),
+                 np.int32(gx), np.int32(gy), np.int32(gz),
+                 np.int32(tile_list.nc_x), np.int32(tile_list.nc_y), np.int32(tile_list.nc_z),
+                 np.int32(tile_list._subgrid_dx), np.int32(tile_list._subgrid_dy), np.int32(tile_list._subgrid_dz),
+                 np.int32(order),
+                 self._d_charge_grid),
+                shared_mem=shmem,
+            )
+        else:
+            spread_k = get_spread_kernel()
+            spread_k(grid_1d, (tpb,),
+                (gpu_context.d_wrapped_positions_x,
+                 gpu_context.d_wrapped_positions_y,
+                 gpu_context.d_wrapped_positions_z,
+                 self._d_charges,
+                 np.int32(N),
+                 np.float32(gpu_context._inv_box_x),
+                 np.float32(gpu_context._inv_box_y),
+                 np.float32(gpu_context._inv_box_z),
+                 np.int32(gx), np.int32(gy), np.int32(gz), np.int32(order),
+                 self._d_charge_grid))
 
         grid_3d = self._d_charge_grid.reshape(gx, gy, gz)
         grid_complex = cp.fft.rfftn(grid_3d)
