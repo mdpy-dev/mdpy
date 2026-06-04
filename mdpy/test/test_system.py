@@ -17,11 +17,10 @@ def _run_steps(system, integrator, n, sync_interval=10):
         system.update_neighbor_list(sync_interval=sync_interval)
         system.compute_forces()
         integrator.step(system)
-        system.gpu.refresh_wrapped_positions()
 
 
 def _ensure_ready(system):
-    system.gpu.refresh_wrapped_positions()
+    pass
 
 
 def _make_large_pbc():

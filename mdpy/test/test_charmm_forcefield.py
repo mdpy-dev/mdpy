@@ -22,7 +22,6 @@ def _run_steps(system, integrator, n):
         system.update_neighbor_list(sync_interval=n)
         system.compute_forces()
         integrator.step(system)
-        system.gpu.refresh_wrapped_positions()
 
 
 class TestTopology:
@@ -179,7 +178,6 @@ class TestSystem:
         system.upload_positions(positions)
         velocities = np.zeros_like(positions)
         system.upload_velocities(velocities)
-        system.gpu.refresh_wrapped_positions()
         integrator = VerletIntegrator(time_step=0.5)
         energies = []
         for step in range(100):

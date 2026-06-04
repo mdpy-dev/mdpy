@@ -62,11 +62,10 @@ def _setup_mdpy_system():
     wrapped = frac @ pbc_matrix
     system.upload_positions(wrapped.astype(np.float32))
     system.upload_velocities(np.zeros((topology.num_particles, 3), dtype=np.float32))
-    system.gpu.refresh_wrapped_positions()
     positions_2d = (
-        system.gpu.d_wrapped_positions_x,
-        system.gpu.d_wrapped_positions_y,
-        system.gpu.d_wrapped_positions_z,
+        system.gpu.d_positions_x,
+        system.gpu.d_positions_y,
+        system.gpu.d_positions_z,
     )
     system.block_list.rebuild(
         positions_2d, topology, system.pbc_matrix, system.pbc_inv,
@@ -320,7 +319,6 @@ class TestMultiStepConsistency:
 
         gpu = mdpy_system.gpu
         cp.add(gpu.d_positions_x, np.float32(0.5), out=gpu.d_positions_x)
-        gpu.refresh_wrapped_positions()
 
         mdpy_system.compute_forces()
         energies_2 = mdpy_system.dump_energy()

@@ -464,7 +464,6 @@ class TestPMEReciprocalForce:
         gpu.d_positions_x[:] = cp.asarray(pos[:, 0])
         gpu.d_positions_y[:] = cp.asarray(pos[:, 1])
         gpu.d_positions_z[:] = cp.asarray(pos[:, 2])
-        gpu.refresh_wrapped_positions()
 
         pme_params = PMEParameters.from_box(box, box, box, cutoff=cutoff)
         pme = PMEReciprocalForce(pme_params, cutoff)
@@ -533,7 +532,6 @@ class TestPMEReciprocalForce:
         gpu.d_positions_x[:] = cp.asarray(pos[:, 0])
         gpu.d_positions_y[:] = cp.asarray(pos[:, 1])
         gpu.d_positions_z[:] = cp.asarray(pos[:, 2])
-        gpu.refresh_wrapped_positions()
 
         pme_params = PMEParameters.from_box(box, box, box, cutoff=cutoff)
         pme = PMEReciprocalForce(pme_params, cutoff)
@@ -585,7 +583,6 @@ class TestPMEReciprocalForce:
         gpu.d_positions_x[:] = cp.asarray(pos[:, 0])
         gpu.d_positions_y[:] = cp.asarray(pos[:, 1])
         gpu.d_positions_z[:] = cp.asarray(pos[:, 2])
-        gpu.refresh_wrapped_positions()
 
         pme_params = PMEParameters.from_box(box, box, box, cutoff=cutoff)
         pme = PMEReciprocalForce(pme_params, cutoff)
@@ -741,12 +738,11 @@ class TestPMEIntegration6PO6:
 
         system.upload_positions(wrapped.astype(np.float32))
         system.upload_velocities(np.zeros((self.N, 3), dtype=np.float32))
-        system.gpu.refresh_wrapped_positions()
 
         positions_2d = (
-            system.gpu.d_wrapped_positions_x,
-            system.gpu.d_wrapped_positions_y,
-            system.gpu.d_wrapped_positions_z,
+            system.gpu.d_positions_x,
+            system.gpu.d_positions_y,
+            system.gpu.d_positions_z,
         )
         system.block_list.rebuild(
             positions_2d, self.topology,

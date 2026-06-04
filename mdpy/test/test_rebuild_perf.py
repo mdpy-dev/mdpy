@@ -23,11 +23,10 @@ def _run_steps(system, integrator, n):
         system.update_neighbor_list(sync_interval=n)
         system.compute_forces()
         integrator.step(system)
-        system.gpu.refresh_wrapped_positions()
 
 
 def _ensure_ready(system):
-    system.gpu.refresh_wrapped_positions()
+    pass
 
 
 def _assert_csr_equal(d_offset_a, d_neighbors_a, d_scale_a,
