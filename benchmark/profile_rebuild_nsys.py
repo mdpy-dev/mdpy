@@ -71,7 +71,7 @@ def main():
 
     nvtx.push_range("warmup")
     for _ in range(50):
-        system.update_neighbor_list(force_check=True)
+        system.update_neighbor_list(sync_interval=1)
         system.compute_forces()
         integrator.step(system)
         system.gpu.refresh_wrapped_positions()
@@ -80,7 +80,7 @@ def main():
 
     nvtx.push_range("profiled")
     for _ in range(250):
-        system.update_neighbor_list(force_check=True)
+        system.update_neighbor_list(sync_interval=1)
         system.compute_forces()
         integrator.step(system)
         system.gpu.refresh_wrapped_positions()

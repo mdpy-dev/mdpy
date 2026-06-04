@@ -63,7 +63,7 @@ def main():
     system.upload_positions()
     system.upload_velocities()
     system.gpu.refresh_wrapped_positions()
-    system.update_neighbor_list(force_check=True)
+    system.update_neighbor_list(sync_interval=1)
 
     bonded = system.force_terms[0]
     nonbonded = system.force_terms[1]
@@ -72,7 +72,7 @@ def main():
 
     nvtx.push_range("warmup")
     for _ in range(10):
-        system.update_neighbor_list(force_check=True)
+        system.update_neighbor_list(sync_interval=1)
         system.compute_forces()
         integrator.step(system)
         system.gpu.refresh_wrapped_positions()
@@ -88,7 +88,7 @@ def main():
         nvtx.pop_range()
 
         nvtx.push_range("check_rebuild")
-        system.update_neighbor_list(force_check=True)
+        system.update_neighbor_list(sync_interval=1)
         nvtx.pop_range()
 
         nvtx.push_range("zero_forces")

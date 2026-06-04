@@ -19,7 +19,7 @@ DATA_DIR = os.path.join(os.path.dirname(__file__), 'data')
 
 def _run_steps(system, integrator, n):
     for i in range(n):
-        system.update_neighbor_list(force_check=(i == 0))
+        system.update_neighbor_list(sync_interval=n)
         system.compute_forces()
         integrator.step(system)
         system.gpu.refresh_wrapped_positions()

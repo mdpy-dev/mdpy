@@ -71,7 +71,7 @@ def main():
 
     def _run_steps(n, sync_interval=10):
         for i in range(n):
-            system.update_neighbor_list(force_check=(i % sync_interval == 0))
+            system.update_neighbor_list(sync_interval=sync_interval)
             system.compute_forces()
             integrator.step(system)
             system.gpu.refresh_wrapped_positions()
