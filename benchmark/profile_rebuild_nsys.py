@@ -65,30 +65,24 @@ def main():
 
     integrator = VerletIntegrator(DT_FS)
 
+    system.ensure_uploaded()
+    system.gpu.refresh_wrapped_positions()
+
     nvtx.push_range("warmup")
     for _ in range(50):
-        system._emit_step_kernels(integrator)
+        system.check_and_rebuild()
+        system.compute_forces()
+        integrator.step(system)
+        system.gpu.refresh_wrapped_positions()
     cp.cuda.Stream.null.synchronize()
     nvtx.pop_range()
 
     nvtx.push_range("profiled")
     for _ in range(250):
-        system._emit_step_kernels(integrator)
-        system._step_count += 1
-        system._steps_since_check += 1
-        if system._steps_since_check >= system.block_list.rebuild_check_interval:
-            cp.cuda.Stream.null.synchronize()
-            if int(system.block_list.d_rebuild_flag[0]) == 1:
-                positions_soa = (
-                    system.gpu.d_wrapped_positions_x,
-                    system.gpu.d_wrapped_positions_y,
-                    system.gpu.d_wrapped_positions_z,
-                )
-                nvtx.push_range("rebuild")
-                system._do_full_rebuild(positions_soa)
-                cp.cuda.Stream.null.synchronize()
-                nvtx.pop_range()
-            system._steps_since_check = 0
+        system.check_and_rebuild()
+        system.compute_forces()
+        integrator.step(system)
+        system.gpu.refresh_wrapped_positions()
     cp.cuda.Stream.null.synchronize()
     nvtx.pop_range()
     print("Profiling complete.")

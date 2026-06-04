@@ -60,13 +60,9 @@ def main():
 
     integrator = VerletIntegrator(DT_FS)
 
+    system.ensure_uploaded()
     system.gpu.refresh_wrapped_positions()
-    positions_soa = (
-        system.gpu.d_wrapped_positions_x,
-        system.gpu.d_wrapped_positions_y,
-        system.gpu.d_wrapped_positions_z,
-    )
-    system._do_full_rebuild(positions_soa)
+    system.check_and_rebuild()
 
     bonded = system.force_terms[0]
     nonbonded = system.force_terms[1]
@@ -75,7 +71,10 @@ def main():
 
     nvtx.push_range("warmup")
     for _ in range(10):
-        system._emit_step_kernels(integrator)
+        system.check_and_rebuild()
+        system.compute_forces()
+        integrator.step(system)
+        system.gpu.refresh_wrapped_positions()
     cp.cuda.Stream.null.synchronize()
     nvtx.pop_range()
 
@@ -88,7 +87,7 @@ def main():
         nvtx.pop_range()
 
         nvtx.push_range("check_rebuild")
-        bl.check_rebuild_async(positions_soa)
+        system.check_and_rebuild()
         nvtx.pop_range()
 
         nvtx.push_range("zero_forces")
@@ -104,7 +103,7 @@ def main():
         nvtx.pop_range()
 
         nvtx.push_range("integrator")
-        integrator.step(gpu)
+        integrator.step(system)
         nvtx.pop_range()
 
         nvtx.pop_range()

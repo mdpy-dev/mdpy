@@ -42,18 +42,25 @@ frac -= np.floor(frac)
 wrapped = frac @ pbc_matrix
 system.particles.positions[:] = wrapped
 system.particles.velocities[:] = 0.0
-system.gpu.upload_positions(system.particles)
-system.gpu.upload_velocities(system.particles)
+    system.gpu.upload_positions(system.particles)
+    system.gpu.upload_velocities(system.particles)
 
-integrator = LangevinBAOABIntegrator(2.0, 300.0, 1.0)
+    integrator = LangevinBAOABIntegrator(2.0, 300.0, 1.0)
 
-for _ in range(20):
-    system.step(integrator)
+    system.ensure_uploaded()
+    system.gpu.refresh_wrapped_positions()
 
-print("WARMUP_DONE")
-for _ in range(3):
-    system.step(integrator)
-print("PROFILE_DONE")
+    def _run_steps(n):
+        for _ in range(n):
+            system.check_and_rebuild()
+            system.compute_forces()
+            integrator.step(system)
+            system.gpu.refresh_wrapped_positions()
+
+    print("WARMUP_DONE")
+    _run_steps(20)
+    print("PROFILE_DONE")
+    _run_steps(3)
 """
 
 with open(WORKLOAD, 'w') as f:
