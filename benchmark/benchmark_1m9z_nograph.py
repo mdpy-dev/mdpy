@@ -1,6 +1,6 @@
-"""mdpy 1M9Z benchmark WITHOUT CUDA Graph — for nsys kernel-level profiling.
+"""mdpy 1M9Z benchmark — explicit pipeline, no CUDA Graph.
 
-Forces the non-graph path so every kernel appears individually in nsys timeline.
+Every kernel appears individually in nsys timeline for kernel-level profiling.
 """
 
 import sys
@@ -65,7 +65,17 @@ def main():
 
     integrator = VerletIntegrator(DT_FS)
 
-    print("mdpy 1M9Z benchmark (NO CUDA Graph)")
+    system.ensure_uploaded()
+    system.gpu.refresh_wrapped_positions()
+
+    def _run_steps(n):
+        for _ in range(n):
+            system.check_and_rebuild()
+            system.compute_forces()
+            integrator.step(system)
+            system.gpu.refresh_wrapped_positions()
+
+    print("mdpy 1M9Z benchmark (explicit pipeline)")
     print(f"  Atoms:      {topology.num_particles}")
     print(f"  Box:        {BOX_SIZE} A")
     print(f"  Cutoff:     {CUTOFF} A")
@@ -76,34 +86,12 @@ def main():
     print(f"Warmup ({WARMUP_STEPS} steps)...")
     cp.cuda.Stream.null.synchronize()
     t0 = time.perf_counter()
-    system.step(integrator, WARMUP_STEPS)
+    _run_steps(WARMUP_STEPS)
     cp.cuda.Stream.null.synchronize()
     t_warm = time.perf_counter() - t0
     print(f"  {t_warm:.1f}s ({t_warm / WARMUP_STEPS * 1000:.2f} ms/step)")
 
-    # Bypass step() entirely — manually implement the step loop on the
-    # default stream with correct synchronisation so rebuilds work properly
-    # and no CUDA graph is ever captured.
-    steps_since_check = 0
-    rebuild_interval = system.block_list.rebuild_check_interval
-
-    def _run_steps(n_steps):
-        nonlocal steps_since_check
-        for _ in range(n_steps):
-            system._emit_step_kernels(integrator)
-            steps_since_check += 1
-            if steps_since_check >= rebuild_interval:
-                cp.cuda.Stream.null.synchronize()
-                if int(system.block_list.d_rebuild_flag[0]) == 1:
-                    positions_soa = (
-                        system.gpu.d_wrapped_positions_x,
-                        system.gpu.d_wrapped_positions_y,
-                        system.gpu.d_wrapped_positions_z,
-                    )
-                    system._do_full_rebuild(positions_soa)
-                steps_since_check = 0
-
-    print(f"\nBenchmark: {NUM_BLOCKS} x {BLOCK_STEPS} steps (no graph)")
+    print(f"\nBenchmark: {NUM_BLOCKS} x {BLOCK_STEPS} steps")
     print(
         f"  {'Block':>6s}  {'ms/step':>10s}  {'ns/day':>10s}  {'E_pot (kcal/mol)':>18s}"
     )
@@ -143,7 +131,7 @@ def main():
     print()
     print("Note: dt=0.5fs required because mdpy has no bond constraints.")
     print("      OpenMM uses HBond constraints allowing dt=2fs.")
-    print("      CUDA Graph DISABLED — all kernels emit individually.")
+    print("      Explicit pipeline — all kernels emit individually.")
 
 
 if __name__ == "__main__":

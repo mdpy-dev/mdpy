@@ -76,6 +76,16 @@ def main():
 
     integrator = VerletIntegrator(DT_FS)
 
+    system.ensure_uploaded()
+    system.gpu.refresh_wrapped_positions()
+
+    def _run_steps(n):
+        for _ in range(n):
+            system.check_and_rebuild()
+            system.compute_forces()
+            integrator.step(system)
+            system.gpu.refresh_wrapped_positions()
+
     print("mdpy 1M9Z PME benchmark")
     print(f"  Atoms:      {topology.num_particles}")
     print(f"  Box:        {BOX_SIZE} A")
@@ -90,7 +100,7 @@ def main():
     print(f"Warmup ({WARMUP_STEPS} steps)...")
     cp.cuda.Stream.null.synchronize()
     t0 = time.perf_counter()
-    system.step(integrator, WARMUP_STEPS)
+    _run_steps(WARMUP_STEPS)
     cp.cuda.Stream.null.synchronize()
     t_warm = time.perf_counter() - t0
     print(f"  {t_warm:.1f}s ({t_warm / WARMUP_STEPS * 1000:.2f} ms/step)")
@@ -108,7 +118,7 @@ def main():
     for i in range(NUM_BLOCKS):
         cp.cuda.Stream.null.synchronize()
         t0 = time.perf_counter()
-        system.step(integrator, BLOCK_STEPS)
+        _run_steps(BLOCK_STEPS)
         cp.cuda.Stream.null.synchronize()
         elapsed = time.perf_counter() - t0
 
