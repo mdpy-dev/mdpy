@@ -6,7 +6,6 @@ test_order = [
     'new_topology',
     'new_force_term',
     'bonded_force',
-    'tile_list',
     'block_list',
     'system',
     'charmm_forcefield',
