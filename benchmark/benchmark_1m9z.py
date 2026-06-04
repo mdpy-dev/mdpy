@@ -25,8 +25,8 @@ CUTOFF = 12.0
 DT_FS = 0.5
 KCAL_PER_INTERNAL = 1.0 / 4.1840286576e-4
 WARMUP_STEPS = 50
-BLOCK_STEPS = 2500
-NUM_BLOCKS = 5
+BLOCK_STEPS = 5000
+NUM_BLOCKS = 10
 
 
 def main():
@@ -38,8 +38,7 @@ def main():
     from mdpy.force.nonbonded_force import NonbondedForce
     from mdpy.force.expressions.lennard_jones import lennard_jones
     from mdpy.force.expressions.screened_coulomb import screened_coulomb
-    from mdpy.force.pme_parameters import PMEParameters
-    from mdpy.force.pme_reciprocal_force import PMEReciprocalForce
+    from mdpy.force.pme_reciprocal_force import PMEReciprocalForce, _calc_ewald_coefficient
     from mdpy.integrator.verlet import VerletIntegrator
     from mdpy.system import System
 
@@ -50,38 +49,31 @@ def main():
     parameter_table = create_parameter_table(topology, toppar)
 
     pbc_matrix = np.eye(3, dtype=np.float64) * BOX_SIZE
-    pbc_inv = np.linalg.inv(pbc_matrix)
 
-    pme_params = PMEParameters.from_box(BOX_SIZE, BOX_SIZE, BOX_SIZE, cutoff=CUTOFF)
+    alpha = _calc_ewald_coefficient(CUTOFF)
 
     system = System(topology, pbc_matrix, cutoff=CUTOFF)
     system.add_force_term(BondedForce.charmm(topology, parameter_table))
 
     nb = NonbondedForce(lennard_jones + screened_coulomb)
-    nb.bind(topology, parameter_table, CUTOFF, alpha=pme_params.alpha)
+    nb.bind(topology, parameter_table, CUTOFF, alpha=alpha)
     system.add_force_term(nb)
 
-    pme = PMEReciprocalForce(pme_params, CUTOFF)
+    pme = PMEReciprocalForce(CUTOFF)
     pme.bind(topology, parameter_table, pbc_matrix=pbc_matrix)
     system.add_force_term(pme)
 
-    raw = pdb.positions.astype(np.float64)
-    frac = raw @ pbc_inv
-    frac -= np.floor(frac)
-    wrapped = frac @ pbc_matrix
-    system.upload_positions(wrapped.astype(np.float32))
+    positions = pdb.positions
+    system.upload_positions(positions)
     system.upload_velocities(np.zeros((topology.num_particles, 3), dtype=np.float32))
 
     integrator = VerletIntegrator(DT_FS)
-
-    system.gpu.refresh_wrapped_positions()
 
     def _run_steps(n, sync_interval=10):
         for i in range(n):
             system.update_neighbor_list(sync_interval=sync_interval)
             system.compute_forces()
             integrator.step(system)
-            system.gpu.refresh_wrapped_positions()
 
     print("mdpy 1M9Z PME benchmark")
     print(f"  Atoms:      {topology.num_particles}")
@@ -89,9 +81,11 @@ def main():
     print(f"  Cutoff:     {CUTOFF} A")
     print(f"  dt:         {DT_FS} fs")
     print(f"  Integrator: Verlet (no constraints)")
-    print(f"  PME alpha:  {pme_params.alpha:.4f}")
-    print(f"  PME grid:   {pme_params.grid_x} x {pme_params.grid_y} x {pme_params.grid_z}")
-    print(f"  PME order:  {pme_params.order}")
+    print(f"  PME alpha:  {alpha:.4f}")
+    print(
+        f"  PME grid:   {pme.grid_x} x {pme.grid_y} x {pme.grid_z}"
+    )
+    print(f"  PME order:  {pme.order}")
     print()
 
     print(f"Warmup ({WARMUP_STEPS} steps)...")
