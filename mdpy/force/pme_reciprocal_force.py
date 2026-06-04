@@ -169,9 +169,9 @@ class PMEReciprocalForce(ForceTerm):
         else:
             spread_k = get_spread_kernel()
             spread_k(grid_1d, (tpb,),
-                (gpu_context.d_wrapped_positions_x,
-                 gpu_context.d_wrapped_positions_y,
-                 gpu_context.d_wrapped_positions_z,
+                (gpu_context.d_positions_x,
+                 gpu_context.d_positions_y,
+                 gpu_context.d_positions_z,
                  self._d_charges,
                  np.int32(N),
                  np.float32(gpu_context._inv_box_x),
@@ -188,9 +188,9 @@ class PMEReciprocalForce(ForceTerm):
 
         gather_k = get_gather_kernel()
         gather_k(grid_1d, (tpb,),
-            (gpu_context.d_wrapped_positions_x,
-             gpu_context.d_wrapped_positions_y,
-             gpu_context.d_wrapped_positions_z,
+            (gpu_context.d_positions_x,
+             gpu_context.d_positions_y,
+             gpu_context.d_positions_z,
              self._d_charges,
              np.int32(N),
              np.float32(gpu_context._inv_box_x),
@@ -210,9 +210,9 @@ class PMEReciprocalForce(ForceTerm):
             pair_grid = ((num_pairs + tpb - 1) // tpb,)
             excl_k = get_exclusion_kernel()
             excl_k(pair_grid, (tpb,),
-                (gpu_context.d_wrapped_positions_x,
-                 gpu_context.d_wrapped_positions_y,
-                 gpu_context.d_wrapped_positions_z,
+                (gpu_context.d_positions_x,
+                 gpu_context.d_positions_y,
+                 gpu_context.d_positions_z,
                  self._d_charges,
                  self._d_pair_i, self._d_pair_j, self._d_pair_scale,
                  np.int32(num_pairs), np.float32(self.alpha),
