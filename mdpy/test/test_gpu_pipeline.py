@@ -52,8 +52,8 @@ def _make_system():
     frac -= np.floor(frac)
     system.particles.positions[:] = frac @ pbc
     system.particles.velocities[:] = 0.0
-    system.gpu.upload_positions(system.particles)
-    system.gpu.upload_velocities(system.particles)
+    system.upload_positions()
+    system.upload_velocities()
     return system, VerletIntegrator(0.5)
 
 

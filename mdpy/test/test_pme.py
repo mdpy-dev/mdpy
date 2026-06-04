@@ -740,7 +740,7 @@ class TestPMEIntegration6PO6:
         wrapped = (frac @ pbc_matrix).astype(np.float32)
 
         system.particles.positions[:] = wrapped
-        system.gpu.upload_positions(system.particles)
+        system.upload_positions()
         system.gpu.refresh_wrapped_positions()
 
         positions_2d = (
