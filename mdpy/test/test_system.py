@@ -311,6 +311,74 @@ class TestVerletIntegrator:
         assert min_distance < 1.6, f"Expected oscillation below 1.6, min={min_distance}"
         assert max_distance > 1.5, f"Expected oscillation around equilibrium 1.5, max={max_distance}"
 
+    def test_upload_positions_near_boundary_verlet(self):
+        topology, _ = _build_simple_bond()
+        box = 20.0
+        pbc_matrix = np.eye(3, dtype=env.NUMPY_FLOAT) * box
+        system = System(topology, pbc_matrix)
+
+        system.upload_positions(np.array([
+            [1.0, 10.0, 10.0],
+            [2.5, 10.0, 10.0],
+        ], dtype=env.NUMPY_FLOAT))
+        system.upload_velocities(np.array([
+            [0.5, 0.0, 0.0],
+            [-0.5, 0.0, 0.0],
+        ], dtype=env.NUMPY_FLOAT))
+
+        integrator = VerletIntegrator(time_step=0.5)
+        _ensure_ready(system)
+        _run_steps(system, integrator, 5)
+        pos_before, vel_before = system.dump_state()
+
+        new_positions = np.array([
+            [box - 0.5, 10.0, 10.0],
+            [box - 0.5 + 1.5, 10.0, 10.0],
+        ], dtype=env.NUMPY_FLOAT)
+        system.upload_positions(new_positions)
+        integrator._initialized = False
+
+        _ensure_ready(system)
+        _run_steps(system, integrator, 10)
+        pos_after, vel_after = system.dump_state()
+
+        assert np.all(np.isfinite(pos_after))
+        assert np.all(np.isfinite(vel_after))
+        assert np.all(np.abs(vel_after) < 10.0), \
+            f"Velocities exploded after upload: {vel_after}"
+
+    def test_verlet_velocity_reasonable_after_upload(self):
+        topology, _ = _build_simple_bond()
+        box = 20.0
+        pbc_matrix = np.eye(3, dtype=env.NUMPY_FLOAT) * box
+        system = System(topology, pbc_matrix)
+
+        system.upload_positions(np.array([
+            [1.0, 10.0, 10.0],
+            [2.5, 10.0, 10.0],
+        ], dtype=env.NUMPY_FLOAT))
+        system.upload_velocities(np.zeros((2, 3), dtype=env.NUMPY_FLOAT))
+
+        integrator = VerletIntegrator(time_step=0.5)
+        _ensure_ready(system)
+        _run_steps(system, integrator, 3)
+        _, vel_before = system.dump_state()
+
+        near_edge = np.array([
+            [box - 0.1, 10.0, 10.0],
+            [box - 0.1 + 1.5, 10.0, 10.0],
+        ], dtype=env.NUMPY_FLOAT)
+        system.upload_positions(near_edge)
+        system.upload_velocities(np.zeros((2, 3), dtype=env.NUMPY_FLOAT))
+        integrator._initialized = False
+
+        _ensure_ready(system)
+        _run_steps(system, integrator, 1)
+        _, vel_after = system.dump_state()
+
+        assert np.all(np.abs(vel_after) < 5.0), \
+            f"Velocity too large after upload near boundary: {vel_after}"
+
 
 class TestLangevinIntegrator:
 
@@ -371,6 +439,46 @@ class TestLangevinIntegrator:
             f"Temperature too low: {measured_temperature}, thermostat should heat up"
         assert measured_temperature < 10000.0, \
             f"Temperature too high: {measured_temperature}, thermostat should regulate"
+
+    def test_upload_positions_near_boundary_langevin(self):
+        topology, term_params = _build_simple_bond()
+        parameter_table = _make_parameter_table(term_params)
+        box = 20.0
+        pbc_matrix = np.eye(3, dtype=env.NUMPY_FLOAT) * box
+        system = System(topology, pbc_matrix)
+        bonded = BondedForce.charmm(topology, parameter_table)
+        system.add_force_term(bonded)
+
+        system.upload_positions(np.array([
+            [1.0, 10.0, 10.0],
+            [2.5, 10.0, 10.0],
+        ], dtype=env.NUMPY_FLOAT))
+        system.upload_velocities(np.array([
+            [0.5, 0.0, 0.0],
+            [-0.5, 0.0, 0.0],
+        ], dtype=env.NUMPY_FLOAT))
+
+        integrator = LangevinBAOABIntegrator(
+            time_step=0.1, temperature=300.0, friction=0.1
+        )
+        _ensure_ready(system)
+        _run_steps(system, integrator, 5)
+
+        new_positions = np.array([
+            [box - 0.5, 10.0, 10.0],
+            [0.5, 10.0, 10.0],
+        ], dtype=env.NUMPY_FLOAT)
+        system.upload_positions(new_positions)
+        integrator._initialized = False
+
+        _ensure_ready(system)
+        _run_steps(system, integrator, 20)
+        pos_after, vel_after = system.dump_state()
+
+        assert np.all(np.isfinite(pos_after))
+        assert np.all(np.isfinite(vel_after))
+        assert np.all(np.abs(vel_after) < 100.0), \
+            f"Velocities exploded after upload: {vel_after}"
 
     def test_gpu_system_step(self):
         topology, term_params = _build_simple_bond()
