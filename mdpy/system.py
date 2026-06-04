@@ -30,6 +30,7 @@ class System:
         self.force_terms = []
 
         self._uploaded = False
+        self._steps_since_check = 0
         self._d_cached_unique_i = None
         self._d_cached_unique_j = None
         self._d_cached_unique_scale = None
@@ -56,8 +57,21 @@ class System:
             self.gpu.d_wrapped_positions_y,
             self.gpu.d_wrapped_positions_z,
         )
-        if not self.block_list.check_rebuild(positions_soa):
+        needs_sync = self.block_list.check_rebuild_async(positions_soa)
+        if needs_sync:
+            cp.cuda.Stream.null.synchronize()
+            self._do_rebuild(positions_soa)
+            self._steps_since_check = 0
             return
+        self._steps_since_check += 1
+        if self._steps_since_check < self.block_list.rebuild_check_interval:
+            return
+        cp.cuda.Stream.null.synchronize()
+        if int(self.block_list.d_rebuild_flag[0]) == 1:
+            self._do_rebuild(positions_soa)
+        self._steps_since_check = 0
+
+    def _do_rebuild(self, positions_soa):
         self.block_list.rebuild(
             positions_soa,
             self.topology,
