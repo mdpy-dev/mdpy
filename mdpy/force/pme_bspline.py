@@ -126,6 +126,135 @@ void spread_kernel(
 }
 """
 
+_CELL_SPREAD_KERNEL_SOURCE = r"""
+extern "C" __global__
+void cell_spread_kernel(
+    const float* __restrict__ positions_x,
+    const float* __restrict__ positions_y,
+    const float* __restrict__ positions_z,
+    const float* __restrict__ charges,
+    const int* __restrict__ cell_block_offset,
+    const int* __restrict__ cell_block_count,
+    const int* __restrict__ block_atoms,
+    int num_particles,
+    float recip_box_x, float recip_box_y, float recip_box_z,
+    int grid_x, int grid_y, int grid_z,
+    int nc_x, int nc_y, int nc_z,
+    int subgrid_dx, int subgrid_dy, int subgrid_dz,
+    int order,
+    float* __restrict__ charge_grid
+) {
+    extern __shared__ float subgrid[];
+
+    int cell_idx = blockIdx.x;
+    int lane = threadIdx.x & 31;
+    int warp_id = threadIdx.x >> 5;
+
+    int cx = cell_idx % nc_x;
+    int cy = (cell_idx / nc_x) % nc_y;
+    int cz = cell_idx / (nc_x * nc_y);
+
+    int gx_origin = (int)floorf((float)cx / nc_x * grid_x);
+    int gy_origin = (int)floorf((float)cy / nc_y * grid_y);
+    int gz_origin = (int)floorf((float)cz / nc_z * grid_z);
+
+    int subgrid_total = subgrid_dx * subgrid_dy * subgrid_dz;
+
+    for (int i = threadIdx.x; i < subgrid_total; i += 256)
+        subgrid[i] = 0.0f;
+    __syncthreads();
+
+    int n_blocks = cell_block_count[cell_idx];
+    int block_start = cell_block_offset[cell_idx];
+
+    for (int b = warp_id; b < n_blocks; b += 8) {
+        int global_block = block_start + b;
+        int atom_id = block_atoms[global_block * 32 + lane];
+        if (atom_id < 0 || atom_id >= num_particles) continue;
+
+        float px = positions_x[atom_id];
+        float py = positions_y[atom_id];
+        float pz = positions_z[atom_id];
+
+        float fx = px * recip_box_x * grid_x;
+        float fy = py * recip_box_y * grid_y;
+        float fz = pz * recip_box_z * grid_z;
+
+        float u_arr[3];
+        u_arr[0] = fx - floorf(fx);
+        u_arr[1] = fy - floorf(fy);
+        u_arr[2] = fz - floorf(fz);
+
+        int g0 = (int)floorf(fx);
+        int g1 = (int)floorf(fy);
+        int g2 = (int)floorf(fz);
+
+        int lx0 = g0 - gx_origin;
+        int ly0 = g1 - gy_origin;
+        int lz0 = g2 - gz_origin;
+
+        float theta[3][4];
+        for (int dim = 0; dim < 3; dim++) {
+            float u = u_arr[dim];
+            float data[4];
+            data[0] = 1.0f - u;
+            data[1] = u;
+            data[2] = 0.0f;
+            data[3] = 0.0f;
+            for (int j = 3; j < order; j++) {
+                float div = 1.0f / (float)(j - 1);
+                data[j - 1] = div * u * data[j - 2];
+                for (int k = 1; k < j - 1; k++) {
+                    data[j - k - 1] = div * ((u + (float)k) * data[j - k - 2] + ((float)(j - k) - u) * data[j - k - 1]);
+                }
+                data[0] = div * (1.0f - u) * data[0];
+            }
+            float scale = 1.0f / (float)(order - 1);
+            data[order - 1] = scale * u * data[order - 2];
+            for (int j = 1; j < order - 1; j++) {
+                data[order - j - 1] = scale * ((u + (float)j) * data[order - j - 2] + ((float)(order - j) - u) * data[order - j - 1]);
+            }
+            data[0] = scale * (1.0f - u) * data[0];
+            for (int k = 0; k < order; k++) theta[dim][k] = data[k];
+        }
+
+        float q = charges[atom_id];
+
+        for (int kx = 0; kx < order; kx++) {
+            int lx = lx0 + kx;
+            if (lx < 0 || lx >= subgrid_dx) continue;
+            for (int ky = 0; ky < order; ky++) {
+                int ly = ly0 + ky;
+                if (ly < 0 || ly >= subgrid_dy) continue;
+                for (int kz = 0; kz < order; kz++) {
+                    int lz = lz0 + kz;
+                    if (lz < 0 || lz >= subgrid_dz) continue;
+                    float contrib = q * theta[0][kx] * theta[1][ky] * theta[2][kz];
+                    int local_idx = lx * subgrid_dy * subgrid_dz + ly * subgrid_dz + lz;
+                    atomicAdd(&subgrid[local_idx], contrib);
+                }
+            }
+        }
+    }
+    __syncthreads();
+
+    for (int i = threadIdx.x; i < subgrid_total; i += 256) {
+        if (subgrid[i] == 0.0f) continue;
+        int lx = i / (subgrid_dy * subgrid_dz);
+        int ly = (i / subgrid_dz) % subgrid_dy;
+        int lz = i % subgrid_dz;
+        int gx = (gx_origin + lx) % grid_x;
+        int gy = (gy_origin + ly) % grid_y;
+        int gz = (gz_origin + lz) % grid_z;
+        if (gx < 0) gx += grid_x;
+        if (gy < 0) gy += grid_y;
+        if (gz < 0) gz += grid_z;
+        int global_idx = (gx * grid_y + gy) * grid_z + gz;
+        atomicAdd(&charge_grid[global_idx], subgrid[i]);
+    }
+}
+"""
+
 
 def _compute_bspline_moduli(grid_dim: int, order: int) -> np.ndarray:
     data = [0.0] * order
@@ -432,6 +561,7 @@ _spread_kernel = None
 _gather_kernel = None
 _self_energy_kernel = None
 _exclusion_kernel = None
+_cell_spread_kernel = None
 
 
 def get_spread_kernel():
@@ -460,3 +590,10 @@ def get_exclusion_kernel():
     if _exclusion_kernel is None:
         _exclusion_kernel = cp.RawKernel(_EXCLUSION_KERNEL_SOURCE, "exclusion_kernel")
     return _exclusion_kernel
+
+
+def get_cell_spread_kernel():
+    global _cell_spread_kernel
+    if _cell_spread_kernel is None:
+        _cell_spread_kernel = cp.RawKernel(_CELL_SPREAD_KERNEL_SOURCE, "cell_spread_kernel")
+    return _cell_spread_kernel
