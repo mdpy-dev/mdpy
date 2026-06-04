@@ -29,56 +29,50 @@ class System:
         )
         self.force_terms = []
 
-        self._step_count = 0
-        self._positions_uploaded = False
-        self._velocities_uploaded = False
+        self._uploaded = False
         self._d_cached_unique_i = None
         self._d_cached_unique_j = None
         self._d_cached_unique_scale = None
-        self._steps_since_check = 0
-        self._step_graph = None
-        self._graph_stream = cp.cuda.Stream(non_blocking=True)
-        self._graph_needs_capture = True
-        self._cached_integrator_id = None
 
     def add_force_term(self, term):
         self.force_terms.append(term)
         self.gpu.allocate_energy_accumulator(len(self.force_terms))
+
+    def ensure_uploaded(self):
+        if self._uploaded:
+            return
+        self.gpu.upload_positions(self.particles)
+        self.gpu.upload_velocities(self.particles)
+        self._uploaded = True
 
     def compute_forces(self):
         self.gpu.zero_forces()
         for term_index, term in enumerate(self.force_terms):
             term.compute(self.gpu, self.block_list, compute_energy=False)
 
-    def _emit_step_kernels(self, integrator):
+    def check_and_rebuild(self):
         positions_soa = (
             self.gpu.d_wrapped_positions_x,
             self.gpu.d_wrapped_positions_y,
             self.gpu.d_wrapped_positions_z,
         )
-        self.block_list.check_rebuild_async(positions_soa)
-        self.compute_forces()
-        integrator.step(self.gpu)
-        self.gpu.refresh_wrapped_positions()
-
-    def _capture_step_graph(self, integrator):
-        if self._step_graph is not None:
-            del self._step_graph
-            self._step_graph = None
-
-        s = self._graph_stream
-        with s:
-            s.begin_capture()
-            self._emit_step_kernels(integrator)
-            self._step_graph = s.end_capture()
-
-        self._cached_integrator_id = id(integrator)
-        self._graph_needs_capture = False
+        if not self.block_list.check_rebuild(positions_soa):
+            return
+        self.block_list.rebuild(
+            positions_soa,
+            self.topology,
+            self.pbc_matrix,
+            self.pbc_inv,
+        )
+        self._permute_all_arrays()
+        self.block_list.build_block_pairs(self.topology, self.pbc_matrix)
+        for term in self.force_terms:
+            if hasattr(term, "bind_sorted"):
+                term.bind_sorted(self.topology, self.block_list, self.gpu)
 
     def dump_energy(self):
         if self.gpu.d_energy_accumulator is None:
             return {}
-        self._graph_stream.synchronize()
         self.gpu.zero_forces()
         for term_index, term in enumerate(self.force_terms):
             self.gpu.zero_energy()
@@ -91,6 +85,60 @@ class System:
             if value != 0.0:
                 result[term.name] = value
         return result
+
+    def dump_state(self):
+        bl = self.block_list
+        gpu = self.gpu
+        if bl.d_sorted_to_pdb.size > 0 and bl.num_particles > 0:
+            sorted_to_pdb = bl.d_sorted_to_pdb
+            pos = np.stack([
+                gpu.permute_from_sorted(sorted_to_pdb, gpu.d_positions_x).get(),
+                gpu.permute_from_sorted(sorted_to_pdb, gpu.d_positions_y).get(),
+                gpu.permute_from_sorted(sorted_to_pdb, gpu.d_positions_z).get(),
+            ], axis=1)
+            vel = np.stack([
+                gpu.permute_from_sorted(sorted_to_pdb, gpu.d_velocities_x).get(),
+                gpu.permute_from_sorted(sorted_to_pdb, gpu.d_velocities_y).get(),
+                gpu.permute_from_sorted(sorted_to_pdb, gpu.d_velocities_z).get(),
+            ], axis=1)
+        else:
+            pos = np.stack([
+                gpu.d_positions_x.get(),
+                gpu.d_positions_y.get(),
+                gpu.d_positions_z.get(),
+            ], axis=1)
+            vel = np.stack([
+                gpu.d_velocities_x.get(),
+                gpu.d_velocities_y.get(),
+                gpu.d_velocities_z.get(),
+            ], axis=1)
+        return pos, vel
+
+    def minimize(self, minimizer, number_steps=100):
+        self.ensure_uploaded()
+        self.gpu.refresh_wrapped_positions()
+
+        positions_soa = (
+            self.gpu.d_wrapped_positions_x,
+            self.gpu.d_wrapped_positions_y,
+            self.gpu.d_wrapped_positions_z,
+        )
+        if self.block_list.check_rebuild(positions_soa):
+            self.block_list.rebuild(
+                positions_soa,
+                self.topology,
+                self.pbc_matrix,
+                self.pbc_inv,
+            )
+            self._permute_all_arrays()
+            self.block_list.build_block_pairs(self.topology, self.pbc_matrix)
+        for term in self.force_terms:
+            if hasattr(term, "bind_sorted"):
+                term.bind_sorted(self.topology, self.block_list, self.gpu)
+        self.compute_forces()
+        for _ in range(number_steps):
+            minimizer.step(self)
+            self.gpu.refresh_wrapped_positions()
 
     def _permute_all_arrays(self):
         N = self.topology.num_particles
@@ -160,119 +208,3 @@ class System:
         for term in self.force_terms:
             if hasattr(term, "remap_indices_gpu"):
                 term.remap_indices_gpu(d_remap)
-
-    def step(self, integrator, number_steps=1):
-        if not self._positions_uploaded:
-            self.gpu.upload_positions(self.particles)
-            self._positions_uploaded = True
-        if not self._velocities_uploaded:
-            self.gpu.upload_velocities(self.particles)
-            self._velocities_uploaded = True
-        self.gpu.refresh_wrapped_positions()
-
-        if id(integrator) != self._cached_integrator_id:
-            self._graph_needs_capture = True
-
-        if self._graph_needs_capture:
-            positions_soa = (
-                self.gpu.d_wrapped_positions_x,
-                self.gpu.d_wrapped_positions_y,
-                self.gpu.d_wrapped_positions_z,
-            )
-            if self.block_list.check_rebuild(positions_soa):
-                self._do_full_rebuild(positions_soa)
-            self._capture_step_graph(integrator)
-
-        use_graph = self._step_graph is not None
-        for _ in range(number_steps):
-            if use_graph:
-                self._step_graph.launch(self._graph_stream)
-            else:
-                self._emit_step_kernels(integrator)
-
-            self._step_count += 1
-            self._steps_since_check += 1
-            if self._steps_since_check >= self.block_list.rebuild_check_interval:
-                self._graph_stream.synchronize()
-                if int(self.block_list.d_rebuild_flag[0]) == 1:
-                    positions_soa = (
-                        self.gpu.d_wrapped_positions_x,
-                        self.gpu.d_wrapped_positions_y,
-                        self.gpu.d_wrapped_positions_z,
-                    )
-                    self._do_full_rebuild(positions_soa)
-                    self._capture_step_graph(integrator)
-                self._steps_since_check = 0
-
-    def _do_full_rebuild(self, positions_soa):
-        self.block_list.rebuild(
-            positions_soa,
-            self.topology,
-            self.pbc_matrix,
-            self.pbc_inv,
-        )
-        self._permute_all_arrays()
-        self.block_list.build_block_pairs(self.topology, self.pbc_matrix)
-        for term in self.force_terms:
-            if hasattr(term, "bind_sorted"):
-                term.bind_sorted(self.topology, self.block_list, self.gpu)
-
-    def minimize(self, minimizer, number_steps=100):
-        if not self._positions_uploaded:
-            self.gpu.upload_positions(self.particles)
-            self._positions_uploaded = True
-        if not self._velocities_uploaded:
-            self.gpu.upload_velocities(self.particles)
-            self._velocities_uploaded = True
-        self.gpu.refresh_wrapped_positions()
-
-        positions_soa = (
-            self.gpu.d_wrapped_positions_x,
-            self.gpu.d_wrapped_positions_y,
-            self.gpu.d_wrapped_positions_z,
-        )
-        if self.block_list.check_rebuild(positions_soa):
-            self.block_list.rebuild(
-                positions_soa,
-                self.topology,
-                self.pbc_matrix,
-                self.pbc_inv,
-            )
-            self._permute_all_arrays()
-            self.block_list.build_block_pairs(self.topology, self.pbc_matrix)
-        for term in self.force_terms:
-            if hasattr(term, "bind_sorted"):
-                term.bind_sorted(self.topology, self.block_list, self.gpu)
-        self.compute_forces()
-        for _ in range(number_steps):
-            minimizer.step(self)
-            self.gpu.refresh_wrapped_positions()
-        self.gpu.download_positions(self.particles)
-
-    def dump_state(self):
-        bl = self.block_list
-        if bl.d_sorted_to_pdb.size > 0 and bl.num_particles > 0:
-            sorted_to_pdb = bl.d_sorted_to_pdb
-            pdb_x = self.gpu.permute_from_sorted(sorted_to_pdb, self.gpu.d_positions_x)
-            pdb_y = self.gpu.permute_from_sorted(sorted_to_pdb, self.gpu.d_positions_y)
-            pdb_z = self.gpu.permute_from_sorted(sorted_to_pdb, self.gpu.d_positions_z)
-            pos = np.stack([pdb_x.get(), pdb_y.get(), pdb_z.get()], axis=1)
-            self.particles.positions[:] = pos
-
-            pdb_vx = self.gpu.permute_from_sorted(sorted_to_pdb, self.gpu.d_velocities_x)
-            pdb_vy = self.gpu.permute_from_sorted(sorted_to_pdb, self.gpu.d_velocities_y)
-            pdb_vz = self.gpu.permute_from_sorted(sorted_to_pdb, self.gpu.d_velocities_z)
-            vel = np.stack([pdb_vx.get(), pdb_vy.get(), pdb_vz.get()], axis=1)
-            self.particles.velocities[:] = vel
-        else:
-            self.gpu.download_positions(self.particles)
-            self.gpu.download_velocities(self.particles)
-        return self.particles.positions.copy(), self.particles.velocities.copy()
-
-    @property
-    def step_count(self):
-        return self._step_count
-
-    def __del__(self):
-        if hasattr(self, '_step_graph') and self._step_graph is not None:
-            del self._step_graph
