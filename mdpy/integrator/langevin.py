@@ -85,9 +85,19 @@ void langevin_baoab_kernel(
     float theta3 = 2.0f * 3.14159265358979323846f * rand6;
     float g5 = r3 * cosf(theta3);
 
-    float vx = (pos_x[index] - prev_pos_x[index]) / dt;
-    float vy = (pos_y[index] - prev_pos_y[index]) / dt;
-    float vz = (pos_z[index] - prev_pos_z[index]) / dt;
+    float dx = pos_x[index] - prev_pos_x[index];
+    float dy = pos_y[index] - prev_pos_y[index];
+    float dz = pos_z[index] - prev_pos_z[index];
+    float sx = dx*pbc_inv[0] + dy*pbc_inv[3] + dz*pbc_inv[6];
+    float sy = dx*pbc_inv[1] + dy*pbc_inv[4] + dz*pbc_inv[7];
+    float sz = dx*pbc_inv[2] + dy*pbc_inv[5] + dz*pbc_inv[8];
+    sx -= roundf(sx); sy -= roundf(sy); sz -= roundf(sz);
+    dx = sx*pbc_matrix[0] + sy*pbc_matrix[3] + sz*pbc_matrix[6];
+    dy = sx*pbc_matrix[1] + sy*pbc_matrix[4] + sz*pbc_matrix[7];
+    dz = sx*pbc_matrix[2] + sy*pbc_matrix[5] + sz*pbc_matrix[8];
+    float vx = dx / dt;
+    float vy = dy / dt;
+    float vz = dz / dt;
 
     vx += 0.5f * dt * f_x[index] * inv_mass;
     vy += 0.5f * dt * f_y[index] * inv_mass;
