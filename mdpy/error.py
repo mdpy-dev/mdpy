@@ -40,15 +40,6 @@ class ArrayDimError(Exception):
     '''
     pass
 
-class ModifyJoinedTopologyError(Exception):
-    '''This error occurs when:
-    - Adding particle or topology geometry to a joined Topology object
-
-    Used in:
-    - mdpy.core.topology
-    '''
-    pass
-
 class FileFormatError(Exception):
     '''This error occurs when:
     - file suffix or prefix appears in an unexpected way
@@ -73,15 +64,6 @@ class PBCPoorDefinedError(Exception):
     Used in:
     - mdpy.utils.pbc
     - mdpy.core.trajectory
-    '''
-    pass
-
-class ParameterPoorDefinedError(Exception):
-    '''This error occurs when:
-    - Topology connections' parameter is not defined in selected parameter file
-
-    Used in:
-    - mdpy.io.charmm_toppar_parser
     '''
     pass
 

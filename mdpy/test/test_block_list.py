@@ -2,7 +2,7 @@ import numpy as np
 import cupy as cp
 import pytest
 from mdpy.core.topology import Builder
-from mdpy.core.block_list import BlockList, W, NUM_ATOMS_SENTINEL
+from mdpy.core.block_list import BlockList, BLOCK_SIZE, NUM_ATOMS_SENTINEL
 
 
 def _make_topology(n):
@@ -65,7 +65,7 @@ class TestCellAssignment:
         atom_to_block = cp.asnumpy(bl.d_atom_to_block)
         ba = bl.block_atoms
         for bi in range(bl.num_blocks):
-            for slot in range(W):
+            for slot in range(BLOCK_SIZE):
                 atom_id = ba[bi, slot]
                 if atom_id >= 0:
                     assert atom_to_block[atom_id] == bi, (
@@ -80,7 +80,7 @@ class TestCellAssignment:
         atom_to_slot = cp.asnumpy(bl.d_atom_to_slot)
         ba = bl.block_atoms
         for bi in range(bl.num_blocks):
-            for slot in range(W):
+            for slot in range(BLOCK_SIZE):
                 atom_id = ba[bi, slot]
                 if atom_id >= 0:
                     assert atom_to_block[atom_id] == bi
@@ -112,7 +112,7 @@ class TestInteractingBlocks:
         block_pairs = bl.block_pairs
         interacting = bl.interacting_atoms
         assert block_pairs.shape == (bl.num_block_pairs,)
-        assert interacting.shape == (bl.num_block_pairs, W)
+        assert interacting.shape == (bl.num_block_pairs, BLOCK_SIZE)
 
     def test_interacting_atoms_within_cutoff(self):
         n, box = 100, 50.0
@@ -130,14 +130,14 @@ class TestInteractingBlocks:
             source_block = block_pairs[ti]
             interacting_row = interacting[ti]
             source_atoms = ba[source_block]
-            for slot in range(W):
+            for slot in range(BLOCK_SIZE):
                 aj = interacting_row[slot]
                 if aj < 0 or aj == NUM_ATOMS_SENTINEL:
                     continue
                 pdb_j = sorted_to_pdb[aj]
                 pos_j = positions[pdb_j]
                 found_close = False
-                for si in range(W):
+                for si in range(BLOCK_SIZE):
                     ak = source_atoms[si]
                     if ak < 0:
                         continue
@@ -171,11 +171,11 @@ class TestInteractingBlocks:
             source_block = block_pairs[ti]
             source_atoms = ba[source_block]
             interacting_row = interacting[ti]
-            for si in range(W):
+            for si in range(BLOCK_SIZE):
                 ak = source_atoms[si]
                 if ak < 0:
                     continue
-                for sj in range(W):
+                for sj in range(BLOCK_SIZE):
                     aj = interacting_row[sj]
                     if aj < 0 or aj == NUM_ATOMS_SENTINEL:
                         continue
@@ -210,7 +210,7 @@ class TestInteractingBlocks:
         seen = set()
         for ti in range(bl.num_block_pairs):
             source_block = block_pairs[ti]
-            for sj in range(W):
+            for sj in range(BLOCK_SIZE):
                 aj = interacting[ti, sj]
                 if aj < 0 or aj == NUM_ATOMS_SENTINEL:
                     continue
@@ -377,13 +377,13 @@ class TestPBCHandling:
         for ti in range(bl.num_block_pairs):
             source_block = block_pairs[ti]
             source_pdbs = set()
-            for si in range(W):
+            for si in range(BLOCK_SIZE):
                 ak = ba[source_block, si]
                 if ak >= 0:
                     source_pdbs.add(sorted_to_pdb[ak])
             source_left = any(positions[p, 0] < box / 2 for p in source_pdbs)
             source_right = any(positions[p, 0] > box / 2 for p in source_pdbs)
-            for sj in range(W):
+            for sj in range(BLOCK_SIZE):
                 aj = interacting[ti, sj]
                 if aj < 0 or aj == NUM_ATOMS_SENTINEL:
                     continue
@@ -430,7 +430,7 @@ class TestExclusionMasks:
         ats = cp.asnumpy(bl.d_atom_to_slot)
         for t in range(bl.num_block_pairs):
             bx = bl.block_pairs[t]
-            for sj in range(W):
+            for sj in range(BLOCK_SIZE):
                 aj = ia[t, sj]
                 if aj < 0 or aj >= n:
                     continue
@@ -475,7 +475,7 @@ class TestExclusionMasks:
         found_14 = False
         for t in range(bl.num_block_pairs):
             bx = bl.block_pairs[t]
-            for sj in range(W):
+            for sj in range(BLOCK_SIZE):
                 aj = ia[t, sj]
                 if aj < 0 or aj >= n:
                     continue
@@ -517,8 +517,8 @@ class TestBlockPairClassification:
 
         assert bl.num_main_block_pairs + bl.num_exclusion_block_pairs == bl.num_block_pairs
         if bl.num_exclusion_block_pairs > 0:
-            assert bl.d_excl_exclusion_masks.size >= bl.num_exclusion_block_pairs * W
-            assert bl.d_excl_scaling_masks.size >= bl.num_exclusion_block_pairs * W
+            assert bl.d_excl_exclusion_masks.size >= bl.num_exclusion_block_pairs * BLOCK_SIZE
+            assert bl.d_excl_scaling_masks.size >= bl.num_exclusion_block_pairs * BLOCK_SIZE
 
     def test_no_exclusion_all_main(self):
         n = 20
@@ -534,7 +534,7 @@ class TestBlockPairClassification:
         excl_masks = bl.exclusion_masks
         scale_masks = bl.scaling_masks
         for t in range(bl.num_block_pairs):
-            for sj in range(W):
+            for sj in range(BLOCK_SIZE):
                 assert scale_masks[t, sj] == 0, (
                     "scaling mask should be zero with no bonded topology"
                 )

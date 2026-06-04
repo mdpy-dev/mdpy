@@ -464,9 +464,6 @@ class GPUContext:
     def accumulate_energy(self, term_index):
         self.d_energy_accumulator[term_index] = self.d_energy[0]
 
-    def get_positions_2d(self):
-        return (self.d_positions_x, self.d_positions_y, self.d_positions_z)
-
     def set_box_dims(self, box_x, box_y, box_z):
         self._box_x = float(box_x)
         self._box_y = float(box_y)

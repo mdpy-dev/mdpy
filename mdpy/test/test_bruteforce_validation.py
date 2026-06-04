@@ -19,7 +19,7 @@ REF_PATH = os.path.join(DATA_DIR, 'bruteforce_reference_1M9Z.npz')
 BOX_SIZE = 108.0
 CUTOFF = 12.0
 SENTINEL = 0x7FFFFFFF
-W = 32
+BLOCK_SIZE = 32
 
 
 def _load_reference():
@@ -99,12 +99,12 @@ def _extract_block_list_pairs(system):
         block_x = block_pairs[pair_idx]
         exc_mask = exclusion_masks[pair_idx]
         scl_mask = scaling_masks[pair_idx]
-        for slot_j in range(W):
+        for slot_j in range(BLOCK_SIZE):
             atom_j_sorted = interacting_atoms[pair_idx, slot_j]
             if atom_j_sorted == SENTINEL:
                 continue
             atom_j = int(sorted_to_pdb[atom_j_sorted])
-            for slot_i in range(W):
+            for slot_i in range(BLOCK_SIZE):
                 atom_i_sorted = block_atoms[block_x, slot_i]
                 if atom_i_sorted == SENTINEL:
                     continue

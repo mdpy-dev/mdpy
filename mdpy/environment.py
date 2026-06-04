@@ -8,7 +8,7 @@ copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
 import numpy as np
-from mdpy.error import *
+from mdpy.error import EnvironmentVariableError
 
 class MDPYEnvironment:
     def __init__(self) -> None:
