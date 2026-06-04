@@ -24,7 +24,7 @@ class System:
         self.gpu = GPUContext()
         self.gpu.initialize(topology, self.pbc_matrix.flatten())
 
-        self.tile_list = BlockList(
+        self.block_list = BlockList(
             cutoff, skin=skin, rebuild_check_interval=rebuild_check_interval
         )
         self.force_terms = []
@@ -48,7 +48,7 @@ class System:
     def compute_forces(self):
         self.gpu.zero_forces()
         for term_index, term in enumerate(self.force_terms):
-            term.compute(self.gpu, self.tile_list, compute_energy=False)
+            term.compute(self.gpu, self.block_list, compute_energy=False)
 
     def _emit_step_kernels(self, integrator):
         positions_soa = (
@@ -56,7 +56,7 @@ class System:
             self.gpu.d_wrapped_positions_y,
             self.gpu.d_wrapped_positions_z,
         )
-        self.tile_list.check_rebuild_async(positions_soa)
+        self.block_list.check_rebuild_async(positions_soa)
         self.compute_forces()
         integrator.step(self.gpu)
         self.gpu.refresh_wrapped_positions()
@@ -82,7 +82,7 @@ class System:
         self.gpu.zero_forces()
         for term_index, term in enumerate(self.force_terms):
             self.gpu.zero_energy()
-            term.compute(self.gpu, self.tile_list, compute_energy=True)
+            term.compute(self.gpu, self.block_list, compute_energy=True)
             self.gpu.accumulate_energy(term_index)
         raw = cp.asnumpy(self.gpu.d_energy_accumulator)
         result = {}
@@ -95,9 +95,9 @@ class System:
     def _permute_all_arrays(self):
         N = self.topology.num_particles
         gpu = self.gpu
-        tl = self.tile_list
+        bl = self.block_list
 
-        perm_gpu = tl.d_raw_order
+        perm_gpu = bl.d_raw_order
 
         for name, new_arr in gpu.permute_state_arrays(perm_gpu, [
             ("d_positions_x", gpu.d_positions_x),
@@ -119,7 +119,7 @@ class System:
         ]):
             setattr(gpu, name, new_arr)
 
-        d_remap = tl.d_pdb_to_sorted
+        d_remap = bl.d_pdb_to_sorted
 
         if self._d_cached_unique_i is not None:
             d_composed_perm = cp.empty(N, dtype=cp.int32)
@@ -155,7 +155,7 @@ class System:
             self._d_cached_unique_j = d_excl_neighbors
             self._d_cached_unique_scale = d_excl_scale
 
-        tl.set_gpu_exclusion(d_excl_offset, d_excl_neighbors, d_excl_scale)
+        bl.set_gpu_exclusion(d_excl_offset, d_excl_neighbors, d_excl_scale)
 
         for term in self.force_terms:
             if hasattr(term, "remap_indices_gpu"):
@@ -179,7 +179,7 @@ class System:
                 self.gpu.d_wrapped_positions_y,
                 self.gpu.d_wrapped_positions_z,
             )
-            if self.tile_list.check_rebuild(positions_soa):
+            if self.block_list.check_rebuild(positions_soa):
                 self._do_full_rebuild(positions_soa)
             self._capture_step_graph(integrator)
 
@@ -192,9 +192,9 @@ class System:
 
             self._step_count += 1
             self._steps_since_check += 1
-            if self._steps_since_check >= self.tile_list.rebuild_check_interval:
+            if self._steps_since_check >= self.block_list.rebuild_check_interval:
                 self._graph_stream.synchronize()
-                if int(self.tile_list.d_rebuild_flag[0]) == 1:
+                if int(self.block_list.d_rebuild_flag[0]) == 1:
                     positions_soa = (
                         self.gpu.d_wrapped_positions_x,
                         self.gpu.d_wrapped_positions_y,
@@ -205,17 +205,17 @@ class System:
                 self._steps_since_check = 0
 
     def _do_full_rebuild(self, positions_soa):
-        self.tile_list.rebuild(
+        self.block_list.rebuild(
             positions_soa,
             self.topology,
             self.pbc_matrix,
             self.pbc_inv,
         )
         self._permute_all_arrays()
-        self.tile_list.build_tiles(self.topology, self.pbc_matrix)
+        self.block_list.build_block_pairs(self.topology, self.pbc_matrix)
         for term in self.force_terms:
             if hasattr(term, "bind_sorted"):
-                term.bind_sorted(self.topology, self.tile_list, self.gpu)
+                term.bind_sorted(self.topology, self.block_list, self.gpu)
 
     def minimize(self, minimizer, number_steps=100):
         if not self._positions_uploaded:
@@ -231,18 +231,18 @@ class System:
             self.gpu.d_wrapped_positions_y,
             self.gpu.d_wrapped_positions_z,
         )
-        if self.tile_list.check_rebuild(positions_soa):
-            self.tile_list.rebuild(
+        if self.block_list.check_rebuild(positions_soa):
+            self.block_list.rebuild(
                 positions_soa,
                 self.topology,
                 self.pbc_matrix,
                 self.pbc_inv,
             )
             self._permute_all_arrays()
-            self.tile_list.build_tiles(self.topology, self.pbc_matrix)
+            self.block_list.build_block_pairs(self.topology, self.pbc_matrix)
         for term in self.force_terms:
             if hasattr(term, "bind_sorted"):
-                term.bind_sorted(self.topology, self.tile_list, self.gpu)
+                term.bind_sorted(self.topology, self.block_list, self.gpu)
         self.compute_forces()
         for _ in range(number_steps):
             minimizer.step(self)
@@ -250,9 +250,9 @@ class System:
         self.gpu.download_positions(self.particles)
 
     def dump_state(self):
-        tl = self.tile_list
-        if tl.d_sorted_to_pdb.size > 0 and tl.num_particles > 0:
-            sorted_to_pdb = tl.d_sorted_to_pdb
+        bl = self.block_list
+        if bl.d_sorted_to_pdb.size > 0 and bl.num_particles > 0:
+            sorted_to_pdb = bl.d_sorted_to_pdb
             pdb_x = self.gpu.permute_from_sorted(sorted_to_pdb, self.gpu.d_positions_x)
             pdb_y = self.gpu.permute_from_sorted(sorted_to_pdb, self.gpu.d_positions_y)
             pdb_z = self.gpu.permute_from_sorted(sorted_to_pdb, self.gpu.d_positions_z)
