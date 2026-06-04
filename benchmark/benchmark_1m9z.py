@@ -38,7 +38,7 @@ def main():
     from mdpy.force.nonbonded_force import NonbondedForce
     from mdpy.force.expressions.lennard_jones import lennard_jones
     from mdpy.force.expressions.screened_coulomb import screened_coulomb
-    from mdpy.force.pme_reciprocal_force import PMEReciprocalForce, _calc_ewald_coefficient
+    from mdpy.force.pme_reciprocal_force import PMEReciprocalForce
     from mdpy.integrator.verlet import VerletIntegrator
     from mdpy.system import System
 
@@ -50,13 +50,11 @@ def main():
 
     pbc_matrix = np.eye(3, dtype=np.float64) * BOX_SIZE
 
-    alpha = _calc_ewald_coefficient(CUTOFF)
-
     system = System(topology, pbc_matrix, cutoff=CUTOFF)
     system.add_force_term(BondedForce.charmm(topology, parameter_table))
 
     nb = NonbondedForce(lennard_jones + screened_coulomb)
-    nb.bind(topology, parameter_table, CUTOFF, alpha=alpha)
+    nb.bind(topology, parameter_table, CUTOFF)
     system.add_force_term(nb)
 
     pme = PMEReciprocalForce(CUTOFF)
@@ -81,7 +79,7 @@ def main():
     print(f"  Cutoff:     {CUTOFF} A")
     print(f"  dt:         {DT_FS} fs")
     print(f"  Integrator: Verlet (no constraints)")
-    print(f"  PME alpha:  {alpha:.4f}")
+    print(f"  PME alpha:  {pme.alpha:.4f}")
     print(
         f"  PME grid:   {pme.grid_x} x {pme.grid_y} x {pme.grid_z}"
     )

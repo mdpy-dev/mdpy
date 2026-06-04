@@ -65,94 +65,6 @@ def compute_bspline_weights(fractional: float, order: int = 4) -> tuple[np.ndarr
     return theta, dtheta
 
 
-_SPREAD_KERNEL_SOURCE = r"""
-extern "C" __global__
-void spread_kernel(
-    const float* __restrict__ positions_x,
-    const float* __restrict__ positions_y,
-    const float* __restrict__ positions_z,
-    const float* __restrict__ charges,
-    int num_particles,
-    float recip_box_x, float recip_box_y, float recip_box_z,
-    int grid_x, int grid_y, int grid_z,
-    int order,
-    float* __restrict__ charge_grid
-) {
-    int i = blockIdx.x * blockDim.x + threadIdx.x;
-    if (i >= num_particles) return;
-
-    float px = positions_x[i];
-    float py = positions_y[i];
-    float pz = positions_z[i];
-
-    float fx = px * recip_box_x * grid_x;
-    float fy = py * recip_box_y * grid_y;
-    float fz = pz * recip_box_z * grid_z;
-
-    float u_arr[3];
-    u_arr[0] = fx - floorf(fx);
-    u_arr[1] = fy - floorf(fy);
-    u_arr[2] = fz - floorf(fz);
-
-    int grid_start[3];
-    grid_start[0] = ((int)floorf(fx)) % grid_x;
-    grid_start[1] = ((int)floorf(fy)) % grid_y;
-    grid_start[2] = ((int)floorf(fz)) % grid_z;
-    if (grid_start[0] < 0) grid_start[0] += grid_x;
-    if (grid_start[1] < 0) grid_start[1] += grid_y;
-    if (grid_start[2] < 0) grid_start[2] += grid_z;
-
-    float theta[3][4];
-    for (int dim = 0; dim < 3; dim++) {
-        float u = u_arr[dim];
-        float data[4];
-        data[0] = 1.0f - u;
-        data[1] = u;
-        data[2] = 0.0f;
-        data[3] = 0.0f;
-        for (int j = 3; j < order; j++) {
-            float div = 1.0f / (float)(j - 1);
-            data[j - 1] = div * u * data[j - 2];
-            for (int k = 1; k < j - 1; k++) {
-                data[j - k - 1] = div * ((u + (float)k) * data[j - k - 2] + ((float)(j - k) - u) * data[j - k - 1]);
-            }
-            data[0] = div * (1.0f - u) * data[0];
-        }
-        float scale = 1.0f / (float)(order - 1);
-        data[order - 1] = scale * u * data[order - 2];
-        for (int j = 1; j < order - 1; j++) {
-            data[order - j - 1] = scale * ((u + (float)j) * data[order - j - 2] + ((float)(order - j) - u) * data[order - j - 1]);
-        }
-        data[0] = scale * (1.0f - u) * data[0];
-        for (int k = 0; k < order; k++) theta[dim][k] = data[k];
-    }
-
-    float q = charges[i];
-
-    for (int kx = 0; kx < order; kx++) {
-        int gx = (grid_start[0] + kx) % grid_x;
-        if (gx < 0) gx += grid_x;
-        float tx = theta[0][kx];
-
-        for (int ky = 0; ky < order; ky++) {
-            int gy = (grid_start[1] + ky) % grid_y;
-            if (gy < 0) gy += grid_y;
-            float ty = theta[1][ky];
-
-            for (int kz = 0; kz < order; kz++) {
-                int gz = (grid_start[2] + kz) % grid_z;
-                if (gz < 0) gz += grid_z;
-                float tz = theta[2][kz];
-
-                float contribution = q * tx * ty * tz;
-                int idx = (gx * grid_y + gy) * grid_z + gz;
-                atomicAdd(&charge_grid[idx], contribution);
-            }
-        }
-    }
-}
-"""
-
 _CELL_SPREAD_KERNEL_SOURCE = r"""
 extern "C" __global__
 void cell_spread_kernel(
@@ -584,18 +496,10 @@ void exclusion_kernel(
 }
 """
 
-_spread_kernel = None
 _gather_kernel = None
 _self_energy_kernel = None
 _exclusion_kernel = None
 _cell_spread_kernel = None
-
-
-def get_spread_kernel():
-    global _spread_kernel
-    if _spread_kernel is None:
-        _spread_kernel = cp.RawKernel(_SPREAD_KERNEL_SOURCE, "spread_kernel")
-    return _spread_kernel
 
 
 def get_gather_kernel():
@@ -758,52 +662,30 @@ class PMEReciprocalForce(ForceTerm):
 
         self._d_charge_grid[:] = 0
 
-        use_cell_spread = (
-            block_list is not None
-            and hasattr(block_list, 'nc_total')
-            and block_list.nc_total > 0
-            and hasattr(block_list, '_sorted_positions')
-            and block_list._sorted_positions is not None
+        if not self._subgrid_initialized:
+            block_list.compute_pme_subgrid_dims(gx, gy, gz, order)
+            self._subgrid_initialized = True
+
+        sorted_pos_x, sorted_pos_y, sorted_pos_z = block_list._sorted_positions
+        sorted_charges = self._d_charges[block_list.d_sorted_to_pdb]
+
+        cell_spread_k = get_cell_spread_kernel()
+        shmem = block_list._subgrid_total * 4
+        cell_spread_k(
+            (block_list.nc_total,), (tpb,),
+            (sorted_pos_x, sorted_pos_y, sorted_pos_z, sorted_charges,
+             block_list.d_cell_block_offset, block_list.d_cell_block_count, block_list.d_block_atoms,
+             np.int32(N),
+             np.float32(gpu_context._inv_box_x),
+             np.float32(gpu_context._inv_box_y),
+             np.float32(gpu_context._inv_box_z),
+             np.int32(gx), np.int32(gy), np.int32(gz),
+             np.int32(block_list.nc_x), np.int32(block_list.nc_y), np.int32(block_list.nc_z),
+             np.int32(block_list._subgrid_dx), np.int32(block_list._subgrid_dy), np.int32(block_list._subgrid_dz),
+             np.int32(order),
+             self._d_charge_grid),
+            shared_mem=shmem,
         )
-
-        if use_cell_spread:
-            if not self._subgrid_initialized:
-                block_list.compute_pme_subgrid_dims(gx, gy, gz, order)
-                self._subgrid_initialized = True
-
-            sorted_pos_x, sorted_pos_y, sorted_pos_z = block_list._sorted_positions
-            sorted_charges = self._d_charges[block_list.d_sorted_to_pdb]
-
-            cell_spread_k = get_cell_spread_kernel()
-            shmem = block_list._subgrid_total * 4
-            cell_spread_k(
-                (block_list.nc_total,), (tpb,),
-                (sorted_pos_x, sorted_pos_y, sorted_pos_z, sorted_charges,
-                 block_list.d_cell_block_offset, block_list.d_cell_block_count, block_list.d_block_atoms,
-                 np.int32(N),
-                 np.float32(gpu_context._inv_box_x),
-                 np.float32(gpu_context._inv_box_y),
-                 np.float32(gpu_context._inv_box_z),
-                 np.int32(gx), np.int32(gy), np.int32(gz),
-                 np.int32(block_list.nc_x), np.int32(block_list.nc_y), np.int32(block_list.nc_z),
-                 np.int32(block_list._subgrid_dx), np.int32(block_list._subgrid_dy), np.int32(block_list._subgrid_dz),
-                 np.int32(order),
-                 self._d_charge_grid),
-                shared_mem=shmem,
-            )
-        else:
-            spread_k = get_spread_kernel()
-            spread_k(grid_1d, (tpb,),
-                (gpu_context.d_positions_x,
-                 gpu_context.d_positions_y,
-                 gpu_context.d_positions_z,
-                 self._d_charges,
-                 np.int32(N),
-                 np.float32(gpu_context._inv_box_x),
-                 np.float32(gpu_context._inv_box_y),
-                 np.float32(gpu_context._inv_box_z),
-                 np.int32(gx), np.int32(gy), np.int32(gz), np.int32(order),
-                 self._d_charge_grid))
 
         grid_3d = self._d_charge_grid.reshape(gx, gy, gz)
         grid_complex = cp.fft.rfftn(grid_3d)

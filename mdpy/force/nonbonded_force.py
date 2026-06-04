@@ -1210,6 +1210,9 @@ class NonbondedForce(ForceTerm):
         self._d_types = None
 
     def bind(self, topology, parameter_table, cutoff, **scalars):
+        if 'alpha' not in scalars and 'alpha' in self.expression.scalar_names:
+            from mdpy.force.pme_reciprocal_force import _calc_ewald_coefficient
+            scalars['alpha'] = _calc_ewald_coefficient(cutoff)
         self._scalars = scalars
         self._cutoff = cutoff
         self._cutoff_sq = cutoff * cutoff
