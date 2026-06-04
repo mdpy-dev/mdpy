@@ -16,6 +16,8 @@ void verlet_init_kernel(
     const float* __restrict__ f_y,
     const float* __restrict__ f_z,
     const float* __restrict__ masses,
+    const float* __restrict__ pbc_matrix,
+    const float* __restrict__ pbc_inv,
     float* __restrict__ prev_pos_x,
     float* __restrict__ prev_pos_y,
     float* __restrict__ prev_pos_z,
@@ -27,9 +29,16 @@ void verlet_init_kernel(
     if (mass <= 0.0f) return;
     float inv_mass = 1.0f / mass;
     float half_inv = 0.5f * inv_mass * dt_sq;
-    prev_pos_x[index] = pos_x[index] - vel_x[index]*dt + f_x[index]*half_inv;
-    prev_pos_y[index] = pos_y[index] - vel_y[index]*dt + f_y[index]*half_inv;
-    prev_pos_z[index] = pos_z[index] - vel_z[index]*dt + f_z[index]*half_inv;
+    float px = pos_x[index] - vel_x[index]*dt + f_x[index]*half_inv;
+    float py = pos_y[index] - vel_y[index]*dt + f_y[index]*half_inv;
+    float pz = pos_z[index] - vel_z[index]*dt + f_z[index]*half_inv;
+    float fx = px*pbc_inv[0] + py*pbc_inv[3] + pz*pbc_inv[6];
+    float fy = px*pbc_inv[1] + py*pbc_inv[4] + pz*pbc_inv[7];
+    float fz = px*pbc_inv[2] + py*pbc_inv[5] + pz*pbc_inv[8];
+    fx -= floorf(fx); fy -= floorf(fy); fz -= floorf(fz);
+    prev_pos_x[index] = fx*pbc_matrix[0] + fy*pbc_matrix[3] + fz*pbc_matrix[6];
+    prev_pos_y[index] = fx*pbc_matrix[1] + fy*pbc_matrix[4] + fz*pbc_matrix[7];
+    prev_pos_z[index] = fx*pbc_matrix[2] + fy*pbc_matrix[5] + fz*pbc_matrix[8];
 }
 """
 
@@ -95,7 +104,7 @@ void verlet_kernel(
     sx = nx*pbc_inv[0] + ny*pbc_inv[3] + nz*pbc_inv[6];
     sy = nx*pbc_inv[1] + ny*pbc_inv[4] + nz*pbc_inv[7];
     sz = nx*pbc_inv[2] + ny*pbc_inv[5] + nz*pbc_inv[8];
-    sx -= roundf(sx); sy -= roundf(sy); sz -= roundf(sz);
+    sx -= floorf(sx); sy -= floorf(sy); sz -= floorf(sz);
     nx = sx*pbc_matrix[0] + sy*pbc_matrix[3] + sz*pbc_matrix[6];
     ny = sx*pbc_matrix[1] + sy*pbc_matrix[4] + sz*pbc_matrix[7];
     nz = sx*pbc_matrix[2] + sy*pbc_matrix[5] + sz*pbc_matrix[8];
@@ -134,6 +143,7 @@ class VerletIntegrator:
                 gpu.d_velocities_x, gpu.d_velocities_y, gpu.d_velocities_z,
                 gpu.d_forces_x, gpu.d_forces_y, gpu.d_forces_z,
                 gpu.d_masses,
+                gpu.d_pbc_matrix, gpu.d_pbc_inv,
                 gpu.d_prev_positions_x, gpu.d_prev_positions_y, gpu.d_prev_positions_z,
                 np.float32(self.dt),
                 np.float32(self.dt_sq),
