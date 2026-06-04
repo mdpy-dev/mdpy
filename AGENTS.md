@@ -48,7 +48,7 @@ Simulation data is a GPU-side black box during the run loop. The only way to obs
 
 The following functions — and every function they call directly or indirectly — must NOT transfer **bulk data** (arrays, reductions) from GPU to CPU:
 
-- `System.step()` call chain: `check_rebuild()`, `rebuild()`, `compute_forces()`, `integrator.step()`
+- Explicit pipeline loop: `check_and_rebuild()`, `compute_forces()`, `integrator.step(system)`, `refresh_wrapped_positions()`
 - `System.minimize()` inner loop
 
 **Forbidden operations** inside the hot path:
@@ -70,8 +70,13 @@ The following functions — and every function they call directly or indirectly 
 There are no `potential_energy` or `energies` properties on System. Energy is not "queryable state" — it is "output you explicitly request". Callers who need state during a loop collect it at explicit checkpoints:
 
 ```python
+system.ensure_uploaded()
+system.gpu.refresh_wrapped_positions()
 for i in range(10000):
-    system.step(integrator)
+    system.check_and_rebuild()
+    system.compute_forces()
+    integrator.step(system)
+    system.gpu.refresh_wrapped_positions()
     if i % 1000 == 0:
         pos, vel = system.dump_state()
         energies = system.dump_energy()
@@ -386,7 +391,7 @@ On tile list rebuild:
 | File | Responsibility |
 |------|---------------|
 | `mdpy/environment.py` | Precision config (`env.NUMPY_FLOAT`, `env.NUMPY_INT`); platform always CUDA |
-| `mdpy/system.py` | Top-level simulation driver, orchestrates GPUContext + TileList + ForceTerms |
+| `mdpy/system.py` | Simulation driver with public atomic operations: `check_and_rebuild()`, `compute_forces()`, `dump_state()`, `dump_energy()` |
 | `mdpy/core/gpu_context.py` | GPU memory manager — owns all `d_*` state arrays, permutation kernels, PBC wrap |
 | `mdpy/core/tile_list.py` | Tile-based neighbor list — GPU kernels (Morton/AABB/tile-find/masks); provides mapping only |
 | `mdpy/core/topology.py` | Molecular topology (particles/bonds/angles/dihedrals/impropers), `join()` → compact arrays |
@@ -397,8 +402,8 @@ On tile list rebuild:
 | `mdpy/force/expressions/coulomb.py` | Coulomb expression with constant `0.13893556595455` |
 | `mdpy/forcefield/charmm_forcefield.py` | PSF+PDB+PRM → Topology + ParameterTable pipeline |
 | `mdpy/forcefield/parameters.py` | ParameterTable with `per_type` and `per_atom` dicts |
-| `mdpy/integrator/verlet.py` | `@cuda.jit` Verlet integrator |
-| `mdpy/integrator/langevin.py` | `@cuda.jit` Langevin BAOAB (LCG PRNG) |
+| `mdpy/integrator/verlet.py` | `@cuda.jit` Verlet integrator (`step(system)`) |
+| `mdpy/integrator/langevin.py` | `@cuda.jit` Langevin BAOAB (`step(system)`, LCG PRNG) |
 | `mdpy/io/` | File parsers (PSF/PDB/DCD/HDF5/CHARMM toppar) |
 | `mdpy/test/generate_bruteforce_reference.py` | Brute-force O(N²) reference data generator for 1M9Z |
 | `mdpy/test/test_bruteforce_validation.py` | Gold standard validation: tile list + forces vs brute-force |
@@ -428,7 +433,6 @@ Scalar reads for kernel launch sizing and control flow. These are acceptable per
 | `tile_list.py:927` | `int(self._d_counters[0])` | Tile count for array sizing |
 | `tile_list.py:959` | `int(d_rev_offset[-1])` | Reverse map allocation size |
 | `tile_list.py:1062-1063` | `int(d_classify_excl_counter[0])`, `int(d_classify_main_counter[0])` | Exclusion/main tile counts |
-| `system.py:202` | `int(self.tile_list.d_rebuild_flag[0])` | Periodic rebuild check flag |
 
 ### P2 — Dead Code to Remove
 
@@ -439,7 +443,7 @@ Scalar reads for kernel launch sizing and control flow. These are acceptable per
 | `tile_list.py` | `_rebuild_cpu()`, `_cut_blocks()`, `_compute_block_aabbs()`, `_find_tiles()`, `_morton_encode()`, `_aabb_min_image_dist_sq()`, `_to_device()` — CPU-only fallbacks if still present |
 | `tile_list.py` | Pure Python fallbacks for `_build_atom_to_block_slot` / `_build_masks_numba` (`else` branch) if still present |
 | `environment.py` | `set_platform()`, `'CPU'` option, `supported_platforms` — platform is always CUDA |
-| `nonbonded_force.py:672` | `getDeviceProperties(0)` queried every step — cache at bind time |
+| `nonbonded_force.py:672` | `getDeviceProperties(0)` queried every compute call — cache at bind time |
 
 ### P3 — Performance Optimizations
 
