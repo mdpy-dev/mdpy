@@ -135,7 +135,7 @@ class TestSystem:
         assert system.topology is topology
         assert system.particles.num_particles == 4
         assert isinstance(system.gpu, GPUContext)
-        assert isinstance(system.tile_list, BlockList)
+        assert isinstance(system.block_list, BlockList)
         assert system.cutoff == 12.0
         assert system.dump_energy() == {}
         assert system.step_count == 0
@@ -397,7 +397,7 @@ class TestLangevinIntegrator:
 def _get_pdb_to_sorted(system):
     """Compute PDB→sorted mapping from GPU cumulative d_sorted_to_pdb."""
     import cupy as cp
-    d_stp = system.tile_list.d_sorted_to_pdb
+    d_stp = system.block_list.d_sorted_to_pdb
     sorted_to_pdb = cp.asnumpy(d_stp)
     pdb_to_sorted = np.empty_like(sorted_to_pdb)
     pdb_to_sorted[sorted_to_pdb] = np.arange(len(sorted_to_pdb), dtype=sorted_to_pdb.dtype)
@@ -608,8 +608,8 @@ class TestRebuildSortCorrectness:
             err_msg="Permutation invariant broken after multiple rebuilds")
 
         import cupy as cp
-        tl = system.tile_list
-        d_stp = tl.d_sorted_to_pdb
+        bl = system.block_list
+        d_stp =     bl.d_sorted_to_pdb
         pdb_gpu_x = system.gpu.permute_from_sorted(d_stp, system.gpu.d_positions_x)
         pdb_gpu_y = system.gpu.permute_from_sorted(d_stp, system.gpu.d_positions_y)
         pdb_gpu_z = system.gpu.permute_from_sorted(d_stp, system.gpu.d_positions_z)

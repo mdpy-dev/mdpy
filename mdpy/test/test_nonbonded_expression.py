@@ -156,9 +156,9 @@ class TestExpressionCombination:
 
     def test_combined_kernel_source(self):
         combined = lennard_jones + coulomb
-        kernel = combined.assemble_tile_kernel()
+        kernel = combined.assemble_exclusion_block_pair_kernel()
         assert 'extern "C" __global__' in kernel
-        assert 'tile_kernel' in kernel
+        assert 'exclusion_block_pair_kernel' in kernel
         assert '__restrict__ lj_pair_arr' in kernel
         assert 'lj_pair_14_arr' in kernel
         assert 'charge_14' in kernel
@@ -173,9 +173,9 @@ class TestExpressionCombination:
 
 class TestKernelAssembly:
     def test_lj_kernel_structure(self):
-        kernel = lennard_jones.assemble_tile_kernel()
+        kernel = lennard_jones.assemble_exclusion_block_pair_kernel()
         assert 'extern "C" __global__' in kernel
-        assert 'void tile_kernel' in kernel
+        assert 'void exclusion_block_pair_kernel' in kernel
         assert '__shfl_sync' in kernel
         assert 'atomicAdd' in kernel
         assert 'rsqrtf' in kernel
@@ -184,31 +184,31 @@ class TestKernelAssembly:
         assert 'force_magnitude' in kernel
 
     def test_coulomb_kernel_has_charge_arrays(self):
-        kernel = coulomb.assemble_tile_kernel()
+        kernel = coulomb.assemble_exclusion_block_pair_kernel()
         assert 'charge_14' in kernel
         assert 'charge_i' in kernel
         assert 'charge_j' in kernel
 
     def test_combined_kernel_has_all_params(self):
         combined = lennard_jones + coulomb
-        kernel = combined.assemble_tile_kernel()
+        kernel = combined.assemble_exclusion_block_pair_kernel()
         assert '__restrict__ lj_pair_arr' in kernel
         assert '__restrict__ lj_pair_14_arr' in kernel
         assert 'sigma_ij_pair = is_14' in kernel
         assert 'charge_i' in kernel
 
-    def test_kernel_has_tiles_and_interacting(self):
-        kernel = lennard_jones.assemble_tile_kernel()
-        assert 'tiles[' in kernel
+    def test_kernel_has_block_pairs_and_interacting(self):
+        kernel = lennard_jones.assemble_exclusion_block_pair_kernel()
+        assert 'block_pairs[' in kernel
         assert 'interacting_atoms' in kernel
 
     def test_kernel_has_exclusion(self):
-        kernel = lennard_jones.assemble_tile_kernel()
+        kernel = lennard_jones.assemble_exclusion_block_pair_kernel()
         assert 'exclusion_masks' in kernel
         assert 'scaling_masks' in kernel
 
     def test_kernel_is_valid_c_syntax(self):
-        kernel = lennard_jones.assemble_tile_kernel()
+        kernel = lennard_jones.assemble_exclusion_block_pair_kernel()
         assert kernel.count('{') == kernel.count('}')
 
 
@@ -290,10 +290,10 @@ class TestEdgeCases:
 class TestCombinedKernelSource:
     def test_combined_kernel_source(self):
         combined = lennard_jones + coulomb
-        kernel = combined.assemble_tile_kernel()
+        kernel = combined.assemble_exclusion_block_pair_kernel()
 
         assert 'extern "C" __global__' in kernel
-        assert 'void tile_kernel' in kernel
+        assert 'void exclusion_block_pair_kernel' in kernel
 
         assert '__restrict__ lj_pair_arr' in kernel
         assert '__restrict__ lj_pair_14_arr' in kernel

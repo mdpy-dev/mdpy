@@ -26,7 +26,7 @@ def _make_pbc(box):
     return np.eye(3, dtype=np.float32) * box
 
 
-def _rebuild_and_build_tiles(n, box=50.0, cutoff=10.0, skin=2.0, seed=42, positions=None):
+def _rebuild_and_build_block_pairs(n, box=50.0, cutoff=10.0, skin=2.0, seed=42, positions=None):
     if positions is None:
         positions = _make_positions(n, box, seed)
     topology = _make_topology(n)
@@ -34,7 +34,7 @@ def _rebuild_and_build_tiles(n, box=50.0, cutoff=10.0, skin=2.0, seed=42, positi
     pbc_inv = np.linalg.inv(pbc_matrix)
     bl = BlockList(cutoff=cutoff, skin=skin)
     bl.rebuild(positions, topology, pbc_matrix, pbc_inv)
-    bl.build_tiles(topology, pbc_matrix)
+    bl.build_block_pairs(topology, pbc_matrix)
     return bl, positions, pbc_matrix, pbc_inv, topology
 
 
@@ -43,7 +43,7 @@ class TestCellAssignment:
     def test_cell_grid_dimensions(self):
         n, box = 100, 50.0
         cutoff, skin = 10.0, 2.0
-        bl, *_ = _rebuild_and_build_tiles(n, box, cutoff, skin)
+        bl, *_ = _rebuild_and_build_block_pairs(n, box, cutoff, skin)
         expected_nc = int(box / (cutoff + skin))
         assert bl.nc_x == expected_nc
         assert bl.nc_y == expected_nc
@@ -52,7 +52,7 @@ class TestCellAssignment:
 
     def test_block_coverage(self):
         n, box = 100, 50.0
-        bl, *_ = _rebuild_and_build_tiles(n, box)
+        bl, *_ = _rebuild_and_build_block_pairs(n, box)
         ba = bl.block_atoms.ravel()
         real_atoms = ba[ba >= 0]
         unique, counts = np.unique(real_atoms, return_counts=True)
@@ -61,7 +61,7 @@ class TestCellAssignment:
 
     def test_blocks_are_cell_aligned(self):
         n, box = 100, 50.0
-        bl, *_ = _rebuild_and_build_tiles(n, box)
+        bl, *_ = _rebuild_and_build_block_pairs(n, box)
         atom_to_block = cp.asnumpy(bl.d_atom_to_block)
         ba = bl.block_atoms
         for bi in range(bl.num_blocks):
@@ -75,7 +75,7 @@ class TestCellAssignment:
 
     def test_atom_to_block_mapping(self):
         n, box = 100, 50.0
-        bl, *_ = _rebuild_and_build_tiles(n, box)
+        bl, *_ = _rebuild_and_build_block_pairs(n, box)
         atom_to_block = cp.asnumpy(bl.d_atom_to_block)
         atom_to_slot = cp.asnumpy(bl.d_atom_to_slot)
         ba = bl.block_atoms
@@ -88,7 +88,7 @@ class TestCellAssignment:
 
     def test_sort_order_is_correct(self):
         n, box = 100, 50.0
-        bl, *_ = _rebuild_and_build_tiles(n, box)
+        bl, *_ = _rebuild_and_build_block_pairs(n, box)
         raw_order = cp.asnumpy(bl.d_raw_order)
         pdb_to_sorted = cp.asnumpy(bl.d_pdb_to_sorted)
         sorted_to_pdb = cp.asnumpy(bl.d_sorted_to_pdb)
@@ -105,29 +105,29 @@ class TestCellAssignment:
 
 class TestInteractingBlocks:
 
-    def test_tiles_not_empty(self):
+    def test_block_pairs_not_empty(self):
         n, box = 100, 50.0
-        bl, *_ = _rebuild_and_build_tiles(n, box, cutoff=10.0, skin=2.0)
-        assert bl.num_tiles > 0
-        tiles = bl.tiles
+        bl, *_ = _rebuild_and_build_block_pairs(n, box, cutoff=10.0, skin=2.0)
+        assert bl.num_block_pairs > 0
+        block_pairs = bl.block_pairs
         interacting = bl.interacting_atoms
-        assert tiles.shape == (bl.num_tiles,)
-        assert interacting.shape == (bl.num_tiles, W)
+        assert block_pairs.shape == (bl.num_block_pairs,)
+        assert interacting.shape == (bl.num_block_pairs, W)
 
     def test_interacting_atoms_within_cutoff(self):
         n, box = 100, 50.0
         cutoff, skin = 10.0, 2.0
-        bl, positions, pbc_matrix, _, _ = _rebuild_and_build_tiles(n, box, cutoff, skin)
+        bl, positions, pbc_matrix, _, _ = _rebuild_and_build_block_pairs(n, box, cutoff, skin)
         sorted_to_pdb = cp.asnumpy(bl.d_sorted_to_pdb)
-        tiles = bl.tiles
+        block_pairs = bl.block_pairs
         interacting = bl.interacting_atoms
         ba = bl.block_atoms
         build_radius_sq = bl.build_radius ** 2
         pbc_2d = pbc_matrix.reshape(3, 3)
         box_diag = np.array([pbc_2d[0, 0], pbc_2d[1, 1], pbc_2d[2, 2]])
 
-        for ti in range(bl.num_tiles):
-            source_block = tiles[ti]
+        for ti in range(bl.num_block_pairs):
+            source_block = block_pairs[ti]
             interacting_row = interacting[ti]
             source_atoms = ba[source_block]
             for slot in range(W):
@@ -150,16 +150,16 @@ class TestInteractingBlocks:
                         found_close = True
                         break
                 assert found_close, (
-                    f"Tile {ti}: interacting atom sorted_idx={aj} pdb={pdb_j} "
+                    f"Block-pair {ti}: interacting atom sorted_idx={aj} pdb={pdb_j} "
                     f"is not within build_radius of any atom in source block {source_block}"
                 )
 
     def test_pair_completeness(self):
         n, box = 100, 50.0
         cutoff, skin = 10.0, 2.0
-        bl, positions, pbc_matrix, _, _ = _rebuild_and_build_tiles(n, box, cutoff, skin)
+        bl, positions, pbc_matrix, _, _ = _rebuild_and_build_block_pairs(n, box, cutoff, skin)
         sorted_to_pdb = cp.asnumpy(bl.d_sorted_to_pdb)
-        tiles = bl.tiles
+        block_pairs = bl.block_pairs
         interacting = bl.interacting_atoms
         ba = bl.block_atoms
         build_radius_sq = bl.build_radius ** 2
@@ -167,8 +167,8 @@ class TestInteractingBlocks:
         box_diag = np.array([pbc_2d[0, 0], pbc_2d[1, 1], pbc_2d[2, 2]])
 
         found_pairs = set()
-        for ti in range(bl.num_tiles):
-            source_block = tiles[ti]
+        for ti in range(bl.num_block_pairs):
+            source_block = block_pairs[ti]
             source_atoms = ba[source_block]
             interacting_row = interacting[ti]
             for si in range(W):
@@ -199,28 +199,28 @@ class TestInteractingBlocks:
                 dist_sq = dx * dx + dy * dy + dz * dz
                 if dist_sq <= build_radius_sq:
                     assert (i, j) in found_pairs, (
-                        f"Pair (sorted {i}, sorted {j}) within build_radius but not found in tiles"
+                        f"Pair (sorted {i}, sorted {j}) within build_radius but not found in block_pairs"
                     )
 
     def test_newton_third_law_no_duplicates(self):
         n, box = 100, 50.0
-        bl, *_ = _rebuild_and_build_tiles(n, box, cutoff=10.0, skin=2.0)
-        tiles = bl.tiles
+        bl, *_ = _rebuild_and_build_block_pairs(n, box, cutoff=10.0, skin=2.0)
+        block_pairs = bl.block_pairs
         interacting = bl.interacting_atoms
         seen = set()
-        for ti in range(bl.num_tiles):
-            source_block = tiles[ti]
+        for ti in range(bl.num_block_pairs):
+            source_block = block_pairs[ti]
             for sj in range(W):
                 aj = interacting[ti, sj]
                 if aj < 0 or aj == NUM_ATOMS_SENTINEL:
                     continue
                 pair = (source_block, aj)
                 assert pair not in seen, (
-                    f"Duplicate (block={source_block}, sorted_atom={aj}) in tiles"
+                    f"Duplicate (block={source_block}, sorted_atom={aj}) in block_pairs"
                 )
                 seen.add(pair)
 
-    def test_self_tile_small(self):
+    def test_self_block_pair_small(self):
         n = 4
         box = 50.0
         cutoff, skin = 100.0, 10.0
@@ -230,11 +230,11 @@ class TestInteractingBlocks:
             [3.0, 3.0, 3.0],
             [4.0, 4.0, 4.0],
         ], dtype=np.float32)
-        bl, *_ = _rebuild_and_build_tiles(n, box, cutoff, skin, positions=positions)
+        bl, *_ = _rebuild_and_build_block_pairs(n, box, cutoff, skin, positions=positions)
         assert bl.num_blocks == 1
-        assert bl.num_tiles > 0
+        assert bl.num_block_pairs > 0
 
-    def test_interaction_tiles_cull(self):
+    def test_interaction_block_pairs_cull(self):
         group_size = 32
         n = group_size * 4
         box = 500.0
@@ -251,10 +251,10 @@ class TestInteractingBlocks:
             for i in range(group_size):
                 idx = g * group_size + i
                 positions[idx] = np.array(centers[g]) + rng.uniform(-1, 1, 3)
-        bl, *_ = _rebuild_and_build_tiles(n, box, cutoff, skin, positions=positions)
-        assert bl.num_tiles < bl.num_blocks ** 2
+        bl, *_ = _rebuild_and_build_block_pairs(n, box, cutoff, skin, positions=positions)
+        assert bl.num_block_pairs < bl.num_blocks ** 2
 
-    def test_shift_nonzero_for_cross_boundary_tiles(self):
+    def test_shift_nonzero_for_cross_boundary_block_pairs(self):
         n = 64
         box = 20.0
         cutoff, skin = 4.0, 1.0
@@ -264,21 +264,21 @@ class TestInteractingBlocks:
         positions[32:, 0] = box - 1.0
         positions[:, 1] = 12.5 + rng.uniform(-0.1, 0.1, n)
         positions[:, 2] = 12.5 + rng.uniform(-0.1, 0.1, n)
-        bl, *_ = _rebuild_and_build_tiles(n, box, cutoff, skin, positions=positions)
+        bl, *_ = _rebuild_and_build_block_pairs(n, box, cutoff, skin, positions=positions)
 
-        shift_x = cp.asnumpy(bl.d_tile_shift_x[:bl.num_tiles])
-        shift_y = cp.asnumpy(bl.d_tile_shift_y[:bl.num_tiles])
-        shift_z = cp.asnumpy(bl.d_tile_shift_z[:bl.num_tiles])
+        shift_x = cp.asnumpy(bl.d_block_pair_shift_x[:bl.num_block_pairs])
+        shift_y = cp.asnumpy(bl.d_block_pair_shift_y[:bl.num_block_pairs])
+        shift_z = cp.asnumpy(bl.d_block_pair_shift_z[:bl.num_block_pairs])
 
         total_shift = np.sum(np.abs(shift_x)) + np.sum(np.abs(shift_y)) + np.sum(np.abs(shift_z))
-        assert total_shift > 0, "Expected at least some tiles with nonzero PBC shift"
+        assert total_shift > 0, "Expected at least some block pairs with nonzero PBC shift"
 
-        tiles = cp.asnumpy(bl.d_tiles[:bl.num_tiles])
-        int_atoms = cp.asnumpy(bl.d_interacting_atoms[:bl.num_tiles * 32]).reshape(bl.num_tiles, 32)
+        block_pairs = cp.asnumpy(bl.d_block_pairs[:bl.num_block_pairs])
+        int_atoms = cp.asnumpy(bl.d_interacting_atoms[:bl.num_block_pairs * 32]).reshape(bl.num_block_pairs, 32)
         block_atoms_np = cp.asnumpy(bl.d_block_atoms).reshape(-1, 32)
 
-        for t in range(bl.num_tiles):
-            bx = tiles[t]
+        for t in range(bl.num_block_pairs):
+            bx = block_pairs[t]
             j_atoms = int_atoms[t]
             all_from_self = True
             for a in j_atoms:
@@ -294,7 +294,7 @@ class TestInteractingBlocks:
                     break
             if all_from_self:
                 assert shift_x[t] == 0.0 and shift_y[t] == 0.0 and shift_z[t] == 0.0, \
-                    f"Self-tile {t} should have zero shift"
+                    f"Self-block-pair {t} should have zero shift"
 
     def test_shift_distance_matches_roundf(self):
         n = 64
@@ -306,7 +306,7 @@ class TestInteractingBlocks:
         positions[32:, 0] = box - 1.0
         positions[:, 1] = 12.5 + rng.uniform(-0.1, 0.1, n)
         positions[:, 2] = 12.5 + rng.uniform(-0.1, 0.1, n)
-        bl, *_ = _rebuild_and_build_tiles(n, box, cutoff, skin, positions=positions)
+        bl, *_ = _rebuild_and_build_block_pairs(n, box, cutoff, skin, positions=positions)
 
         pos_x = cp.asnumpy(bl._sorted_positions[0])
         pos_y = cp.asnumpy(bl._sorted_positions[1])
@@ -316,16 +316,16 @@ class TestInteractingBlocks:
         box_y = float(pbc_2d[1, 1])
         box_z = float(pbc_2d[2, 2])
 
-        tiles = cp.asnumpy(bl.d_tiles[:bl.num_tiles])
-        shift_x = cp.asnumpy(bl.d_tile_shift_x[:bl.num_tiles])
-        shift_y = cp.asnumpy(bl.d_tile_shift_y[:bl.num_tiles])
-        shift_z = cp.asnumpy(bl.d_tile_shift_z[:bl.num_tiles])
-        int_atoms = cp.asnumpy(bl.d_interacting_atoms[:bl.num_tiles * 32]).reshape(bl.num_tiles, 32)
+        block_pairs = cp.asnumpy(bl.d_block_pairs[:bl.num_block_pairs])
+        shift_x = cp.asnumpy(bl.d_block_pair_shift_x[:bl.num_block_pairs])
+        shift_y = cp.asnumpy(bl.d_block_pair_shift_y[:bl.num_block_pairs])
+        shift_z = cp.asnumpy(bl.d_block_pair_shift_z[:bl.num_block_pairs])
+        int_atoms = cp.asnumpy(bl.d_interacting_atoms[:bl.num_block_pairs * 32]).reshape(bl.num_block_pairs, 32)
         block_atoms_np = cp.asnumpy(bl.d_block_atoms).reshape(-1, 32)
 
         max_err = 0.0
-        for t in range(bl.num_tiles):
-            bx = tiles[t]
+        for t in range(bl.num_block_pairs):
+            bx = block_pairs[t]
             sx, sy, sz = shift_x[t], shift_y[t], shift_z[t]
             for lane in range(32):
                 gj = int_atoms[t, lane]
@@ -357,7 +357,7 @@ class TestInteractingBlocks:
 
 class TestPBCHandling:
 
-    def test_cross_boundary_tiles(self):
+    def test_cross_boundary_block_pairs(self):
         n = 64
         box = 50.0
         cutoff, skin = 12.0, 2.0
@@ -367,15 +367,15 @@ class TestPBCHandling:
         rng = np.random.RandomState(99)
         positions[:, 1] = rng.uniform(0, box, n)
         positions[:, 2] = rng.uniform(0, box, n)
-        bl, *_ = _rebuild_and_build_tiles(n, box, cutoff, skin, positions=positions)
-        assert bl.num_tiles > 0
+        bl, *_ = _rebuild_and_build_block_pairs(n, box, cutoff, skin, positions=positions)
+        assert bl.num_block_pairs > 0
         sorted_to_pdb = cp.asnumpy(bl.d_sorted_to_pdb)
         ba = bl.block_atoms
-        tiles = bl.tiles
+        block_pairs = bl.block_pairs
         interacting = bl.interacting_atoms
         has_cross = False
-        for ti in range(bl.num_tiles):
-            source_block = tiles[ti]
+        for ti in range(bl.num_block_pairs):
+            source_block = block_pairs[ti]
             source_pdbs = set()
             for si in range(W):
                 ak = ba[source_block, si]
@@ -397,130 +397,7 @@ class TestPBCHandling:
                         break
             if has_cross:
                 break
-        assert has_cross, "No cross-boundary tiles found when expected"
-
-
-from mdpy.core.tile_list import TileList as OldTileList
-
-
-def _brute_force_pairs(positions, box, build_radius):
-    n = len(positions)
-    box_diag = np.array([box, box, box], dtype=np.float32)
-    build_radius_sq = build_radius ** 2
-    pairs = set()
-    for i in range(n):
-        for j in range(i + 1, n):
-            dx = positions[j] - positions[i]
-            dx -= box_diag * np.round(dx / box_diag)
-            dist_sq = np.sum(dx ** 2)
-            if dist_sq <= build_radius_sq:
-                pairs.add((i, j))
-    return pairs
-
-
-def _collect_blocklist_pairs(bl):
-    sorted_to_pdb = cp.asnumpy(bl.d_sorted_to_pdb)
-    ba = bl.block_atoms
-    ia = bl.interacting_atoms
-    pairs = set()
-    for t in range(bl.num_tiles):
-        bx = bl.tiles[t]
-        for sj in range(W):
-            aj = ia[t, sj]
-            if aj < 0 or aj >= bl.num_particles or aj == NUM_ATOMS_SENTINEL:
-                continue
-            aj_pdb = sorted_to_pdb[aj]
-            for sk in range(W):
-                ak = ba[bx, sk]
-                if ak < 0:
-                    continue
-                ak_pdb = sorted_to_pdb[ak]
-                pair = tuple(sorted([aj_pdb, ak_pdb]))
-                if pair[0] != pair[1]:
-                    pairs.add(pair)
-    return pairs
-
-
-def _collect_tilelist_pairs(tl):
-    sorted_to_pdb = cp.asnumpy(tl.d_sorted_to_pdb)
-    ba = tl.block_atoms
-    ia = tl.interacting_atoms
-    pairs = set()
-    for t in range(tl.num_tiles):
-        bx = tl.tiles[t]
-        for sj in range(W):
-            aj = ia[t, sj]
-            if aj < 0 or aj >= tl.num_particles:
-                continue
-            aj_pdb = sorted_to_pdb[aj]
-            for sk in range(W):
-                ak = ba[bx, sk]
-                if ak < 0:
-                    continue
-                ak_pdb = sorted_to_pdb[ak]
-                pair = tuple(sorted([aj_pdb, ak_pdb]))
-                if pair[0] != pair[1]:
-                    pairs.add(pair)
-    return pairs
-
-
-class TestComparisonWithTileList:
-
-    def test_same_pair_coverage_random(self):
-        n, box, seed, cutoff, skin = 200, 50.0, 99, 8.0, 2.0
-        positions = _make_positions(n, box, seed)
-        topology = _make_topology(n)
-        pbc_matrix = _make_pbc(box)
-        pbc_inv = np.linalg.inv(pbc_matrix)
-
-        bl = BlockList(cutoff=cutoff, skin=skin)
-        bl.rebuild(positions, topology, pbc_matrix, pbc_inv)
-        bl.build_tiles(topology, pbc_matrix)
-
-        brute = _brute_force_pairs(positions, box, bl.build_radius)
-        found = _collect_blocklist_pairs(bl)
-        missing = brute - found
-        assert not missing, f"Missing {len(missing)} pairs (out of {len(brute)})"
-
-    def test_same_pair_coverage_dense(self):
-        n, box, seed, cutoff, skin = 100, 20.0, 55, 10.0, 2.0
-        positions = _make_positions(n, box, seed)
-        topology = _make_topology(n)
-        pbc_matrix = _make_pbc(box)
-        pbc_inv = np.linalg.inv(pbc_matrix)
-
-        bl = BlockList(cutoff=cutoff, skin=skin)
-        bl.rebuild(positions, topology, pbc_matrix, pbc_inv)
-        bl.build_tiles(topology, pbc_matrix)
-
-        brute = _brute_force_pairs(positions, box, bl.build_radius)
-        found = _collect_blocklist_pairs(bl)
-        missing = brute - found
-        assert not missing, f"Missing {len(missing)} pairs (out of {len(brute)})"
-
-    def test_consistency_with_old_tilelist(self):
-        n, box, seed, cutoff, skin = 200, 50.0, 99, 8.0, 2.0
-        positions = _make_positions(n, box, seed)
-        topology = _make_topology(n)
-        pbc_matrix = _make_pbc(box)
-        pbc_inv = np.linalg.inv(pbc_matrix)
-
-        bl = BlockList(cutoff=cutoff, skin=skin)
-        bl.rebuild(positions, topology, pbc_matrix, pbc_inv)
-        bl.build_tiles(topology, pbc_matrix)
-
-        tl = OldTileList(cutoff=cutoff, skin=skin)
-        tl.rebuild(positions, topology, pbc_matrix, pbc_inv)
-        tl.build_tiles(topology, pbc_matrix)
-
-        brute = _brute_force_pairs(positions, box, bl.build_radius)
-        bl_pairs = _collect_blocklist_pairs(bl)
-        tl_pairs = _collect_tilelist_pairs(tl)
-
-        bl_missing = brute - bl_pairs
-        tl_missing = brute - tl_pairs
-        assert not bl_missing, f"BlockList missing {len(bl_missing)}/{len(brute)} pairs"
-        assert not tl_missing, f"TileList missing {len(tl_missing)}/{len(brute)} pairs"
+        assert has_cross, "No cross-boundary block pairs found when expected"
 
 
 class TestExclusionMasks:
@@ -545,14 +422,14 @@ class TestExclusionMasks:
         pbc_inv = np.linalg.inv(pbc_matrix)
         bl = BlockList(cutoff=10.0, skin=2.0)
         bl.rebuild(positions, topology, pbc_matrix, pbc_inv)
-        bl.build_tiles(topology, pbc_matrix)
+        bl.build_block_pairs(topology, pbc_matrix)
 
         excl = bl.exclusion_masks
         ia = bl.interacting_atoms
         atb = cp.asnumpy(bl.d_atom_to_block)
         ats = cp.asnumpy(bl.d_atom_to_slot)
-        for t in range(bl.num_tiles):
-            bx = bl.tiles[t]
+        for t in range(bl.num_block_pairs):
+            bx = bl.block_pairs[t]
             for sj in range(W):
                 aj = ia[t, sj]
                 if aj < 0 or aj >= n:
@@ -588,7 +465,7 @@ class TestExclusionMasks:
         pbc_inv = np.linalg.inv(pbc_matrix)
         bl = BlockList(cutoff=10.0, skin=2.0)
         bl.rebuild(positions, topology, pbc_matrix, pbc_inv)
-        bl.build_tiles(topology, pbc_matrix)
+        bl.build_block_pairs(topology, pbc_matrix)
 
         excl = bl.exclusion_masks
         scale = bl.scaling_masks
@@ -596,8 +473,8 @@ class TestExclusionMasks:
         atb = cp.asnumpy(bl.d_atom_to_block)
         ats = cp.asnumpy(bl.d_atom_to_slot)
         found_14 = False
-        for t in range(bl.num_tiles):
-            bx = bl.tiles[t]
+        for t in range(bl.num_block_pairs):
+            bx = bl.block_pairs[t]
             for sj in range(W):
                 aj = ia[t, sj]
                 if aj < 0 or aj >= n:
@@ -614,9 +491,9 @@ class TestExclusionMasks:
         assert found_14, "expected 1-4 pair in scaling mask"
 
 
-class TestTileClassification:
+class TestBlockPairClassification:
 
-    def test_classify_splits_tiles(self):
+    def test_classify_splits_block_pairs(self):
         n = 10
         builder = Builder()
         builder.set_particles(
@@ -636,12 +513,12 @@ class TestTileClassification:
         pbc_inv = np.linalg.inv(pbc_matrix)
         bl = BlockList(cutoff=10.0, skin=2.0)
         bl.rebuild(positions, topology, pbc_matrix, pbc_inv)
-        bl.build_tiles(topology, pbc_matrix)
+        bl.build_block_pairs(topology, pbc_matrix)
 
-        assert bl.num_main_tiles + bl.num_exclusion_tiles == bl.num_tiles
-        if bl.num_exclusion_tiles > 0:
-            assert bl.d_excl_exclusion_masks.size >= bl.num_exclusion_tiles * W
-            assert bl.d_excl_scaling_masks.size >= bl.num_exclusion_tiles * W
+        assert bl.num_main_block_pairs + bl.num_exclusion_block_pairs == bl.num_block_pairs
+        if bl.num_exclusion_block_pairs > 0:
+            assert bl.d_excl_exclusion_masks.size >= bl.num_exclusion_block_pairs * W
+            assert bl.d_excl_scaling_masks.size >= bl.num_exclusion_block_pairs * W
 
     def test_no_exclusion_all_main(self):
         n = 20
@@ -651,12 +528,12 @@ class TestTileClassification:
         pbc_inv = np.linalg.inv(pbc_matrix)
         bl = BlockList(cutoff=8.0, skin=2.0)
         bl.rebuild(positions, topology, pbc_matrix, pbc_inv)
-        bl.build_tiles(topology, pbc_matrix)
+        bl.build_block_pairs(topology, pbc_matrix)
 
-        assert bl.num_main_tiles + bl.num_exclusion_tiles == bl.num_tiles
+        assert bl.num_main_block_pairs + bl.num_exclusion_block_pairs == bl.num_block_pairs
         excl_masks = bl.exclusion_masks
         scale_masks = bl.scaling_masks
-        for t in range(bl.num_tiles):
+        for t in range(bl.num_block_pairs):
             for sj in range(W):
                 assert scale_masks[t, sj] == 0, (
                     "scaling mask should be zero with no bonded topology"
@@ -768,8 +645,8 @@ class TestCellProcessingBatch:
         real_atoms = block_atoms_np[block_atoms_np >= 0]
         assert len(np.unique(real_atoms)) == n
 
-        bl.build_tiles(topology, pbc_matrix)
-        assert bl.num_tiles > 0
+        bl.build_block_pairs(topology, pbc_matrix)
+        assert bl.num_block_pairs > 0
 
 
 class TestBlockToCellExpand:

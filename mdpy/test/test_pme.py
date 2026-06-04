@@ -748,15 +748,15 @@ class TestPMEIntegration6PO6:
             system.gpu.d_wrapped_positions_y,
             system.gpu.d_wrapped_positions_z,
         )
-        system.tile_list.rebuild(
+        system.block_list.rebuild(
             positions_2d, self.topology,
             system.pbc_matrix, system.pbc_inv,
         )
         system._permute_all_arrays()
-        system.tile_list.build_tiles(self.topology, system.pbc_matrix)
+        system.block_list.build_block_pairs(self.topology, system.pbc_matrix)
         for term in system.force_terms:
             if hasattr(term, 'bind_sorted'):
-                term.bind_sorted(self.topology, system.tile_list, system.gpu)
+                term.bind_sorted(self.topology, system.block_list, system.gpu)
 
         return system, pme_params
 

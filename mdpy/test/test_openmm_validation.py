@@ -55,7 +55,7 @@ def _setup_mdpy_system(psf_path, pdb_path, prm_path, cutoff=12.0):
         system.gpu.d_wrapped_positions_y,
         system.gpu.d_wrapped_positions_z,
     )
-    system.tile_list.rebuild(
+    system.block_list.rebuild(
         positions_2d, topology,
         system.pbc_matrix, system.pbc_inv,
     )

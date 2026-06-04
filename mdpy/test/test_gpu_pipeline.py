@@ -43,15 +43,15 @@ def _make_system():
     return system, VerletIntegrator(0.5)
 
 
-def test_gpu_tile_classification():
+def test_gpu_block_pair_classification():
     system, integrator = _make_system()
     system.step(integrator, 1)
-    tl = system.tile_list
-    assert tl.num_exclusion_tiles + tl.num_main_tiles == tl.num_tiles
-    assert tl.num_exclusion_tiles > 0
-    assert tl.d_excl_tiles.shape[0] >= tl.num_exclusion_tiles
-    assert tl.d_main_tiles.shape[0] >= tl.num_main_tiles
-    assert tl.d_excl_interacting_atoms.shape[0] >= tl.num_exclusion_tiles * 32
-    assert tl.d_excl_exclusion_masks.shape[0] >= tl.num_exclusion_tiles * 32
-    assert tl.d_excl_scaling_masks.shape[0] >= tl.num_exclusion_tiles * 32
-    assert tl.d_main_interacting_atoms.shape[0] >= tl.num_main_tiles * 32
+    bl = system.block_list
+    assert bl.num_exclusion_block_pairs + bl.num_main_block_pairs == bl.num_block_pairs
+    assert bl.num_exclusion_block_pairs > 0
+    assert bl.d_excl_block_pairs.shape[0] >= bl.num_exclusion_block_pairs
+    assert bl.d_main_block_pairs.shape[0] >= bl.num_main_block_pairs
+    assert bl.d_excl_interacting_atoms.shape[0] >= bl.num_exclusion_block_pairs * 32
+    assert bl.d_excl_exclusion_masks.shape[0] >= bl.num_exclusion_block_pairs * 32
+    assert bl.d_excl_scaling_masks.shape[0] >= bl.num_exclusion_block_pairs * 32
+    assert bl.d_main_interacting_atoms.shape[0] >= bl.num_main_block_pairs * 32

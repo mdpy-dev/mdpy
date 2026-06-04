@@ -15,7 +15,7 @@ def test_force_term_subclass():
     class MyForce(ForceTerm):
         name = 'my_force'
 
-        def compute(self, gpu_context, tile_list=None):
+        def compute(self, gpu_context, block_list=None):
             return 42.0
 
     term = MyForce()
