@@ -13,6 +13,19 @@ from mdpy.integrator.verlet import VerletIntegrator
 from mdpy.integrator.langevin import LangevinBAOABIntegrator
 
 
+def _run_steps(system, integrator, n):
+    for _ in range(n):
+        system.check_and_rebuild()
+        system.compute_forces()
+        integrator.step(system)
+        system.gpu.refresh_wrapped_positions()
+
+
+def _ensure_ready(system):
+    system.ensure_uploaded()
+    system.gpu.refresh_wrapped_positions()
+
+
 def _make_large_pbc():
     return np.eye(3, dtype=env.NUMPY_FLOAT) * 100.0
 
@@ -138,7 +151,6 @@ class TestSystem:
         assert isinstance(system.block_list, BlockList)
         assert system.cutoff == 12.0
         assert system.dump_energy() == {}
-        assert system.step_count == 0
 
     def test_system_add_force_term(self):
         topology, term_params = _build_four_particle()
@@ -194,12 +206,12 @@ class TestSystem:
         initial_positions = system.particles.positions.copy()
 
         integrator = VerletIntegrator(time_step=0.5)
-        system.step(integrator, number_steps=1)
-        system.dump_state()
+        _ensure_ready(system)
+        _run_steps(system, integrator, 1)
+        pos, _ = system.dump_state()
 
-        assert not np.allclose(system.particles.positions, initial_positions)
-        assert np.all(np.isfinite(system.particles.positions))
-        assert system.step_count == 1
+        assert not np.allclose(pos, initial_positions)
+        assert np.all(np.isfinite(pos))
 
     def test_system_hundred_steps_verlet(self):
         topology, term_params = _build_simple_bond()
@@ -217,13 +229,13 @@ class TestSystem:
         system.particles.velocities[:] = 0.0
 
         integrator = VerletIntegrator(time_step=0.1)
+        _ensure_ready(system)
         energies = []
         for _ in range(100):
-            system.step(integrator, number_steps=1)
+            _run_steps(system, integrator, 1)
             energies.append(sum(system.dump_energy().values()))
 
         assert all(np.isfinite(energy) for energy in energies)
-        assert system.step_count == 100
 
     def test_system_equilibrium_bond(self):
         topology, term_params = _build_simple_bond()
@@ -241,7 +253,8 @@ class TestSystem:
         system.particles.velocities[:] = 0.0
 
         integrator = VerletIntegrator(time_step=0.1)
-        system.step(integrator, number_steps=1)
+        _ensure_ready(system)
+        _run_steps(system, integrator, 1)
 
         total_energy = sum(system.dump_energy().values())
         assert abs(total_energy) < 1e-3, \
@@ -253,35 +266,29 @@ class TestVerletIntegrator:
     def test_free_particle_no_drift(self):
         topology, _ = _build_simple_bond()
         pbc_matrix = _make_large_pbc()
-        ctx = GPUContext()
-        ctx.initialize(topology, pbc_matrix.flatten())
+        system = System(topology, pbc_matrix)
 
-        import cupy as cp
-        ctx.d_positions_x[:] = cp.asarray(np.array([10.0, 11.5], dtype=np.float32))
-        ctx.d_positions_y[:] = cp.asarray(np.array([10.0, 10.0], dtype=np.float32))
-        ctx.d_positions_z[:] = cp.asarray(np.array([10.0, 10.0], dtype=np.float32))
-        ctx.d_velocities_x[:] = cp.asarray(np.array([0.01, -0.01], dtype=np.float32))
-        ctx.d_velocities_y[:] = cp.asarray(np.array([0.0, 0.0], dtype=np.float32))
-        ctx.d_velocities_z[:] = cp.asarray(np.array([0.0, 0.0], dtype=np.float32))
-        ctx.d_forces_x[:] = 0.0
-        ctx.d_forces_y[:] = 0.0
-        ctx.d_forces_z[:] = 0.0
+        system.particles.positions[:] = np.array([
+            [10.0, 10.0, 10.0],
+            [11.5, 10.0, 10.0],
+        ], dtype=env.NUMPY_FLOAT)
+        system.particles.velocities[:] = np.array([
+            [0.01, 0.0, 0.0],
+            [-0.01, 0.0, 0.0],
+        ], dtype=env.NUMPY_FLOAT)
 
         integrator = VerletIntegrator(time_step=1.0)
-        integrator.step(ctx)
+        _ensure_ready(system)
 
-        pos_x = ctx.d_positions_x.get()
-        pos_y = ctx.d_positions_y.get()
-        pos_z = ctx.d_positions_z.get()
-        positions = np.stack([pos_x, pos_y, pos_z], axis=1)
-        assert np.all(np.isfinite(positions))
+        system.compute_forces()
+        integrator.step(system)
 
-        vel_x = ctx.d_velocities_x.get()
-        vel_y = ctx.d_velocities_y.get()
-        vel_z = ctx.d_velocities_z.get()
-        velocities = np.stack([vel_x, vel_y, vel_z], axis=1)
-        assert np.allclose(velocities[0], [0.01, 0.0, 0.0], atol=1e-4)
-        assert np.allclose(velocities[1], [-0.01, 0.0, 0.0], atol=1e-4)
+        pos, _ = system.dump_state()
+        assert np.all(np.isfinite(pos))
+
+        _, vel = system.dump_state()
+        assert np.allclose(vel[0], [0.01, 0.0, 0.0], atol=1e-4)
+        assert np.allclose(vel[1], [-0.01, 0.0, 0.0], atol=1e-4)
 
     def test_harmonic_oscillation(self):
         topology, term_params = _build_simple_bond()
@@ -298,13 +305,12 @@ class TestVerletIntegrator:
         system.particles.velocities[:] = 0.0
 
         integrator = VerletIntegrator(time_step=0.05)
+        _ensure_ready(system)
         distances = []
         for _ in range(200):
-            system.step(integrator, number_steps=1)
-            system.dump_state()
-            distance = np.linalg.norm(
-                system.particles.positions[1] - system.particles.positions[0]
-            )
+            _run_steps(system, integrator, 1)
+            pos, _ = system.dump_state()
+            distance = np.linalg.norm(pos[1] - pos[0])
             distances.append(distance)
 
         assert all(np.isfinite(distance) for distance in distances)
@@ -333,11 +339,11 @@ class TestLangevinIntegrator:
         integrator = LangevinBAOABIntegrator(
             time_step=0.1, temperature=300.0, friction=0.1
         )
-        system.step(integrator, number_steps=1)
-        system.dump_state()
+        _ensure_ready(system)
+        _run_steps(system, integrator, 1)
+        pos, _ = system.dump_state()
 
-        assert np.all(np.isfinite(system.particles.positions))
-        assert system.step_count == 1
+        assert np.all(np.isfinite(pos))
 
     def test_langevin_temperature_relaxation(self):
         topology, term_params = _build_simple_bond()
@@ -358,11 +364,10 @@ class TestLangevinIntegrator:
             time_step=0.05, temperature=target_temperature, friction=1.0
         )
 
-        for _ in range(500):
-            system.step(integrator, number_steps=1)
+        _ensure_ready(system)
+        _run_steps(system, integrator, 500)
 
-        system.dump_state()
-        positions = system.particles.positions
+        positions, _ = system.dump_state()
         assert np.all(np.isfinite(positions))
 
         kinetic_energy = 0.5 * 12.0 * np.sum(
@@ -390,8 +395,10 @@ class TestLangevinIntegrator:
         system.particles.velocities[:] = 0.0
 
         integrator = VerletIntegrator(time_step=0.1)
-        system.step(integrator, number_steps=10)
-        assert np.all(np.isfinite(system.particles.positions))
+        _ensure_ready(system)
+        _run_steps(system, integrator, 10)
+        pos, _ = system.dump_state()
+        assert np.all(np.isfinite(pos))
 
 
 def _get_pdb_to_sorted(system):
@@ -424,10 +431,10 @@ class TestRebuildSortCorrectness:
         system.particles.velocities[:] = 0.0
 
         integrator = VerletIntegrator(time_step=0.1)
+        _ensure_ready(system)
 
-        system.step(integrator, number_steps=5)
-        system.dump_state()
-        pos_after_first = system.particles.positions.copy()
+        _run_steps(system, integrator, 5)
+        pos_after_first, _ = system.dump_state()
 
         assert np.all(np.isfinite(pos_after_first))
         assert pos_after_first.shape == (4, 3)
@@ -442,10 +449,9 @@ class TestRebuildSortCorrectness:
             err_msg="sorted_to_pdb[pdb_to_sorted] != identity")
 
         for i in range(30):
-            system.step(integrator, number_steps=1)
+            _run_steps(system, integrator, 1)
 
-        system.dump_state()
-        pos_after_30 = system.particles.positions.copy()
+        pos_after_30, _ = system.dump_state()
         assert np.all(np.isfinite(pos_after_30))
 
         p2s_2, s2p_2 = _get_pdb_to_sorted(system)
@@ -478,12 +484,12 @@ class TestRebuildSortCorrectness:
         system.particles.velocities[:] = velocities
 
         integrator = VerletIntegrator(time_step=0.1)
-        system.step(integrator, number_steps=1)
-        system.dump_state()
-        prev_pos = system.particles.positions.copy()
+        _ensure_ready(system)
+        _run_steps(system, integrator, 1)
+        prev_pos, _ = system.dump_state()
 
         for i in range(50):
-            system.step(integrator, number_steps=1)
+            _run_steps(system, integrator, 1)
 
             pos, vel = system.dump_state()
 
@@ -529,13 +535,13 @@ class TestRebuildSortCorrectness:
         system.particles.velocities[:] = velocities.copy()
 
         integrator = VerletIntegrator(time_step=0.5)
+        _ensure_ready(system)
 
-        system.step(integrator, number_steps=1)
-        system.dump_state()
-        snapshot_before = system.particles.positions.copy()
+        _run_steps(system, integrator, 1)
+        snapshot_before, _ = system.dump_state()
 
         for step_i in range(100):
-            system.step(integrator, number_steps=1)
+            _run_steps(system, integrator, 1)
 
         pos_final, vel_final = system.dump_state()
 
@@ -582,8 +588,9 @@ class TestRebuildSortCorrectness:
         integrator = VerletIntegrator(time_step=0.5)
 
         integrator._initialized = False
+        _ensure_ready(system)
 
-        system.step(integrator, number_steps=1)
+        _run_steps(system, integrator, 1)
         pos_after_first = system.dump_state()[0]
         assert np.all(np.isfinite(pos_after_first))
 
@@ -593,7 +600,7 @@ class TestRebuildSortCorrectness:
             err_msg="First rebuild: permutation invariant broken")
 
         for step_i in range(200):
-            system.step(integrator, number_steps=1)
+            _run_steps(system, integrator, 1)
 
         pos_after_many, vel_after_many = system.dump_state()
         assert np.all(np.isfinite(pos_after_many)), \
@@ -658,7 +665,8 @@ class TestLazyEnergy:
         system.particles.velocities[:] = 0.0
 
         integrator = VerletIntegrator(time_step=0.1)
-        system.step(integrator, number_steps=5)
+        _ensure_ready(system)
+        _run_steps(system, integrator, 5)
         pos, vel = system.dump_state()
         assert np.all(np.isfinite(pos))
         assert np.all(np.isfinite(vel))
@@ -682,10 +690,11 @@ class TestLazyEnergy:
         system.particles.velocities[:] = 0.0
 
         integrator = VerletIntegrator(time_step=0.1)
-        system.step(integrator, number_steps=1)
+        _ensure_ready(system)
+        _run_steps(system, integrator, 1)
         energy_1 = system.dump_energy()
 
-        system.step(integrator, number_steps=5)
+        _run_steps(system, integrator, 5)
         energy_2 = system.dump_energy()
 
         assert 'bonded' in energy_1
@@ -724,12 +733,14 @@ class TestAsyncRebuild:
         integrator_a = VerletIntegrator(time_step=0.1)
         integrator_b = VerletIntegrator(time_step=0.1)
 
+        _ensure_ready(system_a)
         for _ in range(50):
-            system_a.step(integrator_a, number_steps=1)
+            _run_steps(system_a, integrator_a, 1)
         pos_a, vel_a = system_a.dump_state()
 
+        _ensure_ready(system_b)
         for _ in range(50):
-            system_b.step(integrator_b, number_steps=1)
+            _run_steps(system_b, integrator_b, 1)
         pos_b, vel_b = system_b.dump_state()
 
         np.testing.assert_allclose(pos_a, pos_b, atol=1e-5,
@@ -751,11 +762,11 @@ class TestAsyncRebuild:
         system.particles.velocities[:] = 0.0
 
         integrator = VerletIntegrator(time_step=0.1)
-        system.step(integrator, number_steps=100)
+        _ensure_ready(system)
+        _run_steps(system, integrator, 100)
         pos, vel = system.dump_state()
         assert np.all(np.isfinite(pos))
         assert np.all(np.isfinite(vel))
-        assert system.step_count == 100
 
     def test_async_rebuild_preserves_permutation_invariant(self):
         n = 100
@@ -780,7 +791,8 @@ class TestAsyncRebuild:
         system.particles.velocities[:] = rng.randn(n, 3).astype(env.NUMPY_FLOAT) * 0.001
 
         integrator = VerletIntegrator(time_step=0.5)
-        system.step(integrator, number_steps=200)
+        _ensure_ready(system)
+        _run_steps(system, integrator, 200)
         pos, vel = system.dump_state()
 
         assert np.all(np.isfinite(pos))
@@ -812,11 +824,11 @@ class TestAsyncRebuild:
         ], dtype=env.NUMPY_FLOAT)
 
         integrator = VerletIntegrator(time_step=2.0)
+        _ensure_ready(system)
         for _ in range(100):
-            system.step(integrator, number_steps=1)
+            _run_steps(system, integrator, 1)
         pos, vel = system.dump_state()
         assert np.all(np.isfinite(pos))
-        assert system.step_count == 100
 
     def test_langevin_async_rebuild_stable(self):
         topology, term_params = _build_four_particle()
@@ -836,12 +848,12 @@ class TestAsyncRebuild:
         integrator = LangevinBAOABIntegrator(
             time_step=0.1, temperature=300.0, friction=0.1
         )
+        _ensure_ready(system)
         for _ in range(200):
-            system.step(integrator, number_steps=1)
+            _run_steps(system, integrator, 1)
         pos, vel = system.dump_state()
         assert np.all(np.isfinite(pos))
         assert np.all(np.isfinite(vel))
-        assert system.step_count == 200
 
     def test_custom_interval_affects_rebuild_timing(self):
         topology, term_params = _build_four_particle()
@@ -860,7 +872,7 @@ class TestAsyncRebuild:
         system.particles.velocities[:] = 0.0
 
         integrator = VerletIntegrator(time_step=0.1)
-        system.step(integrator, number_steps=50)
+        _ensure_ready(system)
+        _run_steps(system, integrator, 50)
         pos, vel = system.dump_state()
         assert np.all(np.isfinite(pos))
-        assert system.step_count == 50
