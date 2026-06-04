@@ -29,8 +29,8 @@ class System:
         )
         self.force_terms = []
 
-        self._uploaded = False
-        self._steps_since_check = 0
+        self._positions_uploaded = False
+        self._velocities_uploaded = False
         self._d_cached_unique_i = None
         self._d_cached_unique_j = None
         self._d_cached_unique_scale = None
@@ -39,19 +39,29 @@ class System:
         self.force_terms.append(term)
         self.gpu.allocate_energy_accumulator(len(self.force_terms))
 
-    def ensure_uploaded(self):
-        if self._uploaded:
-            return
+    def upload_positions(self):
         self.gpu.upload_positions(self.particles)
+        self._positions_uploaded = True
+
+    def upload_velocities(self):
         self.gpu.upload_velocities(self.particles)
-        self._uploaded = True
+        self._velocities_uploaded = True
+
+    def _ensure_uploaded(self):
+        if not self._positions_uploaded or not self._velocities_uploaded:
+            raise RuntimeError(
+                "Positions and/or velocities not uploaded to GPU. "
+                "Call system.upload_positions() and system.upload_velocities() first."
+            )
 
     def compute_forces(self):
+        self._ensure_uploaded()
         self.gpu.zero_forces()
         for term_index, term in enumerate(self.force_terms):
             term.compute(self.gpu, self.block_list, compute_energy=False)
 
-    def check_and_rebuild(self):
+    def update_neighbor_list(self, force_check=False):
+        self._ensure_uploaded()
         positions_soa = (
             self.gpu.d_wrapped_positions_x,
             self.gpu.d_wrapped_positions_y,
@@ -61,15 +71,12 @@ class System:
         if needs_sync:
             cp.cuda.Stream.null.synchronize()
             self._do_rebuild(positions_soa)
-            self._steps_since_check = 0
             return
-        self._steps_since_check += 1
-        if self._steps_since_check < self.block_list.rebuild_check_interval:
+        if not force_check:
             return
         cp.cuda.Stream.null.synchronize()
         if int(self.block_list.d_rebuild_flag[0]) == 1:
             self._do_rebuild(positions_soa)
-        self._steps_since_check = 0
 
     def _do_rebuild(self, positions_soa):
         self.block_list.rebuild(
@@ -129,7 +136,8 @@ class System:
         return pos, vel
 
     def minimize(self, minimizer, number_steps=100):
-        self.ensure_uploaded()
+        self.upload_positions()
+        self.upload_velocities()
         self.gpu.refresh_wrapped_positions()
 
         positions_soa = (
