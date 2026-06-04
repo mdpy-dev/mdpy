@@ -48,7 +48,7 @@ Simulation data is a GPU-side black box during the run loop. The only way to obs
 
 The following functions — and every function they call directly or indirectly — must NOT transfer **bulk data** (arrays, reductions) from GPU to CPU:
 
-- Explicit pipeline loop: `check_and_rebuild()`, `compute_forces()`, `integrator.step(system)`, `refresh_wrapped_positions()`
+- Explicit pipeline loop: `update_neighbor_list()`, `compute_forces()`, `integrator.step(system)`, `refresh_wrapped_positions()`
 - `System.minimize()` inner loop
 
 **Forbidden operations** inside the hot path:
@@ -70,10 +70,11 @@ The following functions — and every function they call directly or indirectly 
 There are no `potential_energy` or `energies` properties on System. Energy is not "queryable state" — it is "output you explicitly request". Callers who need state during a loop collect it at explicit checkpoints:
 
 ```python
-system.ensure_uploaded()
+system.upload_positions()
+system.upload_velocities()
 system.gpu.refresh_wrapped_positions()
 for i in range(10000):
-    system.check_and_rebuild()
+    system.update_neighbor_list(force_check=(i % 10 == 0))
     system.compute_forces()
     integrator.step(system)
     system.gpu.refresh_wrapped_positions()
@@ -391,7 +392,7 @@ On tile list rebuild:
 | File | Responsibility |
 |------|---------------|
 | `mdpy/environment.py` | Precision config (`env.NUMPY_FLOAT`, `env.NUMPY_INT`); platform always CUDA |
-| `mdpy/system.py` | Simulation driver with public atomic operations: `check_and_rebuild()`, `compute_forces()`, `dump_state()`, `dump_energy()` |
+| `mdpy/system.py` | Simulation driver with public atomic operations: `upload_positions()`, `upload_velocities()`, `update_neighbor_list()`, `compute_forces()`, `dump_state()`, `dump_energy()` |
 | `mdpy/core/gpu_context.py` | GPU memory manager — owns all `d_*` state arrays, permutation kernels, PBC wrap |
 | `mdpy/core/tile_list.py` | Tile-based neighbor list — GPU kernels (Morton/AABB/tile-find/masks); provides mapping only |
 | `mdpy/core/topology.py` | Molecular topology (particles/bonds/angles/dihedrals/impropers), `join()` → compact arrays |
