@@ -11,6 +11,19 @@ from mdpy.force.force_term import ForceTerm
 COULOMB_CONST = 0.13893556595455
 SQRT_PI = 1.772453850905516
 
+_REMAP_INDICES_KERNEL = r"""
+extern "C" __global__
+void remap_indices_kernel(
+    const int* __restrict__ d_remap,
+    int* __restrict__ d_indices,
+    int num_indices
+) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= num_indices) return;
+    d_indices[i] = d_remap[d_indices[i]];
+}
+"""
+
 
 def _calc_ewald_coefficient(cutoff: float, rtol: float = 1e-5) -> float:
     lo, hi = 0.0, 10.0
@@ -530,6 +543,18 @@ def get_cell_spread_kernel():
     return _cell_spread_kernel
 
 
+_pme_remap_kernel = None
+
+
+def _get_pme_remap_kernel():
+    global _pme_remap_kernel
+    if _pme_remap_kernel is None:
+        _pme_remap_kernel = cp.RawKernel(
+            _REMAP_INDICES_KERNEL, "remap_indices_kernel"
+        )
+    return _pme_remap_kernel
+
+
 class PMEReciprocalForce(ForceTerm):
     name = 'pme_reciprocal'
 
@@ -649,6 +674,31 @@ class PMEReciprocalForce(ForceTerm):
         cp.fft.irfftn(fft, s=(self.grid_x, self.grid_y, self.grid_z))
         self._fft_warmed = True
 
+    def bind_sorted(self, topology, block_list, gpu_context):
+        N = self._N
+        if N == 0:
+            return
+
+        permutation = block_list.d_raw_order
+
+        sorted_charges = cp.empty(N, dtype=np.float32)
+        gpu_context._ensure_permutation_kernels()
+        tpb = 256
+        grid = ((N + tpb - 1) // tpb,)
+        gpu_context._permutation_kernels["permute"](
+            grid, (tpb,),
+            (self._d_charges, permutation, np.int32(N), sorted_charges)
+        )
+        self._d_charges = sorted_charges
+
+        if self._num_exclusion_pairs > 0:
+            kernel = _get_pme_remap_kernel()
+            n = self._num_exclusion_pairs
+            pair_grid = ((n + tpb - 1) // tpb,)
+            d_remap = block_list.d_pdb_to_sorted
+            kernel(pair_grid, (tpb,), (d_remap, self._d_pair_i, np.int32(n)))
+            kernel(pair_grid, (tpb,), (d_remap, self._d_pair_j, np.int32(n)))
+
     def compute(self, gpu_context, block_list=None, compute_energy=True):
         N = self._N
         order = self.order
@@ -666,8 +716,10 @@ class PMEReciprocalForce(ForceTerm):
             block_list.compute_pme_subgrid_dims(gx, gy, gz, order)
             self._subgrid_initialized = True
 
-        sorted_pos_x, sorted_pos_y, sorted_pos_z = block_list._sorted_positions
-        sorted_charges = self._d_charges[block_list.d_sorted_to_pdb]
+        sorted_pos_x = gpu_context.d_positions_x
+        sorted_pos_y = gpu_context.d_positions_y
+        sorted_pos_z = gpu_context.d_positions_z
+        sorted_charges = self._d_charges
 
         cell_spread_k = get_cell_spread_kernel()
         shmem = block_list._subgrid_total * 4
