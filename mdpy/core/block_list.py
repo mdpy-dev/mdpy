@@ -919,6 +919,8 @@ class BlockList:
             self._init_empty()
             return None, None
 
+        prev_sorted_to_pdb = self.d_sorted_to_pdb if self.d_sorted_to_pdb.size == N else None
+
         self._ensure_kernels()
         self._invalidate_caches()
         self.num_particles = N
@@ -1064,6 +1066,10 @@ class BlockList:
 
         self.d_positions_at_rebuild_x, self.d_positions_at_rebuild_y, self.d_positions_at_rebuild_z = self.fused_copy3(pos_x, pos_y, pos_z)
         self.d_rebuild_flag[0] = 0
+
+        raw_order = self.d_raw_order
+        if prev_sorted_to_pdb is not None:
+            self.d_sorted_to_pdb = prev_sorted_to_pdb[raw_order]
 
         return self.d_pdb_to_sorted, None
 
