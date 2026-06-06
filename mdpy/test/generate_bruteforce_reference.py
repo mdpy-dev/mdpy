@@ -11,6 +11,11 @@ import os
 import sys
 import time
 import numpy as np
+from scipy.special import erf
+from mdpy.force.pme_reciprocal_force import (
+    _calc_ewald_coefficient,
+    SQRT_PI,
+)
 
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
 
@@ -339,18 +344,124 @@ def compute_nonbonded_forces(
     return forces, energy
 
 
+def compute_ewald_reciprocal(positions, pairs_i, pairs_j, charges, box_size, alpha):
+    N = len(positions)
+    forces = np.zeros((N, 3), dtype=np.float64)
+    energy = 0.0
+    num_pairs = len(pairs_i)
+    alpha_sq = alpha * alpha
+    two_alpha_over_sqrt_pi = 2.0 * alpha / SQRT_PI
+
+    print(f"  Computing O(N^2) Ewald reciprocal for {num_pairs} pairs, alpha={alpha:.6f}...")
+    t0 = time.time()
+
+    for idx in range(num_pairs):
+        if idx % 2000000 == 0 and idx > 0:
+            elapsed = time.time() - t0
+            pct = idx / num_pairs * 100
+            eta = elapsed / idx * (num_pairs - idx)
+            print(f"    {idx}/{num_pairs} ({pct:.1f}%) - {elapsed:.1f}s, ETA {eta:.0f}s")
+
+        i = pairs_i[idx]
+        j = pairs_j[idx]
+        qi = charges[i]
+        qj = charges[j]
+
+        delta = _minimum_image_vector(positions[i], positions[j], box_size)
+        r = np.linalg.norm(delta)
+        if r < 1e-12:
+            continue
+
+        alpha_r = alpha * r
+        erf_val = erf(alpha_r)
+        exp_val = np.exp(-alpha_sq * r * r)
+
+        energy += COULOMB_CONSTANT * qi * qj * erf_val / r
+
+        f_deriv = COULOMB_CONSTANT * qi * qj * (
+            two_alpha_over_sqrt_pi * exp_val / r - erf_val / (r * r)
+        )
+        f_vec = f_deriv / r * delta
+
+        forces[i] += f_vec
+        forces[j] -= f_vec
+
+    elapsed = time.time() - t0
+    print(f"    Done in {elapsed:.1f}s")
+    return forces, energy
+
+
+def compute_ewald_exclusion_correction(positions, topology, charges, box_size, alpha):
+    N = len(positions)
+    forces = np.zeros((N, 3), dtype=np.float64)
+    energy = 0.0
+    alpha_sq = alpha * alpha
+    two_alpha_over_sqrt_pi = 2.0 * alpha / SQRT_PI
+
+    offset = topology.exclusion_offset
+    neighbors = topology.exclusion_neighbors
+    scale_arr = topology.exclusion_scale
+
+    count = 0
+    print("  Computing Ewald exclusion correction...")
+    t0 = time.time()
+
+    for i in range(N):
+        if i % 5000 == 0 and i > 0:
+            elapsed = time.time() - t0
+            pct = i / N * 100
+            eta = elapsed / i * (N - i)
+            print(f"    {i}/{N} ({pct:.1f}%) - {elapsed:.1f}s, ETA {eta:.0f}s")
+        start = int(offset[i])
+        end = int(offset[i + 1])
+        for idx in range(start, end):
+            j = int(neighbors[idx])
+            if j <= i:
+                continue
+            s = float(scale_arr[idx])
+            one_minus_s = 1.0 - s
+            if abs(one_minus_s) < 1e-12:
+                continue
+
+            delta = _minimum_image_vector(positions[i], positions[j], box_size)
+            r = np.linalg.norm(delta)
+            if r < 1e-12:
+                continue
+
+            qi = charges[i]
+            qj = charges[j]
+            alpha_r = alpha * r
+            erf_val = erf(alpha_r)
+            exp_val = np.exp(-alpha_sq * r * r)
+
+            energy += -COULOMB_CONSTANT * one_minus_s * qi * qj * erf_val / r
+
+            f_deriv = -COULOMB_CONSTANT * one_minus_s * qi * qj * (
+                two_alpha_over_sqrt_pi * exp_val / r - erf_val / (r * r)
+            )
+            f_vec = f_deriv / r * delta
+
+            forces[i] += f_vec
+            forces[j] -= f_vec
+            count += 1
+
+    elapsed = time.time() - t0
+    print(f"    {count} exclusion pairs in {elapsed:.1f}s")
+    return forces, energy
+
+
 def main():
     topology, parameter_table, positions, pbc_matrix, pbc_inv = _setup_system()
     N = topology.num_particles
     print(f"System: {N} atoms, box={BOX_SIZE} A, cutoff={CUTOFF} A")
 
-    print("\n[1/5] Neighbor pairs...")
+    print("\n[1/7] Neighbor pairs...")
     pairs_i, pairs_j, pair_distances = compute_neighbor_pairs(positions, BOX_SIZE, CUTOFF)
 
-    print("\n[2/5] Exclusion/scaling flags...")
+    print("\n[2/7] Exclusion/scaling flags...")
     flags = compute_exclusion_scaling_flags(topology, pairs_i, pairs_j)
 
-    print("\n[3/5] Bonded forces...")
+    print("\n[3/7] Bonded forces...")
     bond_params = parameter_table.get_term_parameter('bond')
     bond_forces, bond_energy = compute_bond_forces(
         positions, topology.bond_indices, bond_params, BOX_SIZE,
@@ -378,7 +489,7 @@ def main():
     bonded_forces = bond_forces + angle_forces + dihedral_forces + improper_forces
     bonded_energy_total = bond_energy + angle_energy + dihedral_energy + improper_energy
 
-    print("\n[4/5] Nonbonded forces...")
+    print("\n[4/7] Nonbonded forces...")
     charges = parameter_table.particle_parameters['charge'].astype(np.float64)
     charges_14 = parameter_table.particle_parameters.get('charge_14', charges).astype(np.float64)
     lj_pair = parameter_table.type_pair_parameters['lj_pair'].astype(np.float64)
@@ -393,7 +504,30 @@ def main():
     )
     print(f"  nonbonded energy: {nonbonded_energy:.6f}")
 
-    print("\n[5/5] Saving reference data...")
+    print("\n[5/7] Ewald reciprocal (erf pairwise)...")
+    alpha = _calc_ewald_coefficient(CUTOFF)
+    print(f"  alpha = {alpha:.6f}")
+
+    recip_forces, recip_pair_energy = compute_ewald_reciprocal(
+        positions, pairs_i, pairs_j, charges, BOX_SIZE, alpha,
+    )
+    self_energy = -COULOMB_CONSTANT * alpha / SQRT_PI * np.sum(charges ** 2)
+    recip_energy = recip_pair_energy + self_energy
+    print(f"  reciprocal pair energy: {recip_pair_energy:.6f}")
+    print(f"  self energy: {self_energy:.6f}")
+    print(f"  reciprocal total energy: {recip_energy:.6f}")
+
+    print("\n[6/7] Ewald exclusion correction...")
+    excl_corr_forces, excl_corr_energy = compute_ewald_exclusion_correction(
+        positions, topology, charges, BOX_SIZE, alpha,
+    )
+    print(f"  exclusion correction energy: {excl_corr_energy:.6f}")
+
+    pme_recip_energy = recip_energy + excl_corr_energy
+    pme_recip_forces = recip_forces + excl_corr_forces
+    print(f"  PME reciprocal energy (with exclusion correction): {pme_recip_energy:.6f}")
+
+    print("\n[7/7] Saving reference data...")
     total_forces = bonded_forces + nonbonded_forces
     total_energy = bonded_energy_total + nonbonded_energy
     print(f"  total energy: {total_energy:.6f}")
@@ -419,6 +553,16 @@ def main():
         nonbonded_energy=np.float64(nonbonded_energy),
         total_forces=total_forces.astype(np.float64),
         total_energy=np.float64(total_energy),
+        ewald_alpha=np.float64(alpha),
+        ewald_recip_pair_forces=recip_forces.astype(np.float64),
+        ewald_recip_pair_energy=np.float64(recip_pair_energy),
+        ewald_self_energy=np.float64(self_energy),
+        ewald_recip_energy=np.float64(recip_energy),
+        ewald_recip_forces=recip_forces.astype(np.float64),
+        ewald_excl_corr_forces=excl_corr_forces.astype(np.float64),
+        ewald_excl_corr_energy=np.float64(excl_corr_energy),
+        pme_recip_forces=pme_recip_forces.astype(np.float64),
+        pme_recip_energy=np.float64(pme_recip_energy),
     )
     print(f"  Saved: {OUTPUT_PATH}")
     print("Done!")
