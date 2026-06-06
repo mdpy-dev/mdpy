@@ -270,7 +270,8 @@ def precompute_bk_factors(
     moduli_z = _compute_bspline_moduli(grid_z, order)
 
     volume = box_x * box_y * box_z
-    scale_factor = math.pi * volume
+    grid_total = grid_x * grid_y * grid_z
+    scale_factor = math.pi * volume / grid_total
     recip_exp_factor = math.pi**2 / (alpha**2)
 
     recip_x = 1.0 / box_x
