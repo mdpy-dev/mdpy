@@ -47,7 +47,9 @@ def _next_fft_friendly_size(n: int) -> int:
         n += 1
 
 
-def compute_bspline_weights(fractional: float, order: int = 4) -> tuple[np.ndarray, np.ndarray]:
+def compute_bspline_weights(
+    fractional: float, order: int = 4
+) -> tuple[np.ndarray, np.ndarray]:
     w = fractional - math.floor(fractional)
 
     data = [0.0] * order
@@ -59,7 +61,9 @@ def compute_bspline_weights(fractional: float, order: int = 4) -> tuple[np.ndarr
         div = 1.0 / (j - 1)
         data[j - 1] = div * w * data[j - 2]
         for k in range(1, j - 1):
-            data[j - k - 1] = div * ((w + k) * data[j - k - 2] + (j - k - w) * data[j - k - 1])
+            data[j - k - 1] = div * (
+                (w + k) * data[j - k - 2] + (j - k - w) * data[j - k - 1]
+            )
         data[0] = div * (1.0 - w) * data[0]
 
     ddata = [0.0] * order
@@ -70,7 +74,9 @@ def compute_bspline_weights(fractional: float, order: int = 4) -> tuple[np.ndarr
     scale = 1.0 / (order - 1)
     data[order - 1] = scale * w * data[order - 2]
     for j in range(1, order - 1):
-        data[order - j - 1] = scale * ((w + j) * data[order - j - 2] + (order - j - w) * data[order - j - 1])
+        data[order - j - 1] = scale * (
+            (w + j) * data[order - j - 2] + (order - j - w) * data[order - j - 1]
+        )
     data[0] = scale * (1.0 - w) * data[0]
 
     theta = np.array(data, dtype=np.float64)
@@ -228,7 +234,9 @@ def _compute_bspline_moduli(grid_dim: int, order: int) -> np.ndarray:
     div = 1.0 / (order - 1)
     data[order - 1] = 0.0
     for l in range(1, order - 1):
-        data[order - l - 1] = div * (l * data[order - l - 2] + (order - l) * data[order - l - 1])
+        data[order - l - 1] = div * (
+            l * data[order - l - 2] + (order - l) * data[order - l - 1]
+        )
     data[0] = div * data[0]
 
     bsplines_data = np.zeros(grid_dim, dtype=np.float64)
@@ -240,20 +248,30 @@ def _compute_bspline_moduli(grid_dim: int, order: int) -> np.ndarray:
 
     for i in range(grid_dim):
         if moduli[i] < 1e-7:
-            moduli[i] = (moduli[(i - 1 + grid_dim) % grid_dim] + moduli[(i + 1) % grid_dim]) * 0.5
+            moduli[i] = (
+                moduli[(i - 1 + grid_dim) % grid_dim] + moduli[(i + 1) % grid_dim]
+            ) * 0.5
 
     return moduli
 
 
-def precompute_bk_factors(alpha: float, grid_x: int, grid_y: int, grid_z: int,
-                          order: int, box_x: float, box_y: float, box_z: float) -> np.ndarray:
+def precompute_bk_factors(
+    alpha: float,
+    grid_x: int,
+    grid_y: int,
+    grid_z: int,
+    order: int,
+    box_x: float,
+    box_y: float,
+    box_z: float,
+) -> np.ndarray:
     moduli_x = _compute_bspline_moduli(grid_x, order)
     moduli_y = _compute_bspline_moduli(grid_y, order)
     moduli_z = _compute_bspline_moduli(grid_z, order)
 
     volume = box_x * box_y * box_z
     scale_factor = math.pi * volume
-    recip_exp_factor = math.pi ** 2 / (alpha ** 2)
+    recip_exp_factor = math.pi**2 / (alpha**2)
 
     recip_x = 1.0 / box_x
     recip_y = 1.0 / box_y
@@ -390,10 +408,10 @@ void gather_kernel(
         }
     }
 
-    energy *= 0.5f * q;
-    ffx *= -q * grid_x * recip_box_x;
-    ffy *= -q * grid_y * recip_box_y;
-    ffz *= -q * grid_z * recip_box_z;
+    energy *= 0.5f * 0.13893556595455f * q;
+    ffx *= -0.13893556595455f * q * grid_x * recip_box_x;
+    ffy *= -0.13893556595455f * q * grid_y * recip_box_y;
+    ffz *= -0.13893556595455f * q * grid_z * recip_box_z;
 
     atomicAdd(&forces_x[i], ffx);
     atomicAdd(&forces_y[i], ffy);
@@ -487,7 +505,7 @@ void exclusion_kernel(
 
     float corr_energy = -COULOMB_CONST * one_minus_scale * qq * erf_val * inv_r;
 
-    float corr_fmag = -COULOMB_CONST * one_minus_scale * qq * alpha3 * r * corr;
+    float corr_fmag = COULOMB_CONST * one_minus_scale * qq * alpha3 * r * corr;
 
     float fx = corr_fmag * dx * inv_r;
     float fy = corr_fmag * dy * inv_r;
@@ -525,7 +543,9 @@ def get_gather_kernel():
 def get_self_energy_kernel():
     global _self_energy_kernel
     if _self_energy_kernel is None:
-        _self_energy_kernel = cp.RawKernel(_SELF_ENERGY_KERNEL_SOURCE, "self_energy_kernel")
+        _self_energy_kernel = cp.RawKernel(
+            _SELF_ENERGY_KERNEL_SOURCE, "self_energy_kernel"
+        )
     return _self_energy_kernel
 
 
@@ -539,7 +559,9 @@ def get_exclusion_kernel():
 def get_cell_spread_kernel():
     global _cell_spread_kernel
     if _cell_spread_kernel is None:
-        _cell_spread_kernel = cp.RawKernel(_CELL_SPREAD_KERNEL_SOURCE, "cell_spread_kernel")
+        _cell_spread_kernel = cp.RawKernel(
+            _CELL_SPREAD_KERNEL_SOURCE, "cell_spread_kernel"
+        )
     return _cell_spread_kernel
 
 
@@ -549,17 +571,20 @@ _pme_remap_kernel = None
 def _get_pme_remap_kernel():
     global _pme_remap_kernel
     if _pme_remap_kernel is None:
-        _pme_remap_kernel = cp.RawKernel(
-            _REMAP_INDICES_KERNEL, "remap_indices_kernel"
-        )
+        _pme_remap_kernel = cp.RawKernel(_REMAP_INDICES_KERNEL, "remap_indices_kernel")
     return _pme_remap_kernel
 
 
 class PMEReciprocalForce(ForceTerm):
-    name = 'pme_reciprocal'
+    name = "pme_reciprocal"
 
-    def __init__(self, cutoff: float, order: int = 4,
-                 fourier_spacing: float = 1.2, ewald_rtol: float = 1e-5):
+    def __init__(
+        self,
+        cutoff: float,
+        order: int = 4,
+        fourier_spacing: float = 1.2,
+        ewald_rtol: float = 1e-5,
+    ):
         self.cutoff = cutoff
         self._order = order
         self._fourier_spacing = fourier_spacing
@@ -596,7 +621,7 @@ class PMEReciprocalForce(ForceTerm):
         N = topology.num_particles
         self._N = N
 
-        charges = parameter_table.particle_parameters['charge'].astype(np.float32)
+        charges = parameter_table.particle_parameters["charge"].astype(np.float32)
         self._d_charges = cp.asarray(charges)
 
         if pbc_matrix is not None:
@@ -627,13 +652,21 @@ class PMEReciprocalForce(ForceTerm):
         self._d_charge_grid = cp.zeros(grid_size, dtype=np.float32)
 
         bk = precompute_bk_factors(
-            self.alpha, self.grid_x, self.grid_y, self.grid_z,
-            self._order, box_x, box_y, box_z,
+            self.alpha,
+            self.grid_x,
+            self.grid_y,
+            self.grid_z,
+            self._order,
+            box_x,
+            box_y,
+            box_z,
         )
         self._d_bk_factors = cp.asarray(bk)
 
         self._self_energy_factor = (
-            -COULOMB_CONST * self.alpha / SQRT_PI
+            -COULOMB_CONST
+            * self.alpha
+            / SQRT_PI
             * float(np.sum(charges.astype(np.float64) ** 2))
         )
 
@@ -686,8 +719,7 @@ class PMEReciprocalForce(ForceTerm):
         tpb = 256
         grid = ((N + tpb - 1) // tpb,)
         gpu_context._permutation_kernels["permute"](
-            grid, (tpb,),
-            (self._d_charges, permutation, np.int32(N), sorted_charges)
+            grid, (tpb,), (self._d_charges, permutation, np.int32(N), sorted_charges)
         )
         self._d_charges = sorted_charges
 
@@ -724,18 +756,32 @@ class PMEReciprocalForce(ForceTerm):
         cell_spread_k = get_cell_spread_kernel()
         shmem = block_list._subgrid_total * 4
         cell_spread_k(
-            (block_list.nc_total,), (tpb,),
-            (sorted_pos_x, sorted_pos_y, sorted_pos_z, sorted_charges,
-             block_list.d_cell_block_offset, block_list.d_cell_block_count, block_list.d_block_atoms,
-             np.int32(N),
-             np.float32(gpu_context._inv_box_x),
-             np.float32(gpu_context._inv_box_y),
-             np.float32(gpu_context._inv_box_z),
-             np.int32(gx), np.int32(gy), np.int32(gz),
-             np.int32(block_list.nc_x), np.int32(block_list.nc_y), np.int32(block_list.nc_z),
-             np.int32(block_list._subgrid_dx), np.int32(block_list._subgrid_dy), np.int32(block_list._subgrid_dz),
-             np.int32(order),
-             self._d_charge_grid),
+            (block_list.nc_total,),
+            (tpb,),
+            (
+                sorted_pos_x,
+                sorted_pos_y,
+                sorted_pos_z,
+                sorted_charges,
+                block_list.d_cell_block_offset,
+                block_list.d_cell_block_count,
+                block_list.d_block_atoms,
+                np.int32(N),
+                np.float32(gpu_context._inv_box_x),
+                np.float32(gpu_context._inv_box_y),
+                np.float32(gpu_context._inv_box_z),
+                np.int32(gx),
+                np.int32(gy),
+                np.int32(gz),
+                np.int32(block_list.nc_x),
+                np.int32(block_list.nc_y),
+                np.int32(block_list.nc_z),
+                np.int32(block_list._subgrid_dx),
+                np.int32(block_list._subgrid_dy),
+                np.int32(block_list._subgrid_dz),
+                np.int32(order),
+                self._d_charge_grid,
+            ),
             shared_mem=shmem,
         )
 
@@ -746,35 +792,56 @@ class PMEReciprocalForce(ForceTerm):
         self._d_charge_grid = grid_3d.ravel()
 
         gather_k = get_gather_kernel()
-        gather_k(grid_1d, (tpb,),
-            (gpu_context.d_positions_x,
-             gpu_context.d_positions_y,
-             gpu_context.d_positions_z,
-             self._d_charges,
-             np.int32(N),
-             np.float32(gpu_context._inv_box_x),
-             np.float32(gpu_context._inv_box_y),
-             np.float32(gpu_context._inv_box_z),
-             np.int32(gx), np.int32(gy), np.int32(gz), np.int32(order),
-             self._d_charge_grid,
-             gpu_context.d_forces_x, gpu_context.d_forces_y, gpu_context.d_forces_z,
-             gpu_context.d_energy))
+        gather_k(
+            grid_1d,
+            (tpb,),
+            (
+                gpu_context.d_positions_x,
+                gpu_context.d_positions_y,
+                gpu_context.d_positions_z,
+                self._d_charges,
+                np.int32(N),
+                np.float32(gpu_context._inv_box_x),
+                np.float32(gpu_context._inv_box_y),
+                np.float32(gpu_context._inv_box_z),
+                np.int32(gx),
+                np.int32(gy),
+                np.int32(gz),
+                np.int32(order),
+                self._d_charge_grid,
+                gpu_context.d_forces_x,
+                gpu_context.d_forces_y,
+                gpu_context.d_forces_z,
+                gpu_context.d_energy,
+            ),
+        )
 
         self_k = get_self_energy_kernel()
-        self_k((1,), (1,),
-            (np.float32(self._self_energy_factor), gpu_context.d_energy))
+        self_k((1,), (1,), (np.float32(self._self_energy_factor), gpu_context.d_energy))
 
         if self._num_exclusion_pairs > 0:
             num_pairs = self._num_exclusion_pairs
             pair_grid = ((num_pairs + tpb - 1) // tpb,)
             excl_k = get_exclusion_kernel()
-            excl_k(pair_grid, (tpb,),
-                (gpu_context.d_positions_x,
-                 gpu_context.d_positions_y,
-                 gpu_context.d_positions_z,
-                 self._d_charges,
-                 self._d_pair_i, self._d_pair_j, self._d_pair_scale,
-                 np.int32(num_pairs), np.float32(self.alpha),
-                 np.float32(box_x), np.float32(box_y), np.float32(box_z),
-                 gpu_context.d_forces_x, gpu_context.d_forces_y, gpu_context.d_forces_z,
-                 gpu_context.d_energy))
+            excl_k(
+                pair_grid,
+                (tpb,),
+                (
+                    gpu_context.d_positions_x,
+                    gpu_context.d_positions_y,
+                    gpu_context.d_positions_z,
+                    self._d_charges,
+                    self._d_pair_i,
+                    self._d_pair_j,
+                    self._d_pair_scale,
+                    np.int32(num_pairs),
+                    np.float32(self.alpha),
+                    np.float32(box_x),
+                    np.float32(box_y),
+                    np.float32(box_z),
+                    gpu_context.d_forces_x,
+                    gpu_context.d_forces_y,
+                    gpu_context.d_forces_z,
+                    gpu_context.d_energy,
+                ),
+            )
