@@ -128,6 +128,42 @@ void pbc_wrap_inplace_kernel(
 }
 """
 
+_WRAP_CORRECT_KERNEL = r"""
+extern "C" __global__
+void wrap_correct_kernel(
+    float* __restrict__ pos_x,
+    float* __restrict__ pos_y,
+    float* __restrict__ pos_z,
+    float* __restrict__ prev_pos_x,
+    float* __restrict__ prev_pos_y,
+    float* __restrict__ prev_pos_z,
+    const float* __restrict__ pbc_matrix,
+    const float* __restrict__ pbc_inv,
+    int number_particles
+) {
+    int index = blockIdx.x * blockDim.x + threadIdx.x;
+    if (index >= number_particles) return;
+    float px = pos_x[index];
+    float py = pos_y[index];
+    float pz = pos_z[index];
+    float fx = px*pbc_inv[0] + py*pbc_inv[3] + pz*pbc_inv[6];
+    float fy = px*pbc_inv[1] + py*pbc_inv[4] + pz*pbc_inv[7];
+    float fz = px*pbc_inv[2] + py*pbc_inv[5] + pz*pbc_inv[8];
+    float fx_w = fx - floorf(fx);
+    float fy_w = fy - floorf(fy);
+    float fz_w = fz - floorf(fz);
+    float dx = (fx_w - fx)*pbc_matrix[0] + (fy_w - fy)*pbc_matrix[3] + (fz_w - fz)*pbc_matrix[6];
+    float dy = (fx_w - fx)*pbc_matrix[1] + (fy_w - fy)*pbc_matrix[4] + (fz_w - fz)*pbc_matrix[7];
+    float dz = (fx_w - fx)*pbc_matrix[2] + (fy_w - fy)*pbc_matrix[5] + (fz_w - fz)*pbc_matrix[8];
+    pos_x[index] += dx;
+    pos_y[index] += dy;
+    pos_z[index] += dz;
+    prev_pos_x[index] += dx;
+    prev_pos_y[index] += dy;
+    prev_pos_z[index] += dz;
+}
+"""
+
 _ZERO_FORCES_KERNEL = r"""
 extern "C" __global__
 void zero_forces_kernel(
@@ -187,12 +223,41 @@ class GPUContext:
         self._permutation_kernels = None
         self._zero_forces_kernel = None
         self._wrap_kernel = None
+        self._wrap_correct_kernel = None
 
     def _ensure_wrap_kernel(self):
         if self._wrap_kernel is not None:
             return
         self._wrap_kernel = cp.RawKernel(
             _PBC_WRAP_INPLACE_KERNEL, "pbc_wrap_inplace_kernel"
+        )
+
+    def _ensure_wrap_correct_kernel(self):
+        if self._wrap_correct_kernel is not None:
+            return
+        self._wrap_correct_kernel = cp.RawKernel(
+            _WRAP_CORRECT_KERNEL, "wrap_correct_kernel"
+        )
+
+    def wrap_positions_with_prev_correction(self):
+        self._ensure_wrap_correct_kernel()
+        N = self.number_particles
+        tpb = 256
+        grid = ((N + tpb - 1) // tpb,)
+        self._wrap_correct_kernel(
+            grid,
+            (tpb,),
+            (
+                self.d_positions_x,
+                self.d_positions_y,
+                self.d_positions_z,
+                self.d_prev_positions_x,
+                self.d_prev_positions_y,
+                self.d_prev_positions_z,
+                self.d_pbc_matrix,
+                self.d_pbc_inv,
+                np.int32(N),
+            ),
         )
 
     def _wrap_positions_inplace(self):
