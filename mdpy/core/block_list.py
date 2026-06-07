@@ -561,8 +561,6 @@ void check_rebuild_kernel(
     const float* __restrict__ old_pos_z,
     int num_particles,
     float threshold_sq,
-    const float* __restrict__ pbc_inv,
-    const float* __restrict__ pbc_matrix,
     int* __restrict__ rebuild_flag
 ) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -570,13 +568,6 @@ void check_rebuild_kernel(
     float dx = pos_x[idx] - old_pos_x[idx];
     float dy = pos_y[idx] - old_pos_y[idx];
     float dz = pos_z[idx] - old_pos_z[idx];
-    float fx = dx*pbc_inv[0] + dy*pbc_inv[3] + dz*pbc_inv[6];
-    float fy = dx*pbc_inv[1] + dy*pbc_inv[4] + dz*pbc_inv[7];
-    float fz = dx*pbc_inv[2] + dy*pbc_inv[5] + dz*pbc_inv[8];
-    fx -= roundf(fx); fy -= roundf(fy); fz -= roundf(fz);
-    dx = fx*pbc_matrix[0] + fy*pbc_matrix[3] + fz*pbc_matrix[6];
-    dy = fx*pbc_matrix[1] + fy*pbc_matrix[4] + fz*pbc_matrix[7];
-    dz = fx*pbc_matrix[2] + fy*pbc_matrix[5] + fz*pbc_matrix[8];
     if (dx*dx + dy*dy + dz*dz > threshold_sq)
         rebuild_flag[0] = 1;
 }
@@ -1372,8 +1363,6 @@ class BlockList:
                 self.d_positions_at_rebuild_z,
                 np.int32(self.num_particles),
                 np.float32(threshold_sq),
-                self._d_pbc_inv,
-                self._d_pbc_matrix,
                 self.d_rebuild_flag,
             ),
         )
@@ -1412,8 +1401,6 @@ class BlockList:
                 self.d_positions_at_rebuild_z,
                 np.int32(self.num_particles),
                 np.float32(threshold_sq),
-                self._d_pbc_inv,
-                self._d_pbc_matrix,
                 self.d_rebuild_flag,
             ),
         )
