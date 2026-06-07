@@ -161,7 +161,7 @@ class TestCellBasedChargeSpreading:
         assert abs_err < 1e-3, f"Max absolute error: {abs_err}"
 
     def test_single_atom(self):
-        d_ref, d_cell, _ = self._run_cell_spread(1, 32, 32, 32, 32.0, 32.0, 32.0)
+        d_ref, d_cell, _ = self._run_cell_spread(1, 32, 32, 32, 50.0, 50.0, 50.0)
         ref = cp.asnumpy(d_ref)
         cell = cp.asnumpy(d_cell)
         np.testing.assert_allclose(cell, ref, atol=1e-5)

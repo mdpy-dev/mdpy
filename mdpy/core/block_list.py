@@ -879,9 +879,9 @@ class BlockList:
         self._scaling_masks_np = None
 
     def compute_pme_subgrid_dims(self, grid_x, grid_y, grid_z, order):
-        self._subgrid_dx = -(-grid_x // self.nc_x) + order
-        self._subgrid_dy = -(-grid_y // self.nc_y) + order
-        self._subgrid_dz = -(-grid_z // self.nc_z) + order
+        self._subgrid_dx = -(-grid_x // self.nc_x) + 2 * order
+        self._subgrid_dy = -(-grid_y // self.nc_y) + 2 * order
+        self._subgrid_dz = -(-grid_z // self.nc_z) + 2 * order
         self._subgrid_total = self._subgrid_dx * self._subgrid_dy * self._subgrid_dz
 
     def _ensure_kernels(self):
