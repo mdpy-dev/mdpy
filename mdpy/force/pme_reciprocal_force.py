@@ -112,9 +112,9 @@ void cell_spread_kernel(
     int cy = (cell_idx / nc_x) % nc_y;
     int cz = cell_idx / (nc_x * nc_y);
 
-    int gx_origin = (int)floorf((float)cx / nc_x * grid_x);
-    int gy_origin = (int)floorf((float)cy / nc_y * grid_y);
-    int gz_origin = (int)floorf((float)cz / nc_z * grid_z);
+    int gx_origin = (int)floorf((float)cx / nc_x * grid_x) - order;
+    int gy_origin = (int)floorf((float)cy / nc_y * grid_y) - order;
+    int gz_origin = (int)floorf((float)cz / nc_z * grid_z) - order;
 
     int subgrid_total = subgrid_dx * subgrid_dy * subgrid_dz;
 
