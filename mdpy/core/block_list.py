@@ -39,16 +39,21 @@ void cell_morton_kernel(
     float fx = px*pbc_inv[0] + py*pbc_inv[3] + pz*pbc_inv[6];
     float fy = px*pbc_inv[1] + py*pbc_inv[4] + pz*pbc_inv[7];
     float fz = px*pbc_inv[2] + py*pbc_inv[5] + pz*pbc_inv[8];
-    fx -= floorf(fx); fy -= floorf(fy); fz -= floorf(fz);
 
-    int cx = min((int)(fx * nc_x), nc_x - 1);
-    int cy = min((int)(fy * nc_y), nc_y - 1);
-    int cz = min((int)(fz * nc_z), nc_z - 1);
+    int cx = (int)(fx * nc_x);
+    cx = max(0, min(cx, nc_x - 1));
+    int cy = (int)(fy * nc_y);
+    cy = max(0, min(cy, nc_y - 1));
+    int cz = (int)(fz * nc_z);
+    cz = max(0, min(cz, nc_z - 1));
     cell_indices[i] = cx + cy * nc_x + cz * nc_x * nc_y;
 
     float lfx = fx * nc_x - cx;
+    lfx = fmaxf(0.0f, fminf(lfx, 1.0f - 1e-6f));
     float lfy = fy * nc_y - cy;
+    lfy = fmaxf(0.0f, fminf(lfy, 1.0f - 1e-6f));
     float lfz = fz * nc_z - cz;
+    lfz = fmaxf(0.0f, fminf(lfz, 1.0f - 1e-6f));
 
     unsigned int lx = min((unsigned int)(lfx * 1024.f), 1023u);
     unsigned int ly = min((unsigned int)(lfy * 1024.f), 1023u);
