@@ -424,14 +424,20 @@ class TestLangevinIntegrator:
         )
 
         _ensure_ready(system)
-        _run_steps(system, integrator, 500)
+        _run_steps(system, integrator, 499)
 
-        positions, _ = system.dump_state()
-        assert np.all(np.isfinite(positions))
+        pos_before, _ = system.dump_state()
+        _run_steps(system, integrator, 1)
+        pos_after, _ = system.dump_state()
+        assert np.all(np.isfinite(pos_after))
 
-        kinetic_energy = 0.5 * 12.0 * np.sum(
-            ((positions[1] - [1.5, 0.0, 0.0]) ** 2) / (0.05 ** 2)
-        )
+        box = float(pbc_matrix[0, 0])
+        delta = pos_after - pos_before
+        frac = delta / box
+        frac -= np.round(frac)
+        delta_wrapped = frac * box
+        velocity = delta_wrapped / 0.05
+        kinetic_energy = 0.5 * 12.0 * np.sum(velocity ** 2)
         measured_temperature = kinetic_energy / (1.5 * 8.314462618e-7)
 
         assert measured_temperature > 10.0, \
@@ -656,6 +662,12 @@ class TestRebuildSortCorrectness:
             err_msg="permutation invariant broken after 100 steps")
 
         max_disp_per_step = np.max(np.abs(pos_final - snapshot_before)) / 100.0
+        pbc_inv = np.diag([1.0 / box] * 3).astype(env.NUMPY_FLOAT)
+        delta = pos_final - snapshot_before
+        frac = delta @ pbc_inv.T
+        frac -= np.round(frac)
+        delta_wrapped = frac @ (np.diag([box] * 3).astype(env.NUMPY_FLOAT)).T
+        max_disp_per_step = np.max(np.abs(delta_wrapped)) / 100.0
         assert max_disp_per_step < 1.0, \
             f"atoms moved {max_disp_per_step:.3f} per step on average, likely wrong PDB mapping"
 
