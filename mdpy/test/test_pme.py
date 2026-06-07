@@ -850,3 +850,126 @@ class TestPMEIntegration6PO6:
         self_energy = -COULOMB_CONST * alpha / SQRT_PI * np.sum(charges ** 2)
         print(f"Self-energy: {self_energy:.6f}")
         assert self_energy < 0, "Self-energy should be negative"
+
+
+class TestBilateralPaddingUnwrapped:
+
+    def test_subgrid_dimensions_bilateral(self):
+        from mdpy.core.block_list import BlockList
+
+        box = 50.0
+        cutoff = 10.0
+        skin = 2.0
+        N = 1
+        grid_x = grid_y = grid_z = 50
+        order = 4
+
+        positions = np.array([[25.0, 25.0, 25.0]], dtype=np.float64)
+        topo = type('T', (), {'num_particles': N, 'particle_types': np.zeros(N, dtype=np.int32)})()
+        pbc = np.eye(3, dtype=np.float64) * box
+        pbc_inv = np.linalg.inv(pbc)
+
+        bl = BlockList(cutoff=cutoff, skin=skin)
+        bl.rebuild(positions, topo, pbc, pbc_inv)
+        bl.compute_pme_subgrid_dims(grid_x, grid_y, grid_z, order)
+
+        expected_dx = -(-grid_x // bl.nc_x) + 2 * order
+        expected_dy = -(-grid_y // bl.nc_y) + 2 * order
+        expected_dz = -(-grid_z // bl.nc_z) + 2 * order
+
+        assert bl._subgrid_dx == expected_dx, \
+            f"subgrid_dx={bl._subgrid_dx}, expected={expected_dx}"
+        assert bl._subgrid_dy == expected_dy
+        assert bl._subgrid_dz == expected_dz
+
+        base_dx = -(-grid_x // bl.nc_x)
+        assert bl._subgrid_dx == base_dx + 2 * order, \
+            f"Bilateral padding should add 2*order: base={base_dx}, got={bl._subgrid_dx}"
+        assert bl._subgrid_dx > base_dx, \
+            f"Subgrid must be larger than base: {bl._subgrid_dx} vs {base_dx}"
+
+    def test_charge_conservation_at_boundary(self):
+        from mdpy.force.pme_reciprocal_force import get_cell_spread_kernel, compute_bspline_weights
+        from mdpy.core.block_list import BlockList
+
+        box = 50.0
+        cutoff = 10.0
+        skin = 2.0
+        N = 1
+        grid_x = grid_y = grid_z = 50
+        order = 4
+
+        charge = np.array([1.0], dtype=np.float32)
+        pos_x = np.array([0.01], dtype=np.float32)
+        pos_y = np.array([0.01], dtype=np.float32)
+        pos_z = np.array([0.01], dtype=np.float32)
+
+        d_pos_x = cp.asarray(pos_x)
+        d_pos_y = cp.asarray(pos_y)
+        d_pos_z = cp.asarray(pos_z)
+        d_charges = cp.asarray(charge)
+
+        ref_grid = np.zeros(grid_x * grid_y * grid_z, dtype=np.float64)
+        for i in range(N):
+            fx = pos_x[i] / box * grid_x
+            fy = pos_y[i] / box * grid_y
+            fz = pos_z[i] / box * grid_z
+            theta_x, _ = compute_bspline_weights(float(fx), order)
+            theta_y, _ = compute_bspline_weights(float(fy), order)
+            theta_z, _ = compute_bspline_weights(float(fz), order)
+            gx0 = int(math.floor(fx)) % grid_x
+            gy0 = int(math.floor(fy)) % grid_y
+            gz0 = int(math.floor(fz)) % grid_z
+            for kx in range(order):
+                ix = (gx0 + kx) % grid_x
+                for ky in range(order):
+                    iy = (gy0 + ky) % grid_y
+                    for kz in range(order):
+                        iz = (gz0 + kz) % grid_z
+                        ref_grid[ix * grid_y * grid_z + iy * grid_z + iz] += \
+                            float(charge[i]) * float(theta_x[kx]) * float(theta_y[ky]) * float(theta_z[kz])
+
+        positions = np.stack([pos_x, pos_y, pos_z], axis=1).astype(np.float64)
+        topo = type('T', (), {'num_particles': N, 'particle_types': np.zeros(N, dtype=np.int32)})()
+        pbc = np.eye(3, dtype=np.float64) * box
+        pbc_inv = np.linalg.inv(pbc)
+        bl = BlockList(cutoff=cutoff, skin=skin)
+        bl.rebuild(positions, topo, pbc, pbc_inv)
+        bl.compute_pme_subgrid_dims(grid_x, grid_y, grid_z, order)
+
+        sorted_pos_x, sorted_pos_y, sorted_pos_z = bl._sorted_positions
+        sorted_charges = d_charges[bl.d_sorted_to_pdb]
+
+        d_grid_cell = cp.zeros(grid_x * grid_y * grid_z, dtype=np.float32)
+        cell_spread_k = get_cell_spread_kernel()
+        shmem = bl._subgrid_total * 4
+        cell_spread_k(
+            (bl.nc_total,), (256,),
+            (sorted_pos_x, sorted_pos_y, sorted_pos_z, sorted_charges,
+             bl.d_cell_block_offset, bl.d_cell_block_count, bl.d_block_atoms,
+             np.int32(N),
+             np.float32(1.0 / box), np.float32(1.0 / box), np.float32(1.0 / box),
+             np.int32(grid_x), np.int32(grid_y), np.int32(grid_z),
+             np.int32(bl.nc_x), np.int32(bl.nc_y), np.int32(bl.nc_z),
+             np.int32(bl._subgrid_dx), np.int32(bl._subgrid_dy), np.int32(bl._subgrid_dz),
+             np.int32(order),
+             d_grid_cell),
+            shared_mem=shmem,
+        )
+
+        cell_grid = cp.asnumpy(d_grid_cell)
+        ref_sum = float(np.sum(ref_grid))
+        cell_sum = float(np.sum(cell_grid))
+
+        assert abs(cell_sum - 1.0) < 1e-4, \
+            f"Charge not conserved: cell_sum={cell_sum:.6f}, expected=1.0"
+        assert abs(cell_sum - ref_sum) < 1e-4, \
+            f"Cell sum ({cell_sum:.6f}) != ref sum ({ref_sum:.6f})"
+
+        nonzero = np.abs(cell_grid) > 1e-10
+        assert np.any(nonzero), "Charge was not spread to grid at all"
+
+        ref_arr = ref_grid.astype(np.float32)
+        if np.any(nonzero):
+            rel_err = np.max(np.abs(ref_arr[nonzero] - cell_grid[nonzero]) / (np.abs(ref_arr[nonzero]) + 1e-10))
+            assert rel_err < 1e-3, f"Max relative error: {rel_err}"
