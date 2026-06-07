@@ -89,6 +89,7 @@ class System:
             self.pbc_inv,
         )
         self._permute_all_arrays()
+        self.gpu.wrap_positions_with_prev_correction()
         self.block_list.build_block_pairs(self.topology, self.pbc_matrix)
         for term in self.force_terms:
             if hasattr(term, "bind_sorted"):
@@ -170,6 +171,7 @@ class System:
                 self.pbc_inv,
             )
             self._permute_all_arrays()
+            self.gpu.wrap_positions_with_prev_correction()
             self.block_list.build_block_pairs(self.topology, self.pbc_matrix)
         for term in self.force_terms:
             if hasattr(term, "bind_sorted"):

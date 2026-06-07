@@ -186,8 +186,8 @@ class GPUContext:
     def __init__(self):
         self.number_particles = 0
 
-        # d_positions_x/y/z: particle positions in [0, L) via floorf PBC wrapping.
-        # Updated by integrator each step. All force terms and BlockList read these.
+        # d_positions_x/y/z: particle positions. May drift to [-skin, L+skin)
+        # between rebuilds. Wrapped back to [0, L) during rebuild.
         self.d_positions_x = None
         self.d_positions_y = None
         self.d_positions_z = None
