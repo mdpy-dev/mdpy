@@ -115,8 +115,8 @@ void lincs_kernel(
     // Phase 5: first coordinate update
     if (!is_dummy) {
         float lagrange = blc * sol;
-        float ci = -lagrange * imi;
-        float cj =  lagrange * imj;
+        float ci = lagrange * imi;
+        float cj = -lagrange * imj;
         atomicAdd(&pos_x[ai], rcx*ci);
         atomicAdd(&pos_y[ai], rcy*ci);
         atomicAdd(&pos_z[ai], rcz*ci);
@@ -167,8 +167,8 @@ void lincs_kernel(
         }
         if (!is_dummy) {
             float dl = blc * sol_iter;
-            float ci = -dl * imi;
-            float cj =  dl * imj;
+            float ci = dl * imi;
+            float cj = -dl * imj;
             atomicAdd(&pos_x[ai], rcx*ci);
             atomicAdd(&pos_y[ai], rcy*ci);
             atomicAdd(&pos_z[ai], rcz*ci);
@@ -282,13 +282,16 @@ def _build_coupling_data(constraint_pairs, masses, target_lengths, block_size=25
             blc_c = blc_arr[c_np]
             shared = None
             sign = 1.0
-            if (i == ci or i == cj) and (j == ci or j == cj):
+            if i == ci:
                 shared = i
                 sign = -1.0
-            elif i == ci or i == cj:
+            elif j == cj:
+                shared = j
+                sign = -1.0
+            elif i == cj:
                 shared = i
                 sign = 1.0
-            elif j == ci or j == cj:
+            elif j == ci:
                 shared = j
                 sign = 1.0
             if shared is not None:
