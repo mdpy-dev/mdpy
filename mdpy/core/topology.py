@@ -245,15 +245,8 @@ void permute_pairs_kernel(
 ) {
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
     if (tid >= num_pairs) return;
-    int ni = permutation[old_i[tid]];
-    int nj = permutation[old_j[tid]];
-    if (ni < nj) {
-        new_i[tid] = ni;
-        new_j[tid] = nj;
-    } else {
-        new_i[tid] = nj;
-        new_j[tid] = ni;
-    }
+    new_i[tid] = permutation[old_i[tid]];
+    new_j[tid] = permutation[old_j[tid]];
     new_scale[tid] = old_scale[tid];
 }
 '''
@@ -367,13 +360,45 @@ def build_exclusion_map_gpu(topology, scale_14=1.0):
     scatter_idx = cp.cumsum(d_flags) - 1
     unique_count = int(scatter_idx[total_pairs - 1]) + 1
 
-    d_unique_i = cp.full(unique_count, -1, dtype=cp.int32)
-    d_unique_j = cp.full(unique_count, -1, dtype=cp.int32)
-    d_unique_scale = cp.zeros(unique_count, dtype=cp.float32)
+    d_dedup_i = cp.full(unique_count, -1, dtype=cp.int32)
+    d_dedup_j = cp.full(unique_count, -1, dtype=cp.int32)
+    d_dedup_scale = cp.zeros(unique_count, dtype=cp.float32)
 
-    d_unique_i[scatter_idx] = d_pair_i
-    d_unique_j[scatter_idx] = d_pair_j
-    d_unique_scale[scatter_idx] = d_pair_scale
+    d_dedup_i[scatter_idx] = d_pair_i
+    d_dedup_j[scatter_idx] = d_pair_j
+    d_dedup_scale[scatter_idx] = d_pair_scale
+
+    d_bi_i = cp.concatenate([d_dedup_i, d_dedup_j])
+    d_bi_j = cp.concatenate([d_dedup_j, d_dedup_i])
+    d_bi_scale = cp.concatenate([d_dedup_scale, d_dedup_scale])
+    bi_count = len(d_bi_i)
+
+    bi_scale_rank = (d_bi_scale > 0.0).astype(cp.int64)
+    bi_sort_key = (d_bi_i.astype(cp.int64) * np.int64(2000000000)
+                   + d_bi_j.astype(cp.int64) * np.int64(2)
+                   + bi_scale_rank)
+    bi_order = cp.argsort(bi_sort_key)
+    d_bi_i = d_bi_i[bi_order]
+    d_bi_j = d_bi_j[bi_order]
+    d_bi_scale = d_bi_scale[bi_order]
+
+    d_bi_flags = cp.zeros(bi_count, dtype=cp.int32)
+    grid_dedup2 = ((bi_count + tpb_dedup - 1) // tpb_dedup,)
+    kernels['parallel_dedup'](grid_dedup2, (tpb_dedup,),
+        (d_bi_i, d_bi_j, d_bi_scale,
+         np.int32(bi_count), d_bi_flags))
+
+    bi_scatter = cp.cumsum(d_bi_flags) - 1
+    bi_unique_count = int(bi_scatter[bi_count - 1]) + 1
+
+    d_unique_i = cp.full(bi_unique_count, -1, dtype=cp.int32)
+    d_unique_j = cp.full(bi_unique_count, -1, dtype=cp.int32)
+    d_unique_scale = cp.zeros(bi_unique_count, dtype=cp.float32)
+
+    d_unique_i[bi_scatter] = d_bi_i
+    d_unique_j[bi_scatter] = d_bi_j
+    d_unique_scale[bi_scatter] = d_bi_scale
+    unique_count = bi_unique_count
 
     d_offset = cp.full(num_particles + 1, -1, dtype=cp.int32)
     tpb_csr = 256
@@ -577,9 +602,10 @@ class Builder:
         for particle_index in range(num_particles):
             neighbors = sorted(exclusion_dict[particle_index].keys())
             for neighbor in neighbors:
-                sorted_pairs.append(
-                    (particle_index, neighbor, exclusion_dict[particle_index][neighbor])
-                )
+                scale = exclusion_dict[particle_index][neighbor]
+                sorted_pairs.append((particle_index, neighbor, scale))
+                sorted_pairs.append((neighbor, particle_index, scale))
+        sorted_pairs.sort()
 
         offset = np.zeros(num_particles + 1, dtype=env.NUMPY_INT)
         neighbors_array = np.empty(len(sorted_pairs), dtype=env.NUMPY_INT)

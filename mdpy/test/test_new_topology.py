@@ -119,7 +119,7 @@ def test_exclusion_map_symmetry():
     neighbors_0, _ = _get_neighbors(topology,0)
     neighbors_1, _ = _get_neighbors(topology,1)
     assert 1 in neighbors_0
-    assert len(neighbors_1) == 0
+    assert 0 in neighbors_1
 
 
 def test_exclusion_map_no_interactions():

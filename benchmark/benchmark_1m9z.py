@@ -80,9 +80,7 @@ def main():
     print(f"  dt:         {DT_FS} fs")
     print(f"  Integrator: Verlet (no constraints)")
     print(f"  PME alpha:  {pme.alpha:.4f}")
-    print(
-        f"  PME grid:   {pme.grid_x} x {pme.grid_y} x {pme.grid_z}"
-    )
+    print(f"  PME grid:   {pme.grid_x} x {pme.grid_y} x {pme.grid_z}")
     print(f"  PME order:  {pme.order}")
     print()
 
