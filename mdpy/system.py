@@ -27,6 +27,7 @@ class System:
             cutoff, skin=skin, rebuild_check_interval=rebuild_check_interval
         )
         self.force_terms = []
+        self.constraints = []
 
         self._positions_uploaded = False
         self._velocities_uploaded = False
@@ -38,6 +39,13 @@ class System:
     def add_force_term(self, term):
         self.force_terms.append(term)
         self.gpu.allocate_energy_accumulator(len(self.force_terms))
+
+    def add_constraint(self, constraint):
+        self.constraints.append(constraint)
+
+    def apply_constraints(self, dt):
+        for constraint in self.constraints:
+            constraint.apply(self.gpu, dt)
 
     def upload_positions(self, positions):
         self.gpu.upload_positions(positions)
@@ -245,3 +253,6 @@ class System:
         for term in self.force_terms:
             if hasattr(term, "remap_indices_gpu"):
                 term.remap_indices_gpu(d_remap)
+
+        for constraint in self.constraints:
+            constraint.remap_indices_gpu(d_remap)
