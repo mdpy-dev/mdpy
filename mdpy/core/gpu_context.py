@@ -452,6 +452,12 @@ class GPUContext:
         self.d_velocities_y[:] = cp.asarray(data[:, 1])
         self.d_velocities_z[:] = cp.asarray(data[:, 2])
 
+    def upload_prev_positions(self, positions):
+        data = np.ascontiguousarray(np.asarray(positions, dtype=np.float32))
+        self.d_prev_positions_x[:] = cp.asarray(data[:, 0])
+        self.d_prev_positions_y[:] = cp.asarray(data[:, 1])
+        self.d_prev_positions_z[:] = cp.asarray(data[:, 2])
+
     def download_positions(self):
         return np.stack(
             [
