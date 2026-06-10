@@ -228,3 +228,40 @@ def test_settle_lincs_coexistence_bond_lengths():
     for c, (bi, bj) in enumerate(ethane_bonds):
         d = np.linalg.norm(pos[ebase + bi] - pos[ebase + bj])
         assert abs(d - target_lengths[c]) < 0.05, f"Ethane bond {c} ({bi}-{bj}): {d:.4f}"
+
+
+def test_settle_md_loop_rebuilds_bond_lengths():
+    topology, pbc_matrix, parameter_table, positions = _build_test_system()
+
+    system = System(topology, pbc_matrix, cutoff=4.0)
+    bonded = BondedForce.charmm(topology, parameter_table)
+    system.add_force_term(bonded)
+
+    constraints = create_constraints(topology, parameter_table, scheme='h-bonds')
+    for c in constraints:
+        system.add_constraint(c)
+
+    system.upload_positions(positions)
+    system.upload_velocities(np.random.RandomState(99).randn(*positions.shape).astype(np.float32) * 0.01)
+
+    integrator = VerletIntegrator(0.002)
+    dOH = 1.0
+    dHH = 1.63298
+    for step in range(100):
+        system.update_neighbor_list(sync_interval=1)
+        system.compute_forces()
+        integrator.step(system)
+        system.apply_constraints(0.002)
+
+    pos, vel = system.dump_state()
+    assert not np.any(np.isnan(pos))
+    for w in range(3):
+        ow = w * 3
+        hw1 = w * 3 + 1
+        hw2 = w * 3 + 2
+        d_oh1 = np.linalg.norm(pos[ow] - pos[hw1])
+        d_oh2 = np.linalg.norm(pos[ow] - pos[hw2])
+        d_hh = np.linalg.norm(pos[hw1] - pos[hw2])
+        assert abs(d_oh1 - dOH) < 5e-3, f"Water {w} O-H1: {d_oh1:.4f}"
+        assert abs(d_oh2 - dOH) < 5e-3, f"Water {w} O-H2: {d_oh2:.4f}"
+        assert abs(d_hh - dHH) < 5e-3, f"Water {w} H-H: {d_hh:.4f}"
