@@ -129,3 +129,33 @@ def test_settle_pbc_boundary_crossing():
         assert abs(d_hh - dHH) < 1e-3, f"H-H {d_hh} != {dHH} at ow={ow_pos}"
         n_cases += 1
     assert n_cases == 4
+
+
+def test_settle_large_perturbation():
+    np.random.seed(42)
+    dOH, dHH = 1.0, 1.63298
+    water_triplets, masses, mol_ids, positions, pbc_matrix = _make_water_system(200, 50.0, dOH, dHH)
+    settle = SettleConstraint(water_triplets, masses, dOH, dHH)
+    gpu = GPUContext()
+    topology = Builder().set_particles(
+        masses,
+        np.zeros(len(masses), dtype=np.float32),
+        np.zeros(len(masses), dtype=np.int32),
+        mol_ids,
+    ).build()[0]
+    gpu.initialize(topology, pbc_matrix.flatten())
+    gpu.upload_positions(positions)
+    gpu.upload_prev_positions(positions.copy())
+    perturbed = positions + np.random.randn(*positions.shape).astype(np.float32) * 0.1
+    gpu.d_positions_x[:] = cp.asarray(perturbed[:, 0])
+    gpu.d_positions_y[:] = cp.asarray(perturbed[:, 1])
+    gpu.d_positions_z[:] = cp.asarray(perturbed[:, 2])
+    settle.apply(gpu, 0.002)
+    corrected = gpu.download_positions()
+    for ow, hw1, hw2 in water_triplets:
+        d_oh1 = np.linalg.norm(corrected[ow] - corrected[hw1])
+        d_oh2 = np.linalg.norm(corrected[ow] - corrected[hw2])
+        d_hh = np.linalg.norm(corrected[hw1] - corrected[hw2])
+        assert abs(d_oh1 - dOH) < 0.05, f"O-H1 {d_oh1} != {dOH}"
+        assert abs(d_oh2 - dOH) < 0.05, f"O-H2 {d_oh2} != {dOH}"
+        assert abs(d_hh - dHH) < 0.05, f"H-H {d_hh} != {dHH}"
