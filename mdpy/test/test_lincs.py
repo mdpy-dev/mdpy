@@ -159,3 +159,110 @@ def test_lincs_multiple_rebuilds():
             f"Bond {c} ({i}-{j}): {d:.4f} != {target_lengths[c]}, "
             f"diff={abs(d - target_lengths[c]):.4f}"
         )
+
+
+def test_lincs_many_groups_multi_block():
+    np.random.seed(42)
+    n_groups = 50
+    n_atoms = n_groups * 2
+    masses = np.ones(n_atoms, dtype=np.float32)
+    masses[0::2] = 12.0
+    constraint_pairs = [(i * 2, i * 2 + 1) for i in range(n_groups)]
+    target_lengths = [1.09] * n_groups
+    positions = np.random.RandomState(42).rand(n_atoms, 3).astype(np.float32) * 10.0 + 50.0
+    mol_ids = np.arange(n_atoms, dtype=np.int32)
+    pbc_matrix = np.diag([100.0, 100.0, 100.0]).astype(np.float32)
+
+    lincs = LincsConstraint(constraint_pairs, target_lengths, masses, expansion_order=4, num_iterations=1)
+
+    assert lincs.num_constraints == n_groups
+    assert lincs.num_constraint_threads > n_groups, (
+        f"num_ct={lincs.num_constraint_threads} should be much larger than "
+        f"num_constraints={n_groups} due to per-group block alignment"
+    )
+
+    gpu = GPUContext()
+    topology = Builder().set_particles(
+        masses,
+        np.zeros(n_atoms, dtype=np.float32),
+        np.zeros(n_atoms, dtype=np.int32),
+        mol_ids,
+    ).build()[0]
+    gpu.initialize(topology, pbc_matrix.flatten())
+    gpu.upload_positions(positions)
+    gpu.upload_prev_positions(positions.copy())
+
+    perturbed = positions + np.random.randn(*positions.shape).astype(np.float32) * 0.005
+    gpu.d_positions_x[:] = cp.asarray(perturbed[:, 0])
+    gpu.d_positions_y[:] = cp.asarray(perturbed[:, 1])
+    gpu.d_positions_z[:] = cp.asarray(perturbed[:, 2])
+
+    identity_map = cp.arange(n_atoms, dtype=np.int32)
+    lincs.apply(gpu, 0.002, d_pdb_to_sorted=identity_map)
+
+    cp.cuda.Stream.null.synchronize()
+
+    corrected = gpu.download_positions()
+    assert not np.any(np.isnan(corrected)), "Positions became NaN — likely illegal memory access in LINCS kernel"
+
+    for c, (i, j) in enumerate(constraint_pairs):
+        d = np.linalg.norm(corrected[i] - corrected[j])
+        assert abs(d - target_lengths[c]) < 0.05, (
+            f"Bond {c} ({i}-{j}): {d:.4f} != {target_lengths[c]}"
+        )
+
+
+def test_lincs_packing_efficiency():
+    n_groups = 50
+    n_atoms = n_groups * 2
+    masses = np.ones(n_atoms, dtype=np.float32)
+    masses[0::2] = 12.0
+    constraint_pairs = [(i * 2, i * 2 + 1) for i in range(n_groups)]
+    target_lengths = [1.09] * n_groups
+
+    lincs = LincsConstraint(constraint_pairs, target_lengths, masses)
+
+    n_blocks = lincs.num_constraint_threads // 256
+    theoretical_min_blocks = (n_groups + 255) // 256
+    assert n_blocks <= theoretical_min_blocks + 1, (
+        f"Packing too loose: {n_blocks} blocks for {n_groups} single-constraint groups, "
+        f"expected ~{theoretical_min_blocks}"
+    )
+
+
+def test_lincs_shared_atom_atomicAdd():
+    np.random.seed(42)
+    masses = np.array([12.0, 1.0, 1.0, 1.0, 1.0], dtype=np.float32)
+    positions = np.array([
+        [5.0, 5.0, 5.0],
+        [5.0, 5.0, 6.09],
+        [5.0, 6.09, 5.0],
+        [6.09, 5.0, 5.0],
+        [5.0, 5.0, 3.91],
+    ], dtype=np.float32)
+    constraint_pairs = [(0, 1), (0, 2), (0, 3), (0, 4)]
+    target_lengths = [1.09, 1.09, 1.09, 1.09]
+    mol_ids = np.zeros(5, dtype=np.int32)
+    pbc_matrix = np.diag([20.0, 20.0, 20.0]).astype(np.float32)
+
+    lincs = LincsConstraint(constraint_pairs, target_lengths, masses, expansion_order=4, num_iterations=1)
+    gpu = GPUContext()
+    topology = Builder().set_particles(
+        masses,
+        np.zeros(5, dtype=np.float32),
+        np.zeros(5, dtype=np.int32),
+        mol_ids,
+    ).build()[0]
+    gpu.initialize(topology, pbc_matrix.flatten())
+    gpu.upload_positions(positions)
+    gpu.upload_prev_positions(positions.copy())
+    perturbed = positions + np.random.randn(*positions.shape).astype(np.float32) * 0.01
+    gpu.d_positions_x[:] = cp.asarray(perturbed[:, 0])
+    gpu.d_positions_y[:] = cp.asarray(perturbed[:, 1])
+    gpu.d_positions_z[:] = cp.asarray(perturbed[:, 2])
+    identity_map = cp.arange(5, dtype=np.int32)
+    lincs.apply(gpu, 0.002, d_pdb_to_sorted=identity_map)
+    corrected = gpu.download_positions()
+    for c, (i, j) in enumerate(constraint_pairs):
+        d = np.linalg.norm(corrected[i] - corrected[j])
+        assert abs(d - target_lengths[c]) < 0.02, f"Bond {c} ({i}-{j}): {d:.4f} != {target_lengths[c]}"
