@@ -85,3 +85,47 @@ def test_settle_no_change_if_already_correct():
     settle.apply(gpu, 0.002)
     corrected = gpu.download_positions()
     np.testing.assert_allclose(corrected, positions, atol=1e-4)
+
+
+def test_settle_pbc_boundary_crossing():
+    np.random.seed(42)
+    dOH, dHH = 1.0, 1.63298
+    box_size = 10.0
+    pbc_matrix = np.diag([box_size, box_size, box_size]).astype(np.float32)
+    half_hh = dHH / 2.0
+    height = np.sqrt(dOH**2 - half_hh**2)
+    masses = np.array([15.999, 1.008, 1.008], dtype=np.float32)
+    mol_ids = np.array([0, 0, 0], dtype=np.int32)
+    topology = Builder().set_particles(
+        masses,
+        np.zeros(3, dtype=np.float32),
+        np.zeros(3, dtype=np.int32),
+        mol_ids,
+    ).build()[0]
+    gpu = GPUContext()
+    gpu.initialize(topology, pbc_matrix.flatten())
+    settle = SettleConstraint([(0, 1, 2)], masses, dOH, dHH)
+    n_cases = 0
+    for ow_pos in [[0.2, 5.0, 5.0], [9.8, 5.0, 5.0], [5.0, 0.1, 0.1], [9.9, 9.9, 9.9]]:
+        positions = np.zeros((3, 3), dtype=np.float32)
+        positions[0] = ow_pos
+        positions[1] = [ow_pos[0] + half_hh, ow_pos[1] + height, ow_pos[2]]
+        positions[2] = [ow_pos[0] - half_hh, ow_pos[1] + height, ow_pos[2]]
+        gpu.upload_positions(positions)
+        gpu.upload_prev_positions(positions.copy())
+        perturbed = positions.copy()
+        perturbed[1, 0] += 0.05
+        perturbed[2, 2] -= 0.05
+        gpu.d_positions_x[:] = cp.asarray(perturbed[:, 0])
+        gpu.d_positions_y[:] = cp.asarray(perturbed[:, 1])
+        gpu.d_positions_z[:] = cp.asarray(perturbed[:, 2])
+        settle.apply(gpu, 0.002)
+        corrected = gpu.download_positions()
+        d_oh1 = np.linalg.norm(corrected[0] - corrected[1])
+        d_oh2 = np.linalg.norm(corrected[0] - corrected[2])
+        d_hh = np.linalg.norm(corrected[1] - corrected[2])
+        assert abs(d_oh1 - dOH) < 1e-3, f"O-H1 {d_oh1} != {dOH} at ow={ow_pos}"
+        assert abs(d_oh2 - dOH) < 1e-3, f"O-H2 {d_oh2} != {dOH} at ow={ow_pos}"
+        assert abs(d_hh - dHH) < 1e-3, f"H-H {d_hh} != {dHH} at ow={ow_pos}"
+        n_cases += 1
+    assert n_cases == 4
