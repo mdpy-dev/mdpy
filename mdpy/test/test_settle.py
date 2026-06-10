@@ -190,3 +190,34 @@ def test_settle_center_of_mass_conservation():
         com_after = (mO * corrected[ow] + mH * corrected[hw1] + mH * corrected[hw2]) / m_total
         drift = np.linalg.norm(com_after - com_before)
         assert drift < 1e-3, f"COM drift {drift:.6f} > 1e-3 for water ({ow},{hw1},{hw2})"
+
+
+def test_settle_tip3p_real_parameters():
+    np.random.seed(42)
+    dOH = 0.9572
+    dHH = 1.5139
+    water_triplets, masses, mol_ids, positions, pbc_matrix = _make_water_system(100, 30.0, dOH, dHH)
+    settle = SettleConstraint(water_triplets, masses, dOH, dHH)
+    gpu = GPUContext()
+    topology = Builder().set_particles(
+        masses,
+        np.zeros(len(masses), dtype=np.float32),
+        np.zeros(len(masses), dtype=np.int32),
+        mol_ids,
+    ).build()[0]
+    gpu.initialize(topology, pbc_matrix.flatten())
+    gpu.upload_positions(positions)
+    gpu.upload_prev_positions(positions.copy())
+    perturbed = positions + np.random.randn(*positions.shape).astype(np.float32) * 0.01
+    gpu.d_positions_x[:] = cp.asarray(perturbed[:, 0])
+    gpu.d_positions_y[:] = cp.asarray(perturbed[:, 1])
+    gpu.d_positions_z[:] = cp.asarray(perturbed[:, 2])
+    settle.apply(gpu, 0.002)
+    corrected = gpu.download_positions()
+    for ow, hw1, hw2 in water_triplets:
+        d_oh1 = np.linalg.norm(corrected[ow] - corrected[hw1])
+        d_oh2 = np.linalg.norm(corrected[ow] - corrected[hw2])
+        d_hh = np.linalg.norm(corrected[hw1] - corrected[hw2])
+        assert abs(d_oh1 - dOH) < 1e-3, f"O-H1 {d_oh1:.6f} != {dOH}"
+        assert abs(d_oh2 - dOH) < 1e-3, f"O-H2 {d_oh2:.6f} != {dOH}"
+        assert abs(d_hh - dHH) < 1e-3, f"H-H {d_hh:.6f} != {dHH}"
