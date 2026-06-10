@@ -303,3 +303,49 @@ def test_lincs_ring_topology():
     for c, (i, j) in enumerate(constraint_pairs):
         d = np.linalg.norm(corrected[i] - corrected[j])
         assert abs(d - target_lengths[c]) < 0.03, f"Ring bond {c} ({i}-{j}): {d:.4f} != {target_lengths[c]}"
+
+
+def test_lincs_md_loop_bond_length_statistics():
+    topology, pbc_matrix, parameter_table, positions = _make_rebuild_test_system()
+
+    from mdpy.force.bonded_force import BondedForce
+    from mdpy.system import System
+    from mdpy.integrator.verlet import VerletIntegrator
+    from mdpy.constraint.lincs import LincsConstraint
+
+    system = System(topology, pbc_matrix, cutoff=12.0)
+    bonded = BondedForce.charmm(topology, parameter_table)
+    system.add_force_term(bonded)
+
+    constraint_pairs = [
+        (0, 1), (0, 2), (0, 3),
+        (4, 5), (4, 6), (4, 7),
+        (0, 4),
+    ]
+    target_lengths = [1.09, 1.09, 1.09, 1.09, 1.09, 1.09, 1.54]
+    lincs = LincsConstraint(constraint_pairs, target_lengths, topology.masses)
+    system.add_constraint(lincs)
+
+    system.upload_positions(positions)
+    system.upload_velocities(np.random.RandomState(42).randn(*positions.shape).astype(np.float32) * 0.001)
+
+    integrator = VerletIntegrator(0.002)
+
+    max_deviations = []
+    for step in range(100):
+        system.update_neighbor_list(sync_interval=1)
+        system.compute_forces()
+        integrator.step(system)
+        system.apply_constraints(0.002)
+        pos, _ = system.dump_state()
+        assert not np.any(np.isnan(pos)), f"NaN at step {step}"
+        step_max = 0.0
+        for c, (i, j) in enumerate(constraint_pairs):
+            d = np.linalg.norm(pos[i] - pos[j])
+            step_max = max(step_max, abs(d - target_lengths[c]))
+        max_deviations.append(step_max)
+
+    overall_max = max(max_deviations)
+    overall_mean = np.mean(max_deviations)
+    assert overall_max < 0.02, f"Max bond deviation {overall_max:.4f} > 0.02"
+    assert overall_mean < 0.005, f"Mean bond deviation {overall_mean:.4f} > 0.005"
