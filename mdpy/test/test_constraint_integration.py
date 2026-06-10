@@ -84,3 +84,33 @@ def test_constraint_loop():
     pos, vel = system.dump_state()
     assert pos.shape == positions.shape
     assert not np.any(np.isnan(pos))
+
+
+def test_constraint_loop_multiple_rebuilds():
+    topology, pbc_matrix, parameter_table, positions = _build_test_system()
+
+    system = System(topology, pbc_matrix, cutoff=12.0)
+
+    bonded = BondedForce.charmm(topology, parameter_table)
+    system.add_force_term(bonded)
+
+    constraints = create_constraints(topology, parameter_table, scheme='h-bonds')
+    for c in constraints:
+        system.add_constraint(c)
+
+    system.upload_positions(positions)
+    velocities = np.random.RandomState(123).randn(*positions.shape).astype(np.float32) * 0.001
+    system.upload_velocities(velocities)
+
+    integrator = VerletIntegrator(0.002)
+
+    for step in range(50):
+        system.update_neighbor_list(sync_interval=1)
+        system.compute_forces()
+        integrator.step(system)
+        system.apply_constraints(0.002)
+
+    pos, vel = system.dump_state()
+    assert pos.shape == positions.shape
+    assert not np.any(np.isnan(pos)), "Positions became NaN"
+    assert not np.any(np.isnan(vel)), "Velocities became NaN"
