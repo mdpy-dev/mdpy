@@ -266,3 +266,40 @@ def test_lincs_shared_atom_atomicAdd():
     for c, (i, j) in enumerate(constraint_pairs):
         d = np.linalg.norm(corrected[i] - corrected[j])
         assert abs(d - target_lengths[c]) < 0.02, f"Bond {c} ({i}-{j}): {d:.4f} != {target_lengths[c]}"
+
+
+def test_lincs_ring_topology():
+    np.random.seed(42)
+    n_atoms = 6
+    masses = np.full(n_atoms, 1.0, dtype=np.float32)
+    spacing = 1.54
+    positions = np.zeros((n_atoms, 3), dtype=np.float32)
+    for i in range(n_atoms):
+        angle = 2.0 * np.pi * i / n_atoms
+        positions[i] = [5.0 + spacing * np.cos(angle), 5.0 + spacing * np.sin(angle), 5.0]
+    constraint_pairs = [(i, (i + 1) % n_atoms) for i in range(n_atoms)]
+    target_lengths = [spacing] * n_atoms
+    mol_ids = np.zeros(n_atoms, dtype=np.int32)
+    pbc_matrix = np.diag([20.0, 20.0, 20.0]).astype(np.float32)
+
+    lincs = LincsConstraint(constraint_pairs, target_lengths, masses, expansion_order=4, num_iterations=1)
+    gpu = GPUContext()
+    topology = Builder().set_particles(
+        masses,
+        np.zeros(n_atoms, dtype=np.float32),
+        np.zeros(n_atoms, dtype=np.int32),
+        mol_ids,
+    ).build()[0]
+    gpu.initialize(topology, pbc_matrix.flatten())
+    gpu.upload_positions(positions)
+    gpu.upload_prev_positions(positions.copy())
+    perturbed = positions + np.random.randn(*positions.shape).astype(np.float32) * 0.01
+    gpu.d_positions_x[:] = cp.asarray(perturbed[:, 0])
+    gpu.d_positions_y[:] = cp.asarray(perturbed[:, 1])
+    gpu.d_positions_z[:] = cp.asarray(perturbed[:, 2])
+    identity_map = cp.arange(n_atoms, dtype=np.int32)
+    lincs.apply(gpu, 0.002, d_pdb_to_sorted=identity_map)
+    corrected = gpu.download_positions()
+    for c, (i, j) in enumerate(constraint_pairs):
+        d = np.linalg.norm(corrected[i] - corrected[j])
+        assert abs(d - target_lengths[c]) < 0.03, f"Ring bond {c} ({i}-{j}): {d:.4f} != {target_lengths[c]}"
