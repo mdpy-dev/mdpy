@@ -44,8 +44,9 @@ class System:
         self.constraints.append(constraint)
 
     def apply_constraints(self, dt):
+        d_pdb_to_sorted = self.block_list.d_pdb_to_sorted
         for constraint in self.constraints:
-            constraint.apply(self.gpu, dt)
+            constraint.apply(self.gpu, dt, d_pdb_to_sorted=d_pdb_to_sorted)
 
     def upload_positions(self, positions):
         self.gpu.upload_positions(positions)

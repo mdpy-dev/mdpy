@@ -95,7 +95,7 @@ void settle_kernel(
     float zx = d21y*d31z - d21z*d31y;
     float zy = d21z*d31x - d21x*d31z;
     float zz = d21x*d31y - d21y*d31x;
-    float zinv = rsqrtf(zx*zx + zy*zy + zz*zz);
+    float zinv = rsqrtf(zx*zx + zy*zy + zz*zz + 1e-30f);
     zx *= zinv; zy *= zinv; zz *= zinv;
 
     float xx = a1y*zz - a1z*zy;
@@ -252,7 +252,7 @@ class SettleConstraint(ConstraintBase):
 
         self._kernel = cp.RawKernel(_SETTLE_KERNEL, "settle_kernel")
 
-    def apply(self, gpu_context, dt):
+    def apply(self, gpu_context, dt, **kwargs):
         if self.num_waters == 0:
             return
         block = 256

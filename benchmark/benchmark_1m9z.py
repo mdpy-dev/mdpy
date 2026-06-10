@@ -22,11 +22,11 @@ STR_PATH = os.path.join(DATA_DIR, "toppar_water_ions.str")
 
 BOX_SIZE = 108.0
 CUTOFF = 12.0
-DT_FS = 0.5
+DT_FS = 2
 KCAL_PER_INTERNAL = 1.0 / 4.1840286576e-4
 WARMUP_STEPS = 50
-BLOCK_STEPS = 5000
-NUM_BLOCKS = 10
+BLOCK_STEPS = 100
+NUM_BLOCKS = 5
 
 
 def main():
@@ -41,6 +41,7 @@ def main():
     from mdpy.force.pme_reciprocal_force import PMEReciprocalForce
     from mdpy.integrator.verlet import VerletIntegrator
     from mdpy.system import System
+    from mdpy.constraint.constraint_scheme import create_constraints
 
     psf = PSFParser(PSF_PATH)
     pdb = PDBParser(PDB_PATH)
@@ -61,6 +62,11 @@ def main():
     pme.bind(topology, parameter_table, pbc_matrix=pbc_matrix)
     system.add_force_term(pme)
 
+    constraints = create_constraints(topology, parameter_table, scheme="h-bonds")
+    for c in constraints:
+        system.add_constraint(c)
+    constraint_names = [c.name for c in constraints]
+
     positions = pdb.positions
     system.upload_positions(positions)
     system.upload_velocities(np.zeros((topology.num_particles, 3), dtype=np.float32))
@@ -72,13 +78,17 @@ def main():
             system.update_neighbor_list(sync_interval=sync_interval)
             system.compute_forces()
             integrator.step(system)
+            system.apply_constraints(DT_FS)
 
     print("mdpy 1M9Z PME benchmark")
     print(f"  Atoms:      {topology.num_particles}")
     print(f"  Box:        {BOX_SIZE} A")
     print(f"  Cutoff:     {CUTOFF} A")
     print(f"  dt:         {DT_FS} fs")
-    print(f"  Integrator: Verlet (no constraints)")
+    print(f"  Integrator: Verlet")
+    print(
+        f"  Constraints: {', '.join(constraint_names) if constraint_names else 'none'}"
+    )
     print(f"  PME alpha:  {pme.alpha:.4f}")
     print(f"  PME grid:   {pme.grid_x} x {pme.grid_y} x {pme.grid_z}")
     print(f"  PME order:  {pme.order}")
@@ -131,8 +141,7 @@ def main():
         print(f"  {name:>16s}: {val * KCAL_PER_INTERNAL:18.1f}")
 
     print()
-    print("Note: dt=0.5fs required because mdpy has no bond constraints.")
-    print("      Electrostatics: PME (screened Coulomb direct + reciprocal grid)")
+    print("Electrostatics: PME (screened Coulomb direct + reciprocal grid)")
 
 
 if __name__ == "__main__":

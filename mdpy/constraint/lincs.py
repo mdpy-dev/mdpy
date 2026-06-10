@@ -31,15 +31,17 @@ void lincs_kernel(
     extern __shared__ float sm[];
 
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    int lid = threadIdx.x;
+    int block_offset = blockIdx.x * blockDim.x;
     bool is_dummy = (tid >= num_constraints);
 
-    int ai = -1, aj = -1;
+    int ai_s = -1, aj_s = -1;
     float d0 = 0.0f, blc = 0.0f, imi = 0.0f, imj = 0.0f;
     float rcx = 0.0f, rcy = 0.0f, rcz = 0.0f;
 
     if (!is_dummy) {
-        ai = con_idx[tid * 2 + 0];
-        aj = con_idx[tid * 2 + 1];
+        ai_s = con_idx[tid * 2 + 0];
+        aj_s = con_idx[tid * 2 + 1];
         d0 = target_len[tid];
         blc = blc_arr[tid];
         imi = inv_mass_i[tid];
@@ -48,8 +50,8 @@ void lincs_kernel(
 
     // Phase 1: reference direction from old positions
     if (!is_dummy) {
-        float ox = old_x[ai], oy = old_y[ai], oz = old_z[ai];
-        float jx = old_x[aj], jy = old_y[aj], jz = old_z[aj];
+        float ox = old_x[ai_s], oy = old_y[ai_s], oz = old_z[ai_s];
+        float jx = old_x[aj_s], jy = old_y[aj_s], jz = old_z[aj_s];
         float dx = jx - ox, dy = jy - oy, dz = jz - oz;
         float fx = dx*pbc_inv[0] + dy*pbc_inv[3] + dz*pbc_inv[6];
         float fy = dx*pbc_inv[1] + dy*pbc_inv[4] + dz*pbc_inv[7];
@@ -60,7 +62,7 @@ void lincs_kernel(
         dz = fx*pbc_matrix[2] + fy*pbc_matrix[5] + fz*pbc_matrix[8];
         float inv_d = rsqrtf(dx*dx + dy*dy + dz*dz + 1e-30f);
         rcx = dx * inv_d; rcy = dy * inv_d; rcz = dz * inv_d;
-        sm[tid*3+0] = rcx; sm[tid*3+1] = rcy; sm[tid*3+2] = rcz;
+        sm[lid*3+0] = rcx; sm[lid*3+1] = rcy; sm[lid*3+2] = rcz;
     }
     __syncthreads();
 
@@ -69,8 +71,9 @@ void lincs_kernel(
         int nc = coupled_counts[tid];
         for (int n = 0; n < nc; n++) {
             int c_idx = coupled_indices[n * num_constraint_threads + tid];
+            int c_lid = c_idx - block_offset;
             float mf = mass_factors[n * num_constraint_threads + tid];
-            float r1x = sm[c_idx*3+0], r1y = sm[c_idx*3+1], r1z = sm[c_idx*3+2];
+            float r1x = sm[c_lid*3+0], r1y = sm[c_lid*3+1], r1z = sm[c_lid*3+2];
             matrix_a[n * num_constraint_threads + tid] = mf * (rcx*r1x + rcy*r1y + rcz*r1z);
         }
     }
@@ -79,8 +82,8 @@ void lincs_kernel(
     // Phase 3: initial RHS = blc * (rc . delta_new - d0)
     float sol = 0.0f;
     if (!is_dummy) {
-        float nix = pos_x[ai], niy = pos_y[ai], niz = pos_z[ai];
-        float njx = pos_x[aj], njy = pos_y[aj], njz = pos_z[aj];
+        float nix = pos_x[ai_s], niy = pos_y[ai_s], niz = pos_z[ai_s];
+        float njx = pos_x[aj_s], njy = pos_y[aj_s], njz = pos_z[aj_s];
         float dx = njx - nix, dy = njy - niy, dz = njz - niz;
         float fx = dx*pbc_inv[0] + dy*pbc_inv[3] + dz*pbc_inv[6];
         float fy = dx*pbc_inv[1] + dy*pbc_inv[4] + dz*pbc_inv[7];
@@ -93,9 +96,8 @@ void lincs_kernel(
     }
 
     // Phase 4: Neumann series  sol = (I + A + A^2 + ... + A^L) * rhs
-    // sm re-used as RHS buffer: sm[tid + blockDim.x * bank]
     float* sm_rhs = sm;
-    sm_rhs[tid + blockDim.x * 0] = sol;
+    sm_rhs[lid + blockDim.x * 0] = sol;
     __syncthreads();
     for (int rec = 0; rec < expansion_order; rec++) {
         float mvb = 0.0f;
@@ -103,26 +105,27 @@ void lincs_kernel(
             int nc = coupled_counts[tid];
             for (int n = 0; n < nc; n++) {
                 int c_idx = coupled_indices[n * num_constraint_threads + tid];
+                int c_lid = c_idx - block_offset;
                 float a_val = matrix_a[n * num_constraint_threads + tid];
-                mvb += a_val * sm_rhs[c_idx + blockDim.x * (rec % 2)];
+                mvb += a_val * sm_rhs[c_lid + blockDim.x * (rec % 2)];
             }
         }
-        sm_rhs[tid + blockDim.x * ((rec+1) % 2)] = mvb;
+        sm_rhs[lid + blockDim.x * ((rec+1) % 2)] = mvb;
         __syncthreads();
         sol += mvb;
     }
 
     // Phase 5: first coordinate update
     if (!is_dummy) {
-        float lagrange = blc * sol;
+        float lagrange = sol;
         float ci = lagrange * imi;
         float cj = -lagrange * imj;
-        atomicAdd(&pos_x[ai], rcx*ci);
-        atomicAdd(&pos_y[ai], rcy*ci);
-        atomicAdd(&pos_z[ai], rcz*ci);
-        atomicAdd(&pos_x[aj], rcx*cj);
-        atomicAdd(&pos_y[aj], rcy*cj);
-        atomicAdd(&pos_z[aj], rcz*cj);
+        atomicAdd(&pos_x[ai_s], rcx*ci);
+        atomicAdd(&pos_y[ai_s], rcy*ci);
+        atomicAdd(&pos_z[ai_s], rcz*ci);
+        atomicAdd(&pos_x[aj_s], rcx*cj);
+        atomicAdd(&pos_y[aj_s], rcy*cj);
+        atomicAdd(&pos_z[aj_s], rcz*cj);
     }
     __syncthreads();
 
@@ -130,8 +133,8 @@ void lincs_kernel(
     for (int iter = 0; iter < num_iterations; iter++) {
         float proj = 0.0f;
         if (!is_dummy) {
-            float nix = pos_x[ai], niy = pos_y[ai], niz = pos_z[ai];
-            float njx = pos_x[aj], njy = pos_y[aj], njz = pos_z[aj];
+            float nix = pos_x[ai_s], niy = pos_y[ai_s], niz = pos_z[ai_s];
+            float njx = pos_x[aj_s], njy = pos_y[aj_s], njz = pos_z[aj_s];
             float dx = njx - nix, dy = njy - niy, dz = njz - niz;
             float fx = dx*pbc_inv[0] + dy*pbc_inv[3] + dz*pbc_inv[6];
             float fy = dx*pbc_inv[1] + dy*pbc_inv[4] + dz*pbc_inv[7];
@@ -149,7 +152,7 @@ void lincs_kernel(
             }
         }
         float sol_iter = proj;
-        sm_rhs[tid + blockDim.x * 0] = proj;
+        sm_rhs[lid + blockDim.x * 0] = proj;
         __syncthreads();
         for (int rec = 0; rec < expansion_order; rec++) {
             float mvb = 0.0f;
@@ -157,24 +160,25 @@ void lincs_kernel(
                 int nc = coupled_counts[tid];
                 for (int n = 0; n < nc; n++) {
                     int c_idx = coupled_indices[n * num_constraint_threads + tid];
+                    int c_lid = c_idx - block_offset;
                     float a_val = matrix_a[n * num_constraint_threads + tid];
-                    mvb += a_val * sm_rhs[c_idx + blockDim.x * (rec % 2)];
+                    mvb += a_val * sm_rhs[c_lid + blockDim.x * (rec % 2)];
                 }
             }
-            sm_rhs[tid + blockDim.x * ((rec+1) % 2)] = mvb;
+            sm_rhs[lid + blockDim.x * ((rec+1) % 2)] = mvb;
             __syncthreads();
             sol_iter += mvb;
         }
         if (!is_dummy) {
-            float dl = blc * sol_iter;
+            float dl = sol_iter;
             float ci = dl * imi;
             float cj = -dl * imj;
-            atomicAdd(&pos_x[ai], rcx*ci);
-            atomicAdd(&pos_y[ai], rcy*ci);
-            atomicAdd(&pos_z[ai], rcz*ci);
-            atomicAdd(&pos_x[aj], rcx*cj);
-            atomicAdd(&pos_y[aj], rcy*cj);
-            atomicAdd(&pos_z[aj], rcz*cj);
+            atomicAdd(&pos_x[ai_s], rcx*ci);
+            atomicAdd(&pos_y[ai_s], rcy*ci);
+            atomicAdd(&pos_z[ai_s], rcz*ci);
+            atomicAdd(&pos_x[aj_s], rcx*cj);
+            atomicAdd(&pos_y[aj_s], rcy*cj);
+            atomicAdd(&pos_z[aj_s], rcz*cj);
         }
         __syncthreads();
     }
@@ -190,7 +194,10 @@ void remap_indices_kernel(
 ) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= num_indices) return;
-    d_indices[i] = d_remap[d_indices[i]];
+    int val = d_indices[i];
+    if (val >= 0) {
+        d_indices[i] = d_remap[val];
+    }
 }
 """
 
@@ -258,7 +265,7 @@ def _build_coupling_data(constraint_pairs, masses, target_lengths, block_size=25
         con_idx[np_, 1] = j
         inv_mi[np_] = 1.0 / float(masses[i])
         inv_mj[np_] = 1.0 / float(masses[j])
-        blc_arr[np_] = 1.0 / np.sqrt(inv_mi[np_] + inv_mj[np_])
+        blc_arr[np_] = 1.0 / (inv_mi[np_] + inv_mj[np_])
         tl_arr[np_] = target_lengths[orig]
 
     max_c = 1
@@ -343,7 +350,7 @@ class LincsConstraint(ConstraintBase):
         self._n_idx = con_idx.size
         self._kernel = cp.RawKernel(_LINCS_KERNEL, "lincs_kernel")
 
-    def apply(self, gpu_context, dt):
+    def apply(self, gpu_context, dt, **kwargs):
         if self.num_constraints == 0:
             return
         block = 256
@@ -379,5 +386,6 @@ class LincsConstraint(ConstraintBase):
             return
         kernel = self._get_remap_kernel()
         tpb = 256
-        grid = ((self._n_idx + tpb - 1) // tpb,)
-        kernel(grid, (tpb,), (d_remap, self.d_con_idx, np.int32(self._n_idx)))
+        n = self.d_con_idx.size
+        grid = ((n + tpb - 1) // tpb,)
+        kernel(grid, (tpb,), (d_remap, self.d_con_idx, np.int32(n)))
