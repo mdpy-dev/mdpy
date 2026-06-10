@@ -265,3 +265,63 @@ def test_settle_md_loop_rebuilds_bond_lengths():
         assert abs(d_oh1 - dOH) < 5e-3, f"Water {w} O-H1: {d_oh1:.4f}"
         assert abs(d_oh2 - dOH) < 5e-3, f"Water {w} O-H2: {d_oh2:.4f}"
         assert abs(d_hh - dHH) < 5e-3, f"Water {w} H-H: {d_hh:.4f}"
+
+
+def test_lincs_md_loop_rebuilds_bond_lengths():
+    from mdpy.constraint.lincs import LincsConstraint
+
+    builder = Builder()
+    masses = np.array([12.0, 1.0, 1.0, 1.0, 12.0, 1.0, 1.0, 1.0], dtype=np.float32)
+    charges = np.zeros(8, dtype=np.float32)
+    ptypes = np.zeros(8, dtype=np.int32)
+    mol_ids = np.zeros(8, dtype=np.int32)
+    positions = np.array([
+        [5.0, 5.0, 5.0],
+        [5.0, 5.0, 6.09],
+        [5.0, 6.09, 5.0],
+        [6.09, 5.0, 5.0],
+        [6.54, 5.0, 5.0],
+        [6.54, 5.0, 6.09],
+        [6.54, 6.09, 5.0],
+        [7.63, 5.0, 5.0],
+    ], dtype=np.float32)
+    builder.add_bond(0, 1, 450.0, 1.09)
+    builder.add_bond(0, 2, 450.0, 1.09)
+    builder.add_bond(0, 3, 450.0, 1.09)
+    builder.add_bond(4, 5, 450.0, 1.09)
+    builder.add_bond(4, 6, 450.0, 1.09)
+    builder.add_bond(4, 7, 450.0, 1.09)
+    builder.add_bond(0, 4, 450.0, 1.54)
+    builder.set_particles(masses, charges, ptypes, mol_ids)
+    topology, term_params = builder.build()
+    pt = ParameterTable()
+    for name, values in term_params.items():
+        pt.add_term_parameter(name, values)
+
+    pbc_matrix = np.diag([15.0, 15.0, 15.0]).astype(np.float32)
+    system = System(topology, pbc_matrix, cutoff=4.0)
+    bonded = BondedForce.charmm(topology, pt)
+    system.add_force_term(bonded)
+
+    constraint_pairs = [(0, 1), (0, 2), (0, 3), (4, 5), (4, 6), (4, 7), (0, 4)]
+    target_lengths = [1.09, 1.09, 1.09, 1.09, 1.09, 1.09, 1.54]
+    lincs = LincsConstraint(constraint_pairs, target_lengths, topology.masses)
+    system.add_constraint(lincs)
+
+    system.upload_positions(positions)
+    system.upload_velocities(np.random.RandomState(77).randn(*positions.shape).astype(np.float32) * 0.01)
+
+    integrator = VerletIntegrator(0.002)
+    for step in range(100):
+        system.update_neighbor_list(sync_interval=1)
+        system.compute_forces()
+        integrator.step(system)
+        system.apply_constraints(0.002)
+
+    pos, vel = system.dump_state()
+    assert not np.any(np.isnan(pos))
+    for c, (i, j) in enumerate(constraint_pairs):
+        d = np.linalg.norm(pos[i] - pos[j])
+        assert abs(d - target_lengths[c]) < 0.05, (
+            f"Bond {c} ({i}-{j}): {d:.4f} != {target_lengths[c]}"
+        )
