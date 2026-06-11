@@ -36,7 +36,7 @@ setup(
     install_requires = [
         'numpy >= 1.20.0',
         'scipy >= 1.7.0',
-        'numba >= 0.54.0',
+
         'matplotlib >= 3.0.0',
         'pytest >= 6.2.0',
         'pytest-xdist >= 2.3.0',

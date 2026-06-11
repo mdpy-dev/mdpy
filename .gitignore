@@ -152,7 +152,7 @@ dmypy.json
 
 # Explicitly ignore requested root directories and files.
 /.opencode/
-/.nvvm_lib/
+
 /.pytest_cache/
 /AGENTS.md
 /benchmark/
