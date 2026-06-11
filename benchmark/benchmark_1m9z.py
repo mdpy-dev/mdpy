@@ -25,7 +25,7 @@ CUTOFF = 12.0
 DT_FS = 2
 KCAL_PER_INTERNAL = 1.0 / 4.1840286576e-4
 WARMUP_STEPS = 50
-BLOCK_STEPS = 100
+BLOCK_STEPS = 2500
 NUM_BLOCKS = 5
 
 
@@ -40,8 +40,10 @@ def main():
     from mdpy.force.expressions.screened_coulomb import screened_coulomb
     from mdpy.force.pme_reciprocal_force import PMEReciprocalForce
     from mdpy.integrator.verlet import VerletIntegrator
+    from mdpy.integrator.langevin import LangevinBAOABIntegrator
     from mdpy.system import System
     from mdpy.constraint.constraint_scheme import create_constraints
+    from mdpy.utils import generate_velocity_from_temperature
 
     psf = PSFParser(PSF_PATH)
     pdb = PDBParser(PDB_PATH)
@@ -68,10 +70,12 @@ def main():
     constraint_names = [c.name for c in constraints]
 
     positions = pdb.positions
+    velocities = generate_velocity_from_temperature(300.0, topology.masses, seed=42)
     system.upload_positions(positions)
-    system.upload_velocities(np.zeros((topology.num_particles, 3), dtype=np.float32))
+    system.upload_velocities(velocities)
 
     integrator = VerletIntegrator(DT_FS)
+    integrator = LangevinBAOABIntegrator(DT_FS, 300.0, 1.0)
 
     def _run_steps(n, sync_interval=10):
         for i in range(n):
