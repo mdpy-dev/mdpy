@@ -2,6 +2,11 @@ import numpy as np
 from .settle import SettleConstraint
 from .lincs import LincsConstraint
 
+_WATER_RESIDUE_NAMES = frozenset({
+    'TIP3', 'TIP3P', 'TIP4', 'TIP4P', 'TIP5', 'TIP5P',
+    'SPC', 'SPCE', 'SPC/E', 'SOL', 'WAT', 'HOH',
+})
+
 
 def _identify_water_molecules(topology):
     water_triplets = []
@@ -14,15 +19,21 @@ def _identify_water_molecules(topology):
     if mol_ids is None:
         return water_triplets, water_bond_set
 
+    mol_types = topology.molecule_types
+    use_mol_types = mol_types and mol_types[0] != ''
+
     oxygen_hydrogen_bonds = {}
     for b in range(bond_indices.shape[0]):
         i, j = int(bond_indices[b, 0]), int(bond_indices[b, 1])
         if mol_ids[i] != mol_ids[j]:
             continue
+        if use_mol_types:
+            if mol_types[i] not in _WATER_RESIDUE_NAMES:
+                continue
         mi, mj = masses[i], masses[j]
-        if (mi > 10.0 and mj < 5.0):
+        if (mi > 14.5 and mj < 5.0):
             oxygen, hydrogen = i, j
-        elif (mj > 10.0 and mi < 5.0):
+        elif (mj > 14.5 and mi < 5.0):
             oxygen, hydrogen = j, i
         else:
             continue
