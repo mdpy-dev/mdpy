@@ -33,15 +33,17 @@ void lincs_kernel(
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
     int lid = threadIdx.x;
     int block_offset = blockIdx.x * blockDim.x;
-    bool is_dummy = (tid >= num_constraints);
 
-    int ai_s = -1, aj_s = -1;
+    if (tid >= num_constraint_threads) return;
+
+    int ai_s = con_idx[tid * 2 + 0];
+    int aj_s = con_idx[tid * 2 + 1];
+    bool is_dummy = (ai_s < 0);
+
     float d0 = 0.0f, blc = 0.0f, imi = 0.0f, imj = 0.0f;
     float rcx = 0.0f, rcy = 0.0f, rcz = 0.0f;
 
     if (!is_dummy) {
-        ai_s = con_idx[tid * 2 + 0];
-        aj_s = con_idx[tid * 2 + 1];
         d0 = target_len[tid];
         blc = blc_arr[tid];
         imi = inv_mass_i[tid];
@@ -243,12 +245,13 @@ def _build_coupling_data(constraint_pairs, masses, target_lengths, block_size=25
     split_map = [0] * num_constraints
     next_slot = 0
     for group in groups:
-        block_start = ((next_slot + block_size - 1) // block_size) * block_size
-        pos = block_start
+        group_size = len(group)
+        slot_in_block = next_slot % block_size
+        if slot_in_block + group_size > block_size:
+            next_slot = ((next_slot + block_size - 1) // block_size) * block_size
         for orig in group:
-            split_map[orig] = pos
-            pos += 1
-        next_slot = pos
+            split_map[orig] = next_slot
+            next_slot += 1
 
     num_ct = ((next_slot + block_size - 1) // block_size) * block_size
 
