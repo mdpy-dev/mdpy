@@ -1,5 +1,10 @@
 from mdpy.force.nonbonded_force import nonbonded_expression, Parameter, Scalar
 
+from mdpy.force.nonbonded_transpiler import (
+    nonbonded_expression as nonbonded_expression_ad,
+)
+from mdpy.force.markers import scalar as scalar_marker
+
 
 @nonbonded_expression
 def screened_coulomb(r, atom_i, atom_j, charge=Parameter(), alpha=Scalar()):
@@ -36,3 +41,9 @@ def screened_coulomb(r, atom_i, atom_j, charge=Parameter(), alpha=Scalar()):
     energy = 0.13893556595455 * qq * (1.0 - erf_val) * inv_r
 
     return energy, force_magnitude
+
+
+@nonbonded_expression_ad
+def screened_coulomb_ad(pos1, pos2, charge1, charge2, alpha=scalar_marker):
+    r = distance(pos1, pos2)
+    return 0.13893556595455 * charge1 * charge2 * erfc(alpha * r) / r
