@@ -441,7 +441,7 @@ class TestExclusionMasks:
                 for s in range(slot_in_block + 1):
                     assert (mask >> s) & 1, f"triangle bit {s} missing"
 
-    def test_dihedral_scaling(self):
+    def test_dihedral_14_fully_excluded(self):
         n = 10
         builder = Builder()
         builder.set_particles(
@@ -468,11 +468,9 @@ class TestExclusionMasks:
         bl.build_block_pairs(topology, pbc_matrix)
 
         excl = bl.exclusion_masks
-        scale = bl.scaling_masks
         ia = bl.interacting_atoms
         atb = cp.asnumpy(bl.d_atom_to_block)
         ats = cp.asnumpy(bl.d_atom_to_slot)
-        found_14 = False
         for t in range(bl.num_block_pairs):
             bx = bl.block_pairs[t]
             for sj in range(BLOCK_SIZE):
@@ -485,10 +483,9 @@ class TestExclusionMasks:
                 for pair_a, pair_b in [(0, 3), (1, 4), (2, 5)]:
                     if aj == pair_a and atb[pair_b] == bx:
                         slot_b = ats[pair_b]
-                        if not ((excl[t, sj] >> slot_b) & 1):
-                            if (scale[t, sj] >> slot_b) & 1:
-                                found_14 = True
-        assert found_14, "expected 1-4 pair in scaling mask"
+                        assert (excl[t, sj] >> slot_b) & 1, (
+                            f"1-4 pair ({pair_a},{pair_b}) should be fully excluded"
+                        )
 
 
 class TestBlockPairClassification:
@@ -518,7 +515,6 @@ class TestBlockPairClassification:
         assert bl.num_main_block_pairs + bl.num_exclusion_block_pairs == bl.num_block_pairs
         if bl.num_exclusion_block_pairs > 0:
             assert bl.d_excl_exclusion_masks.size >= bl.num_exclusion_block_pairs * BLOCK_SIZE
-            assert bl.d_excl_scaling_masks.size >= bl.num_exclusion_block_pairs * BLOCK_SIZE
 
     def test_no_exclusion_all_main(self):
         n = 20
@@ -531,13 +527,6 @@ class TestBlockPairClassification:
         bl.build_block_pairs(topology, pbc_matrix)
 
         assert bl.num_main_block_pairs + bl.num_exclusion_block_pairs == bl.num_block_pairs
-        excl_masks = bl.exclusion_masks
-        scale_masks = bl.scaling_masks
-        for t in range(bl.num_block_pairs):
-            for sj in range(BLOCK_SIZE):
-                assert scale_masks[t, sj] == 0, (
-                    "scaling mask should be zero with no bonded topology"
-                )
 
 
 class TestCheckRebuild:

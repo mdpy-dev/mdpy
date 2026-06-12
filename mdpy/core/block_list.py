@@ -429,14 +429,11 @@ void build_masks_kernel(
     const int* __restrict__ atom_to_slot,
     const int* __restrict__ exclusion_offset,
     const int* __restrict__ exclusion_neighbors,
-    const float* __restrict__ exclusion_scale,
     const int* __restrict__ reverse_offset,
     const int* __restrict__ reverse_neighbors,
-    const float* __restrict__ reverse_scale,
     int num_block_pairs,
     int num_particles,
-    unsigned int* __restrict__ exclusion_masks_out,
-    unsigned int* __restrict__ scaling_masks_out
+    unsigned int* __restrict__ exclusion_masks_out
 ) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= num_block_pairs * 32) return;
@@ -446,7 +443,7 @@ void build_masks_kernel(
     int block_x = block_pairs[pair_idx];
     int atom_j = interacting_atoms[pair_idx * 32 + slot_j];
 
-    unsigned int excl = 0, scale = 0;
+    unsigned int excl = 0;
 
     if (atom_j >= 0 && atom_j < num_particles) {
         int bj = atom_to_block[atom_j];
@@ -462,10 +459,7 @@ void build_masks_kernel(
             if (nb < 0 || nb >= num_particles) continue;
             if (atom_to_block[nb] == block_x) {
                 int sn = atom_to_slot[nb];
-                if (exclusion_scale[k] == 0.0f)
-                    excl |= (1u << sn);
-                else
-                    scale |= (1u << sn);
+                excl |= (1u << sn);
             }
         }
 
@@ -476,16 +470,12 @@ void build_masks_kernel(
             if (nb < 0 || nb >= num_particles) continue;
             if (atom_to_block[nb] == block_x) {
                 int sn = atom_to_slot[nb];
-                if (reverse_scale[k] == 0.0f)
-                    excl |= (1u << sn);
-                else
-                    scale |= (1u << sn);
+                excl |= (1u << sn);
             }
         }
     }
 
     exclusion_masks_out[idx] = excl;
-    scaling_masks_out[idx] = scale;
 }
 """
 
@@ -493,7 +483,6 @@ _CLASSIFY_BLOCK_PAIRS_KERNEL = r"""
 extern "C" __global__
 void classify_block_pairs_kernel(
     const unsigned int* __restrict__ excl_masks,
-    const unsigned int* __restrict__ scale_masks,
     const int* __restrict__ block_pairs,
     const int* __restrict__ interacting_atoms,
     const float* __restrict__ shift_x,
@@ -505,7 +494,6 @@ void classify_block_pairs_kernel(
     int* __restrict__ excl_block_pairs_out,
     int* __restrict__ excl_int_atoms_out,
     unsigned int* __restrict__ excl_masks_out,
-    unsigned int* __restrict__ excl_scale_out,
     int* __restrict__ main_block_pairs_out,
     int* __restrict__ main_int_atoms_out,
     float* __restrict__ excl_shift_x_out,
@@ -520,7 +508,7 @@ void classify_block_pairs_kernel(
 
     bool has_mask = false;
     for (int i = 0; i < 32; i++) {
-        if (excl_masks[pair_idx * 32 + i] != 0 || scale_masks[pair_idx * 32 + i] != 0) {
+        if (excl_masks[pair_idx * 32 + i] != 0) {
             has_mask = true;
             break;
         }
@@ -532,7 +520,6 @@ void classify_block_pairs_kernel(
         for (int i = 0; i < 32; i++) {
             excl_int_atoms_out[idx * 32 + i] = interacting_atoms[pair_idx * 32 + i];
             excl_masks_out[idx * 32 + i] = excl_masks[pair_idx * 32 + i];
-            excl_scale_out[idx * 32 + i] = scale_masks[pair_idx * 32 + i];
         }
         excl_shift_x_out[idx] = shift_x[pair_idx];
         excl_shift_y_out[idx] = shift_y[pair_idx];
@@ -775,9 +762,7 @@ class BlockList:
         self._total_exclusion_pairs = 0
 
         self.d_exclusion_masks = cp.empty(0, dtype=np.uint32)
-        self.d_scaling_masks = cp.empty(0, dtype=np.uint32)
         self._d_exclusion_masks_buf = cp.empty(0, dtype=np.uint32)
-        self._d_scaling_masks_buf = cp.empty(0, dtype=np.uint32)
 
         self.num_main_block_pairs = 0
         self.num_exclusion_block_pairs = 0
@@ -797,7 +782,6 @@ class BlockList:
         self._d_classify_excl_block_pairs = cp.empty(0, dtype=env.NUMPY_INT)
         self._d_classify_excl_int_atoms = cp.empty(0, dtype=env.NUMPY_INT)
         self._d_classify_excl_masks = cp.empty(0, dtype=np.uint32)
-        self._d_classify_excl_scale = cp.empty(0, dtype=np.uint32)
         self._d_classify_main_block_pairs = cp.empty(0, dtype=env.NUMPY_INT)
         self._d_classify_main_int_atoms = cp.empty(0, dtype=env.NUMPY_INT)
         self._d_classify_excl_shift_x = cp.empty(0, dtype=env.NUMPY_FLOAT)
@@ -815,7 +799,6 @@ class BlockList:
         self.d_excl_shift_z = cp.empty(0, dtype=env.NUMPY_FLOAT)
 
         self._exclusion_masks_np = None
-        self._scaling_masks_np = None
 
         self._subgrid_dx = 0
         self._subgrid_dy = 0
@@ -859,20 +842,11 @@ class BlockList:
             ).reshape(-1, BLOCK_SIZE)
         return self._exclusion_masks_np
 
-    @property
-    def scaling_masks(self):
-        if self._scaling_masks_np is None and self.d_scaling_masks.size > 0:
-            self._scaling_masks_np = cp.asnumpy(
-                self.d_scaling_masks[:self.num_block_pairs * BLOCK_SIZE]
-            ).reshape(-1, BLOCK_SIZE)
-        return self._scaling_masks_np
-
     def _invalidate_caches(self):
         self._block_atoms_np = None
         self._block_pairs_np = None
         self._interacting_atoms_np = None
         self._exclusion_masks_np = None
-        self._scaling_masks_np = None
 
     def compute_pme_subgrid_dims(self, grid_x, grid_y, grid_z, order):
         self._subgrid_dx = -(-grid_x // self.nc_x) + 2 * order
@@ -1160,7 +1134,6 @@ class BlockList:
     def _build_masks_gpu(self, topology):
         if self.num_block_pairs == 0:
             self.d_exclusion_masks = cp.empty(0, dtype=np.uint32)
-            self.d_scaling_masks = cp.empty(0, dtype=np.uint32)
             return
 
         self._upload_exclusion(topology)
@@ -1214,9 +1187,7 @@ class BlockList:
         grid = ((total_work + tpb - 1) // tpb,)
         if self._d_exclusion_masks_buf.size < total_work:
             self._d_exclusion_masks_buf = cp.empty(total_work, dtype=np.uint32)
-            self._d_scaling_masks_buf = cp.empty(total_work, dtype=np.uint32)
         self.d_exclusion_masks = self._d_exclusion_masks_buf
-        self.d_scaling_masks = self._d_scaling_masks_buf
         self._kernels["build_masks"](
             grid,
             (tpb,),
@@ -1228,14 +1199,11 @@ class BlockList:
                 self.d_atom_to_slot,
                 self._d_excl_offset,
                 self._d_excl_neighbors,
-                self._d_excl_scale,
                 self._d_reverse_offset,
                 self._d_reverse_neighbors,
-                self._d_reverse_scale,
                 np.int32(self.num_block_pairs),
                 np.int32(N),
                 self.d_exclusion_masks,
-                self.d_scaling_masks,
             ),
         )
 
@@ -1246,7 +1214,6 @@ class BlockList:
             self.d_excl_block_pairs = cp.empty(0, dtype=env.NUMPY_INT)
             self.d_excl_interacting_atoms = cp.empty(0, dtype=env.NUMPY_INT)
             self.d_excl_exclusion_masks = cp.empty(0, dtype=np.uint32)
-            self.d_excl_scaling_masks = cp.empty(0, dtype=np.uint32)
             self.d_main_block_pairs = cp.empty(0, dtype=env.NUMPY_INT)
             self.d_main_interacting_atoms = cp.empty(0, dtype=env.NUMPY_INT)
             self.d_block_pair_shift_x = cp.empty(0, dtype=env.NUMPY_FLOAT)
@@ -1269,7 +1236,6 @@ class BlockList:
                 max_block_pairs * BLOCK_SIZE, dtype=env.NUMPY_INT
             )
             self._d_classify_excl_masks = cp.empty(max_block_pairs * BLOCK_SIZE, dtype=np.uint32)
-            self._d_classify_excl_scale = cp.empty(max_block_pairs * BLOCK_SIZE, dtype=np.uint32)
             self._d_classify_main_block_pairs = cp.empty(max_block_pairs, dtype=env.NUMPY_INT)
             self._d_classify_main_int_atoms = cp.empty(
                 max_block_pairs * BLOCK_SIZE, dtype=env.NUMPY_INT
@@ -1291,7 +1257,6 @@ class BlockList:
             (tpb,),
             (
                 self.d_exclusion_masks,
-                self.d_scaling_masks,
                 self.d_block_pairs,
                 self.d_interacting_atoms,
                 self.d_block_pair_shift_x,
@@ -1303,7 +1268,6 @@ class BlockList:
                 self._d_classify_excl_block_pairs,
                 self._d_classify_excl_int_atoms,
                 self._d_classify_excl_masks,
-                self._d_classify_excl_scale,
                 self._d_classify_main_block_pairs,
                 self._d_classify_main_int_atoms,
                 self._d_classify_excl_shift_x,
@@ -1321,7 +1285,6 @@ class BlockList:
         self.d_excl_block_pairs = self._d_classify_excl_block_pairs
         self.d_excl_interacting_atoms = self._d_classify_excl_int_atoms
         self.d_excl_exclusion_masks = self._d_classify_excl_masks
-        self.d_excl_scaling_masks = self._d_classify_excl_scale
         self.d_main_block_pairs = self._d_classify_main_block_pairs
         self.d_main_interacting_atoms = self._d_classify_main_int_atoms
         self.d_excl_shift_x = self._d_classify_excl_shift_x
@@ -1429,13 +1392,11 @@ class BlockList:
         self.d_sorted_to_pdb = cp.empty(0, dtype=env.NUMPY_INT)
         self._sorted_positions = None
         self.d_exclusion_masks = cp.empty(0, dtype=np.uint32)
-        self.d_scaling_masks = cp.empty(0, dtype=np.uint32)
         self.num_exclusion_block_pairs = 0
         self.num_main_block_pairs = 0
         self.d_excl_block_pairs = cp.empty(0, dtype=env.NUMPY_INT)
         self.d_excl_interacting_atoms = cp.empty(0, dtype=env.NUMPY_INT)
         self.d_excl_exclusion_masks = cp.empty(0, dtype=np.uint32)
-        self.d_excl_scaling_masks = cp.empty(0, dtype=np.uint32)
         self.d_main_block_pairs = cp.empty(0, dtype=env.NUMPY_INT)
         self.d_main_interacting_atoms = cp.empty(0, dtype=env.NUMPY_INT)
         self.d_block_pair_shift_x = cp.empty(0, dtype=env.NUMPY_FLOAT)

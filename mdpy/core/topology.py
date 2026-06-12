@@ -163,7 +163,7 @@ void generate_pairs_kernel(
         int d = dihedral_idx[idx * 4 + 3];
         out_i[tid] = min(a, d);
         out_j[tid] = max(a, d);
-        out_scale[tid] = scale_14;
+        out_scale[tid] = 0.0f;
     } else {
         int idx = tid - dihedral_end;
         int a = improper_idx[idx * 4];
@@ -593,7 +593,7 @@ class Builder:
             _add(angle[0], angle[2], 0.0)
 
         for dihedral in self._dihedrals:
-            _add(dihedral[0], dihedral[3], scale_14)
+            _add(dihedral[0], dihedral[3], 0.0)
 
         for improper in self._impropers:
             _add(improper[0], improper[3], 0.0)
