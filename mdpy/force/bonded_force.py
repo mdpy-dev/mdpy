@@ -558,3 +558,161 @@ class BondedForce(ForceTerm):
             args.append(np.int32(term_data['count']))
 
         self._kernel((grid_size,), (block_size,), tuple(args))
+
+
+_V2_BODY_TEMPLATES = {
+    2: r'''
+    for (int idx = tid; idx < num_terms; idx += stride) {{
+        int a1 = d_indices[idx*2];
+        int a2 = d_indices[idx*2+1];
+        {param_loads}
+        {expression_fragment}
+        e += _result_energy;
+    }}
+''',
+    3: r'''
+    for (int idx = tid; idx < num_terms; idx += stride) {{
+        int a1 = d_indices[idx*3];
+        int a2 = d_indices[idx*3+1];
+        int a3 = d_indices[idx*3+2];
+        {param_loads}
+        {expression_fragment}
+        e += _result_energy;
+    }}
+''',
+    4: r'''
+    for (int idx = tid; idx < num_terms; idx += stride) {{
+        int a1 = d_indices[idx*4];
+        int a2 = d_indices[idx*4+1];
+        int a3 = d_indices[idx*4+2];
+        int a4 = d_indices[idx*4+3];
+        {param_loads}
+        {expression_fragment}
+        e += _result_energy;
+    }}
+''',
+}
+
+_V2_MAIN_TEMPLATE = r'''
+extern "C" __global__
+void compute_bonded_v2(
+    const float* __restrict__ pos_x,
+    const float* __restrict__ pos_y,
+    const float* __restrict__ pos_z,
+    float* __restrict__ f_x,
+    float* __restrict__ f_y,
+    float* __restrict__ f_z,
+    float* __restrict__ energy_buf,
+    const float* __restrict__ pbc_inv,
+    const float* __restrict__ pbc_matrix,
+    const int* __restrict__ d_indices,
+    const float* __restrict__ d_parameters,
+    int num_terms
+) {{
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    int stride = blockDim.x * gridDim.x;
+    float e = 0.0f;
+
+    {body}
+
+    for (int off = 16; off > 0; off >>= 1)
+        e += __shfl_down_sync(0xffffffff, e, off);
+    if ((threadIdx.x & 31) == 0)
+        atomicAdd(energy_buf, e);
+}}
+'''
+
+
+class BondedForceV2:
+    name = 'bonded_v2'
+
+    def __init__(self, expression):
+        self._expression = expression
+        self._body = expression.body
+        self._parameter_names = expression.parameter_names
+        self._parameters_per_term = len(self._parameter_names)
+        self._pending_indices = []
+        self._pending_parameters = []
+        self._count = 0
+        self._capacity = 0
+        self._d_indices = None
+        self._d_parameters = None
+        self._kernel = None
+        self._kernel_source = None
+        self._num_sm = None
+        self._dirty = True
+
+    def add(self, indices, **params):
+        self._pending_indices.append(list(indices))
+        self._pending_parameters.append([params.get(name, 0.0) for name in self._parameter_names])
+        self._count += 1
+        self._dirty = True
+
+    def sync(self):
+        if not self._pending_indices:
+            return
+        indices = np.array(self._pending_indices, dtype=np.int32)
+        parameters = np.array(self._pending_parameters, dtype=np.float32)
+        new_count = indices.shape[0]
+        if self._capacity < new_count:
+            new_capacity = max(new_count, max(64, int(self._capacity * 1.5)))
+            self._d_indices = cp.zeros((new_capacity, self._body), dtype=np.int32)
+            self._d_parameters = cp.zeros((new_capacity, self._parameters_per_term), dtype=np.float32)
+            self._capacity = new_capacity
+        self._d_indices[:new_count] = cp.asarray(indices)
+        self._d_parameters[:new_count] = cp.asarray(parameters)
+        self._pending_indices.clear()
+        self._pending_parameters.clear()
+        self._dirty = False
+
+    def bind(self):
+        self.sync()
+        self._assemble_kernel()
+
+    def _assemble_kernel(self):
+        param_loads_lines = []
+        for i, parameter_name in enumerate(self._parameter_names):
+            param_loads_lines.append(
+                f'float {parameter_name} = d_parameters[idx*{self._parameters_per_term} + {i}];'
+            )
+        param_loads = '\n        '.join(param_loads_lines)
+        body_template = _V2_BODY_TEMPLATES[self._body]
+        body = body_template.format(
+            param_loads=param_loads,
+            expression_fragment=self._expression.cuda_fragment,
+        )
+        self._kernel_source = _PREAMBLE + _V2_MAIN_TEMPLATE.format(body=body)
+
+    def _ensure_compiled(self):
+        if self._kernel is not None:
+            return
+        self._kernel = cp.RawKernel(self._kernel_source, 'compute_bonded_v2')
+        if self._num_sm is None:
+            self._num_sm = cp.cuda.runtime.getDeviceProperties(0)['multiProcessorCount']
+
+    def compute(self, gpu_context, block_list=None):
+        if self._count == 0:
+            return
+        if self._dirty:
+            self.sync()
+        self._ensure_compiled()
+
+        block_size = 128
+        max_blocks = 6 * self._num_sm
+        grid_size = max(min((self._count + block_size - 1) // block_size, max_blocks), 1)
+
+        args = (
+            gpu_context.d_positions_x,
+            gpu_context.d_positions_y,
+            gpu_context.d_positions_z,
+            gpu_context.d_forces_x,
+            gpu_context.d_forces_y,
+            gpu_context.d_forces_z,
+            gpu_context.d_energy,
+            gpu_context.d_pbc_inv,
+            gpu_context.d_pbc_matrix,
+            self._d_indices.ravel(),
+            self._d_parameters.ravel(),
+            np.int32(self._count),
+        )
+        self._kernel((grid_size,), (block_size,), args)

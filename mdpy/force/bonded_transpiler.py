@@ -102,7 +102,7 @@ class _BondedASTWalker:
                 func_name = node.func.id
 
             if func_name in ('distance', 'angle', 'dihedral'):
-                result = self._fresh_name(func_name[0])
+                result = self._fresh_name('_h')
                 arg_indices = []
                 for arg in node.args:
                     if isinstance(arg, ast.Name) and arg.id in self._position_index:
