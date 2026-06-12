@@ -341,3 +341,117 @@ def test_incremental_add_and_sync():
 
     energy_after = float(context2.d_energy[0])
     assert energy_after > energy_before
+
+
+@bonded_expression(body=2)
+def simple_coulomb(pos1, pos2, charge1, charge2):
+    r = distance(pos1, pos2)
+    return 0.13893556595455 * charge1 * charge2 / r
+
+
+def test_per_particle_set_parameter():
+    force = BondedForceV2(simple_coulomb)
+    charges = np.array([1.0, -1.0, 0.5, -0.5], dtype=np.float32)
+    force.set_parameter("charge", charges)
+
+    assert "charge" in force._per_particle_gpu
+    assert force._per_particle_gpu["charge"].shape[0] == 4
+
+    import cupy as cp
+    gpu_charges = cp.asnumpy(force._per_particle_gpu["charge"])
+    np.testing.assert_allclose(gpu_charges, charges, atol=1e-6)
+
+
+def test_per_particle_energy():
+    force = BondedForceV2(simple_coulomb)
+
+    q1, q2 = 1.0, -0.5
+    charges = np.array([q1, q2], dtype=np.float32)
+    force.set_parameter("charge", charges)
+    force.add([0, 1])
+
+    positions = np.array([
+        [0.0, 0.0, 0.0],
+        [3.0, 0.0, 0.0],
+    ], dtype=env.NUMPY_FLOAT)
+    pbc_matrix = _make_large_pbc()
+
+    force.bind()
+    context = MockGPUContext(positions, pbc_matrix)
+    force.compute(context)
+
+    energy = float(context.d_energy[0])
+    r = 3.0
+    expected = 0.13893556595455 * q1 * q2 / r
+    assert abs(energy - expected) < 1e-3, f"Energy {energy} != {expected}"
+
+
+def test_per_particle_forces_balanced():
+    force = BondedForceV2(simple_coulomb)
+
+    charges = np.array([1.0, -1.0], dtype=np.float32)
+    force.set_parameter("charge", charges)
+    force.add([0, 1])
+
+    positions = np.array([
+        [0.0, 0.0, 0.0],
+        [3.0, 0.0, 0.0],
+    ], dtype=env.NUMPY_FLOAT)
+    pbc_matrix = _make_large_pbc()
+
+    force.bind()
+    context = MockGPUContext(positions, pbc_matrix)
+    force.compute(context)
+
+    gpu_forces = context.d_forces.get().reshape(-1, 3)
+    total_force = np.sum(gpu_forces, axis=0)
+    assert np.linalg.norm(total_force) < 0.5, \
+        f"Forces not balanced: sum={total_force}"
+
+
+def test_per_particle_multiple_pairs():
+    force = BondedForceV2(simple_coulomb)
+
+    charges = np.array([1.0, -1.0, 0.5, -0.5], dtype=np.float32)
+    force.set_parameter("charge", charges)
+    force.add([0, 1])
+    force.add([2, 3])
+
+    positions = np.array([
+        [0.0, 0.0, 0.0],
+        [2.0, 0.0, 0.0],
+        [5.0, 0.0, 0.0],
+        [7.0, 0.0, 0.0],
+    ], dtype=env.NUMPY_FLOAT)
+    pbc_matrix = _make_large_pbc()
+
+    force.bind()
+    context = MockGPUContext(positions, pbc_matrix)
+    force.compute(context)
+
+    energy = float(context.d_energy[0])
+    expected_e01 = 0.13893556595455 * 1.0 * (-1.0) / 2.0
+    expected_e23 = 0.13893556595455 * 0.5 * (-0.5) / 2.0
+    expected = expected_e01 + expected_e23
+    assert abs(energy - expected) < 1e-2, f"Energy {energy} != {expected}"
+
+
+def test_per_particle_no_per_particle_props():
+    force = BondedForceV2(harmonic_bond)
+    k = 100.0
+    r0 = 1.5
+    force.add([0, 1], k=k, r0=r0)
+
+    positions = np.array([
+        [0.0, 0.0, 0.0],
+        [2.0, 0.0, 0.0],
+    ], dtype=env.NUMPY_FLOAT)
+    pbc_matrix = _make_large_pbc()
+
+    force.bind()
+    context = MockGPUContext(positions, pbc_matrix)
+    force.compute(context)
+
+    energy = float(context.d_energy[0])
+    expected_energy = k * (2.0 - r0) ** 2
+    assert abs(energy - expected_energy) < 1e-2

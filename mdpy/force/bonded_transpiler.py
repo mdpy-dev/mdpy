@@ -137,6 +137,10 @@ class _BondedExpression:
         self.helper_calls = []
         self._compile()
 
+    @property
+    def per_particle(self):
+        return self._expr_info.per_particle
+
     def _compile(self):
         source = textwrap.dedent(inspect.getsource(self._func))
         tree = ast.parse(source)

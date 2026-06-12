@@ -6,6 +6,7 @@ import inspect
 import numpy as np
 import textwrap
 
+from mdpy import env
 from mdpy.force.force_term import ForceTerm
 
 _MATH_FUNCTIONS = {
@@ -15,6 +16,14 @@ _MATH_FUNCTIONS = {
     'log': 'logf', 'abs': 'fabsf', 'floor': 'floorf',
     'ceil': 'ceilf', 'min': 'fminf', 'max': 'fmaxf',
 }
+
+import re as _re
+
+def _extract_trailing_digit(name):
+    m = _re.search(r'(\d+)$', name)
+    if m:
+        return int(m.group(1))
+    return None
 
 _REMAP_INDICES_KERNEL = r"""
 extern "C" __global__
@@ -607,7 +616,7 @@ void compute_bonded_v2(
     const float* __restrict__ pbc_matrix,
     const int* __restrict__ d_indices,
     const float* __restrict__ d_parameters,
-    int num_terms
+    int num_terms{extra_params}
 ) {{
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
     int stride = blockDim.x * gridDim.x;
@@ -631,6 +640,11 @@ class BondedForceV2:
         self._body = expression.body
         self._parameter_names = expression.parameter_names
         self._parameters_per_term = len(self._parameter_names)
+        self._per_particle = expression.per_particle
+        self._per_particle_gpu = {}
+        self._per_particle_properties = list(dict.fromkeys(
+            expression.per_particle.values()
+        ))
         self._pending_indices = []
         self._pending_parameters = []
         self._count = 0
@@ -641,6 +655,10 @@ class BondedForceV2:
         self._kernel_source = None
         self._num_sm = None
         self._dirty = True
+
+    def set_parameter(self, name, array):
+        arr = np.asarray(array, dtype=env.NUMPY_FLOAT).ravel()
+        self._per_particle_gpu[name] = cp.asarray(arr)
 
     def add(self, indices, **params):
         self._pending_indices.append(list(indices))
@@ -675,13 +693,38 @@ class BondedForceV2:
             param_loads_lines.append(
                 f'float {parameter_name} = d_parameters[idx*{self._parameters_per_term} + {i}];'
             )
+        atom_index_names = ['a1', 'a2', 'a3', 'a4']
+        for arg_name in self._per_particle:
+            base_name = self._per_particle[arg_name]
+            trailing = _extract_trailing_digit(arg_name)
+            atom_idx = atom_index_names[trailing - 1] if trailing is not None else 'a1'
+            param_loads_lines.append(
+                f'float {arg_name} = d_{base_name}[{atom_idx}];'
+            )
         param_loads = '\n        '.join(param_loads_lines)
         body_template = _V2_BODY_TEMPLATES[self._body]
         body = body_template.format(
             param_loads=param_loads,
             expression_fragment=self._expression.cuda_fragment,
         )
-        self._kernel_source = _PREAMBLE + _V2_MAIN_TEMPLATE.format(body=body)
+        extra_param_lines = []
+        for prop_name in self._per_particle_properties:
+            extra_param_lines.append(
+                f'const float* __restrict__ d_{prop_name}'
+            )
+        extra_params = ''
+        if extra_param_lines:
+            extra_params = ',\n    ' + ',\n    '.join(extra_param_lines)
+        self._kernel_source = _PREAMBLE + _V2_MAIN_TEMPLATE.format(
+            body=body, extra_params=extra_params,
+        )
+
+    def bind_sorted(self, gpu_context, sort_order):
+        for prop_name in self._per_particle_properties:
+            d_arr = self._per_particle_gpu[prop_name]
+            arrays = {prop_name: d_arr}
+            gpu_context.permute_to_sorted(sort_order, arrays)
+            self._per_particle_gpu[prop_name] = arrays[prop_name]
 
     def _ensure_compiled(self):
         if self._kernel is not None:
@@ -701,7 +744,7 @@ class BondedForceV2:
         max_blocks = 6 * self._num_sm
         grid_size = max(min((self._count + block_size - 1) // block_size, max_blocks), 1)
 
-        args = (
+        args = [
             gpu_context.d_positions_x,
             gpu_context.d_positions_y,
             gpu_context.d_positions_z,
@@ -714,5 +757,7 @@ class BondedForceV2:
             self._d_indices.ravel(),
             self._d_parameters.ravel(),
             np.int32(self._count),
-        )
-        self._kernel((grid_size,), (block_size,), args)
+        ]
+        for prop_name in self._per_particle_properties:
+            args.append(self._per_particle_gpu[prop_name])
+        self._kernel((grid_size,), (block_size,), tuple(args))
