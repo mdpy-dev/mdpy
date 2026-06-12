@@ -18,16 +18,21 @@ _DISTANCE_FORCE = r'''
 _DISTANCE_13_FORWARD = r'''
         float3 r13v = pbc_wrap_vec(sub_f3(load_pos(pos_x,pos_y,pos_z,a3), load_pos(pos_x,pos_y,pos_z,a1)), pbc_inv, pbc_matrix);
         float {result_name} = len_f3(r13v);
+        float inv_l13 = 0.0f;
         if ({result_name} >= 1e-12f) {{
-            float inv_l13 = 1.0f / {result_name};
+            inv_l13 = 1.0f / {result_name};
+        }}
 '''
 
 _DISTANCE_13_FORCE = r'''
-            float _grad_{result_name} = {grad_expr};
-            float f_ub = _grad_{result_name} * inv_l13;
-            float3 f13 = scale_f3(r13v, f_ub);
-            add_force(f_x,f_y,f_z, a1, f13);
-            add_force(f_x,f_y,f_z, a3, scale_f3(f13, -1.0f));
+        {{
+            if ({result_name} >= 1e-12f) {{
+                float _grad_{result_name} = {grad_expr};
+                float f_ub = _grad_{result_name} * inv_l13;
+                float3 f13 = scale_f3(r13v, f_ub);
+                add_force(f_x,f_y,f_z, a1, f13);
+                add_force(f_x,f_y,f_z, a3, scale_f3(f13, -1.0f));
+            }}
         }}
 '''
 

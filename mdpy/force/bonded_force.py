@@ -510,16 +510,17 @@ class BondedForce(ForceTerm):
 
     @classmethod
     def charmm(cls, topology, parameter_table):
-        from mdpy.force.expressions.bonded import (
-            harmonic_bond, charmm_angle, periodic_dihedral, harmonic_improper,
+        from mdpy.forcefield.charmm_forces import (
+            _create_bond_force, _create_angle_force,
+            _create_dihedral_force, _create_improper_force,
         )
-        bonded = cls()
-        bonded.add_expression(harmonic_bond, 'bond')
-        bonded.add_expression(charmm_angle, 'angle')
-        bonded.add_expression(periodic_dihedral, 'dihedral')
-        bonded.add_expression(harmonic_improper, 'improper')
-        bonded.bind(topology, parameter_table)
-        return bonded
+        sub_forces = [
+            _create_bond_force(topology, parameter_table),
+            _create_angle_force(topology, parameter_table),
+            _create_dihedral_force(topology, parameter_table),
+            _create_improper_force(topology, parameter_table),
+        ]
+        return _BondedForceAggregator(sub_forces)
 
     def remap_indices_gpu(self, d_remap):
         active_terms = [td for td in self._term_data if td['count'] > 0]
@@ -567,6 +568,26 @@ class BondedForce(ForceTerm):
             args.append(np.int32(term_data['count']))
 
         self._kernel((grid_size,), (block_size,), tuple(args))
+
+
+class _BondedForceAggregator:
+    name = 'bonded'
+
+    def __init__(self, sub_forces):
+        self._sub_forces = sub_forces
+
+    def compute(self, gpu_context, block_list=None, compute_energy=True):
+        for force in self._sub_forces:
+            force.compute(gpu_context, block_list, compute_energy)
+
+    def remap_indices_gpu(self, d_remap):
+        for force in self._sub_forces:
+            force.remap_indices_gpu(d_remap)
+
+    def bind_sorted(self, topology, block_list, gpu_context):
+        for force in self._sub_forces:
+            if hasattr(force, 'bind_sorted'):
+                force.bind_sorted(topology, block_list, gpu_context)
 
 
 _V2_BODY_TEMPLATES = {
