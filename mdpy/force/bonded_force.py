@@ -634,6 +634,15 @@ void compute_bonded_v2(
 
 class BondedForceV2:
     name = 'bonded_v2'
+    _remap_kernel = None
+
+    @classmethod
+    def _get_remap_kernel(cls):
+        if cls._remap_kernel is None:
+            cls._remap_kernel = cp.RawKernel(
+                _REMAP_INDICES_KERNEL, "remap_indices_kernel"
+            )
+        return cls._remap_kernel
 
     def __init__(self, expression):
         self._expression = expression
@@ -719,7 +728,18 @@ class BondedForceV2:
             body=body, extra_params=extra_params,
         )
 
-    def bind_sorted(self, gpu_context, sort_order):
+    def remap_indices_gpu(self, d_remap):
+        if self._count == 0 or self._d_indices is None:
+            return
+        kernel = self._get_remap_kernel()
+        indices = self._d_indices.ravel()
+        n = indices.size
+        tpb = 256
+        grid = ((n + tpb - 1) // tpb,)
+        kernel(grid, (tpb,), (d_remap, indices, np.int32(n)))
+
+    def bind_sorted(self, topology, block_list, gpu_context):
+        sort_order = block_list.d_raw_order
         for prop_name in self._per_particle_properties:
             d_arr = self._per_particle_gpu[prop_name]
             arrays = {prop_name: d_arr}
@@ -733,7 +753,7 @@ class BondedForceV2:
         if self._num_sm is None:
             self._num_sm = cp.cuda.runtime.getDeviceProperties(0)['multiProcessorCount']
 
-    def compute(self, gpu_context, block_list=None):
+    def compute(self, gpu_context, block_list=None, compute_energy=True):
         if self._count == 0:
             return
         if self._dirty:
