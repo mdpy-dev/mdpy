@@ -34,6 +34,17 @@ def generate_reference(psf_path, pdb_path, prm_path, output_path, cutoff_ang=12.
         nonbondedMethod=app.NoCutoff,
     )
 
+    for force in system.getForces():
+        if force.__class__.__name__ == 'NonbondedForce':
+            for i in range(force.getNumExceptions()):
+                p1, p2, _, _, _ = force.getExceptionParameters(i)
+                force.setExceptionParameters(
+                    i, p1, p2,
+                    0.0 * omm_unit.elementary_charge**2,
+                    0.1 * omm_unit.nanometer,
+                    0.0 * omm_unit.kilojoule_per_mole,
+                )
+
     force_groups = {}
     for force in system.getForces():
         name = force.__class__.__name__

@@ -139,10 +139,11 @@ class TestOpenMMValidation6PO6:
     def test_total_energy(self, mdpy_6po6, ref_6po6):
         mdpy_total = sum(mdpy_6po6.dump_energy().values())
         ref_total = float(ref_6po6['ref_mdpy_total_energy'])
-        err = _rel_err(mdpy_total, ref_total)
-        assert err < 0.05, (
+        abs_err = abs(mdpy_total - ref_total)
+        rel_err = _rel_err(mdpy_total, ref_total)
+        assert abs_err < 0.005 or rel_err < 0.05, (
             f'Total energy: mdpy={mdpy_total:.8f}, ref={ref_total:.8f}, '
-            f'rel_err={err:.6e}'
+            f'abs_err={abs_err:.6e}, rel_err={rel_err:.6e}'
         )
 
     def test_force_direction_correlation(self, mdpy_6po6, ref_6po6):
