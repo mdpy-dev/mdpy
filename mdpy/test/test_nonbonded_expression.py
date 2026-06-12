@@ -160,8 +160,7 @@ class TestExpressionCombination:
         assert 'extern "C" __global__' in kernel
         assert 'exclusion_block_pair_kernel' in kernel
         assert '__restrict__ lj_pair_arr' in kernel
-        assert 'lj_pair_14_arr' in kernel
-        assert 'charge_14' in kernel
+        assert 'charge_i' in kernel
 
     def test_second_expression_locals_renamed(self):
         combined = lennard_jones + coulomb
@@ -179,13 +178,12 @@ class TestKernelAssembly:
         assert '__shfl_sync' in kernel
         assert 'atomicAdd' in kernel
         assert 'rsqrtf' in kernel
-        assert 'is_14' in kernel
+        assert 'exclusion_masks' in kernel
         assert 'energy_val' in kernel
         assert 'force_magnitude' in kernel
 
     def test_coulomb_kernel_has_charge_arrays(self):
         kernel = coulomb.assemble_exclusion_block_pair_kernel()
-        assert 'charge_14' in kernel
         assert 'charge_i' in kernel
         assert 'charge_j' in kernel
 
@@ -193,8 +191,6 @@ class TestKernelAssembly:
         combined = lennard_jones + coulomb
         kernel = combined.assemble_exclusion_block_pair_kernel()
         assert '__restrict__ lj_pair_arr' in kernel
-        assert '__restrict__ lj_pair_14_arr' in kernel
-        assert 'sigma_ij_pair = is_14' in kernel
         assert 'charge_i' in kernel
 
     def test_kernel_has_block_pairs_and_interacting(self):
@@ -205,7 +201,7 @@ class TestKernelAssembly:
     def test_kernel_has_exclusion(self):
         kernel = lennard_jones.assemble_exclusion_block_pair_kernel()
         assert 'exclusion_masks' in kernel
-        assert 'scaling_masks' in kernel
+        assert 'scaling_masks' not in kernel
 
     def test_kernel_is_valid_c_syntax(self):
         kernel = lennard_jones.assemble_exclusion_block_pair_kernel()
@@ -296,11 +292,6 @@ class TestCombinedKernelSource:
         assert 'void exclusion_block_pair_kernel' in kernel
 
         assert '__restrict__ lj_pair_arr' in kernel
-        assert '__restrict__ lj_pair_14_arr' in kernel
-        assert 'charge_14' in kernel
-
-        assert 'sigma_ij_pair = is_14' in kernel
-        assert 'epsilon_ij_pair = is_14' in kernel
         assert 'charge_i' in kernel
 
         assert 'rsqrtf' in kernel

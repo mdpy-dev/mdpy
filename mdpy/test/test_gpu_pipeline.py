@@ -64,5 +64,4 @@ def test_gpu_block_pair_classification():
     assert bl.d_main_block_pairs.shape[0] >= bl.num_main_block_pairs
     assert bl.d_excl_interacting_atoms.shape[0] >= bl.num_exclusion_block_pairs * 32
     assert bl.d_excl_exclusion_masks.shape[0] >= bl.num_exclusion_block_pairs * 32
-    assert bl.d_excl_scaling_masks.shape[0] >= bl.num_exclusion_block_pairs * 32
     assert bl.d_main_interacting_atoms.shape[0] >= bl.num_main_block_pairs * 32

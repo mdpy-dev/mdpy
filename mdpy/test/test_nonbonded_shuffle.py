@@ -23,7 +23,7 @@ class TestExclusionBlockPairKernel:
     def test_kernel_has_exclusion_masks(self, combined_expr):
         source = combined_expr.assemble_exclusion_block_pair_kernel()
         assert 'exclusion_masks' in source
-        assert 'scaling_masks' in source
+        assert 'scaling_masks' not in source
 
     def test_kernel_has_warp_dispatch(self, combined_expr):
         source = combined_expr.assemble_exclusion_block_pair_kernel()
@@ -34,17 +34,17 @@ class TestExclusionBlockPairKernel:
         source = combined_expr.assemble_exclusion_block_pair_kernel()
         assert '__shfl_sync' in source
 
-    def test_kernel_has_is_14(self, combined_expr):
+    def test_kernel_no_is_14(self, combined_expr):
         source = combined_expr.assemble_exclusion_block_pair_kernel()
-        assert 'is_14' in source
+        assert 'is_14' not in source
 
     def test_kernel_valid_braces(self, combined_expr):
         source = combined_expr.assemble_exclusion_block_pair_kernel()
         assert source.count('{') == source.count('}')
 
-    def test_kernel_has_param_select(self, combined_expr):
+    def test_kernel_no_param_select(self, combined_expr):
         source = combined_expr.assemble_exclusion_block_pair_kernel()
-        assert 'charge_i_saved' in source
+        assert 'charge_i_saved' not in source
 
 
 class TestNonbondedForceCompute:
