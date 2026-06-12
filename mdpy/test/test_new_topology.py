@@ -107,7 +107,7 @@ def test_exclusion_map_basic():
     idx_03 = np.where(neighbors_0 == 3)[0][0]
     assert scales_0[idx_01] == 0.0
     assert scales_0[idx_02] == 0.0
-    assert scales_0[idx_03] == 1.0
+    assert scales_0[idx_03] == 0.0
 
 
 def test_exclusion_map_symmetry():

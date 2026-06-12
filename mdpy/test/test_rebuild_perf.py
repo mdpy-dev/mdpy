@@ -283,16 +283,17 @@ def test_remap_indices_gpu_correctness():
     d_remap = cp.empty(topology.num_particles, dtype=cp.int32)
     d_remap[d_perm] = cp.arange(topology.num_particles, dtype=cp.int32)
 
+    sub_forces = bonded_force._sub_forces if hasattr(bonded_force, '_sub_forces') else [bonded_force]
     ref_indices = {}
-    for td in bonded_force._term_data:
-        if td['count'] > 0:
-            ref_indices[id(td)] = cp.asnumpy(td['d_indices']).copy()
+    for sf in sub_forces:
+        if sf._count > 0:
+            ref_indices[id(sf)] = cp.asnumpy(sf._d_indices[:sf._count]).copy()
 
     bonded_force.remap_indices_gpu(d_remap)
 
-    for td in bonded_force._term_data:
-        if td['count'] > 0:
+    for sf in sub_forces:
+        if sf._count > 0:
             remap_np = cp.asnumpy(d_remap)
-            expected = remap_np[ref_indices[id(td)]]
-            actual = cp.asnumpy(td['d_indices'])
+            actual = cp.asnumpy(sf._d_indices[:sf._count])
+            expected = remap_np[ref_indices[id(sf)]]
             np.testing.assert_array_equal(actual, expected)
