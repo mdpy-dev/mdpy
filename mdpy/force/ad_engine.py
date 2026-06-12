@@ -96,6 +96,12 @@ def _diff_erf(d_out, entry):
     return [(a, f'{d_out} * {c}f * expf(-({a}) * ({a}))')]
 
 
+def _diff_erfc(d_out, entry):
+    a = entry.operands[0]
+    c = 2.0 / math.sqrt(math.pi)
+    return [(a, f'{d_out} * (-{c}f * expf(-({a}) * ({a})))')]
+
+
 _DIFF_RULES = {
     'add': _diff_add,
     'sub': _diff_sub,
@@ -108,6 +114,7 @@ _DIFF_RULES = {
     'exp': _diff_exp,
     'log': _diff_log,
     'erf': _diff_erf,
+    'erfc': _diff_erfc,
 }
 
 
