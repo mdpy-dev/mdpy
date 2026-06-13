@@ -28,13 +28,14 @@ class TestFactoryCreation:
     def test_returns_dict_with_all_keys(self, topology_and_table):
         topology, table = topology_and_table
         forces = create_charmm_forces(topology, table, topology.num_particles)
-        expected_keys = {'bond', 'angle', 'dihedral', 'improper', 'nb14', 'nonbonded'}
+        expected_keys = {'bonded', 'nonbonded'}
         assert set(forces.keys()) == expected_keys
 
-    def test_bond_is_bonded_force(self, topology_and_table):
+    def test_bonded_is_force_group(self, topology_and_table):
         topology, table = topology_and_table
         forces = create_charmm_forces(topology, table, topology.num_particles)
-        assert isinstance(forces['bond'], BondedForce)
+        from mdpy.force.force_group import ForceGroup
+        assert isinstance(forces['bonded'], ForceGroup)
 
     def test_nonbonded_is_force_group(self, topology_and_table):
         topology, table = topology_and_table
@@ -54,14 +55,18 @@ class TestBondForce:
     def test_bond_count_matches_topology(self, topology_and_table):
         topology, table = topology_and_table
         forces = create_charmm_forces(topology, table, topology.num_particles)
-        assert forces['bond']._count == topology.num_bonds
+        bonded = forces['bonded']
+        bond_force = [f for f in bonded._forces if f.name == 'bond'][0]
+        assert bond_force._count == topology.num_bonds
 
     def test_bond_parameters_extracted(self, topology_and_table):
         topology, table = topology_and_table
         forces = create_charmm_forces(topology, table, topology.num_particles)
+        bonded = forces['bonded']
+        bond_force = [f for f in bonded._forces if f.name == 'bond'][0]
         bond_params = table.get_term_parameter('bond')
-        assert forces['bond']._count > 0
-        assert forces['bond']._parameters_per_term == 2
+        assert bond_force._count > 0
+        assert bond_force._parameters_per_term == 2
 
 
 class TestAngleForce:
@@ -69,12 +74,16 @@ class TestAngleForce:
     def test_angle_count_matches_topology(self, topology_and_table):
         topology, table = topology_and_table
         forces = create_charmm_forces(topology, table, topology.num_particles)
-        assert forces['angle']._count == topology.num_angles
+        bonded = forces['bonded']
+        angle_force = [f for f in bonded._forces if f.name == 'angle'][0]
+        assert angle_force._count == topology.num_angles
 
     def test_angle_parameters_extracted(self, topology_and_table):
         topology, table = topology_and_table
         forces = create_charmm_forces(topology, table, topology.num_particles)
-        assert forces['angle']._parameters_per_term == 4
+        bonded = forces['bonded']
+        angle_force = [f for f in bonded._forces if f.name == 'angle'][0]
+        assert angle_force._parameters_per_term == 4
 
 
 class TestDihedralForce:
@@ -82,12 +91,16 @@ class TestDihedralForce:
     def test_dihedral_count_matches_topology(self, topology_and_table):
         topology, table = topology_and_table
         forces = create_charmm_forces(topology, table, topology.num_particles)
-        assert forces['dihedral']._count == topology.num_dihedrals
+        bonded = forces['bonded']
+        dihedral_force = [f for f in bonded._forces if f.name == 'dihedral'][0]
+        assert dihedral_force._count == topology.num_dihedrals
 
     def test_dihedral_parameters_extracted(self, topology_and_table):
         topology, table = topology_and_table
         forces = create_charmm_forces(topology, table, topology.num_particles)
-        assert forces['dihedral']._parameters_per_term == 3
+        bonded = forces['bonded']
+        dihedral_force = [f for f in bonded._forces if f.name == 'dihedral'][0]
+        assert dihedral_force._parameters_per_term == 3
 
 
 class TestImproperForce:
@@ -95,7 +108,9 @@ class TestImproperForce:
     def test_improper_count_matches_topology(self, topology_and_table):
         topology, table = topology_and_table
         forces = create_charmm_forces(topology, table, topology.num_particles)
-        assert forces['improper']._count == topology.num_impropers
+        bonded = forces['bonded']
+        improper_force = [f for f in bonded._forces if f.name == 'improper'][0]
+        assert improper_force._count == topology.num_impropers
 
 
 class TestNb14Force:
@@ -103,22 +118,30 @@ class TestNb14Force:
     def test_nb14_is_bonded_force(self, topology_and_table):
         topology, table = topology_and_table
         forces = create_charmm_forces(topology, table, topology.num_particles)
-        assert isinstance(forces['nb14'], BondedForce)
+        bonded = forces['bonded']
+        nb14_force = [f for f in bonded._forces if f.name == 'nb14'][0]
+        assert isinstance(nb14_force, BondedForce)
 
     def test_nb14_has_charges(self, topology_and_table):
         topology, table = topology_and_table
         forces = create_charmm_forces(topology, table, topology.num_particles)
-        assert 'charge' in forces['nb14']._per_particle_gpu
+        bonded = forces['bonded']
+        nb14_force = [f for f in bonded._forces if f.name == 'nb14'][0]
+        assert 'charge' in nb14_force._per_particle_gpu
 
     def test_nb14_count_positive(self, topology_and_table):
         topology, table = topology_and_table
         forces = create_charmm_forces(topology, table, topology.num_particles)
-        assert forces['nb14']._count > 0
+        bonded = forces['bonded']
+        nb14_force = [f for f in bonded._forces if f.name == 'nb14'][0]
+        assert nb14_force._count > 0
 
     def test_nb14_charge_scale_is_one(self, topology_and_table):
         topology, table = topology_and_table
         forces = create_charmm_forces(topology, table, topology.num_particles)
-        assert forces['nb14']._parameters_per_term == 3
+        bonded = forces['bonded']
+        nb14_force = [f for f in bonded._forces if f.name == 'nb14'][0]
+        assert nb14_force._parameters_per_term == 3
 
 
 class TestNonbondedForce:
@@ -156,7 +179,8 @@ class TestEnergyComputation:
         pbc_matrix = np.eye(3, dtype=env.NUMPY_FLOAT) * 100.0
 
         forces = create_charmm_forces(topology, table, topology.num_particles)
-        bond_force = forces['bond']
+        bonded_group = forces['bonded']
+        bond_force = [f for f in bonded_group._forces if f.name == 'bond'][0]
 
         positions = pdb.positions.astype(env.NUMPY_FLOAT)
 
@@ -171,6 +195,7 @@ class TestEnergyComputation:
                 self.d_forces_y = cp.zeros(N, dtype=np.float32)
                 self.d_forces_z = cp.zeros(N, dtype=np.float32)
                 self.d_energy = cp.zeros(1, dtype=np.float32)
+                self.d_charges = None
                 pbc_inv = np.linalg.inv(pbc_matrix)
                 self.d_pbc_inv = cp.asarray(
                     np.ascontiguousarray(pbc_inv, dtype=np.float32).ravel()
