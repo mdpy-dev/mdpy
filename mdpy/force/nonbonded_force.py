@@ -104,7 +104,7 @@ void pack_sorted_posq_kernel(
 """
 
 
-def _assemble_main_kernel(expr_info, energy_cuda, dEdr_cuda, total_energy_expr, compute_energy=True):
+def _assemble_main_kernel(expr_info, energy_cuda, grad_cuda, dEdr_cuda, total_energy_expr, compute_energy=True):
     i_props, j_props = _split_per_particle(expr_info.per_particle)
     bases = _unique_prop_bases(expr_info.per_particle)
     non_charge_bases = [b for b in bases if b != 'charge']
@@ -239,6 +239,7 @@ void main_block_pair_kernel(
                 int pair_idx = type_i * n_types + type_j;
 {load_pair}
 {energy_cuda}
+{grad_cuda if grad_cuda else ''}
                 float force_magnitude = ({dEdr_cuda});
                 float energy_val = {total_energy_expr};
                 float inv_dist_force = force_magnitude * inv_dist;
@@ -275,7 +276,7 @@ void main_block_pair_kernel(
     return kernel
 
 
-def _assemble_exclusion_kernel(expr_info, energy_cuda, dEdr_cuda, total_energy_expr, compute_energy=True):
+def _assemble_exclusion_kernel(expr_info, energy_cuda, grad_cuda, dEdr_cuda, total_energy_expr, compute_energy=True):
     i_props, j_props = _split_per_particle(expr_info.per_particle)
     bases = _unique_prop_bases(expr_info.per_particle)
     non_charge_bases = [b for b in bases if b != 'charge']
@@ -416,6 +417,7 @@ void exclusion_block_pair_kernel(
                 int pair_idx = type_i * n_types + type_j;
 {load_pair}
 {energy_cuda}
+{grad_cuda if grad_cuda else ''}
                 float force_magnitude = ({dEdr_cuda});
                 float energy_val = {total_energy_expr};
                 float inv_dist_force = force_magnitude * inv_dist;
@@ -459,6 +461,7 @@ class NonbondedForce(ForceTerm):
         self._expression = expression
         self._expr_info = expression.expr_info
         self._dEdr_cuda = expression.dEdr_cuda
+        self._grad_cuda = getattr(expression, 'grad_cuda', None)
         self._energy_cuda_raw = expression.energy_cuda
 
         self._i_props, self._j_props = _split_per_particle(
@@ -519,20 +522,20 @@ class NonbondedForce(ForceTerm):
         )
 
         main_src = _assemble_main_kernel(
-            self._expr_info, self._energy_cuda, self._dEdr_cuda,
-            self._total_energy_expr, compute_energy=True,
+            self._expr_info, self._energy_cuda, self._grad_cuda,
+            self._dEdr_cuda, self._total_energy_expr, compute_energy=True,
         )
         excl_src = _assemble_exclusion_kernel(
-            self._expr_info, self._energy_cuda, self._dEdr_cuda,
-            self._total_energy_expr, compute_energy=True,
+            self._expr_info, self._energy_cuda, self._grad_cuda,
+            self._dEdr_cuda, self._total_energy_expr, compute_energy=True,
         )
         main_src_fo = _assemble_main_kernel(
-            self._expr_info, self._energy_cuda, self._dEdr_cuda,
-            self._total_energy_expr, compute_energy=False,
+            self._expr_info, self._energy_cuda, self._grad_cuda,
+            self._dEdr_cuda, self._total_energy_expr, compute_energy=False,
         )
         excl_src_fo = _assemble_exclusion_kernel(
-            self._expr_info, self._energy_cuda, self._dEdr_cuda,
-            self._total_energy_expr, compute_energy=False,
+            self._expr_info, self._energy_cuda, self._grad_cuda,
+            self._dEdr_cuda, self._total_energy_expr, compute_energy=False,
         )
 
         self._main_kernel = cp.RawKernel(main_src, "main_block_pair_kernel")
