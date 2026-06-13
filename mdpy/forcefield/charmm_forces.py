@@ -149,6 +149,24 @@ def _create_nonbonded_force(topology, parameter_table, cutoff):
     return group
 
 
+def create_bonded_group(topology, parameter_table):
+    """Create a ForceGroup containing all CHARMM bonded force terms.
+
+    Returns: ForceGroup with bond + angle + dihedral + improper forces.
+    """
+    from mdpy.force.force_group import ForceGroup
+
+    sub_forces = [
+        _create_bond_force(topology, parameter_table),
+        _create_angle_force(topology, parameter_table),
+        _create_dihedral_force(topology, parameter_table),
+        _create_improper_force(topology, parameter_table),
+    ]
+    group = ForceGroup(sub_forces)
+    group.name = 'bonded'
+    return group
+
+
 def create_charmm_forces(topology, parameter_table, number_atoms, cutoff=12.0):
     bond = _create_bond_force(topology, parameter_table)
     angle = _create_angle_force(topology, parameter_table)

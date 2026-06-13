@@ -76,6 +76,10 @@ class ForceGroup(ForceTerm):
         for f in self._forces:
             f.remap_indices_gpu(d_remap)
 
+    @property
+    def _sub_forces(self):
+        return self._forces
+
     def bind_sorted(self, topology, block_list, gpu_context):
         if self._merged_nb is not None:
             self._merged_nb.bind_sorted(topology, block_list, gpu_context)

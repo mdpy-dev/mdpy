@@ -80,26 +80,6 @@ __device__ __forceinline__ void add_force(
 '''
 
 
-class _BondedForceAggregator:
-    name = 'bonded'
-
-    def __init__(self, sub_forces):
-        self._sub_forces = sub_forces
-
-    def compute(self, gpu_context, block_list=None, compute_energy=True):
-        for force in self._sub_forces:
-            force.compute(gpu_context, block_list, compute_energy)
-
-    def remap_indices_gpu(self, d_remap):
-        for force in self._sub_forces:
-            force.remap_indices_gpu(d_remap)
-
-    def bind_sorted(self, topology, block_list, gpu_context):
-        for force in self._sub_forces:
-            if hasattr(force, 'bind_sorted'):
-                force.bind_sorted(topology, block_list, gpu_context)
-
-
 _BODY_TEMPLATES = {
     2: r'''
     for (int idx = tid; idx < num_terms; idx += stride) {{
@@ -286,17 +266,8 @@ class BondedForce(ForceTerm):
 
     @classmethod
     def charmm(cls, topology, parameter_table):
-        from mdpy.forcefield.charmm_forces import (
-            _create_bond_force, _create_angle_force,
-            _create_dihedral_force, _create_improper_force,
-        )
-        sub_forces = [
-            _create_bond_force(topology, parameter_table),
-            _create_angle_force(topology, parameter_table),
-            _create_dihedral_force(topology, parameter_table),
-            _create_improper_force(topology, parameter_table),
-        ]
-        return _BondedForceAggregator(sub_forces)
+        from mdpy.forcefield.charmm_forces import create_bonded_group
+        return create_bonded_group(topology, parameter_table)
 
     def compute(self, gpu_context, block_list=None, compute_energy=True):
         if self._count == 0:
