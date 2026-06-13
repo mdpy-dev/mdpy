@@ -1,0 +1,85 @@
+from __future__ import annotations
+
+from mdpy.force.force_term import ForceTerm
+
+
+class ForceGroup(ForceTerm):
+    name = ''
+
+    def __init__(self, forces):
+        if not forces:
+            raise ValueError("ForceGroup requires at least one force")
+        force_type = type(forces[0])
+        for f in forces:
+            if type(f) is not force_type:
+                raise TypeError(
+                    f"ForceGroup requires homogeneous types, "
+                    f"got {force_type.__name__} and {type(f).__name__}"
+                )
+        self._forces = list(forces)
+        self._force_type = force_type
+        self._merged_nb = None
+        self._do_compile()
+
+    def _do_compile(self):
+        from mdpy.force.nonbonded_force import NonbondedForce
+        if all(isinstance(f, NonbondedForce) for f in self._forces):
+            self._compile_nonbonded()
+
+    def _compile_nonbonded(self):
+        from mdpy.force.nonbonded_force import NonbondedForce
+
+        merged_expr = self._forces[0]._expression
+        for f in self._forces[1:]:
+            merged_expr = merged_expr + f._expression
+
+        cutoffs = [f._cutoff for f in self._forces if f._cutoff is not None]
+        cutoff = cutoffs[0] if cutoffs else 12.0
+
+        self._merged_nb = NonbondedForce(merged_expr, cutoff)
+
+        for f in self._forces:
+            for name, mat in f._pair_param_data.items():
+                if name not in self._merged_nb._pair_param_data:
+                    self._merged_nb.set_pair_parameter(name, mat)
+            for name, val in f._scalar_data.items():
+                if name not in self._merged_nb._scalar_data:
+                    self._merged_nb.set_scalar(name, val)
+
+    def __add__(self, other):
+        if isinstance(other, ForceGroup):
+            if other._force_type is not self._force_type:
+                raise TypeError(
+                    f"Cannot add ForceGroup of {other._force_type.__name__} "
+                    f"to ForceGroup of {self._force_type.__name__}"
+                )
+            return ForceGroup(self._forces + other._forces)
+        if type(other) is self._force_type:
+            return ForceGroup(self._forces + [other])
+        if isinstance(other, ForceTerm) and type(other) is not self._force_type:
+            raise TypeError(
+                f"Cannot add {type(other).__name__} to ForceGroup of "
+                f"{self._force_type.__name__}"
+            )
+        return NotImplemented
+
+    def compute(self, gpu_context, block_list=None, compute_energy=True):
+        if self._merged_nb is not None:
+            self._merged_nb.compute(gpu_context, block_list, compute_energy)
+        else:
+            for f in self._forces:
+                f.compute(gpu_context, block_list, compute_energy)
+
+    def remap_indices_gpu(self, d_remap):
+        if self._merged_nb is not None:
+            return
+        for f in self._forces:
+            f.remap_indices_gpu(d_remap)
+
+    def bind_sorted(self, topology, block_list, gpu_context):
+        if self._merged_nb is not None:
+            self._merged_nb.bind_sorted(topology, block_list, gpu_context)
+        else:
+            for f in self._forces:
+                if hasattr(f, 'bind_sorted'):
+                    f.bind_sorted(topology, block_list, gpu_context)
