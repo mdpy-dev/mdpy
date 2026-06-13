@@ -1,6 +1,14 @@
 from mdpy.force.nonbonded_transpiler import nonbonded_expression
 from mdpy.force.markers import scalar as scalar_marker
 
+# NOTE: This expression uses a "decorate then override" pattern.
+# The @nonbonded_expression decorator auto-compiles the energy via AD,
+# but the module then overwrites energy_cuda, dEdr_cuda, and sets
+# grad_cuda=None with hand-tuned CUDA code using a rational minimax
+# polynomial approximation for erfc(). This is faster and more
+# numerically stable than the AD-generated version. The auto-compiled
+# output is intentionally discarded.
+
 
 @nonbonded_expression
 def screened_coulomb(pos1, pos2, charge1, charge2, alpha=scalar_marker):
