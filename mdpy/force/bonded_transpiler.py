@@ -5,12 +5,124 @@ import textwrap
 from mdpy.force.markers import param as _param_marker, scalar as _scalar_marker
 from mdpy.force.expr_info import ExprInfo, _strip_trailing_digits
 from mdpy.force.ad_engine import TapeEntry, ForwardADEngine, _HELPER_OPERATIONS
-from mdpy.force.helper_registry import HELPER_REGISTRY
 from mdpy.force._kernels import _MATH_FUNCTIONS
 
-_ARG_INDEX_TO_HELPER = {}
-for _htype, _info in HELPER_REGISTRY.items():
-    _ARG_INDEX_TO_HELPER[tuple(_info['arg_indices'])] = _htype
+_DISTANCE_FORWARD = r'''
+        float3 _delta_{rn} = pbc_wrap_vec(sub_f3(load_pos(pos_x,pos_y,pos_z,{atom_b}), load_pos(pos_x,pos_y,pos_z,{atom_a})), pbc_inv, pbc_matrix);
+        float {rn} = len_f3(_delta_{rn});
+        float _inv_r_{rn} = 0.0f;
+        if ({rn} >= 1e-12f) {{
+            _inv_r_{rn} = 1.0f / {rn};
+        }}
+'''
+
+_DISTANCE_FORCE = r'''
+        {{
+            if ({rn} >= 1e-12f) {{
+                float _grad_{rn} = {grad_expr};
+                float _f_common_{rn} = _grad_{rn} * _inv_r_{rn};
+                float3 _fvec_{rn} = scale_f3(_delta_{rn}, _f_common_{rn});
+                add_force(f_x,f_y,f_z, {atom_a}, _fvec_{rn});
+                add_force(f_x,f_y,f_z, {atom_b}, scale_f3(_fvec_{rn}, -1.0f));
+            }}
+        }}
+'''
+
+_ANGLE_FORWARD = r'''
+        float3 _r1_{rn} = pbc_wrap_vec(sub_f3(load_pos(pos_x,pos_y,pos_z,{arm1}), load_pos(pos_x,pos_y,pos_z,{vertex})), pbc_inv, pbc_matrix);
+        float3 _r2_{rn} = pbc_wrap_vec(sub_f3(load_pos(pos_x,pos_y,pos_z,{arm2}), load_pos(pos_x,pos_y,pos_z,{vertex})), pbc_inv, pbc_matrix);
+        float _l1_{rn} = len_f3(_r1_{rn});
+        float _l2_{rn} = len_f3(_r2_{rn});
+        if (_l1_{rn} < 1e-12f || _l2_{rn} < 1e-12f) continue;
+        float _inv_l1_{rn} = 1.0f / _l1_{rn};
+        float _inv_l2_{rn} = 1.0f / _l2_{rn};
+        float _ct_{rn} = dot_f3(_r1_{rn}, _r2_{rn}) * _inv_l1_{rn} * _inv_l2_{rn};
+        _ct_{rn} = fmaxf(-1.0f, fminf(1.0f, _ct_{rn}));
+        float {rn} = acosf(_ct_{rn});
+'''
+
+_ANGLE_FORCE = r'''
+        {{
+            float _neg_dEdtheta_{rn} = -({grad_expr});
+            float3 _n_{rn} = cross_f3(_r1_{rn}, _r2_{rn});
+            float3 _c1_{rn} = cross_f3(_r1_{rn}, _n_{rn});
+            float _lc1_{rn} = len_f3(_c1_{rn});
+            if (_lc1_{rn} > 1e-12f) {{
+                float _inv1_{rn} = _neg_dEdtheta_{rn} / (_lc1_{rn} * _l1_{rn});
+                float3 _fv1_{rn} = scale_f3(_c1_{rn}, _inv1_{rn});
+                add_force(f_x,f_y,f_z, {arm1}, _fv1_{rn});
+                add_force(f_x,f_y,f_z, {vertex}, scale_f3(_fv1_{rn}, -1.0f));
+            }}
+            float3 _c3_{rn} = cross_f3(scale_f3(_r2_{rn}, -1.0f), _n_{rn});
+            float _lc3_{rn} = len_f3(_c3_{rn});
+            if (_lc3_{rn} > 1e-12f) {{
+                float _inv3_{rn} = _neg_dEdtheta_{rn} / (_lc3_{rn} * _l2_{rn});
+                float3 _fv3_{rn} = scale_f3(_c3_{rn}, _inv3_{rn});
+                add_force(f_x,f_y,f_z, {arm2}, _fv3_{rn});
+                add_force(f_x,f_y,f_z, {vertex}, scale_f3(_fv3_{rn}, -1.0f));
+            }}
+        }}
+'''
+
+_DIHEDRAL_FORWARD = r'''
+        float3 _rab_{rn} = pbc_wrap_vec(sub_f3(load_pos(pos_x,pos_y,pos_z,{b}), load_pos(pos_x,pos_y,pos_z,{a})), pbc_inv, pbc_matrix);
+        float3 _rbc_{rn} = pbc_wrap_vec(sub_f3(load_pos(pos_x,pos_y,pos_z,{c}), load_pos(pos_x,pos_y,pos_z,{b})), pbc_inv, pbc_matrix);
+        float3 _rcd_{rn} = pbc_wrap_vec(sub_f3(load_pos(pos_x,pos_y,pos_z,{d}), load_pos(pos_x,pos_y,pos_z,{c})), pbc_inv, pbc_matrix);
+        float _lab_{rn} = len_f3(_rab_{rn}), _lbc_{rn} = len_f3(_rbc_{rn}), _lcd_{rn} = len_f3(_rcd_{rn});
+        if (_lab_{rn} < 1e-12f || _lbc_{rn} < 1e-12f || _lcd_{rn} < 1e-12f) continue;
+        float3 _n1_{rn} = cross_f3(_rab_{rn}, _rbc_{rn});
+        float3 _n2_{rn} = cross_f3(_rbc_{rn}, _rcd_{rn});
+        float _dn_{rn} = dot_f3(_n1_{rn}, _n2_{rn});
+        float _drn_{rn} = dot_f3(_rab_{rn}, _n2_{rn});
+        float {rn} = atan2f(_lbc_{rn} * _drn_{rn}, _dn_{rn});
+        float _n1s_{rn} = dot_f3(_n1_{rn}, _n1_{rn});
+        float _n2s_{rn} = dot_f3(_n2_{rn}, _n2_{rn});
+        if (_n1s_{rn} < 1e-12f || _n2s_{rn} < 1e-12f) continue;
+'''
+
+_DIHEDRAL_FORCE = r'''
+        {{
+            float _fv_{rn} = -({grad_expr});
+            float _fa_{rn} = _fv_{rn} * _lbc_{rn} / _n1s_{rn};
+            float _fd_{rn} = _fv_{rn} * _lbc_{rn} / _n2s_{rn};
+            float3 _f_a_{rn} = scale_f3(_n1_{rn}, -_fa_{rn});
+            float3 _f_d_{rn} = scale_f3(_n2_{rn}, _fd_{rn});
+            float3 _voc_{rn} = scale_f3(_rbc_{rn}, 0.5f);
+            float _loc_{rn} = _lbc_{rn} * 0.5f;
+            float _ils_{rn} = 1.0f / (_loc_{rn} * _loc_{rn});
+            float3 _t1_{rn} = cross_f3(_voc_{rn}, _f_d_{rn});
+            float3 _t2_{rn} = scale_f3(cross_f3(_rcd_{rn}, _f_d_{rn}), 0.5f);
+            float3 _t3_{rn} = scale_f3(cross_f3(scale_f3(_rab_{rn}, -1.0f), _f_a_{rn}), 0.5f);
+            float3 _st_{rn} = scale_f3(add_f3(_t1_{rn}, add_f3(_t2_{rn}, _t3_{rn})), -1.0f);
+            float3 _f_c_{rn} = scale_f3(cross_f3(_st_{rn}, _voc_{rn}), _ils_{rn});
+            float3 _f_b_{rn} = scale_f3(add_f3(_f_a_{rn}, add_f3(_f_c_{rn}, _f_d_{rn})), -1.0f);
+            add_force(f_x,f_y,f_z, {a}, _f_a_{rn});
+            add_force(f_x,f_y,f_z, {b}, _f_b_{rn});
+            add_force(f_x,f_y,f_z, {c}, _f_c_{rn});
+            add_force(f_x,f_y,f_z, {d}, _f_d_{rn});
+        }}
+'''
+
+HELPER_REGISTRY = {
+    'distance': {
+        'n_args': 2,
+        'atom_params': ['atom_a', 'atom_b'],
+        'forward': _DISTANCE_FORWARD,
+        'force': _DISTANCE_FORCE,
+    },
+    'angle': {
+        'n_args': 3,
+        'atom_params': ['arm1', 'vertex', 'arm2'],
+        'forward': _ANGLE_FORWARD,
+        'force': _ANGLE_FORCE,
+    },
+    'dihedral': {
+        'n_args': 4,
+        'atom_params': ['a', 'b', 'c', 'd'],
+        'forward': _DIHEDRAL_FORWARD,
+        'force': _DIHEDRAL_FORCE,
+    },
+}
 
 
 def _classify_for_bonded(func, body):
@@ -102,9 +214,9 @@ class _BondedASTWalker:
                 for arg in node.args:
                     if isinstance(arg, ast.Name) and arg.id in self._position_index:
                         arg_indices.append(self._position_index[arg.id])
-                helper_type = _ARG_INDEX_TO_HELPER.get(tuple(arg_indices), func_name)
+                # helper_type is just func_name now — no lookup table needed
                 self.tape.append(TapeEntry(result, func_name, [], result))
-                self._helper_calls.append((helper_type, result, arg_indices))
+                self._helper_calls.append((func_name, result, arg_indices))
                 self.forward_lines.append(f'// {func_name} computed by helper')
                 return result
 
@@ -169,9 +281,13 @@ class _BondedExpression:
 
         parts = []
 
-        for helper_type, result_name, _ in walker._helper_calls:
+        for helper_type, result_name, arg_indices in walker._helper_calls:
             template = HELPER_REGISTRY[helper_type]['forward']
-            parts.append(template.format(result_name=result_name))
+            atom_params = HELPER_REGISTRY[helper_type]['atom_params']
+            fmt = {'rn': result_name}
+            for ph, idx in zip(atom_params, arg_indices):
+                fmt[ph] = f'a{idx + 1}'
+            parts.append(template.format(**fmt))
 
         for line in walker.forward_lines:
             parts.append(f'        {line}')
@@ -184,7 +300,7 @@ class _BondedExpression:
             for line in shared_grad_lines:
                 parts.append(f'        {line}')
 
-        for idx, (helper_type, result_name, _) in enumerate(walker._helper_calls):
+        for idx, (helper_type, result_name, arg_indices) in enumerate(walker._helper_calls):
             if num_helpers > 1:
                 prefix = f'_g{idx}_'
                 grad_lines, derivs = fwd_ad.differentiate(
@@ -197,10 +313,11 @@ class _BondedExpression:
 
             grad_expr = derivs.get(energy_var, '0.0f')
             template = HELPER_REGISTRY[helper_type]['force']
-            parts.append(template.format(
-                result_name=result_name,
-                grad_expr=grad_expr,
-            ))
+            atom_params = HELPER_REGISTRY[helper_type]['atom_params']
+            fmt = {'rn': result_name, 'grad_expr': grad_expr}
+            for ph, idx in zip(atom_params, arg_indices):
+                fmt[ph] = f'a{idx + 1}'
+            parts.append(template.format(**fmt))
             self.helper_calls.append((helper_type, result_name, grad_expr))
 
         self.cuda_fragment = '\n'.join(parts)
