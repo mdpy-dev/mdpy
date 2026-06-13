@@ -2,10 +2,9 @@ import ast
 import inspect
 import textwrap
 
-from mdpy.force.markers import param as _param_marker, scalar as _scalar_marker
-from mdpy.force.expr_info import ExprInfo, _strip_trailing_digits
+from mdpy.force.primitives import param as _param_marker, scalar as _scalar_marker
+from mdpy.force._utils import ExprInfo, _strip_trailing_digits, _MATH_FUNCTIONS
 from mdpy.force.ad_engine import TapeEntry, ForwardADEngine
-from mdpy.force._kernels import _MATH_FUNCTIONS
 
 
 def _classify_for_nonbonded(func):

@@ -1,5 +1,5 @@
 from mdpy.force.nonbonded_transpiler import nonbonded_expression
-from mdpy.force.markers import scalar as scalar_marker
+from mdpy.force.primitives import scalar as scalar_marker
 
 # NOTE: This expression uses a "decorate then override" pattern.
 # The @nonbonded_expression decorator auto-compiles the energy via AD,

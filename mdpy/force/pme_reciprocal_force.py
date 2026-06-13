@@ -11,7 +11,7 @@ from mdpy.force.force_term import ForceTerm
 COULOMB_CONST = 0.13893556595455
 SQRT_PI = 1.772453850905516
 
-from mdpy.force._kernels import _REMAP_INDICES_KERNEL
+from mdpy.force._utils import _REMAP_INDICES_KERNEL
 
 
 def _calc_ewald_coefficient(cutoff: float, rtol: float = 1e-5) -> float:

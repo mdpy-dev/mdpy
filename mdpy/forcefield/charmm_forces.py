@@ -6,6 +6,7 @@ from mdpy import env
 from mdpy.force.bonded_force import BondedForce
 from mdpy.force.nonbonded_force import NonbondedForce
 from mdpy.force.bonded_transpiler import bonded_expression
+from mdpy.force.primitives import distance, angle, dihedral
 from mdpy.force.expressions.nb14 import nb14_lj_coulomb
 from mdpy.force.expressions.lennard_jones import lennard_jones
 from mdpy.force.expressions.coulomb import coulomb

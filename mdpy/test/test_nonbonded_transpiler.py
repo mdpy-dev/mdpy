@@ -1,6 +1,6 @@
 import pytest
 from mdpy.force.nonbonded_transpiler import nonbonded_expression
-from mdpy.force.markers import param, scalar
+from mdpy.force.primitives import param, scalar
 
 
 class TestNonbondedTranspiler:

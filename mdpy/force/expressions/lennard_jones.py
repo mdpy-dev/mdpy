@@ -1,5 +1,5 @@
 from mdpy.force.nonbonded_transpiler import nonbonded_expression
-from mdpy.force.markers import param
+from mdpy.force.primitives import param, distance
 
 
 @nonbonded_expression

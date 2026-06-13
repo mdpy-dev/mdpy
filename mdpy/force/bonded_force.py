@@ -13,7 +13,7 @@ def _extract_trailing_digit(name):
         return int(m.group(1))
     return None
 
-from mdpy.force._kernels import _REMAP_INDICES_KERNEL
+from mdpy.force._utils import _REMAP_INDICES_KERNEL
 
 _PREAMBLE = r'''
 __device__ __forceinline__ float3 make_f3(float x, float y, float z) {
