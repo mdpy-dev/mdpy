@@ -42,8 +42,10 @@ def _setup_system():
 
     system = System(topology, pbc_matrix, cutoff=CUTOFF)
     system.add_force_term(BondedForce.charmm(topology, parameter_table))
-    nb = NonbondedForce(lennard_jones + coulomb)
-    nb.bind(topology, parameter_table, CUTOFF)
+    nb = NonbondedForce(lennard_jones + coulomb, cutoff=CUTOFF)
+    lj_pair = parameter_table.type_pair_parameters['lj_pair']
+    nb.set_pair_parameter('sigma', lj_pair[0::2].astype(env.NUMPY_FLOAT))
+    nb.set_pair_parameter('epsilon', lj_pair[1::2].astype(env.NUMPY_FLOAT))
     system.add_force_term(nb)
 
     raw = pdb.positions.astype(np.float64)

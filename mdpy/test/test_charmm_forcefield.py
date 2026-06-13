@@ -115,8 +115,10 @@ class TestSystem:
 
         system = System(topology, pbc_matrix)
         system.add_force_term(BondedForce.charmm(topology, parameter_table))
-        nb = NonbondedForce(lennard_jones + coulomb)
-        nb.bind(topology, parameter_table, system.cutoff)
+        nb = NonbondedForce(lennard_jones + coulomb, cutoff=system.cutoff)
+        lj_pair = parameter_table.type_pair_parameters['lj_pair']
+        nb.set_pair_parameter('sigma', lj_pair[0::2].astype(env.NUMPY_FLOAT))
+        nb.set_pair_parameter('epsilon', lj_pair[1::2].astype(env.NUMPY_FLOAT))
         system.add_force_term(nb)
         pbc_inv = np.linalg.inv(pbc_matrix)
         raw = pdb.positions.astype(np.float64)
@@ -139,8 +141,10 @@ class TestSystem:
 
         system = System(topology, pbc_matrix)
         system.add_force_term(BondedForce.charmm(topology, parameter_table))
-        nb = NonbondedForce(lennard_jones + coulomb)
-        nb.bind(topology, parameter_table, system.cutoff)
+        nb = NonbondedForce(lennard_jones + coulomb, cutoff=system.cutoff)
+        lj_pair = parameter_table.type_pair_parameters['lj_pair']
+        nb.set_pair_parameter('sigma', lj_pair[0::2].astype(env.NUMPY_FLOAT))
+        nb.set_pair_parameter('epsilon', lj_pair[1::2].astype(env.NUMPY_FLOAT))
         system.add_force_term(nb)
         pbc_inv = np.linalg.inv(pbc_matrix)
         raw = pdb.positions.astype(np.float64)
@@ -167,8 +171,10 @@ class TestSystem:
 
         system = System(topology, pbc_matrix)
         system.add_force_term(BondedForce.charmm(topology, parameter_table))
-        nb = NonbondedForce(lennard_jones + coulomb)
-        nb.bind(topology, parameter_table, system.cutoff)
+        nb = NonbondedForce(lennard_jones + coulomb, cutoff=system.cutoff)
+        lj_pair = parameter_table.type_pair_parameters['lj_pair']
+        nb.set_pair_parameter('sigma', lj_pair[0::2].astype(env.NUMPY_FLOAT))
+        nb.set_pair_parameter('epsilon', lj_pair[1::2].astype(env.NUMPY_FLOAT))
         system.add_force_term(nb)
         pbc_inv = np.linalg.inv(pbc_matrix)
         raw = pdb.positions.astype(np.float64)
@@ -195,8 +201,10 @@ class TestSystem:
 
         system = System(topology, pbc_matrix)
         system.add_force_term(BondedForce.charmm(topology, parameter_table))
-        nb = NonbondedForce(lennard_jones + coulomb)
-        nb.bind(topology, parameter_table, system.cutoff)
+        nb = NonbondedForce(lennard_jones + coulomb, cutoff=system.cutoff)
+        lj_pair = parameter_table.type_pair_parameters['lj_pair']
+        nb.set_pair_parameter('sigma', lj_pair[0::2].astype(env.NUMPY_FLOAT))
+        nb.set_pair_parameter('epsilon', lj_pair[1::2].astype(env.NUMPY_FLOAT))
         system.add_force_term(nb)
         pbc_inv = np.linalg.inv(pbc_matrix)
         raw = pdb.positions.astype(np.float64)

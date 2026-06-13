@@ -10,7 +10,7 @@ import cupy as cp
 import pytest
 
 from mdpy import env
-from mdpy.force.bonded_force import BondedForceV2
+from mdpy.force.bonded_force import BondedForce
 from mdpy.force.bonded_transpiler import bonded_expression
 from mdpy.force.markers import param, scalar as scalar_marker
 
@@ -90,13 +90,12 @@ def _nb14_lj_coulomb(pos1, pos2, charge1, charge2, sigma=param, epsilon=param, c
 def _compute_bonded_energy(expression, positions, params_list, per_particle_data=None, pbc=None):
     if pbc is None:
         pbc = _large_pbc()
-    force = BondedForceV2(expression)
+    force = BondedForce(expression)
     if per_particle_data:
         for name, arr in per_particle_data.items():
             force.set_parameter(name, arr)
     for indices, params in params_list:
         force.add(indices, **params)
-    force.bind()
     ctx = MockGPUContext(positions, pbc)
     force.compute(ctx)
     return float(ctx.d_energy[0])
@@ -124,13 +123,12 @@ def _numerical_gradient_bonded(expression, positions, params_list, per_particle_
 
 def _compare_forces(expression, positions, params_list, per_particle_data=None, tol=1e-2):
     pbc = _large_pbc()
-    force = BondedForceV2(expression)
+    force = BondedForce(expression)
     if per_particle_data:
         for name, arr in per_particle_data.items():
             force.set_parameter(name, arr)
     for indices, params in params_list:
         force.add(indices, **params)
-    force.bind()
     ctx = MockGPUContext(positions, pbc)
     force.compute(ctx)
     anal_forces = ctx.get_forces()

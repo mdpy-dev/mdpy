@@ -3,7 +3,7 @@ from mdpy.force.nonbonded_transpiler import nonbonded_expression
 from mdpy.force.markers import param, scalar
 
 
-class TestNonbondedTranspilerV2:
+class TestNonbondedTranspiler:
     def test_lj_classification(self):
         @nonbonded_expression
         def lennard_jones(pos1, pos2, sigma=param, epsilon=param):

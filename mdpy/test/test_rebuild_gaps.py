@@ -39,8 +39,10 @@ def _make_system(box=30.0, cutoff=12.0):
     pbc = np.eye(3, dtype=np.float64) * box
     system = System(topology, pbc, cutoff=cutoff)
     system.add_force_term(BondedForce.charmm(topology, pt))
-    nb = NonbondedForce(lennard_jones + coulomb)
-    nb.bind(topology, pt, cutoff)
+    nb = NonbondedForce(lennard_jones + coulomb, cutoff=cutoff)
+    lj_pair = pt.type_pair_parameters['lj_pair']
+    nb.set_pair_parameter('sigma', lj_pair[0::2].astype(env.NUMPY_FLOAT))
+    nb.set_pair_parameter('epsilon', lj_pair[1::2].astype(env.NUMPY_FLOAT))
     system.add_force_term(nb)
     raw = pdb.positions.astype(np.float64)
     pbc_inv = np.linalg.inv(pbc)

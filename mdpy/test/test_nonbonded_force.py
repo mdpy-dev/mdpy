@@ -4,12 +4,12 @@ import cupy as cp
 
 from mdpy.force.nonbonded_transpiler import nonbonded_expression
 from mdpy.force.nonbonded_force import (
-    NonbondedForceV2,
-    _assemble_main_kernel_v2,
-    _assemble_exclusion_kernel_v2,
+    NonbondedForce,
+    _assemble_main_kernel,
+    _assemble_exclusion_kernel,
     _prepare_energy_expression,
-    _split_per_particle_v2,
-    _unique_prop_bases_v2,
+    _split_per_particle,
+    _unique_prop_bases,
 )
 from mdpy.force.markers import param, scalar as scalar_marker
 
@@ -38,10 +38,10 @@ combined_lj_coulomb = lj_ad + coulomb_ad
 combined_lj_screened = lj_ad + screened_coulomb_ad
 
 
-class TestV2KernelAssembly:
+class TestKernelAssembly:
     def test_lj_kernel_no_scaling_masks(self):
         energy_cuda, total_expr = _prepare_energy_expression(lj_ad.energy_cuda)
-        src = _assemble_exclusion_kernel_v2(
+        src = _assemble_exclusion_kernel(
             lj_ad.expr_info, energy_cuda, lj_ad.dEdr_cuda, total_expr
         )
         assert 'scaling_masks' not in src
@@ -50,14 +50,14 @@ class TestV2KernelAssembly:
 
     def test_lj_kernel_no_14_params(self):
         energy_cuda, total_expr = _prepare_energy_expression(lj_ad.energy_cuda)
-        src = _assemble_exclusion_kernel_v2(
+        src = _assemble_exclusion_kernel(
             lj_ad.expr_info, energy_cuda, lj_ad.dEdr_cuda, total_expr
         )
         assert '_14' not in src
 
     def test_combined_kernel_no_scaling_masks(self):
         energy_cuda, total_expr = _prepare_energy_expression(combined_lj_coulomb.energy_cuda)
-        src = _assemble_exclusion_kernel_v2(
+        src = _assemble_exclusion_kernel(
             combined_lj_coulomb.expr_info, energy_cuda,
             combined_lj_coulomb.dEdr_cuda, total_expr
         )
@@ -66,7 +66,7 @@ class TestV2KernelAssembly:
 
     def test_combined_kernel_has_charge_arrays(self):
         energy_cuda, total_expr = _prepare_energy_expression(combined_lj_coulomb.energy_cuda)
-        src = _assemble_main_kernel_v2(
+        src = _assemble_main_kernel(
             combined_lj_coulomb.expr_info, energy_cuda,
             combined_lj_coulomb.dEdr_cuda, total_expr
         )
@@ -75,7 +75,7 @@ class TestV2KernelAssembly:
 
     def test_kernel_has_pair_param_matrices(self):
         energy_cuda, total_expr = _prepare_energy_expression(lj_ad.energy_cuda)
-        src = _assemble_main_kernel_v2(
+        src = _assemble_main_kernel(
             lj_ad.expr_info, energy_cuda, lj_ad.dEdr_cuda, total_expr
         )
         assert 'd_sigma_matrix' in src
@@ -83,7 +83,7 @@ class TestV2KernelAssembly:
 
     def test_kernel_has_exclusion_masks_only(self):
         energy_cuda, total_expr = _prepare_energy_expression(combined_lj_coulomb.energy_cuda)
-        src = _assemble_exclusion_kernel_v2(
+        src = _assemble_exclusion_kernel(
             combined_lj_coulomb.expr_info, energy_cuda,
             combined_lj_coulomb.dEdr_cuda, total_expr
         )
@@ -92,7 +92,7 @@ class TestV2KernelAssembly:
 
     def test_kernel_has_warp_structure(self):
         energy_cuda, total_expr = _prepare_energy_expression(combined_lj_coulomb.energy_cuda)
-        src = _assemble_main_kernel_v2(
+        src = _assemble_main_kernel(
             combined_lj_coulomb.expr_info, energy_cuda,
             combined_lj_coulomb.dEdr_cuda, total_expr
         )
@@ -102,7 +102,7 @@ class TestV2KernelAssembly:
 
     def test_kernel_valid_braces(self):
         energy_cuda, total_expr = _prepare_energy_expression(combined_lj_coulomb.energy_cuda)
-        src = _assemble_main_kernel_v2(
+        src = _assemble_main_kernel(
             combined_lj_coulomb.expr_info, energy_cuda,
             combined_lj_coulomb.dEdr_cuda, total_expr
         )
@@ -110,7 +110,7 @@ class TestV2KernelAssembly:
 
     def test_force_only_kernel_no_energy(self):
         energy_cuda, total_expr = _prepare_energy_expression(combined_lj_coulomb.energy_cuda)
-        src = _assemble_main_kernel_v2(
+        src = _assemble_main_kernel(
             combined_lj_coulomb.expr_info, energy_cuda,
             combined_lj_coulomb.dEdr_cuda, total_expr, compute_energy=False
         )
@@ -118,9 +118,9 @@ class TestV2KernelAssembly:
         assert 'total_energy' not in src
 
 
-class TestV2Helpers:
+class TestHelpers:
     def test_split_per_particle_coulomb(self):
-        i_props, j_props = _split_per_particle_v2(
+        i_props, j_props = _split_per_particle(
             coulomb_ad.expr_info.per_particle
         )
         assert 'charge1' in i_props
@@ -129,12 +129,12 @@ class TestV2Helpers:
         assert j_props['charge2'] == 'charge'
 
     def test_split_per_particle_lj(self):
-        i_props, j_props = _split_per_particle_v2(lj_ad.expr_info.per_particle)
+        i_props, j_props = _split_per_particle(lj_ad.expr_info.per_particle)
         assert len(i_props) == 0
         assert len(j_props) == 0
 
     def test_unique_prop_bases(self):
-        bases = _unique_prop_bases_v2({'charge1': 'charge', 'charge2': 'charge'})
+        bases = _unique_prop_bases({'charge1': 'charge', 'charge2': 'charge'})
         assert bases == ['charge']
 
     def test_prepare_energy_single(self):
@@ -155,10 +155,10 @@ class TestV2Helpers:
         assert total_expr == '0.0f'
 
 
-class TestV2KernelCompilation:
+class TestKernelCompilation:
     def test_lj_kernel_compiles(self):
         energy_cuda, total_expr = _prepare_energy_expression(lj_ad.energy_cuda)
-        src = _assemble_main_kernel_v2(
+        src = _assemble_main_kernel(
             lj_ad.expr_info, energy_cuda, lj_ad.dEdr_cuda, total_expr
         )
         kernel = cp.RawKernel(src, 'main_block_pair_kernel_v2')
@@ -166,7 +166,7 @@ class TestV2KernelCompilation:
 
     def test_coulomb_kernel_compiles(self):
         energy_cuda, total_expr = _prepare_energy_expression(coulomb_ad.energy_cuda)
-        src = _assemble_main_kernel_v2(
+        src = _assemble_main_kernel(
             coulomb_ad.expr_info, energy_cuda, coulomb_ad.dEdr_cuda, total_expr
         )
         kernel = cp.RawKernel(src, 'main_block_pair_kernel_v2')
@@ -174,7 +174,7 @@ class TestV2KernelCompilation:
 
     def test_combined_kernel_compiles(self):
         energy_cuda, total_expr = _prepare_energy_expression(combined_lj_coulomb.energy_cuda)
-        src = _assemble_main_kernel_v2(
+        src = _assemble_main_kernel(
             combined_lj_coulomb.expr_info, energy_cuda,
             combined_lj_coulomb.dEdr_cuda, total_expr
         )
@@ -183,7 +183,7 @@ class TestV2KernelCompilation:
 
     def test_exclusion_kernel_compiles(self):
         energy_cuda, total_expr = _prepare_energy_expression(combined_lj_coulomb.energy_cuda)
-        src = _assemble_exclusion_kernel_v2(
+        src = _assemble_exclusion_kernel(
             combined_lj_coulomb.expr_info, energy_cuda,
             combined_lj_coulomb.dEdr_cuda, total_expr
         )
@@ -192,7 +192,7 @@ class TestV2KernelCompilation:
 
     def test_screened_coulomb_kernel_compiles(self):
         energy_cuda, total_expr = _prepare_energy_expression(screened_coulomb_ad.energy_cuda)
-        src = _assemble_main_kernel_v2(
+        src = _assemble_main_kernel(
             screened_coulomb_ad.expr_info, energy_cuda,
             screened_coulomb_ad.dEdr_cuda, total_expr
         )
@@ -200,39 +200,32 @@ class TestV2KernelCompilation:
         assert kernel is not None
 
 
-class TestV2ClassInstantiation:
+class TestClassInstantiation:
     def test_create_lj(self):
-        nb = NonbondedForceV2(lj_ad)
-        assert nb.name == 'nonbonded_v2'
+        nb = NonbondedForce(lj_ad)
+        assert nb.name == 'nonbonded'
         assert nb._expr_info.params == ['sigma', 'epsilon']
 
     def test_create_combined(self):
-        nb = NonbondedForceV2(combined_lj_coulomb)
+        nb = NonbondedForce(combined_lj_coulomb)
         assert 'sigma' in nb._expr_info.params
         assert 'epsilon' in nb._expr_info.params
         assert 'charge' in nb._prop_bases
 
-    def test_set_parameter(self):
-        nb = NonbondedForceV2(coulomb_ad)
-        charges = np.array([1.0, -1.0], dtype=np.float32)
-        nb.set_parameter('charge', charges)
-        assert 'charge' in nb._per_particle_data
-        np.testing.assert_array_equal(nb._per_particle_data['charge'], charges)
-
     def test_set_pair_parameter(self):
-        nb = NonbondedForceV2(lj_ad)
+        nb = NonbondedForce(lj_ad)
         sigma = np.eye(3, dtype=np.float32)
         nb.set_pair_parameter('sigma', sigma)
         assert 'sigma' in nb._pair_param_data
 
     def test_set_scalar(self):
-        nb = NonbondedForceV2(screened_coulomb_ad)
+        nb = NonbondedForce(screened_coulomb_ad)
         nb.set_scalar('alpha', 0.34)
         assert nb._scalar_data['alpha'] == pytest.approx(0.34)
 
 
-class TestV2CoulombBruteForce:
-    """Brute-force validation of V2 Coulomb against numpy."""
+class TestCoulombBruteForce:
+    """Brute-force validation of Coulomb against numpy."""
 
     @pytest.fixture
     def two_particle_system(self):
@@ -254,8 +247,8 @@ class TestV2CoulombBruteForce:
         assert brute_force_on_0[0] == pytest.approx(0.13893556595455 / 9.0, rel=1e-6)
 
 
-class TestV2LJBruteForce:
-    """Brute-force validation of V2 LJ against numpy."""
+class TestLJBruteForce:
+    """Brute-force validation of LJ against numpy."""
 
     def test_lj_two_particles(self):
         sigma = 3.0

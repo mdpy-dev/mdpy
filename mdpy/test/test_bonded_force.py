@@ -2,20 +2,12 @@ import numpy as np
 import pytest
 
 from mdpy import env
-from mdpy.core.topology import Builder
-from mdpy.core.parameter_table import ParameterTable
 from mdpy.force.bonded_force import BondedForce
+from mdpy.force.bonded_transpiler import bonded_expression
 
 
 def _make_large_pbc():
     return np.eye(3, dtype=env.NUMPY_FLOAT) * 100.0
-
-
-def _make_parameter_table(term_params):
-    pt = ParameterTable()
-    for name, values in term_params.items():
-        pt.add_term_parameter(name, values)
-    return pt
 
 
 class MockGPUContext:
@@ -44,83 +36,130 @@ class MockGPUContext:
         return cp.stack([self.d_forces_x, self.d_forces_y, self.d_forces_z], axis=1).ravel()
 
 
-def _build_two_particle():
-    builder = Builder()
-    builder.set_particles(
-        masses=np.array([12.0, 12.0], dtype=env.NUMPY_FLOAT),
-        charges=np.zeros(2, dtype=env.NUMPY_FLOAT),
-        particle_types=np.zeros(2, dtype=env.NUMPY_INT),
-    )
-    builder.add_bond(0, 1, 100.0, 1.5)
-    return builder.build()
+@bonded_expression(body=2)
+def harmonic_bond(p1, p2, k=0.0, r0=0.0):
+    r = distance(p1, p2)
+    dr = r - r0
+    return k * dr * dr
 
 
-def _build_three_particle():
-    builder = Builder()
-    builder.set_particles(
-        masses=np.array([12.0, 12.0, 12.0], dtype=env.NUMPY_FLOAT),
-        charges=np.zeros(3, dtype=env.NUMPY_FLOAT),
-        particle_types=np.zeros(3, dtype=env.NUMPY_INT),
-    )
-    builder.add_bond(0, 1, 100.0, 1.5)
-    builder.add_bond(1, 2, 100.0, 1.5)
-    builder.add_angle(0, 1, 2, 50.0, np.pi / 3, 10.0, 2.5)
-    return builder.build()
+@bonded_expression(body=3)
+def harmonic_angle(p1, p2, p3, k=0.0, theta0=0.0):
+    theta = angle(p1, p2, p3)
+    dt = theta - theta0
+    return k * dt * dt
 
 
-def _build_four_particle():
-    builder = Builder()
-    builder.set_particles(
-        masses=np.array([12.0, 12.0, 12.0, 12.0], dtype=env.NUMPY_FLOAT),
-        charges=np.zeros(4, dtype=env.NUMPY_FLOAT),
-        particle_types=np.zeros(4, dtype=env.NUMPY_INT),
-    )
-    builder.add_bond(0, 1, 100.0, 1.5)
-    builder.add_bond(1, 2, 100.0, 1.5)
-    builder.add_bond(2, 3, 100.0, 1.5)
-    builder.add_angle(0, 1, 2, 50.0, np.pi / 3, 0.0, 0.0)
-    builder.add_angle(1, 2, 3, 50.0, np.pi / 3, 0.0, 0.0)
-    builder.add_dihedral(0, 1, 2, 3, 20.0, 1.0, np.pi)
-    builder.add_improper(0, 1, 2, 3, 30.0, 0.0)
-    return builder.build()
+@bonded_expression(body=4)
+def periodic_dihedral(p1, p2, p3, p4, k=0.0, n=0.0, delta=0.0):
+    phi = dihedral(p1, p2, p3, p4)
+    return k * (1.0 + cos(n * phi - delta))
 
 
-def _build_empty():
-    builder = Builder()
-    builder.set_particles(
-        masses=np.array([12.0, 12.0], dtype=env.NUMPY_FLOAT),
-        charges=np.zeros(2, dtype=env.NUMPY_FLOAT),
-        particle_types=np.zeros(2, dtype=env.NUMPY_INT),
-    )
-    return builder.build()
+@bonded_expression(body=4)
+def harmonic_improper(p1, p2, p3, p4, k=0.0, psi0=0.0):
+    psi = dihedral(p1, p2, p3, p4)
+    dp = psi - psi0
+    return k * dp * dp
 
 
-def test_bond_force_gpu():
-    topology, term_params = _build_two_particle()
-    parameter_table = _make_parameter_table(term_params)
+def test_harmonic_bond_energy():
+    force = BondedForce(harmonic_bond)
+    k = 100.0
+    r0 = 1.5
+    force.add([0, 1], k=k, r0=r0)
+
     positions = np.array([
         [0.0, 0.0, 0.0],
         [2.0, 0.0, 0.0],
     ], dtype=env.NUMPY_FLOAT)
     pbc_matrix = _make_large_pbc()
 
-    force = BondedForce.charmm(topology, parameter_table)
     context = MockGPUContext(positions, pbc_matrix)
     force.compute(context)
-    energy = float(context.d_energy[0])
 
-    expected_energy = 100.0 * (2.0 - 1.5) ** 2
-    assert abs(energy - expected_energy) < 1e-2, f"GPU energy {energy} != {expected_energy}"
+    energy = float(context.d_energy[0])
+    expected_energy = k * (2.0 - r0) ** 2
+    assert abs(energy - expected_energy) < 1e-2, f"Energy {energy} != {expected_energy}"
+
+
+def test_harmonic_bond_forces():
+    force = BondedForce(harmonic_bond)
+    k = 100.0
+    r0 = 1.5
+    force.add([0, 1], k=k, r0=r0)
+
+    positions = np.array([
+        [0.0, 0.0, 0.0],
+        [2.0, 0.0, 0.0],
+    ], dtype=env.NUMPY_FLOAT)
+    pbc_matrix = _make_large_pbc()
+
+    context = MockGPUContext(positions, pbc_matrix)
+    force.compute(context)
 
     gpu_forces = context.d_forces.get().reshape(-1, 3)
-    expected_force_magnitude = 2.0 * 100.0 * (2.0 - 1.5)
-    assert abs(gpu_forces[0, 0] - expected_force_magnitude) < 0.1
-    assert abs(gpu_forces[1, 0] + expected_force_magnitude) < 0.1
+    expected_force_magnitude = 2.0 * k * (2.0 - r0)
+    assert abs(gpu_forces[0, 0] - expected_force_magnitude) < 0.1, \
+        f"Force on atom 0: {gpu_forces[0, 0]} != {expected_force_magnitude}"
+    assert abs(gpu_forces[1, 0] + expected_force_magnitude) < 0.1, \
+        f"Force on atom 1: {gpu_forces[1, 0]} != {-expected_force_magnitude}"
 
 
-def test_angle_force_gpu():
-    topology, term_params = _build_three_particle()
-    parameter_table = _make_parameter_table(term_params)
+def test_harmonic_bond_newtons_third_law():
+    force = BondedForce(harmonic_bond)
+    k = 200.0
+    r0 = 1.0
+    force.add([0, 1], k=k, r0=r0)
+
+    positions = np.array([
+        [1.0, 2.0, 3.0],
+        [4.0, 5.0, 6.0],
+    ], dtype=env.NUMPY_FLOAT)
+    pbc_matrix = _make_large_pbc()
+
+    context = MockGPUContext(positions, pbc_matrix)
+    force.compute(context)
+
+    gpu_forces = context.d_forces.get().reshape(-1, 3)
+    total_force = np.sum(gpu_forces, axis=0)
+    assert np.linalg.norm(total_force) < 1e-3, \
+        f"Forces not balanced: sum={total_force}"
+
+
+def test_multiple_bonds():
+    force = BondedForce(harmonic_bond)
+    k = 100.0
+    r0 = 1.5
+    force.add([0, 1], k=k, r0=r0)
+    force.add([1, 2], k=k, r0=r0)
+
+    positions = np.array([
+        [0.0, 0.0, 0.0],
+        [2.0, 0.0, 0.0],
+        [4.0, 0.0, 0.0],
+    ], dtype=env.NUMPY_FLOAT)
+    pbc_matrix = _make_large_pbc()
+
+    context = MockGPUContext(positions, pbc_matrix)
+    force.compute(context)
+
+    energy = float(context.d_energy[0])
+    expected_energy = 2.0 * k * (2.0 - r0) ** 2
+    assert abs(energy - expected_energy) < 1e-1, f"Energy {energy} != {expected_energy}"
+
+    gpu_forces = context.d_forces.get().reshape(-1, 3)
+    total_force = np.sum(gpu_forces, axis=0)
+    assert np.linalg.norm(total_force) < 0.5, \
+        f"Forces not balanced: sum={total_force}"
+
+
+def test_harmonic_angle_energy():
+    force = BondedForce(harmonic_angle)
+    k = 50.0
+    theta0 = np.pi / 3
+    force.add([0, 1, 2], k=k, theta0=theta0)
+
     positions = np.array([
         [0.0, 1.5, 0.0],
         [0.0, 0.0, 0.0],
@@ -128,22 +167,43 @@ def test_angle_force_gpu():
     ], dtype=env.NUMPY_FLOAT)
     pbc_matrix = _make_large_pbc()
 
-    force = BondedForce.charmm(topology, parameter_table)
     context = MockGPUContext(positions, pbc_matrix)
     force.compute(context)
-    energy = float(context.d_energy[0])
 
+    energy = float(context.d_energy[0])
     assert np.isfinite(energy)
     assert energy != 0.0
 
+
+def test_harmonic_angle_forces_balanced():
+    force = BondedForce(harmonic_angle)
+    k = 50.0
+    theta0 = np.pi / 3
+    force.add([0, 1, 2], k=k, theta0=theta0)
+
+    positions = np.array([
+        [0.0, 1.5, 0.0],
+        [0.0, 0.0, 0.0],
+        [1.5 * np.cos(np.pi / 6), 1.5 * np.sin(np.pi / 6), 0.0],
+    ], dtype=env.NUMPY_FLOAT)
+    pbc_matrix = _make_large_pbc()
+
+    context = MockGPUContext(positions, pbc_matrix)
+    force.compute(context)
+
     gpu_forces = context.d_forces.get().reshape(-1, 3)
     total_force = np.sum(gpu_forces, axis=0)
-    assert np.linalg.norm(total_force) < 0.5
+    assert np.linalg.norm(total_force) < 0.5, \
+        f"Angle forces not balanced: sum={total_force}"
 
 
-def test_dihedral_force_gpu():
-    topology, term_params = _build_four_particle()
-    parameter_table = _make_parameter_table(term_params)
+def test_periodic_dihedral_energy():
+    force = BondedForce(periodic_dihedral)
+    k = 20.0
+    n = 1.0
+    delta = np.pi
+    force.add([0, 1, 2, 3], k=k, n=n, delta=delta)
+
     positions = np.array([
         [0.0, 1.5, 0.0],
         [0.0, 0.0, 0.0],
@@ -152,21 +212,20 @@ def test_dihedral_force_gpu():
     ], dtype=env.NUMPY_FLOAT)
     pbc_matrix = _make_large_pbc()
 
-    force = BondedForce.charmm(topology, parameter_table)
     context = MockGPUContext(positions, pbc_matrix)
     force.compute(context)
-    energy = float(context.d_energy[0])
 
+    energy = float(context.d_energy[0])
     assert energy != 0.0
 
-    gpu_forces = context.d_forces.get().reshape(-1, 3)
-    total_force = np.sum(gpu_forces, axis=0)
-    assert np.linalg.norm(total_force) < 0.5
 
+def test_periodic_dihedral_forces_balanced():
+    force = BondedForce(periodic_dihedral)
+    k = 20.0
+    n = 1.0
+    delta = np.pi
+    force.add([0, 1, 2, 3], k=k, n=n, delta=delta)
 
-def test_improper_force_gpu():
-    topology, term_params = _build_four_particle()
-    parameter_table = _make_parameter_table(term_params)
     positions = np.array([
         [0.0, 1.5, 0.0],
         [0.0, 0.0, 0.0],
@@ -175,49 +234,328 @@ def test_improper_force_gpu():
     ], dtype=env.NUMPY_FLOAT)
     pbc_matrix = _make_large_pbc()
 
-    force = BondedForce.charmm(topology, parameter_table)
     context = MockGPUContext(positions, pbc_matrix)
     force.compute(context)
 
     gpu_forces = context.d_forces.get().reshape(-1, 3)
     total_force = np.sum(gpu_forces, axis=0)
-    assert np.linalg.norm(total_force) < 0.5
+    assert np.linalg.norm(total_force) < 0.5, \
+        f"Dihedral forces not balanced: sum={total_force}"
 
 
-def test_empty_terms_gpu():
-    topology, term_params = _build_empty()
-    parameter_table = _make_parameter_table(term_params)
+def test_improper_forces_balanced():
+    force = BondedForce(harmonic_improper)
+    k = 30.0
+    psi0 = 0.0
+    force.add([0, 1, 2, 3], k=k, psi0=psi0)
+
+    positions = np.array([
+        [0.0, 1.5, 0.0],
+        [0.0, 0.0, 0.0],
+        [1.5, 0.0, 0.0],
+        [1.5, 0.0, 1.5],
+    ], dtype=env.NUMPY_FLOAT)
+    pbc_matrix = _make_large_pbc()
+
+    context = MockGPUContext(positions, pbc_matrix)
+    force.compute(context)
+
+    gpu_forces = context.d_forces.get().reshape(-1, 3)
+    total_force = np.sum(gpu_forces, axis=0)
+    assert np.linalg.norm(total_force) < 0.5, \
+        f"Improper forces not balanced: sum={total_force}"
+
+
+def test_bond_energy_at_equilibrium():
+    force = BondedForce(harmonic_bond)
+    k = 100.0
+    r0 = 1.5
+    force.add([0, 1], k=k, r0=r0)
+
+    positions = np.array([
+        [0.0, 0.0, 0.0],
+        [1.5, 0.0, 0.0],
+    ], dtype=env.NUMPY_FLOAT)
+    pbc_matrix = _make_large_pbc()
+
+    context = MockGPUContext(positions, pbc_matrix)
+    force.compute(context)
+
+    energy = float(context.d_energy[0])
+    assert abs(energy) < 1e-3, f"Energy at equilibrium should be ~0, got {energy}"
+
+
+def test_empty_terms():
+    force = BondedForce(harmonic_bond)
+
     positions = np.array([
         [0.0, 0.0, 0.0],
         [2.0, 0.0, 0.0],
     ], dtype=env.NUMPY_FLOAT)
     pbc_matrix = _make_large_pbc()
 
-    force = BondedForce.charmm(topology, parameter_table)
     context = MockGPUContext(positions, pbc_matrix)
     force.compute(context)
+
     energy = float(context.d_energy[0])
+    assert abs(energy) < 1e-6, f"Empty force energy should be 0, got {energy}"
 
-    assert abs(energy) < 1e-6, f"Empty topology GPU energy should be 0, got {energy}"
 
+def test_incremental_add_and_sync():
+    force = BondedForce(harmonic_bond)
+    k = 100.0
+    r0 = 1.5
 
-def test_cpu_gpu_consistency():
-    topology, term_params = _build_four_particle()
-    parameter_table = _make_parameter_table(term_params)
+    force.add([0, 1], k=k, r0=r0)
+    force.add([1, 2], k=k, r0=r0)
+
     positions = np.array([
-        [0.0, 1.5, 0.0],
         [0.0, 0.0, 0.0],
-        [1.5, 0.0, 0.0],
-        [1.5, 0.0, 1.5],
+        [2.0, 0.0, 0.0],
+        [3.5, 0.0, 0.0],
     ], dtype=env.NUMPY_FLOAT)
     pbc_matrix = _make_large_pbc()
 
-    force = BondedForce.charmm(topology, parameter_table)
+    context = MockGPUContext(positions, pbc_matrix)
+    force.compute(context)
+
+    energy_before = float(context.d_energy[0])
+    assert energy_before > 0.0
+
+    force.add([0, 2], k=k, r0=r0)
+    context2 = MockGPUContext(positions, pbc_matrix)
+    force.sync()
+    force.compute(context2)
+
+    energy_after = float(context2.d_energy[0])
+    assert energy_after > energy_before
+
+
+@bonded_expression(body=2)
+def simple_coulomb(pos1, pos2, charge1, charge2):
+    r = distance(pos1, pos2)
+    return 0.13893556595455 * charge1 * charge2 / r
+
+
+def test_per_particle_set_parameter():
+    force = BondedForce(simple_coulomb)
+    charges = np.array([1.0, -1.0, 0.5, -0.5], dtype=np.float32)
+    force.set_parameter("charge", charges)
+
+    assert "charge" in force._per_particle_gpu
+    assert force._per_particle_gpu["charge"].shape[0] == 4
+
+    import cupy as cp
+    gpu_charges = cp.asnumpy(force._per_particle_gpu["charge"])
+    np.testing.assert_allclose(gpu_charges, charges, atol=1e-6)
+
+
+def test_per_particle_energy():
+    force = BondedForce(simple_coulomb)
+
+    q1, q2 = 1.0, -0.5
+    charges = np.array([q1, q2], dtype=np.float32)
+    force.set_parameter("charge", charges)
+    force.add([0, 1])
+
+    positions = np.array([
+        [0.0, 0.0, 0.0],
+        [3.0, 0.0, 0.0],
+    ], dtype=env.NUMPY_FLOAT)
+    pbc_matrix = _make_large_pbc()
 
     context = MockGPUContext(positions, pbc_matrix)
     force.compute(context)
-    gpu_forces = context.d_forces.get().reshape(-1, 3)
 
-    gpu_total = np.sum(gpu_forces, axis=0)
-    assert np.linalg.norm(gpu_total) < 0.5, \
-        f"GPU forces not balanced: sum={gpu_total}"
+    energy = float(context.d_energy[0])
+    r = 3.0
+    expected = 0.13893556595455 * q1 * q2 / r
+    assert abs(energy - expected) < 1e-3, f"Energy {energy} != {expected}"
+
+
+def test_per_particle_forces_balanced():
+    force = BondedForce(simple_coulomb)
+
+    charges = np.array([1.0, -1.0], dtype=np.float32)
+    force.set_parameter("charge", charges)
+    force.add([0, 1])
+
+    positions = np.array([
+        [0.0, 0.0, 0.0],
+        [3.0, 0.0, 0.0],
+    ], dtype=env.NUMPY_FLOAT)
+    pbc_matrix = _make_large_pbc()
+
+    context = MockGPUContext(positions, pbc_matrix)
+    force.compute(context)
+
+    gpu_forces = context.d_forces.get().reshape(-1, 3)
+    total_force = np.sum(gpu_forces, axis=0)
+    assert np.linalg.norm(total_force) < 0.5, \
+        f"Forces not balanced: sum={total_force}"
+
+
+def test_per_particle_multiple_pairs():
+    force = BondedForce(simple_coulomb)
+
+    charges = np.array([1.0, -1.0, 0.5, -0.5], dtype=np.float32)
+    force.set_parameter("charge", charges)
+    force.add([0, 1])
+    force.add([2, 3])
+
+    positions = np.array([
+        [0.0, 0.0, 0.0],
+        [2.0, 0.0, 0.0],
+        [5.0, 0.0, 0.0],
+        [7.0, 0.0, 0.0],
+    ], dtype=env.NUMPY_FLOAT)
+    pbc_matrix = _make_large_pbc()
+
+    context = MockGPUContext(positions, pbc_matrix)
+    force.compute(context)
+
+    energy = float(context.d_energy[0])
+    expected_e01 = 0.13893556595455 * 1.0 * (-1.0) / 2.0
+    expected_e23 = 0.13893556595455 * 0.5 * (-0.5) / 2.0
+    expected = expected_e01 + expected_e23
+    assert abs(energy - expected) < 1e-2, f"Energy {energy} != {expected}"
+
+
+def test_per_particle_no_per_particle_props():
+    force = BondedForce(harmonic_bond)
+    k = 100.0
+    r0 = 1.5
+    force.add([0, 1], k=k, r0=r0)
+
+    positions = np.array([
+        [0.0, 0.0, 0.0],
+        [2.0, 0.0, 0.0],
+    ], dtype=env.NUMPY_FLOAT)
+    pbc_matrix = _make_large_pbc()
+
+    context = MockGPUContext(positions, pbc_matrix)
+    force.compute(context)
+
+    energy = float(context.d_energy[0])
+    expected_energy = k * (2.0 - r0) ** 2
+    assert abs(energy - expected_energy) < 1e-2
+
+
+COULOMB_CONSTANT = 0.13893556595455
+
+
+def _analytical_nb14_energy(r, q1, q2, sigma, epsilon, charge_scale):
+    e_coul = charge_scale * COULOMB_CONSTANT * q1 * q2 / r
+    sr = sigma / r
+    sr6 = sr ** 6
+    e_lj = 4.0 * epsilon * (sr6 * sr6 - sr6)
+    return e_coul + e_lj
+
+
+from mdpy.force.expressions.nb14 import nb14_lj_coulomb
+
+
+def test_nb14_energy_analytical():
+    force = BondedForce(nb14_lj_coulomb)
+
+    q1, q2 = 1.0, -0.5
+    sigma = 1.0
+    epsilon = 0.1
+    charge_scale = 0.83333333
+    r = 3.0
+
+    charges = np.array([q1, q2], dtype=np.float32)
+    force.set_parameter("charge", charges)
+    force.add([0, 1], sigma=sigma, epsilon=epsilon, charge_scale=charge_scale)
+
+    positions = np.array([
+        [0.0, 0.0, 0.0],
+        [r, 0.0, 0.0],
+    ], dtype=env.NUMPY_FLOAT)
+    pbc_matrix = _make_large_pbc()
+
+    context = MockGPUContext(positions, pbc_matrix)
+    force.compute(context)
+
+    energy = float(context.d_energy[0])
+    expected = _analytical_nb14_energy(r, q1, q2, sigma, epsilon, charge_scale)
+    assert abs(energy - expected) < 1e-3, f"Energy {energy} != {expected}"
+
+
+def test_nb14_forces_balanced():
+    force = BondedForce(nb14_lj_coulomb)
+
+    charges = np.array([1.0, -0.5], dtype=np.float32)
+    force.set_parameter("charge", charges)
+    force.add([0, 1], sigma=1.0, epsilon=0.1, charge_scale=0.83333333)
+
+    positions = np.array([
+        [1.0, 2.0, 3.0],
+        [4.0, 5.0, 6.0],
+    ], dtype=env.NUMPY_FLOAT)
+    pbc_matrix = _make_large_pbc()
+
+    context = MockGPUContext(positions, pbc_matrix)
+    force.compute(context)
+
+    gpu_forces = context.d_forces.get().reshape(-1, 3)
+    total_force = np.sum(gpu_forces, axis=0)
+    assert np.linalg.norm(total_force) < 0.5, \
+        f"nb14 forces not balanced: sum={total_force}"
+
+
+def test_nb14_multiple_pairs():
+    force = BondedForce(nb14_lj_coulomb)
+
+    charges = np.array([1.0, -1.0, 0.5, -0.5], dtype=np.float32)
+    force.set_parameter("charge", charges)
+
+    sigma1, eps1, cs1 = 1.0, 0.1, 0.83333333
+    sigma2, eps2, cs2 = 2.0, 0.2, 1.0
+    force.add([0, 1], sigma=sigma1, epsilon=eps1, charge_scale=cs1)
+    force.add([2, 3], sigma=sigma2, epsilon=eps2, charge_scale=cs2)
+
+    positions = np.array([
+        [0.0, 0.0, 0.0],
+        [2.5, 0.0, 0.0],
+        [5.0, 0.0, 0.0],
+        [7.5, 0.0, 0.0],
+    ], dtype=env.NUMPY_FLOAT)
+    pbc_matrix = _make_large_pbc()
+
+    context = MockGPUContext(positions, pbc_matrix)
+    force.compute(context)
+
+    energy = float(context.d_energy[0])
+    e01 = _analytical_nb14_energy(2.5, 1.0, -1.0, sigma1, eps1, cs1)
+    e23 = _analytical_nb14_energy(2.5, 0.5, -0.5, sigma2, eps2, cs2)
+    expected = e01 + e23
+    assert abs(energy - expected) < 1e-2, f"Energy {energy} != {expected}"
+
+
+def test_nb14_force_direction():
+    force = BondedForce(nb14_lj_coulomb)
+
+    q1, q2 = 1.0, -1.0
+    sigma = 3.5
+    epsilon = 0.1
+    charge_scale = 0.83333333
+
+    charges = np.array([q1, q2], dtype=np.float32)
+    force.set_parameter("charge", charges)
+    force.add([0, 1], sigma=sigma, epsilon=epsilon, charge_scale=charge_scale)
+
+    positions = np.array([
+        [0.0, 0.0, 0.0],
+        [5.0, 0.0, 0.0],
+    ], dtype=env.NUMPY_FLOAT)
+    pbc_matrix = _make_large_pbc()
+
+    context = MockGPUContext(positions, pbc_matrix)
+    force.compute(context)
+
+    gpu_forces = context.d_forces.get().reshape(-1, 3)
+    f0x = gpu_forces[0, 0]
+    f1x = gpu_forces[1, 0]
+    assert abs(f0x + f1x) < 0.5, \
+        f"Forces not equal and opposite: f0x={f0x}, f1x={f1x}"

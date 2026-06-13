@@ -2,7 +2,7 @@ import pytest
 from mdpy.force.bonded_transpiler import bonded_expression
 
 
-class TestBondedTranspilerV2:
+class TestBondedTranspiler:
     def test_harmonic_bond_classification(self):
         @bonded_expression(body=2)
         def harmonic_bond(pos1, pos2, k=1, r0=1):

@@ -7,13 +7,9 @@ from mdpy.io.psf_parser import PSFParser
 from mdpy.io.charmm_toppar_parser import CharmmTopparParser, create_parameter_table
 from mdpy.forcefield.charmm_forces import (
     create_charmm_forces,
-    charmm_bond_v2,
-    charmm_angle_v2,
-    charmm_dihedral_v2,
-    charmm_improper_v2,
 )
-from mdpy.force.bonded_force import BondedForceV2
-from mdpy.force.nonbonded_force import NonbondedForceV2
+from mdpy.force.bonded_force import BondedForce
+from mdpy.force.nonbonded_force import NonbondedForce
 
 DATA_DIR = os.path.join(os.path.dirname(__file__), 'data')
 
@@ -35,15 +31,16 @@ class TestFactoryCreation:
         expected_keys = {'bond', 'angle', 'dihedral', 'improper', 'nb14', 'nonbonded'}
         assert set(forces.keys()) == expected_keys
 
-    def test_bond_is_bonded_force_v2(self, topology_and_table):
+    def test_bond_is_bonded_force(self, topology_and_table):
         topology, table = topology_and_table
         forces = create_charmm_forces(topology, table, topology.num_particles)
-        assert isinstance(forces['bond'], BondedForceV2)
+        assert isinstance(forces['bond'], BondedForce)
 
-    def test_nonbonded_is_nonbonded_force_v2(self, topology_and_table):
+    def test_nonbonded_is_force_group(self, topology_and_table):
         topology, table = topology_and_table
         forces = create_charmm_forces(topology, table, topology.num_particles)
-        assert isinstance(forces['nonbonded'], NonbondedForceV2)
+        from mdpy.force.force_group import ForceGroup
+        assert isinstance(forces['nonbonded'], ForceGroup)
 
     def test_unique_names(self, topology_and_table):
         topology, table = topology_and_table
@@ -103,10 +100,10 @@ class TestImproperForce:
 
 class TestNb14Force:
 
-    def test_nb14_is_bonded_force_v2(self, topology_and_table):
+    def test_nb14_is_bonded_force(self, topology_and_table):
         topology, table = topology_and_table
         forces = create_charmm_forces(topology, table, topology.num_particles)
-        assert isinstance(forces['nb14'], BondedForceV2)
+        assert isinstance(forces['nb14'], BondedForce)
 
     def test_nb14_has_charges(self, topology_and_table):
         topology, table = topology_and_table
@@ -129,19 +126,22 @@ class TestNonbondedForce:
     def test_nonbonded_has_charge(self, topology_and_table):
         topology, table = topology_and_table
         forces = create_charmm_forces(topology, table, topology.num_particles)
-        assert 'charge' in forces['nonbonded']._per_particle_data
+        nb = forces['nonbonded']._merged_nb
+        assert 'charge' in nb._prop_bases
 
     def test_nonbonded_has_sigma_epsilon(self, topology_and_table):
         topology, table = topology_and_table
         forces = create_charmm_forces(topology, table, topology.num_particles)
-        assert 'sigma' in forces['nonbonded']._pair_param_data
-        assert 'epsilon' in forces['nonbonded']._pair_param_data
+        nb = forces['nonbonded']._merged_nb
+        assert 'sigma' in nb._pair_param_data
+        assert 'epsilon' in nb._pair_param_data
 
     def test_nonbonded_sigma_matrix_shape(self, topology_and_table):
         topology, table = topology_and_table
         forces = create_charmm_forces(topology, table, topology.num_particles)
+        nb = forces['nonbonded']._merged_nb
         n_types = len(table.type_parameters['sigma'])
-        sigma = forces['nonbonded']._pair_param_data['sigma']
+        sigma = nb._pair_param_data['sigma']
         assert sigma.shape[0] == n_types * n_types
 
 
