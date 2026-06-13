@@ -275,14 +275,19 @@ class ForwardADEngine:
     preventing the expression blowup that plagues reverse-mode string AD.
     """
 
-    def differentiate(self, tape, seed_vars=None):
+    def differentiate(self, tape, seed_vars=None, prefix='_d_'):
         """Process tape in forward order, computing derivatives.
 
         Args:
             tape: list of TapeEntry in forward evaluation order.
             seed_vars: dict mapping variable names to their derivative
                        expressions w.r.t. the independent variable.
-                       Default: {'r': '1.0f'}
+                       If None, all helper operations are auto-seeded
+                       to '1.0f' (useful for single-helper expressions).
+                       If provided explicitly, only the specified helpers
+                       are seeded — other helpers get derivative '0.0f'.
+            prefix: prefix for generated derivative variable names.
+                    Default '_d_' for backward compatibility.
 
         Returns:
             (grad_lines, derivs) where grad_lines is a list of CUDA
@@ -290,15 +295,17 @@ class ForwardADEngine:
             and derivs maps each tape variable name to its derivative
             variable name (or '0.0f' if derivative is zero).
         """
+        auto_seed_helpers = seed_vars is None
         if seed_vars is None:
-            seed_vars = {'r': '1.0f'}
+            seed_vars = {}
 
         derivs = dict(seed_vars)
         grad_lines = []
 
         for entry in tape:
             if entry.operation in _HELPER_OPERATIONS:
-                derivs[entry.var_name] = '1.0f'
+                if auto_seed_helpers and entry.var_name not in derivs:
+                    derivs[entry.var_name] = '1.0f'
                 continue
 
             rule = _FWD_RULES.get(entry.operation)
@@ -311,7 +318,7 @@ class ForwardADEngine:
             deriv_expr = rule(operands, d_operands)
 
             if deriv_expr is not None:
-                name = f'_d_{entry.var_name}'
+                name = f'{prefix}{entry.var_name}'
                 grad_lines.append(f'float {name} = {deriv_expr};')
                 derivs[entry.var_name] = name
 

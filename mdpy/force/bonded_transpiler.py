@@ -4,7 +4,7 @@ import textwrap
 
 from mdpy.force.markers import param as _param_marker, scalar as _scalar_marker
 from mdpy.force.expr_info import ExprInfo, _strip_trailing_digits
-from mdpy.force.ad_engine import TapeEntry, ScalarADEngine, _HELPER_OPERATIONS
+from mdpy.force.ad_engine import TapeEntry, ForwardADEngine, _HELPER_OPERATIONS
 from mdpy.force.helper_registry import HELPER_REGISTRY
 
 _MATH_FUNCTIONS = {
@@ -170,8 +170,7 @@ class _BondedExpression:
         if energy_var is None:
             return
 
-        ad = ScalarADEngine()
-        ad.differentiate(walker.tape, energy_var)
+        fwd_ad = ForwardADEngine()
 
         parts = []
 
@@ -180,23 +179,34 @@ class _BondedExpression:
             parts.append(template.format(result_name=result_name))
 
         for line in walker.forward_lines:
-            if not line.startswith('//'):
-                parts.append(f'        {line}')
-            else:
-                parts.append(f'        {line}')
+            parts.append(f'        {line}')
 
         parts.append(f'        float _result_energy = {energy_var};')
 
-        for helper_type, result_name, _ in walker._helper_calls:
-            for entry in walker.tape:
-                if entry.var_name == result_name and entry.d_output is not None:
-                    template = HELPER_REGISTRY[helper_type]['force']
-                    parts.append(template.format(
-                        result_name=result_name,
-                        grad_expr=entry.d_output,
-                    ))
-                    self.helper_calls.append((helper_type, result_name, entry.d_output))
-                    break
+        num_helpers = len(walker._helper_calls)
+        if num_helpers <= 1:
+            shared_grad_lines, shared_derivs = fwd_ad.differentiate(walker.tape)
+            for line in shared_grad_lines:
+                parts.append(f'        {line}')
+
+        for idx, (helper_type, result_name, _) in enumerate(walker._helper_calls):
+            if num_helpers > 1:
+                prefix = f'_g{idx}_'
+                grad_lines, derivs = fwd_ad.differentiate(
+                    walker.tape, seed_vars={result_name: '1.0f'}, prefix=prefix,
+                )
+                for line in grad_lines:
+                    parts.append(f'        {line}')
+            else:
+                derivs = shared_derivs
+
+            grad_expr = derivs.get(energy_var, '0.0f')
+            template = HELPER_REGISTRY[helper_type]['force']
+            parts.append(template.format(
+                result_name=result_name,
+                grad_expr=grad_expr,
+            ))
+            self.helper_calls.append((helper_type, result_name, grad_expr))
 
         self.cuda_fragment = '\n'.join(parts)
 
