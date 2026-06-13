@@ -9,11 +9,13 @@ Reports ms/step and ns/day with per-term energy breakdown.
 
 import os
 import time
+import sys
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 import cupy as cp
 import numpy as np
-
-from benchmark._data_path import DATA_DIR
+from _data_path import DATA_DIR
 
 PSF_PATH = os.path.join(DATA_DIR, "1M9Z.psf")
 PDB_PATH = os.path.join(DATA_DIR, "1M9Z_minimized.pdb")
@@ -34,6 +36,7 @@ def main():
     from mdpy.io.pdb_parser import PDBParser
     from mdpy.io.charmm_toppar_parser import CharmmTopparParser
     from mdpy.io.charmm_toppar_parser import create_parameter_table
+    from mdpy import env
     from mdpy.force.bonded_force import BondedForce
     from mdpy.force.nonbonded_force import NonbondedForce
     from mdpy.force.expressions.lennard_jones import lennard_jones
@@ -56,12 +59,15 @@ def main():
     system = System(topology, pbc_matrix, cutoff=CUTOFF)
     system.add_force_term(BondedForce.charmm(topology, parameter_table))
 
-    nb = NonbondedForce(lennard_jones + screened_coulomb)
-    nb.bind(topology, parameter_table, CUTOFF)
+    nb = NonbondedForce(lennard_jones + screened_coulomb, CUTOFF)
+    lj_pair = parameter_table.type_pair_parameters['lj_pair']
+    nb.set_pair_parameter('sigma', lj_pair[0::2].astype(env.NUMPY_FLOAT))
+    nb.set_pair_parameter('epsilon', lj_pair[1::2].astype(env.NUMPY_FLOAT))
     system.add_force_term(nb)
 
     pme = PMEReciprocalForce(CUTOFF)
     pme.bind(topology, parameter_table, pbc_matrix=pbc_matrix)
+    nb.set_scalar('alpha', pme.alpha)
     system.add_force_term(pme)
 
     constraints = create_constraints(topology, parameter_table, scheme="h-bonds")
