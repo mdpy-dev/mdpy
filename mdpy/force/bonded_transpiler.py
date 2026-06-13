@@ -6,12 +6,7 @@ from mdpy.force.markers import param as _param_marker, scalar as _scalar_marker
 from mdpy.force.expr_info import ExprInfo, _strip_trailing_digits
 from mdpy.force.ad_engine import TapeEntry, ForwardADEngine, _HELPER_OPERATIONS
 from mdpy.force.helper_registry import HELPER_REGISTRY
-
-_MATH_FUNCTIONS = {
-    'sqrt': 'sqrtf', 'sin': 'sinf', 'cos': 'cosf',
-    'exp': 'expf', 'log': 'logf', 'abs': 'fabsf',
-    'erf': 'erff',
-}
+from mdpy.force._kernels import _MATH_FUNCTIONS
 
 _ARG_INDEX_TO_HELPER = {}
 for _htype, _info in HELPER_REGISTRY.items():

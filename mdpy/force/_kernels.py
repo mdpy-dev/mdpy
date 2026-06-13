@@ -10,3 +10,9 @@ void remap_indices_kernel(
     d_indices[i] = d_remap[d_indices[i]];
 }
 """
+
+_MATH_FUNCTIONS = {
+    'sqrt': 'sqrtf', 'sin': 'sinf', 'cos': 'cosf',
+    'exp': 'expf', 'log': 'logf', 'abs': 'fabsf',
+    'erf': 'erff', 'erfc': 'erfcf',
+}
