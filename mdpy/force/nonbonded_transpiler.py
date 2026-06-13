@@ -4,7 +4,7 @@ import textwrap
 
 from mdpy.force.markers import param as _param_marker, scalar as _scalar_marker
 from mdpy.force.expr_info import ExprInfo, _strip_trailing_digits
-from mdpy.force.ad_engine import TapeEntry, ScalarADEngine
+from mdpy.force.ad_engine import TapeEntry, ScalarADEngine, ForwardADEngine
 
 _MATH_FUNCTIONS = {
     'sqrt': 'sqrtf', 'sin': 'sinf', 'cos': 'cosf',
@@ -45,6 +45,53 @@ class _NonbondedASTWalker:
         self._counter += 1
         return f'{prefix}{self._counter}'
 
+    def _emit_mul(self, a, b):
+        result = self._fresh_name()
+        cuda_val = f'({a} * {b})'
+        self.tape.append(TapeEntry(result, 'mul', [a, b], cuda_val))
+        self.forward_lines.append(f'float {result} = {cuda_val};')
+        return result
+
+    def _expand_pow(self, base_node, base_str, exp_str):
+        if isinstance(base_node, ast.Constant) and isinstance(base_node.value, int):
+            try:
+                n = int(exp_str)
+            except (ValueError, TypeError):
+                n = None
+        else:
+            try:
+                n = int(exp_str)
+            except (ValueError, TypeError):
+                n = None
+        if n is None or n < 0:
+            result = self._fresh_name()
+            cuda_val = f'powf({base_str}, {exp_str})'
+            self.tape.append(TapeEntry(result, 'pow', [base_str, exp_str], cuda_val))
+            self.forward_lines.append(f'float {result} = {cuda_val};')
+            return result
+        if n == 0:
+            return '1.0f'
+        if n == 1:
+            return base_str
+        if n == 2:
+            return self._emit_mul(base_str, base_str)
+        if n == 3:
+            return self._emit_mul(self._emit_mul(base_str, base_str), base_str)
+        if n == 6:
+            cube = self._emit_mul(base_str, self._emit_mul(base_str, base_str))
+            return self._emit_mul(cube, cube)
+        if n == 12:
+            cube = self._emit_mul(base_str, self._emit_mul(base_str, base_str))
+            six = self._emit_mul(cube, cube)
+            return self._emit_mul(six, six)
+        sq = self._emit_mul(base_str, base_str)
+        cur = sq
+        for _ in range(n // 2 - 1):
+            cur = self._emit_mul(cur, sq)
+        if n % 2 == 1:
+            cur = self._emit_mul(cur, base_str)
+        return cur
+
     def _expr(self, node):
         if isinstance(node, ast.Constant):
             v = node.value
@@ -70,14 +117,18 @@ class _NonbondedASTWalker:
             op_str = op_map.get(type(node.op))
             if op_str is None:
                 raise ValueError(f"Unsupported binary op: {type(node.op).__name__}")
-            result = self._fresh_name()
             if op_str == '**':
-                cuda_val = f'powf({left}, {right})'
-                self.tape.append(TapeEntry(result, 'pow', [left, right], cuda_val))
-            else:
-                cuda_val = f'({left} {op_str} {right})'
-                op_name = {'+': 'add', '-': 'sub', '*': 'mul', '/': 'div', '%': 'mod'}[op_str]
-                self.tape.append(TapeEntry(result, op_name, [left, right], cuda_val))
+                return self._expand_pow(node.left, left, right)
+            if op_str == '/' and right == 'r':
+                result = self._fresh_name()
+                cuda_val = f'({left} * inv_dist)'
+                self.tape.append(TapeEntry(result, 'div', [left, 'r'], f'({left} / r)'))
+                self.forward_lines.append(f'float {result} = {cuda_val};')
+                return result
+            result = self._fresh_name()
+            cuda_val = f'({left} {op_str} {right})'
+            op_name = {'+': 'add', '-': 'sub', '*': 'mul', '/': 'div', '%': 'mod'}[op_str]
+            self.tape.append(TapeEntry(result, op_name, [left, right], cuda_val))
             self.forward_lines.append(f'float {result} = {cuda_val};')
             return result
 
@@ -119,6 +170,7 @@ class _NonbondedExpression:
         self._expr_info = _classify_for_nonbonded(func)
         self.energy_cuda = ''
         self.dEdr_cuda = None
+        self.grad_cuda = None
         self._local_vars = set()
         self._compile()
 
@@ -155,25 +207,27 @@ class _NonbondedExpression:
         if energy_var is None:
             return
 
-        ad = ScalarADEngine()
-        ad.differentiate(walker.tape, energy_var)
-
         parts = []
         for line in walker.forward_lines:
-            if not line.startswith('//'):
-                parts.append(f'        {line}')
-            else:
-                parts.append(f'        {line}')
+            parts.append(f'        {line}')
         parts.append(f'        float _result_energy = {energy_var};')
         self.energy_cuda = '\n'.join(parts)
         self._local_vars = {line.split()[1].split('=')[0].strip()
                             for line in walker.forward_lines
                             if not line.startswith('//') and '=' in line}
 
-        for entry in walker.tape:
-            if entry.operation == 'distance' and entry.d_output is not None:
-                self.dEdr_cuda = entry.d_output
-                break
+        fwd_ad = ForwardADEngine()
+        grad_lines, derivs = fwd_ad.differentiate(walker.tape)
+        if grad_lines:
+            indented = '\n'.join(f'        {line}' for line in grad_lines)
+            self.grad_cuda = indented
+            for line in grad_lines:
+                var_name = line.split()[1].split('=')[0].strip()
+                self._local_vars.add(var_name)
+            self.dEdr_cuda = derivs.get(energy_var, '0.0f')
+        else:
+            self.grad_cuda = None
+            self.dEdr_cuda = '0.0f'
 
     def __add__(self, other):
         if not isinstance(other, _NonbondedExpression):
@@ -210,22 +264,33 @@ class _NonbondedExpression:
                 other_locals.add(var)
 
         import re as _re
-        renamed_energy_2 = other.energy_cuda
-        for var in sorted(other._local_vars, key=len, reverse=True):
-            if var in self_locals:
-                renamed_energy_2 = _re.sub(
-                    r'\b' + _re.escape(var) + r'\b', var + suffix, renamed_energy_2
-                )
+
+        def _rename_vars(text):
+            if text is None:
+                return None
+            for var in sorted(other._local_vars, key=len, reverse=True):
+                if var in self_locals:
+                    text = _re.sub(
+                        r'\b' + _re.escape(var) + r'\b', var + suffix, text
+                    )
+            return text
+
+        renamed_energy_2 = _rename_vars(other.energy_cuda)
+        renamed_grad_2 = _rename_vars(other.grad_cuda)
 
         merged.energy_cuda = self.energy_cuda + '\n' + renamed_energy_2
 
+        if self.grad_cuda and renamed_grad_2:
+            merged.grad_cuda = self.grad_cuda + '\n' + renamed_grad_2
+        elif self.grad_cuda:
+            merged.grad_cuda = self.grad_cuda
+        elif renamed_grad_2:
+            merged.grad_cuda = renamed_grad_2
+        else:
+            merged.grad_cuda = None
+
         if self.dEdr_cuda is not None and other.dEdr_cuda is not None:
-            dEdr_2 = other.dEdr_cuda
-            for var in sorted(other._local_vars, key=len, reverse=True):
-                if var in self_locals:
-                    dEdr_2 = _re.sub(
-                        r'\b' + _re.escape(var) + r'\b', var + suffix, dEdr_2
-                    )
+            dEdr_2 = _rename_vars(other.dEdr_cuda)
             merged.dEdr_cuda = f'({self.dEdr_cuda} + {dEdr_2})'
         elif self.dEdr_cuda is not None:
             merged.dEdr_cuda = self.dEdr_cuda
