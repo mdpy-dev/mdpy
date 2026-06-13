@@ -38,7 +38,7 @@ def main():
     from mdpy.io.charmm_toppar_parser import create_parameter_table
     from mdpy import env
     from mdpy.force.bonded_force import BondedForce
-from mdpy.force.factories.charmm import create_bonded_group
+    from mdpy.force.factories.charmm import create_bonded_group
     from mdpy.force.nonbonded_force import NonbondedForce
     from mdpy.force.expressions.lennard_jones import lennard_jones
     from mdpy.force.expressions.screened_coulomb import screened_coulomb
@@ -61,14 +61,14 @@ from mdpy.force.factories.charmm import create_bonded_group
     system.add_force_term(create_bonded_group(topology, parameter_table))
 
     nb = NonbondedForce(lennard_jones + screened_coulomb, CUTOFF)
-    lj_pair = parameter_table.type_pair_parameters['lj_pair']
-    nb.set_pair_parameter('sigma', lj_pair[0::2].astype(env.NUMPY_FLOAT))
-    nb.set_pair_parameter('epsilon', lj_pair[1::2].astype(env.NUMPY_FLOAT))
+    lj_pair = parameter_table.type_pair_parameters["lj_pair"]
+    nb.set_pair_parameter("sigma", lj_pair[0::2].astype(env.NUMPY_FLOAT))
+    nb.set_pair_parameter("epsilon", lj_pair[1::2].astype(env.NUMPY_FLOAT))
     system.add_force_term(nb)
 
     pme = PMEReciprocalForce(CUTOFF)
     pme.bind(topology, parameter_table, pbc_matrix=pbc_matrix)
-    nb.set_scalar('alpha', pme.alpha)
+    nb.set_scalar("alpha", pme.alpha)
     system.add_force_term(pme)
 
     constraints = create_constraints(topology, parameter_table, scheme="h-bonds")
