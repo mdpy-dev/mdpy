@@ -189,6 +189,14 @@ class ForwardADEngine:
     def differentiate(self, tape, seed_vars=None, prefix='_d_'):
         """Process tape in forward order, computing derivatives.
 
+        For power chains (e.g., x -> x^2 -> x^3 -> x^6 -> x^12), uses the
+        power rule d(x^n)/dr = n * x^(n-1) * dx instead of the product rule.
+        This produces fewer intermediate gradient variables, reducing register
+        pressure in the generated CUDA kernel.
+
+        Intermediate power-chain nodes whose derivatives are never referenced
+        by a downstream operation are not emitted at all (lazy emission).
+
         Args:
             tape: list of TapeEntry in forward evaluation order.
             seed_vars: dict mapping variable names to their derivative
@@ -202,7 +210,7 @@ class ForwardADEngine:
 
         Returns:
             (grad_lines, derivs) where grad_lines is a list of CUDA
-            code strings (e.g. 'float _d__t4 = (2.0f * _t3 * _d__t3);')
+            code strings (e.g. 'float _d__t4 = (6.0f * _t3 * _t2 * _d__t1);')
             and derivs maps each tape variable name to its derivative
             variable name (or '0.0f' if derivative is zero).
         """
@@ -212,6 +220,23 @@ class ForwardADEngine:
 
         derivs = dict(seed_vars)
         grad_lines = []
+
+        # Lazy emission: power-chain gradient expressions are stored here
+        # and only appended to grad_lines when referenced by a downstream
+        # operation. Unreferenced intermediates are never emitted.
+        pending_grads = {}
+
+        # Power chain tracking
+        # power_map: var_name -> (base_var, exponent)
+        # power_vars: (base_var, exponent) -> var_name  (reverse lookup)
+        power_map = {}
+        power_vars = {}
+
+        def flush_if_pending(name):
+            """Emit a pending gradient line if it hasn't been emitted yet."""
+            if name in pending_grads:
+                expr = pending_grads.pop(name)
+                grad_lines.append(f'float {name} = {expr};')
 
         for entry in tape:
             if entry.operation in _HELPER_OPERATIONS:
@@ -226,11 +251,93 @@ class ForwardADEngine:
             operands = entry.operands
             d_operands = [derivs.get(op, '0.0f') for op in operands]
 
+            # --- Power chain detection ---
+            # Must happen BEFORE flushing d_operands, because a power-chain
+            # mul uses d_base (not d_operands). Flushing d_operands here
+            # would prematurely emit gradients that the power rule bypasses.
+            if entry.operation == 'mul':
+                a, b = operands
+                pa = power_map.get(a)
+                pb = power_map.get(b)
+
+                detected_power = None
+
+                if a == b:
+                    # Squaring: t = a * a
+                    if pa is not None:
+                        detected_power = (pa[0], pa[1] * 2)
+                    elif derivs.get(a, '0.0f') != '0.0f':
+                        detected_power = (a, 2)
+                elif pa is not None and pb is not None and pa[0] == pb[0]:
+                    # Same base: a^p1 * b^p2 = base^(p1+p2)
+                    detected_power = (pa[0], pa[1] + pb[1])
+                elif pa is not None and pa[0] == b:
+                    # a^p * a = a^(p+1)
+                    detected_power = (b, pa[1] + 1)
+                elif pb is not None and pb[0] == a:
+                    # a * a^p = a^(p+1)
+                    detected_power = (a, pb[1] + 1)
+
+                if detected_power is not None:
+                    base, exp = detected_power
+                    power_map[entry.var_name] = detected_power
+                    power_vars[detected_power] = entry.var_name
+
+                    # Try power rule for gradient
+                    d_base = derivs.get(base, '0.0f')
+                    flush_if_pending(d_base)
+
+                    if d_base != '0.0f' and exp > 1:
+                        # Find base^(exp-1) variables via decomposition
+                        target = exp - 1
+                        if target == 0:
+                            deriv_expr = f'({exp}.0f * {d_base})'
+                            name = f'{prefix}{entry.var_name}'
+                            pending_grads[name] = deriv_expr
+                            derivs[entry.var_name] = name
+                            continue
+
+                        available = {e: v for (b2, e), v in power_vars.items()
+                                     if b2 == base}
+                        decomp = _decompose_exponent(target, available)
+
+                        if decomp is not None and len(decomp) > 0:
+                            factors = ' * '.join(decomp)
+                            deriv_expr = f'({exp}.0f * {factors} * {d_base})'
+                            name = f'{prefix}{entry.var_name}'
+                            pending_grads[name] = deriv_expr
+                            derivs[entry.var_name] = name
+                            continue
+
+                    # Power detected but can't use power rule (decomp failed
+                    # or d_base is zero) — fall through to standard rule
+
+            # --- Standard differentiation (fallback) ---
+            # Flush pending gradients that this operation references
+            for d_op in d_operands:
+                flush_if_pending(d_op)
+
             deriv_expr = rule(operands, d_operands)
 
             if deriv_expr is not None:
                 name = f'{prefix}{entry.var_name}'
                 grad_lines.append(f'float {name} = {deriv_expr};')
                 derivs[entry.var_name] = name
+
+            # Track this variable as a potential power base (power 1)
+            # for future power chain detection
+            if entry.var_name not in power_map:
+                d_self = derivs.get(entry.var_name, '0.0f')
+                if d_self != '0.0f':
+                    power_map[entry.var_name] = (entry.var_name, 1)
+                    power_vars[(entry.var_name, 1)] = entry.var_name
+
+        # Flush the final result's pending gradient if any.
+        # Intermediate pending gradients that were never referenced are
+        # dead code and intentionally not emitted.
+        if tape:
+            last_deriv = derivs.get(tape[-1].var_name)
+            if last_deriv is not None:
+                flush_if_pending(last_deriv)
 
         return grad_lines, derivs
