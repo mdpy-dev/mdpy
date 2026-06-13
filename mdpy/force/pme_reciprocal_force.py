@@ -11,18 +11,7 @@ from mdpy.force.force_term import ForceTerm
 COULOMB_CONST = 0.13893556595455
 SQRT_PI = 1.772453850905516
 
-_REMAP_INDICES_KERNEL = r"""
-extern "C" __global__
-void remap_indices_kernel(
-    const int* __restrict__ d_remap,
-    int* __restrict__ d_indices,
-    int num_indices
-) {
-    int i = blockIdx.x * blockDim.x + threadIdx.x;
-    if (i >= num_indices) return;
-    d_indices[i] = d_remap[d_indices[i]];
-}
-"""
+from mdpy.force._kernels import _REMAP_INDICES_KERNEL
 
 
 def _calc_ewald_coefficient(cutoff: float, rtol: float = 1e-5) -> float:
