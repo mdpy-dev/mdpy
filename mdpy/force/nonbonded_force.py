@@ -72,6 +72,7 @@ void pack_sorted_posq_kernel(
     const float* __restrict__ pos_x,
     const float* __restrict__ pos_y,
     const float* __restrict__ pos_z,
+    const float* __restrict__ charge,
     const int* __restrict__ block_atoms,
     int num_particles,
     int total_slots,
@@ -83,7 +84,7 @@ void pack_sorted_posq_kernel(
         posq[idx * 4 + 0] = pos_x[idx];
         posq[idx * 4 + 1] = pos_y[idx];
         posq[idx * 4 + 2] = pos_z[idx];
-        posq[idx * 4 + 3] = 0.0f;
+        posq[idx * 4 + 3] = charge[idx];
     }
     if (idx < total_slots) {
         int atom_id = block_atoms[idx];
@@ -91,7 +92,7 @@ void pack_sorted_posq_kernel(
             sorted_posq[idx * 4 + 0] = pos_x[atom_id];
             sorted_posq[idx * 4 + 1] = pos_y[atom_id];
             sorted_posq[idx * 4 + 2] = pos_z[atom_id];
-            sorted_posq[idx * 4 + 3] = 0.0f;
+            sorted_posq[idx * 4 + 3] = charge[atom_id];
         } else {
             sorted_posq[idx * 4 + 0] = 0.0f;
             sorted_posq[idx * 4 + 1] = 0.0f;
@@ -106,13 +107,14 @@ void pack_sorted_posq_kernel(
 def _assemble_main_kernel(expr_info, energy_cuda, dEdr_cuda, total_energy_expr, compute_energy=True):
     i_props, j_props = _split_per_particle(expr_info.per_particle)
     bases = _unique_prop_bases(expr_info.per_particle)
+    non_charge_bases = [b for b in bases if b != 'charge']
 
     sorted_decls = ""
-    for base in bases:
+    for base in non_charge_bases:
         sorted_decls += f",\n    const float* __restrict__ sorted_{base}"
 
     unsorted_decls = ""
-    for base in bases:
+    for base in non_charge_bases:
         unsorted_decls += f",\n    const float* __restrict__ d_{base}"
 
     pair_decls = ""
@@ -125,7 +127,10 @@ def _assemble_main_kernel(expr_info, energy_cuda, dEdr_cuda, total_energy_expr, 
 
     load_i = ""
     for arg_name, base_name in i_props.items():
-        load_i += f"\n        float {arg_name} = sorted_{base_name}[block_x * 32 + tgx];"
+        if base_name == 'charge':
+            load_i += f"\n        float {arg_name} = posq_i.w;"
+        else:
+            load_i += f"\n        float {arg_name} = sorted_{base_name}[block_x * 32 + tgx];"
 
     load_j_init = ""
     for arg_name in j_props:
@@ -133,7 +138,10 @@ def _assemble_main_kernel(expr_info, energy_cuda, dEdr_cuda, total_energy_expr, 
 
     load_j_from_array = ""
     for arg_name, base_name in j_props.items():
-        load_j_from_array += f"\n            {arg_name} = d_{base_name}[gj];"
+        if base_name == 'charge':
+            load_j_from_array += f"\n            {arg_name} = _pj.w;"
+        else:
+            load_j_from_array += f"\n            {arg_name} = d_{base_name}[gj];"
 
     shuffle_j = ""
     for arg_name in j_props:
@@ -270,13 +278,14 @@ void main_block_pair_kernel(
 def _assemble_exclusion_kernel(expr_info, energy_cuda, dEdr_cuda, total_energy_expr, compute_energy=True):
     i_props, j_props = _split_per_particle(expr_info.per_particle)
     bases = _unique_prop_bases(expr_info.per_particle)
+    non_charge_bases = [b for b in bases if b != 'charge']
 
     sorted_decls = ""
-    for base in bases:
+    for base in non_charge_bases:
         sorted_decls += f",\n    const float* __restrict__ sorted_{base}"
 
     unsorted_decls = ""
-    for base in bases:
+    for base in non_charge_bases:
         unsorted_decls += f",\n    const float* __restrict__ d_{base}"
 
     pair_decls = ""
@@ -289,7 +298,10 @@ def _assemble_exclusion_kernel(expr_info, energy_cuda, dEdr_cuda, total_energy_e
 
     load_i = ""
     for arg_name, base_name in i_props.items():
-        load_i += f"\n        float {arg_name} = sorted_{base_name}[block_x * 32 + tgx];"
+        if base_name == 'charge':
+            load_i += f"\n        float {arg_name} = posq_i.w;"
+        else:
+            load_i += f"\n        float {arg_name} = sorted_{base_name}[block_x * 32 + tgx];"
 
     load_j_init = ""
     for arg_name in j_props:
@@ -297,7 +309,10 @@ def _assemble_exclusion_kernel(expr_info, energy_cuda, dEdr_cuda, total_energy_e
 
     load_j_from_array = ""
     for arg_name, base_name in j_props.items():
-        load_j_from_array += f"\n            {arg_name} = d_{base_name}[gj];"
+        if base_name == 'charge':
+            load_j_from_array += f"\n            {arg_name} = _pj.w;"
+        else:
+            load_j_from_array += f"\n            {arg_name} = d_{base_name}[gj];"
 
     shuffle_j = ""
     for arg_name in j_props:
@@ -492,7 +507,7 @@ class NonbondedForce(ForceTerm):
 
         if self._pair_param_data:
             first_matrix = next(iter(self._pair_param_data.values()))
-            self._n_types = first_matrix.shape[0]
+            self._n_types = int(np.sqrt(first_matrix.shape[0]))
         else:
             self._n_types = int(cp.max(gpu_context.d_types).get()) + 1
 
@@ -552,11 +567,14 @@ class NonbondedForce(ForceTerm):
     def _gather_per_particle(self, block_list):
         if block_list.num_blocks == 0:
             return
+        non_charge_bases = [b for b in self._prop_bases if b != 'charge']
+        if not non_charge_bases:
+            return
         self._ensure_gather_kernels()
         total_slots = block_list.num_blocks * 32
         tpb = 256
         grid = ((total_slots + tpb - 1) // tpb,)
-        for base_name in self._prop_bases:
+        for base_name in non_charge_bases:
             d_arr = self._d_per_particle[base_name]
             sorted_arr = cp.empty(total_slots, dtype=np.float32)
             self._gather_kernels["gather_sorted"](
@@ -575,19 +593,18 @@ class NonbondedForce(ForceTerm):
         borrowed = {k for k in self._prop_bases if k == 'charge'}
         arrays_float = {k: v for k, v in self._d_per_particle.items()
                         if k not in borrowed}
-        arrays_int = {}
-        if self._expr_info.params:
-            arrays_int["_types"] = gpu_context.d_types
-
         if arrays_float:
-            gpu_context.permute_to_sorted(
-                permutation, arrays_float,
-                arrays_int=arrays_int if arrays_int else None,
-            )
+            gpu_context.permute_to_sorted(permutation, arrays_float)
             for base_name, arr in arrays_float.items():
                 self._d_per_particle[base_name] = arr
-        if arrays_int:
-            self._d_types = arrays_int.pop("_types")
+
+        if self._expr_info.params:
+            arrays_int = {"_types": gpu_context.d_types}
+            gpu_context.permute_to_sorted(
+                block_list.d_sorted_to_pdb, {},
+                arrays_int=arrays_int,
+            )
+            self._d_types = arrays_int["_types"]
         else:
             self._d_types = gpu_context.d_types
 
@@ -598,12 +615,14 @@ class NonbondedForce(ForceTerm):
         tpb = 256
         grid = ((total_slots + tpb - 1) // tpb,)
         self._d_sorted_posq = cp.zeros(total_slots * 4, dtype=np.float32)
+        d_charges = gpu_context.d_charges
         self._pack_posq_kernel(
             grid, (tpb,),
             (
                 gpu_context.d_positions_x,
                 gpu_context.d_positions_y,
                 gpu_context.d_positions_z,
+                d_charges,
                 block_list.d_block_atoms,
                 np.int32(N),
                 np.int32(total_slots),
@@ -619,12 +638,14 @@ class NonbondedForce(ForceTerm):
         grid = ((total_slots + tpb - 1) // tpb,)
         if self._d_sorted_posq.size != total_slots * 4:
             self._d_sorted_posq = cp.zeros(total_slots * 4, dtype=np.float32)
+        d_charges = gpu_context.d_charges
         self._pack_posq_kernel(
             grid, (tpb,),
             (
                 gpu_context.d_positions_x,
                 gpu_context.d_positions_y,
                 gpu_context.d_positions_z,
+                d_charges,
                 block_list.d_block_atoms,
                 np.int32(N),
                 np.int32(total_slots),
@@ -655,8 +676,12 @@ class NonbondedForce(ForceTerm):
             np.int32(gpu_context.number_particles),
         ])
         for base in self._prop_bases:
+            if base == 'charge':
+                continue
             args.append(self._d_sorted_per_particle[base])
         for base in self._prop_bases:
+            if base == 'charge':
+                continue
             args.append(self._d_per_particle[base])
         for name in self._expr_info.params:
             args.append(self._d_pair_params[name])
@@ -689,8 +714,12 @@ class NonbondedForce(ForceTerm):
             np.int32(gpu_context.number_particles),
         ])
         for base in self._prop_bases:
+            if base == 'charge':
+                continue
             args.append(self._d_sorted_per_particle[base])
         for base in self._prop_bases:
+            if base == 'charge':
+                continue
             args.append(self._d_per_particle[base])
         for name in self._expr_info.params:
             args.append(self._d_pair_params[name])

@@ -64,14 +64,16 @@ class TestKernelAssembly:
         assert 'scaling_masks' not in src
         assert 'is_14' not in src
 
-    def test_combined_kernel_has_charge_arrays(self):
+    def test_combined_kernel_charge_from_posq(self):
         energy_cuda, total_expr = _prepare_energy_expression(combined_lj_coulomb.energy_cuda)
         src = _assemble_main_kernel(
             combined_lj_coulomb.expr_info, energy_cuda,
             combined_lj_coulomb.dEdr_cuda, total_expr
         )
-        assert 'sorted_charge' in src
-        assert 'd_charge' in src
+        assert 'sorted_charge' not in src
+        assert 'd_charge' not in src
+        assert 'posq_i.w' in src
+        assert '_pj.w' in src
 
     def test_kernel_has_pair_param_matrices(self):
         energy_cuda, total_expr = _prepare_energy_expression(lj_ad.energy_cuda)

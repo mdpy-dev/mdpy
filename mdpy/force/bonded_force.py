@@ -256,7 +256,11 @@ class BondedForce(ForceTerm):
         )
 
     def remap_indices_gpu(self, d_remap):
-        if self._count == 0 or self._d_indices is None:
+        if self._count == 0:
+            return
+        if self._dirty:
+            self.sync()
+        if self._d_indices is None:
             return
         kernel = self._get_remap_kernel()
         indices = self._d_indices.ravel()

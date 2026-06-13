@@ -4,7 +4,7 @@ import textwrap
 
 from mdpy.force.markers import param as _param_marker, scalar as _scalar_marker
 from mdpy.force.expr_info import ExprInfo, _strip_trailing_digits
-from mdpy.force.ad_engine import TapeEntry, ScalarADEngine, ForwardADEngine
+from mdpy.force.ad_engine import TapeEntry, ForwardADEngine
 
 _MATH_FUNCTIONS = {
     'sqrt': 'sqrtf', 'sin': 'sinf', 'cos': 'cosf',
