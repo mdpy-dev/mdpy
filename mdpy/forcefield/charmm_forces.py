@@ -106,6 +106,9 @@ def _create_improper_force(topology, parameter_table):
 def _create_nb14_force(topology, parameter_table):
     force = BondedForce(nb14_lj_coulomb)
     force.name = 'nb14'
+    charges = parameter_table.particle_parameters.get('charge')
+    if charges is not None:
+        force.set_parameter('charge', charges)
     if topology.num_dihedrals > 0:
         lj_pair_14 = parameter_table.type_pair_parameters['lj_pair_14']
         n_types = int(np.sqrt(len(lj_pair_14) // 2))

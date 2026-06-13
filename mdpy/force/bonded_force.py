@@ -299,6 +299,8 @@ class BondedForce(ForceTerm):
             return
         if self._dirty:
             self.sync()
+        if self._kernel_source is None:
+            self._assemble_kernel()
         self._ensure_compiled()
 
         block_size = 128

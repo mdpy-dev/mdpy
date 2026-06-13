@@ -544,6 +544,11 @@ class NonbondedForce(ForceTerm):
             ),
         }
 
+    def _resolve_per_particle(self, gpu_context):
+        for base_name in self._prop_bases:
+            if base_name == 'charge':
+                self._d_per_particle[base_name] = gpu_context.d_charges
+
     def _gather_per_particle(self, block_list):
         if block_list.num_blocks == 0:
             return
@@ -562,20 +567,25 @@ class NonbondedForce(ForceTerm):
             self._d_sorted_per_particle[base_name] = sorted_arr
 
     def bind_sorted(self, topology, block_list, gpu_context):
+        if not self._compiled:
+            self._lazy_compile(gpu_context)
+        self._resolve_per_particle(gpu_context)
         permutation = block_list.d_raw_order
 
-        arrays_float = dict(self._d_per_particle)
+        borrowed = {k for k in self._prop_bases if k == 'charge'}
+        arrays_float = {k: v for k, v in self._d_per_particle.items()
+                        if k not in borrowed}
         arrays_int = {}
         if self._expr_info.params:
             arrays_int["_types"] = gpu_context.d_types
 
-        gpu_context.permute_to_sorted(
-            permutation, arrays_float,
-            arrays_int=arrays_int if arrays_int else None,
-        )
-
-        for base_name, arr in arrays_float.items():
-            self._d_per_particle[base_name] = arr
+        if arrays_float:
+            gpu_context.permute_to_sorted(
+                permutation, arrays_float,
+                arrays_int=arrays_int if arrays_int else None,
+            )
+            for base_name, arr in arrays_float.items():
+                self._d_per_particle[base_name] = arr
         if arrays_int:
             self._d_types = arrays_int.pop("_types")
         else:
@@ -694,9 +704,7 @@ class NonbondedForce(ForceTerm):
         if not self._compiled:
             self._lazy_compile(gpu_context)
 
-        for base_name in self._prop_bases:
-            if base_name == 'charge' and base_name not in self._d_per_particle:
-                self._d_per_particle[base_name] = gpu_context.d_charges
+        self._resolve_per_particle(gpu_context)
 
         if block_list is None or (block_list.num_main_block_pairs == 0 and block_list.num_exclusion_block_pairs == 0):
             return
