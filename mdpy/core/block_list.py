@@ -771,7 +771,6 @@ class BlockList:
         self.d_excl_block_pairs = cp.empty(0, dtype=env.NUMPY_INT)
         self.d_excl_interacting_atoms = cp.empty(0, dtype=env.NUMPY_INT)
         self.d_excl_exclusion_masks = cp.empty(0, dtype=np.uint32)
-        self.d_excl_scaling_masks = cp.empty(0, dtype=np.uint32)
 
         self.d_block_pair_shift_x = cp.empty(0, dtype=env.NUMPY_FLOAT)
         self.d_block_pair_shift_y = cp.empty(0, dtype=env.NUMPY_FLOAT)
