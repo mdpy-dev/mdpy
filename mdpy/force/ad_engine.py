@@ -144,6 +144,40 @@ _FWD_RULES = {
 }
 
 
+def _decompose_exponent(target_exp, available_powers):
+    """Decompose base^target_exp into a product of known tape variables.
+
+    Given a set of available powers {exponent: var_name}, find a subset
+    of exponents that sum to target_exp. Returns a list of variable names
+    whose product equals base^target_exp, or None if impossible.
+
+    Uses greedy decomposition: sort exponents descending, greedily subtract.
+
+    Args:
+        target_exp: The desired exponent (e.g., 5 for base^5).
+        available_powers: dict mapping exponent -> variable name.
+            e.g., {1: '_t1', 2: '_t2', 3: '_t3', 6: '_t4'}
+
+    Returns:
+        List of variable names (e.g., ['_t3', '_t2']) or None.
+    """
+    if target_exp == 0:
+        return []
+    if target_exp < 0:
+        return None
+
+    result = []
+    remaining = target_exp
+    for exp in sorted(available_powers.keys(), reverse=True):
+        while remaining >= exp and exp > 0:
+            result.append(available_powers[exp])
+            remaining -= exp
+
+    if remaining == 0:
+        return result
+    return None
+
+
 class ForwardADEngine:
     """Forward-mode AD for scalar-to-scalar functions.
 

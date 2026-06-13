@@ -59,3 +59,42 @@ class TestForwardADEngine:
         er_line = [l for l in lines if '_d__er' in l][0]
         assert 'expf' in er_line
         assert '1.1283791670955126f' in er_line
+
+
+class TestDecomposeExponent:
+    def test_exact_match(self):
+        """Target exponent exists directly in available powers."""
+        from mdpy.force.ad_engine import _decompose_exponent
+        available = {1: '_t1', 2: '_t2', 3: '_t3', 6: '_t4'}
+        result = _decompose_exponent(3, available)
+        assert result == ['_t3']
+
+    def test_two_way_decomposition(self):
+        """5 = 3 + 2, needs two variables."""
+        from mdpy.force.ad_engine import _decompose_exponent
+        available = {1: '_t1', 2: '_t2', 3: '_t3', 6: '_t4'}
+        result = _decompose_exponent(5, available)
+        assert set(result) == {'_t3', '_t2'}
+        assert len(result) == 2
+
+    def test_three_way_decomposition(self):
+        """11 = 6 + 3 + 2, needs three variables."""
+        from mdpy.force.ad_engine import _decompose_exponent
+        available = {1: '_t1', 2: '_t2', 3: '_t3', 6: '_t4', 12: '_t6'}
+        result = _decompose_exponent(11, available)
+        assert set(result) == {'_t4', '_t3', '_t2'}
+        assert len(result) == 3
+
+    def test_impossible_decomposition_returns_none(self):
+        """If decomposition is impossible, return None."""
+        from mdpy.force.ad_engine import _decompose_exponent
+        available = {2: '_t2', 4: '_t4'}
+        result = _decompose_exponent(3, available)
+        assert result is None
+
+    def test_target_zero_returns_empty(self):
+        """x^0 = 1, no variables needed."""
+        from mdpy.force.ad_engine import _decompose_exponent
+        available = {1: '_t1', 2: '_t2'}
+        result = _decompose_exponent(0, available)
+        assert result == []
