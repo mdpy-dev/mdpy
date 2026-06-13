@@ -210,6 +210,7 @@ class System:
             ("d_prev_positions_y", gpu.d_prev_positions_y),
             ("d_prev_positions_z", gpu.d_prev_positions_z),
             ("d_masses", gpu.d_masses),
+            ("d_charges", gpu.d_charges),
         ]):
             setattr(gpu, name, new_arr)
 
