@@ -9,6 +9,7 @@ from mdpy.io.charmm_toppar_parser import create_parameter_table
 from mdpy.core.parameter_table import ParameterTable
 from mdpy.system import System
 from mdpy.force.bonded_force import BondedForce
+from mdpy.force.factories.charmm import create_bonded_group
 from mdpy.force.nonbonded_force import NonbondedForce
 from mdpy.force.expressions.lennard_jones import lennard_jones
 from mdpy.force.expressions.coulomb import coulomb
@@ -114,7 +115,7 @@ class TestSystem:
         pbc_matrix = np.eye(3, dtype=env.NUMPY_FLOAT) * 100.0
 
         system = System(topology, pbc_matrix)
-        system.add_force_term(BondedForce.charmm(topology, parameter_table))
+        system.add_force_term(create_bonded_group(topology, parameter_table))
         nb = NonbondedForce(lennard_jones + coulomb, cutoff=system.cutoff)
         lj_pair = parameter_table.type_pair_parameters['lj_pair']
         nb.set_pair_parameter('sigma', lj_pair[0::2].astype(env.NUMPY_FLOAT))
@@ -140,7 +141,7 @@ class TestSystem:
         pbc_matrix = np.eye(3, dtype=env.NUMPY_FLOAT) * 100.0
 
         system = System(topology, pbc_matrix)
-        system.add_force_term(BondedForce.charmm(topology, parameter_table))
+        system.add_force_term(create_bonded_group(topology, parameter_table))
         nb = NonbondedForce(lennard_jones + coulomb, cutoff=system.cutoff)
         lj_pair = parameter_table.type_pair_parameters['lj_pair']
         nb.set_pair_parameter('sigma', lj_pair[0::2].astype(env.NUMPY_FLOAT))
@@ -170,7 +171,7 @@ class TestSystem:
         pbc_matrix = np.eye(3, dtype=env.NUMPY_FLOAT) * 100.0
 
         system = System(topology, pbc_matrix)
-        system.add_force_term(BondedForce.charmm(topology, parameter_table))
+        system.add_force_term(create_bonded_group(topology, parameter_table))
         nb = NonbondedForce(lennard_jones + coulomb, cutoff=system.cutoff)
         lj_pair = parameter_table.type_pair_parameters['lj_pair']
         nb.set_pair_parameter('sigma', lj_pair[0::2].astype(env.NUMPY_FLOAT))
@@ -200,7 +201,7 @@ class TestSystem:
         pbc_matrix = np.eye(3, dtype=env.NUMPY_FLOAT) * 100.0
 
         system = System(topology, pbc_matrix)
-        system.add_force_term(BondedForce.charmm(topology, parameter_table))
+        system.add_force_term(create_bonded_group(topology, parameter_table))
         nb = NonbondedForce(lennard_jones + coulomb, cutoff=system.cutoff)
         lj_pair = parameter_table.type_pair_parameters['lj_pair']
         nb.set_pair_parameter('sigma', lj_pair[0::2].astype(env.NUMPY_FLOAT))

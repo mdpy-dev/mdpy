@@ -3,6 +3,7 @@ import pytest
 from mdpy.core.topology import Builder
 from mdpy.core.parameter_table import ParameterTable
 from mdpy.force.bonded_force import BondedForce
+from mdpy.force.factories.charmm import create_bonded_group
 from mdpy.system import System
 from mdpy.integrator.verlet import VerletIntegrator
 from mdpy.constraint.constraint_scheme import create_constraints
@@ -60,7 +61,7 @@ def test_constraint_loop():
 
     system = System(topology, pbc_matrix, cutoff=12.0)
 
-    bonded = BondedForce.charmm(topology, parameter_table)
+    bonded = create_bonded_group(topology, parameter_table)
     system.add_force_term(bonded)
 
     constraints = create_constraints(topology, parameter_table, scheme='h-bonds')
@@ -91,7 +92,7 @@ def test_constraint_loop_multiple_rebuilds():
 
     system = System(topology, pbc_matrix, cutoff=12.0)
 
-    bonded = BondedForce.charmm(topology, parameter_table)
+    bonded = create_bonded_group(topology, parameter_table)
     system.add_force_term(bonded)
 
     constraints = create_constraints(topology, parameter_table, scheme='h-bonds')
@@ -188,7 +189,7 @@ def test_settle_lincs_coexistence_bond_lengths():
     topology, pbc_matrix, parameter_table, positions = _build_mixed_system()
 
     system = System(topology, pbc_matrix, cutoff=12.0)
-    bonded = BondedForce.charmm(topology, parameter_table)
+    bonded = create_bonded_group(topology, parameter_table)
     system.add_force_term(bonded)
 
     constraints = create_constraints(topology, parameter_table, scheme='h-bonds')
@@ -234,7 +235,7 @@ def test_settle_md_loop_rebuilds_bond_lengths():
     topology, pbc_matrix, parameter_table, positions = _build_test_system()
 
     system = System(topology, pbc_matrix, cutoff=4.0)
-    bonded = BondedForce.charmm(topology, parameter_table)
+    bonded = create_bonded_group(topology, parameter_table)
     system.add_force_term(bonded)
 
     constraints = create_constraints(topology, parameter_table, scheme='h-bonds')
@@ -300,7 +301,7 @@ def test_lincs_md_loop_rebuilds_bond_lengths():
 
     pbc_matrix = np.diag([15.0, 15.0, 15.0]).astype(np.float32)
     system = System(topology, pbc_matrix, cutoff=4.0)
-    bonded = BondedForce.charmm(topology, pt)
+    bonded = create_bonded_group(topology, pt)
     system.add_force_term(bonded)
 
     constraint_pairs = [(0, 1), (0, 2), (0, 3), (4, 5), (4, 6), (4, 7), (0, 4)]

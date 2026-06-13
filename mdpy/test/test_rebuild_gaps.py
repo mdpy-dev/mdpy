@@ -7,6 +7,7 @@ from mdpy.io.pdb_parser import PDBParser
 from mdpy.io.charmm_toppar_parser import CharmmTopparParser
 from mdpy.io.charmm_toppar_parser import create_parameter_table
 from mdpy.force.bonded_force import BondedForce
+from mdpy.force.factories.charmm import create_bonded_group
 from mdpy.force.nonbonded_force import NonbondedForce
 from mdpy.force.expressions.lennard_jones import lennard_jones
 from mdpy.force.expressions.coulomb import coulomb
@@ -38,7 +39,7 @@ def _make_system(box=30.0, cutoff=12.0):
     pt = create_parameter_table(topology, toppar)
     pbc = np.eye(3, dtype=np.float64) * box
     system = System(topology, pbc, cutoff=cutoff)
-    system.add_force_term(BondedForce.charmm(topology, pt))
+    system.add_force_term(create_bonded_group(topology, pt))
     nb = NonbondedForce(lennard_jones + coulomb, cutoff=cutoff)
     lj_pair = pt.type_pair_parameters['lj_pair']
     nb.set_pair_parameter('sigma', lj_pair[0::2].astype(env.NUMPY_FLOAT))

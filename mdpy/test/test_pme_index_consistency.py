@@ -6,6 +6,7 @@ from mdpy.io.psf_parser import PSFParser
 from mdpy.io.pdb_parser import PDBParser
 from mdpy.io.charmm_toppar_parser import CharmmTopparParser, create_parameter_table
 from mdpy.force.bonded_force import BondedForce
+from mdpy.force.factories.charmm import create_bonded_group
 from mdpy.force.nonbonded_force import NonbondedForce
 from mdpy.force.expressions.lennard_jones import lennard_jones
 from mdpy.force.expressions.screened_coulomb import screened_coulomb
@@ -30,7 +31,7 @@ def _build_system():
     pbc_matrix = np.eye(3, dtype=np.float32) * BOX
 
     system = System(topology, pbc_matrix, cutoff=CUTOFF)
-    system.add_force_term(BondedForce.charmm(topology, parameter_table))
+    system.add_force_term(create_bonded_group(topology, parameter_table))
 
     nb = NonbondedForce(lennard_jones + screened_coulomb, cutoff=CUTOFF)
     lj_pair = parameter_table.type_pair_parameters['lj_pair']

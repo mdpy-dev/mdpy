@@ -25,6 +25,7 @@ CUTOFF = 12.0
 
 def _setup_system():
     from mdpy.force.bonded_force import BondedForce
+    from mdpy.force.factories.charmm import create_bonded_group
     from mdpy.force.expressions.coulomb import coulomb
     from mdpy.force.expressions.lennard_jones import lennard_jones
     from mdpy.force.nonbonded_force import NonbondedForce
@@ -43,7 +44,7 @@ def _setup_system():
     pbc_inv = np.linalg.inv(pbc_matrix)
 
     system = System(topology, pbc_matrix, cutoff=CUTOFF)
-    system.add_force_term(BondedForce.charmm(topology, parameter_table))
+    system.add_force_term(create_bonded_group(topology, parameter_table))
     nb = NonbondedForce(lennard_jones + coulomb, cutoff=CUTOFF)
     lj_pair = parameter_table.type_pair_parameters['lj_pair']
     nb.set_pair_parameter('sigma', lj_pair[0::2].astype(env.NUMPY_FLOAT))

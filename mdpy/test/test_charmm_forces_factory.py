@@ -5,7 +5,7 @@ import pytest
 from mdpy import env
 from mdpy.io.psf_parser import PSFParser
 from mdpy.io.charmm_toppar_parser import CharmmTopparParser, create_parameter_table
-from mdpy.forcefield.charmm_forces import (
+from mdpy.force.factories.charmm import (
     create_charmm_forces,
 )
 from mdpy.force.bonded_force import BondedForce

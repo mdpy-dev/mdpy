@@ -5,8 +5,11 @@ import numpy as np
 from mdpy import env
 from mdpy.force.bonded_force import BondedForce
 from mdpy.force.nonbonded_force import NonbondedForce
-from mdpy.force.bonded_transpiler import bonded_expression
-from mdpy.force.primitives import distance, angle, dihedral
+from mdpy.force.force_group import ForceGroup
+from mdpy.force.expressions.harmonic_bond import harmonic_bond
+from mdpy.force.expressions.charmm_angle import charmm_angle
+from mdpy.force.expressions.periodic_dihedral import periodic_dihedral
+from mdpy.force.expressions.harmonic_improper import harmonic_improper
 from mdpy.force.expressions.nb14 import nb14_lj_coulomb
 from mdpy.force.expressions.lennard_jones import lennard_jones
 from mdpy.force.expressions.coulomb import coulomb
@@ -15,39 +18,8 @@ from mdpy.force.expressions.coulomb import coulomb
 CHARMM_14_CHARGE_SCALE = 1.0
 
 
-@bonded_expression(body=2)
-def charmm_bond(p1, p2, k=0.0, r0=0.0):
-    r = distance(p1, p2)
-    dr = r - r0
-    return k * dr * dr
-
-
-@bonded_expression(body=3)
-def charmm_angle(p1, p2, p3, k=0.0, theta0=0.0, k_ub=0.0, r_ub=0.0):
-    theta = angle(p1, p2, p3)
-    dt = theta - theta0
-    e_angle = k * dt * dt
-    r13 = distance(p1, p3)
-    dr13 = r13 - r_ub
-    e_ub = k_ub * dr13 * dr13
-    return e_angle + e_ub
-
-
-@bonded_expression(body=4)
-def charmm_dihedral(p1, p2, p3, p4, k=0.0, n=0.0, delta=0.0):
-    phi = dihedral(p1, p2, p3, p4)
-    return k * (1.0 + cos(n * phi - delta))
-
-
-@bonded_expression(body=4)
-def charmm_improper(p1, p2, p3, p4, k=0.0, psi0=0.0):
-    psi = dihedral(p1, p2, p3, p4)
-    dp = psi - psi0
-    return k * dp * dp
-
-
 def _create_bond_force(topology, parameter_table):
-    force = BondedForce(charmm_bond)
+    force = BondedForce(harmonic_bond)
     force.name = 'bond'
     if topology.num_bonds > 0:
         bond_params = parameter_table.get_term_parameter('bond')
@@ -75,7 +47,7 @@ def _create_angle_force(topology, parameter_table):
 
 
 def _create_dihedral_force(topology, parameter_table):
-    force = BondedForce(charmm_dihedral)
+    force = BondedForce(periodic_dihedral)
     force.name = 'dihedral'
     if topology.num_dihedrals > 0:
         dihedral_params = parameter_table.get_term_parameter('dihedral')
@@ -90,7 +62,7 @@ def _create_dihedral_force(topology, parameter_table):
 
 
 def _create_improper_force(topology, parameter_table):
-    force = BondedForce(charmm_improper)
+    force = BondedForce(harmonic_improper)
     force.name = 'improper'
     if topology.num_impropers > 0:
         improper_params = parameter_table.get_term_parameter('improper')
@@ -155,8 +127,6 @@ def create_bonded_group(topology, parameter_table):
 
     Returns: ForceGroup with bond + angle + dihedral + improper forces.
     """
-    from mdpy.force.force_group import ForceGroup
-
     sub_forces = [
         _create_bond_force(topology, parameter_table),
         _create_angle_force(topology, parameter_table),

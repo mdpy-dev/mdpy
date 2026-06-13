@@ -16,6 +16,7 @@ from mdpy.force.pme_reciprocal_force import (
     get_self_energy_kernel,
     precompute_bk_factors,
 )
+from mdpy.force.factories.charmm import create_bonded_group
 
 
 class TestBSplineWeights:
@@ -763,7 +764,7 @@ class TestPMEIntegration6PO6:
 
         system = System(self.topology, pbc_matrix, cutoff=self.cutoff)
 
-        system.add_force_term(BondedForce.charmm(self.topology, self.parameter_table))
+        system.add_force_term(create_bonded_group(self.topology, self.parameter_table))
 
         nb = NonbondedForce(lennard_jones + screened_coulomb, cutoff=self.cutoff)
         lj_pair = self.parameter_table.type_pair_parameters['lj_pair']

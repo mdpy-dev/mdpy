@@ -32,6 +32,7 @@ def _setup_system(include_bonded, include_nonbonded):
     from mdpy.io.charmm_toppar_parser import CharmmTopparParser
     from mdpy.io.charmm_toppar_parser import create_parameter_table
     from mdpy.force.bonded_force import BondedForce
+    from mdpy.force.factories.charmm import create_bonded_group
     from mdpy.force.nonbonded_force import NonbondedForce
     from mdpy.force.expressions.lennard_jones import lennard_jones
     from mdpy.force.expressions.coulomb import coulomb
@@ -49,7 +50,7 @@ def _setup_system(include_bonded, include_nonbonded):
     system = System(topology, pbc_matrix, cutoff=CUTOFF)
 
     if include_bonded:
-        system.add_force_term(BondedForce.charmm(topology, parameter_table))
+        system.add_force_term(create_bonded_group(topology, parameter_table))
 
     if include_nonbonded:
         nb = NonbondedForce(lennard_jones + coulomb, cutoff=CUTOFF)

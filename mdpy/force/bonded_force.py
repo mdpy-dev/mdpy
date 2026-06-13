@@ -253,11 +253,6 @@ class BondedForce(ForceTerm):
         if self._num_sm is None:
             self._num_sm = cp.cuda.runtime.getDeviceProperties(0)['multiProcessorCount']
 
-    @classmethod
-    def charmm(cls, topology, parameter_table):
-        from mdpy.forcefield.charmm_forces import create_bonded_group
-        return create_bonded_group(topology, parameter_table)
-
     def compute(self, gpu_context, block_list=None, compute_energy=True):
         if self._count == 0:
             return

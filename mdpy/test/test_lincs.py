@@ -79,6 +79,7 @@ def _make_rebuild_test_system():
     from mdpy.core.topology import Builder
     from mdpy.core.parameter_table import ParameterTable
     from mdpy.force.bonded_force import BondedForce
+    from mdpy.force.factories.charmm import create_bonded_group
     from mdpy.system import System
     from mdpy.integrator.verlet import VerletIntegrator
     from mdpy.constraint.constraint_scheme import create_constraints
@@ -122,12 +123,13 @@ def test_lincs_multiple_rebuilds():
     topology, pbc_matrix, parameter_table, positions = _make_rebuild_test_system()
 
     from mdpy.force.bonded_force import BondedForce
+    from mdpy.force.factories.charmm import create_bonded_group
     from mdpy.system import System
     from mdpy.integrator.verlet import VerletIntegrator
     from mdpy.constraint.lincs import LincsConstraint
 
     system = System(topology, pbc_matrix, cutoff=12.0)
-    bonded = BondedForce.charmm(topology, parameter_table)
+    bonded = create_bonded_group(topology, parameter_table)
     system.add_force_term(bonded)
 
     constraint_pairs = [
@@ -309,12 +311,13 @@ def test_lincs_md_loop_bond_length_statistics():
     topology, pbc_matrix, parameter_table, positions = _make_rebuild_test_system()
 
     from mdpy.force.bonded_force import BondedForce
+    from mdpy.force.factories.charmm import create_bonded_group
     from mdpy.system import System
     from mdpy.integrator.verlet import VerletIntegrator
     from mdpy.constraint.lincs import LincsConstraint
 
     system = System(topology, pbc_matrix, cutoff=12.0)
-    bonded = BondedForce.charmm(topology, parameter_table)
+    bonded = create_bonded_group(topology, parameter_table)
     system.add_force_term(bonded)
 
     constraint_pairs = [
