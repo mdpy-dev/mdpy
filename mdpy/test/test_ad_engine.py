@@ -187,3 +187,144 @@ class TestPowerChainOptimization:
         assert '2.0f' in t2_line
         assert '_t1' in t2_line
         assert '_d__t1' in t2_line
+
+
+class TestPowerChainNumericalCorrectness:
+    def test_lj_gradient_matches_finite_difference(self):
+        """Verify power-rule LJ gradient equals finite-difference gradient."""
+        import math
+
+        # LJ energy: E = 4*eps*((sigma/r)^12 - (sigma/r)^6)
+        sigma = 3.4
+        epsilon = 0.1
+        r0 = 5.0  # test distance
+        h = 1e-5  # finite difference step
+
+        def lj_energy(r):
+            sr = sigma / r
+            sr6 = sr ** 6
+            sr12 = sr6 * sr6
+            return 4.0 * epsilon * (sr12 - sr6)
+
+        # Finite difference dE/dr
+        dE_dr_numerical = (lj_energy(r0 + h) - lj_energy(r0 - h)) / (2 * h)
+
+        # Build the same tape the transpiler generates
+        tape = [
+            TapeEntry('r', 'distance', [], 'r'),
+            TapeEntry('_t1', 'div', ['sigma', 'r'], '(sigma * inv_dist)'),
+            TapeEntry('_t2', 'mul', ['_t1', '_t1'], '(_t1 * _t1)'),
+            TapeEntry('_t3', 'mul', ['_t1', '_t2'], '(_t1 * _t2)'),
+            TapeEntry('_t4', 'mul', ['_t3', '_t3'], '(_t3 * _t3)'),
+            TapeEntry('_t5', 'mul', ['4.0f', 'epsilon'], '(4.0f * epsilon)'),
+            TapeEntry('_t6', 'mul', ['_t4', '_t4'], '(_t4 * _t4)'),
+            TapeEntry('_t7', 'sub', ['_t6', '_t4'], '(_t6 - _t4)'),
+            TapeEntry('_t8', 'mul', ['_t5', '_t7'], '(_t5 * _t7)'),
+        ]
+        engine = ForwardADEngine()
+        lines, derivs = engine.differentiate(tape)
+
+        # Manually evaluate the gradient CUDA code in Python
+        # by substituting variable values
+        inv_dist = 1.0 / r0
+        env = {
+            'sigma': sigma, 'epsilon': epsilon, 'r': r0,
+            'inv_dist': inv_dist,
+        }
+
+        # First, evaluate the energy forward lines (the tape's cuda_value)
+        # We need to compute _t1 through _t8 values
+        # _t1 = sigma * inv_dist
+        env['_t1'] = sigma * inv_dist
+        env['_t2'] = env['_t1'] * env['_t1']
+        env['_t3'] = env['_t1'] * env['_t2']
+        env['_t4'] = env['_t3'] * env['_t3']
+        env['_t5'] = 4.0 * epsilon
+        env['_t6'] = env['_t4'] * env['_t4']
+        env['_t7'] = env['_t6'] - env['_t4']
+        env['_t8'] = env['_t5'] * env['_t7']
+
+        # Now evaluate each gradient line
+        for line in lines:
+            # Parse: float _d__tN = (expr);
+            expr_str = line.split('=', 1)[1].strip().rstrip(';')
+            var_name = line.split()[1].split('=')[0].strip()
+            # Evaluate in Python (CUDA float literals need 'f' stripped)
+            # Replace patterns like "6.0f" with "6.0"
+            import re
+            py_expr = re.sub(r'(\d+)\.0f', r'\1.0', expr_str)
+            py_expr = py_expr.replace('inv_dist', 'inv_dist')
+            val = eval(py_expr, {'__builtins__': {}}, env)
+            env[var_name] = val
+
+        # The final derivative is derivs['_t8'] (should be '_d__t8' or an expression)
+        dE_dr_analytical = env.get(derivs['_t8'], 0.0)
+        # If derivs['_t8'] is an expression (not a variable name), eval it
+        if derivs['_t8'] not in env:
+            import re
+            py_expr = re.sub(r'(\d+)\.0f', r'\1.0', derivs['_t8'])
+            dE_dr_analytical = eval(py_expr, {'__builtins__': {}}, env)
+
+        relative_error = abs(dE_dr_analytical - dE_dr_numerical) / max(abs(dE_dr_numerical), 1e-30)
+        assert relative_error < 1e-4, (
+            f"Analytical {dE_dr_analytical:.8f} != numerical {dE_dr_numerical:.8f}, "
+            f"rel_err={relative_error:.2e}"
+        )
+
+    def test_lj_gradient_at_multiple_distances(self):
+        """Verify LJ gradient at several distances."""
+        sigma = 3.4
+        epsilon = 0.1
+        h = 1e-5
+
+        def lj_energy(r):
+            sr = sigma / r
+            sr6 = sr ** 6
+            sr12 = sr6 * sr6
+            return 4.0 * epsilon * (sr12 - sr6)
+
+        tape = [
+            TapeEntry('r', 'distance', [], 'r'),
+            TapeEntry('_t1', 'div', ['sigma', 'r'], '(sigma * inv_dist)'),
+            TapeEntry('_t2', 'mul', ['_t1', '_t1'], '(_t1 * _t1)'),
+            TapeEntry('_t3', 'mul', ['_t1', '_t2'], '(_t1 * _t2)'),
+            TapeEntry('_t4', 'mul', ['_t3', '_t3'], '(_t3 * _t3)'),
+            TapeEntry('_t5', 'mul', ['4.0f', 'epsilon'], '(4.0f * epsilon)'),
+            TapeEntry('_t6', 'mul', ['_t4', '_t4'], '(_t4 * _t4)'),
+            TapeEntry('_t7', 'sub', ['_t6', '_t4'], '(_t6 - _t4)'),
+            TapeEntry('_t8', 'mul', ['_t5', '_t7'], '(_t5 * _t7)'),
+        ]
+        engine = ForwardADEngine()
+        lines, derivs = engine.differentiate(tape)
+
+        import re
+        for r0 in [3.5, 4.0, 5.0, 7.0, 10.0]:
+            dE_dr_numerical = (lj_energy(r0 + h) - lj_energy(r0 - h)) / (2 * h)
+
+            inv_dist = 1.0 / r0
+            env = {'sigma': sigma, 'epsilon': epsilon, 'r': r0, 'inv_dist': inv_dist}
+            env['_t1'] = sigma * inv_dist
+            env['_t2'] = env['_t1'] ** 2
+            env['_t3'] = env['_t1'] ** 3
+            env['_t4'] = env['_t3'] ** 2
+            env['_t5'] = 4.0 * epsilon
+            env['_t6'] = env['_t4'] ** 2
+            env['_t7'] = env['_t6'] - env['_t4']
+            env['_t8'] = env['_t5'] * env['_t7']
+
+            for line in lines:
+                expr_str = line.split('=', 1)[1].strip().rstrip(';')
+                var_name = line.split()[1].split('=')[0].strip()
+                py_expr = re.sub(r'(\d+)\.0f', r'\1.0', expr_str)
+                env[var_name] = eval(py_expr, {'__builtins__': {}}, env)
+
+            dE_dr_analytical = env.get(derivs['_t8'], 0.0)
+            if derivs['_t8'] not in env:
+                py_expr = re.sub(r'(\d+)\.0f', r'\1.0', derivs['_t8'])
+                dE_dr_analytical = eval(py_expr, {'__builtins__': {}}, env)
+
+            rel_err = abs(dE_dr_analytical - dE_dr_numerical) / max(abs(dE_dr_numerical), 1e-30)
+            assert rel_err < 1e-4, (
+                f"r={r0}: analytical {dE_dr_analytical:.8f} != numerical {dE_dr_numerical:.8f}, "
+                f"rel_err={rel_err:.2e}"
+            )
