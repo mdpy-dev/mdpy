@@ -6,7 +6,7 @@ from mdpy.force.primitives import param, distance
 # but the module then overwrites energy_cuda, dEdr_cuda, and sets
 # grad_cuda=None with hand-tuned CUDA code. The closed-form gradient
 # -24*eps*(2*sr12-sr6)/r uses fewer live variables than the AD-generated
-# power-chain gradient, reducing register pressure from 52 to ~48.
+# power-chain gradient, reducing register pressure.
 
 
 @nonbonded_expression
@@ -22,9 +22,10 @@ lennard_jones.energy_cuda = '''\
         float sr3 = sr * sr * sr;
         float sr6 = sr3 * sr3;
         float sr12 = sr6 * sr6;
-        float _result_energy = (4.0f * epsilon * (sr12 - sr6));'''
+        float _result_energy = (4.0f * epsilon * (sr12 - sr6));
+        float _lj_force = (-24.0f * epsilon * (sr12 + sr12 - sr6) * inv_dist);'''
 
-lennard_jones.dEdr_cuda = '((-24.0f * epsilon * (sr12 + sr12 - sr6) * inv_dist))'
+lennard_jones.dEdr_cuda = '_lj_force'
 
-lennard_jones._local_vars = {'sr', 'sr3', 'sr6', 'sr12', '_result_energy'}
+lennard_jones._local_vars = {'sr', 'sr3', 'sr6', 'sr12', '_result_energy', '_lj_force'}
 lennard_jones.grad_cuda = None
