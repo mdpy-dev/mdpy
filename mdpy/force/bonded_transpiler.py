@@ -186,11 +186,11 @@ class _BondedASTWalker:
             result = self._fresh_name()
             if op_str == '**':
                 cuda_val = f'powf({left}, {right})'
-                self.tape.append(TapeEntry(result, 'pow', [left, right], cuda_val))
+                self.tape.append(TapeEntry(result, 'pow', [left, right]))
             else:
                 cuda_val = f'({left} {op_str} {right})'
                 op_name = {'+': 'add', '-': 'sub', '*': 'mul', '/': 'div', '%': 'mod'}[op_str]
-                self.tape.append(TapeEntry(result, op_name, [left, right], cuda_val))
+                self.tape.append(TapeEntry(result, op_name, [left, right]))
             self.forward_lines.append(f'float {result} = {cuda_val};')
             return result
 
@@ -198,7 +198,7 @@ class _BondedASTWalker:
             operand = self._expr(node.operand)
             result = self._fresh_name()
             cuda_val = f'(0.0f - {operand})'
-            self.tape.append(TapeEntry(result, 'sub', ['0.0f', operand], cuda_val))
+            self.tape.append(TapeEntry(result, 'sub', ['0.0f', operand]))
             self.forward_lines.append(f'float {result} = {cuda_val};')
             return result
 
@@ -214,7 +214,7 @@ class _BondedASTWalker:
                     if isinstance(arg, ast.Name) and arg.id in self._position_index:
                         arg_indices.append(self._position_index[arg.id])
                 # helper_type is just func_name now — no lookup table needed
-                self.tape.append(TapeEntry(result, func_name, [], result))
+                self.tape.append(TapeEntry(result, func_name, []))
                 self._helper_calls.append((func_name, result, arg_indices))
                 self.forward_lines.append(f'// {func_name} computed by helper')
                 return result
@@ -224,7 +224,7 @@ class _BondedASTWalker:
                 cuda_name = _MATH_FUNCTIONS[func_name]
                 result = self._fresh_name()
                 cuda_val = f'{cuda_name}({arg})'
-                self.tape.append(TapeEntry(result, func_name, [arg], cuda_val))
+                self.tape.append(TapeEntry(result, func_name, [arg]))
                 self.forward_lines.append(f'float {result} = {cuda_val};')
                 return result
 
@@ -240,7 +240,6 @@ class _BondedExpression:
         self.body = body
         self.parameter_names = self._expr_info.params
         self.cuda_fragment = ''
-        self.helper_calls = []
         self._compile()
 
     @property
@@ -317,7 +316,6 @@ class _BondedExpression:
             for ph, idx in zip(atom_params, arg_indices):
                 fmt[ph] = f'a{idx + 1}'
             parts.append(template.format(**fmt))
-            self.helper_calls.append((helper_type, result_name, grad_expr))
 
         self.cuda_fragment = '\n'.join(parts)
 

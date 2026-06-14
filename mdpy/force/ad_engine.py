@@ -1,12 +1,10 @@
 class TapeEntry:
-    __slots__ = ('var_name', 'operation', 'operands', 'cuda_value', 'd_output')
+    __slots__ = ('var_name', 'operation', 'operands')
 
-    def __init__(self, var_name, operation, operands, cuda_value):
+    def __init__(self, var_name, operation, operands):
         self.var_name = var_name
         self.operation = operation
         self.operands = operands
-        self.cuda_value = cuda_value
-        self.d_output = None
 
 
 _HELPER_OPERATIONS = frozenset({'distance', 'angle', 'dihedral'})
@@ -128,6 +126,14 @@ def _fwd_cos(operands, d_operands):
     return f'((-sinf({a})) * {da})'
 
 
+def _fwd_abs(operands, d_operands):
+    a = operands[0]
+    da = d_operands[0]
+    if da == '0.0f':
+        return None
+    return f'((a >= 0.0f ? 1.0f : -1.0f) * {da})'
+
+
 _FWD_RULES = {
     'add': _fwd_add,
     'sub': _fwd_sub,
@@ -141,6 +147,7 @@ _FWD_RULES = {
     'log': _fwd_log,
     'sin': _fwd_sin,
     'cos': _fwd_cos,
+    'abs': _fwd_abs,
 }
 
 

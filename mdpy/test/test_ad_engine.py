@@ -6,9 +6,9 @@ class TestForwardADEngine:
     def test_simple_mul_chain(self):
         """_t1 = sigma * inv_dist (div by r), _t2 = _t1 * _t1, energy = _t2"""
         tape = [
-            TapeEntry('r', 'distance', [], 'r'),
-            TapeEntry('_t1', 'div', ['sigma', 'r'], '(sigma * inv_dist)'),
-            TapeEntry('_t2', 'mul', ['_t1', '_t1'], '(_t1 * _t1)'),
+            TapeEntry('r', 'distance', []),
+            TapeEntry('_t1', 'div', ['sigma', 'r']),
+            TapeEntry('_t2', 'mul', ['_t1', '_t1']),
         ]
         engine = ForwardADEngine()
         lines, derivs = engine.differentiate(tape)
@@ -23,8 +23,8 @@ class TestForwardADEngine:
     def test_constant_has_zero_derivative(self):
         """_t5 = 4.0f * epsilon -> derivative is 0, no line emitted"""
         tape = [
-            TapeEntry('r', 'distance', [], 'r'),
-            TapeEntry('_t5', 'mul', ['4.0f', 'epsilon'], '(4.0f * epsilon)'),
+            TapeEntry('r', 'distance', []),
+            TapeEntry('_t5', 'mul', ['4.0f', 'epsilon']),
         ]
         engine = ForwardADEngine()
         lines, derivs = engine.differentiate(tape)
@@ -34,11 +34,11 @@ class TestForwardADEngine:
     def test_sub_rule(self):
         """_t7 = _t6 - _t4 -> d_t7 = _d_t6 - _d_t4"""
         tape = [
-            TapeEntry('r', 'distance', [], 'r'),
-            TapeEntry('_t3', 'mul', ['sigma', 'r'], '(sigma * r)'),
-            TapeEntry('_t4', 'mul', ['_t3', '_t3'], '(_t3 * _t3)'),
-            TapeEntry('_t6', 'mul', ['_t4', '_t4'], '(_t4 * _t4)'),
-            TapeEntry('_t7', 'sub', ['_t6', '_t4'], '(_t6 - _t4)'),
+            TapeEntry('r', 'distance', []),
+            TapeEntry('_t3', 'mul', ['sigma', 'r']),
+            TapeEntry('_t4', 'mul', ['_t3', '_t3']),
+            TapeEntry('_t6', 'mul', ['_t4', '_t4']),
+            TapeEntry('_t7', 'sub', ['_t6', '_t4']),
         ]
         engine = ForwardADEngine()
         lines, derivs = engine.differentiate(tape)
@@ -50,9 +50,9 @@ class TestForwardADEngine:
     def test_erfc_rule(self):
         """erfc(alpha_r) -> -2/sqrt(pi) * exp(-alpha_r^2) * d_alpha_r"""
         tape = [
-            TapeEntry('r', 'distance', [], 'r'),
-            TapeEntry('_ar', 'mul', ['alpha', 'r'], '(alpha * r)'),
-            TapeEntry('_er', 'erfc', ['_ar'], 'erfcf(_ar)'),
+            TapeEntry('r', 'distance', []),
+            TapeEntry('_ar', 'mul', ['alpha', 'r']),
+            TapeEntry('_er', 'erfc', ['_ar']),
         ]
         engine = ForwardADEngine()
         lines, derivs = engine.differentiate(tape)
@@ -105,15 +105,15 @@ class TestPowerChainOptimization:
         """LJ tape: _t1=sr, _t2=sr^2, _t3=sr^3, _t4=sr^6.
         Power rule should eliminate _d__t2 and _d__t3."""
         tape = [
-            TapeEntry('r', 'distance', [], 'r'),
-            TapeEntry('_t1', 'div', ['sigma', 'r'], '(sigma * inv_dist)'),
-            TapeEntry('_t2', 'mul', ['_t1', '_t1'], '(_t1 * _t1)'),
-            TapeEntry('_t3', 'mul', ['_t1', '_t2'], '(_t1 * _t2)'),
-            TapeEntry('_t4', 'mul', ['_t3', '_t3'], '(_t3 * _t3)'),
-            TapeEntry('_t5', 'mul', ['4.0f', 'epsilon'], '(4.0f * epsilon)'),
-            TapeEntry('_t6', 'mul', ['_t4', '_t4'], '(_t4 * _t4)'),
-            TapeEntry('_t7', 'sub', ['_t6', '_t4'], '(_t6 - _t4)'),
-            TapeEntry('_t8', 'mul', ['_t5', '_t7'], '(_t5 * _t7)'),
+            TapeEntry('r', 'distance', []),
+            TapeEntry('_t1', 'div', ['sigma', 'r']),
+            TapeEntry('_t2', 'mul', ['_t1', '_t1']),
+            TapeEntry('_t3', 'mul', ['_t1', '_t2']),
+            TapeEntry('_t4', 'mul', ['_t3', '_t3']),
+            TapeEntry('_t5', 'mul', ['4.0f', 'epsilon']),
+            TapeEntry('_t6', 'mul', ['_t4', '_t4']),
+            TapeEntry('_t7', 'sub', ['_t6', '_t4']),
+            TapeEntry('_t8', 'mul', ['_t5', '_t7']),
         ]
         engine = ForwardADEngine()
         lines, derivs = engine.differentiate(tape)
@@ -159,10 +159,10 @@ class TestPowerChainOptimization:
     def test_non_power_mul_keeps_product_rule(self):
         """mul of variables with different bases should still use product rule."""
         tape = [
-            TapeEntry('r', 'distance', [], 'r'),
-            TapeEntry('_a', 'div', ['sigma', 'r'], '(sigma * inv_dist)'),
-            TapeEntry('_b', 'div', ['epsilon', 'r'], '(epsilon * inv_dist)'),
-            TapeEntry('_c', 'mul', ['_a', '_b'], '(_a * _b)'),
+            TapeEntry('r', 'distance', []),
+            TapeEntry('_a', 'div', ['sigma', 'r']),
+            TapeEntry('_b', 'div', ['epsilon', 'r']),
+            TapeEntry('_c', 'mul', ['_a', '_b']),
         ]
         engine = ForwardADEngine()
         lines, derivs = engine.differentiate(tape)
@@ -175,9 +175,9 @@ class TestPowerChainOptimization:
     def test_simple_square_keeps_squaring_rule(self):
         """t = a * a (simple square) should still use 2*a*da, not power rule."""
         tape = [
-            TapeEntry('r', 'distance', [], 'r'),
-            TapeEntry('_t1', 'div', ['sigma', 'r'], '(sigma * inv_dist)'),
-            TapeEntry('_t2', 'mul', ['_t1', '_t1'], '(_t1 * _t1)'),
+            TapeEntry('r', 'distance', []),
+            TapeEntry('_t1', 'div', ['sigma', 'r']),
+            TapeEntry('_t2', 'mul', ['_t1', '_t1']),
         ]
         engine = ForwardADEngine()
         lines, derivs = engine.differentiate(tape)
@@ -211,15 +211,15 @@ class TestPowerChainNumericalCorrectness:
 
         # Build the same tape the transpiler generates
         tape = [
-            TapeEntry('r', 'distance', [], 'r'),
-            TapeEntry('_t1', 'div', ['sigma', 'r'], '(sigma * inv_dist)'),
-            TapeEntry('_t2', 'mul', ['_t1', '_t1'], '(_t1 * _t1)'),
-            TapeEntry('_t3', 'mul', ['_t1', '_t2'], '(_t1 * _t2)'),
-            TapeEntry('_t4', 'mul', ['_t3', '_t3'], '(_t3 * _t3)'),
-            TapeEntry('_t5', 'mul', ['4.0f', 'epsilon'], '(4.0f * epsilon)'),
-            TapeEntry('_t6', 'mul', ['_t4', '_t4'], '(_t4 * _t4)'),
-            TapeEntry('_t7', 'sub', ['_t6', '_t4'], '(_t6 - _t4)'),
-            TapeEntry('_t8', 'mul', ['_t5', '_t7'], '(_t5 * _t7)'),
+            TapeEntry('r', 'distance', []),
+            TapeEntry('_t1', 'div', ['sigma', 'r']),
+            TapeEntry('_t2', 'mul', ['_t1', '_t1']),
+            TapeEntry('_t3', 'mul', ['_t1', '_t2']),
+            TapeEntry('_t4', 'mul', ['_t3', '_t3']),
+            TapeEntry('_t5', 'mul', ['4.0f', 'epsilon']),
+            TapeEntry('_t6', 'mul', ['_t4', '_t4']),
+            TapeEntry('_t7', 'sub', ['_t6', '_t4']),
+            TapeEntry('_t8', 'mul', ['_t5', '_t7']),
         ]
         engine = ForwardADEngine()
         lines, derivs = engine.differentiate(tape)
@@ -284,15 +284,15 @@ class TestPowerChainNumericalCorrectness:
             return 4.0 * epsilon * (sr12 - sr6)
 
         tape = [
-            TapeEntry('r', 'distance', [], 'r'),
-            TapeEntry('_t1', 'div', ['sigma', 'r'], '(sigma * inv_dist)'),
-            TapeEntry('_t2', 'mul', ['_t1', '_t1'], '(_t1 * _t1)'),
-            TapeEntry('_t3', 'mul', ['_t1', '_t2'], '(_t1 * _t2)'),
-            TapeEntry('_t4', 'mul', ['_t3', '_t3'], '(_t3 * _t3)'),
-            TapeEntry('_t5', 'mul', ['4.0f', 'epsilon'], '(4.0f * epsilon)'),
-            TapeEntry('_t6', 'mul', ['_t4', '_t4'], '(_t4 * _t4)'),
-            TapeEntry('_t7', 'sub', ['_t6', '_t4'], '(_t6 - _t4)'),
-            TapeEntry('_t8', 'mul', ['_t5', '_t7'], '(_t5 * _t7)'),
+            TapeEntry('r', 'distance', []),
+            TapeEntry('_t1', 'div', ['sigma', 'r']),
+            TapeEntry('_t2', 'mul', ['_t1', '_t1']),
+            TapeEntry('_t3', 'mul', ['_t1', '_t2']),
+            TapeEntry('_t4', 'mul', ['_t3', '_t3']),
+            TapeEntry('_t5', 'mul', ['4.0f', 'epsilon']),
+            TapeEntry('_t6', 'mul', ['_t4', '_t4']),
+            TapeEntry('_t7', 'sub', ['_t6', '_t4']),
+            TapeEntry('_t8', 'mul', ['_t5', '_t7']),
         ]
         engine = ForwardADEngine()
         lines, derivs = engine.differentiate(tape)

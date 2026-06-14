@@ -42,25 +42,19 @@ class _NonbondedASTWalker:
     def _emit_mul(self, a, b):
         result = self._fresh_name()
         cuda_val = f'({a} * {b})'
-        self.tape.append(TapeEntry(result, 'mul', [a, b], cuda_val))
+        self.tape.append(TapeEntry(result, 'mul', [a, b]))
         self.forward_lines.append(f'float {result} = {cuda_val};')
         return result
 
-    def _expand_pow(self, base_node, base_str, exp_str):
-        if isinstance(base_node, ast.Constant) and isinstance(base_node.value, int):
-            try:
-                n = int(exp_str)
-            except (ValueError, TypeError):
-                n = None
-        else:
-            try:
-                n = int(exp_str)
-            except (ValueError, TypeError):
-                n = None
+    def _expand_pow(self, base_str, exp_str):
+        try:
+            n = int(exp_str)
+        except (ValueError, TypeError):
+            n = None
         if n is None or n < 0:
             result = self._fresh_name()
             cuda_val = f'powf({base_str}, {exp_str})'
-            self.tape.append(TapeEntry(result, 'pow', [base_str, exp_str], cuda_val))
+            self.tape.append(TapeEntry(result, 'pow', [base_str, exp_str]))
             self.forward_lines.append(f'float {result} = {cuda_val};')
             return result
         if n == 0:
@@ -112,17 +106,17 @@ class _NonbondedASTWalker:
             if op_str is None:
                 raise ValueError(f"Unsupported binary op: {type(node.op).__name__}")
             if op_str == '**':
-                return self._expand_pow(node.left, left, right)
+                return self._expand_pow(left, right)
             if op_str == '/' and right == 'r':
                 result = self._fresh_name()
                 cuda_val = f'({left} * inv_dist)'
-                self.tape.append(TapeEntry(result, 'div', [left, 'r'], f'({left} / r)'))
+                self.tape.append(TapeEntry(result, 'div', [left, 'r']))
                 self.forward_lines.append(f'float {result} = {cuda_val};')
                 return result
             result = self._fresh_name()
             cuda_val = f'({left} {op_str} {right})'
             op_name = {'+': 'add', '-': 'sub', '*': 'mul', '/': 'div', '%': 'mod'}[op_str]
-            self.tape.append(TapeEntry(result, op_name, [left, right], cuda_val))
+            self.tape.append(TapeEntry(result, op_name, [left, right]))
             self.forward_lines.append(f'float {result} = {cuda_val};')
             return result
 
@@ -130,7 +124,7 @@ class _NonbondedASTWalker:
             operand = self._expr(node.operand)
             result = self._fresh_name()
             cuda_val = f'(0.0f - {operand})'
-            self.tape.append(TapeEntry(result, 'sub', ['0.0f', operand], cuda_val))
+            self.tape.append(TapeEntry(result, 'sub', ['0.0f', operand]))
             self.forward_lines.append(f'float {result} = {cuda_val};')
             return result
 
@@ -140,7 +134,7 @@ class _NonbondedASTWalker:
                 func_name = node.func.id
 
             if func_name == 'distance':
-                self.tape.append(TapeEntry('r', 'distance', [], 'r'))
+                self.tape.append(TapeEntry('r', 'distance', []))
                 self.forward_lines.append('// distance computed externally')
                 return 'r'
 
@@ -149,7 +143,7 @@ class _NonbondedASTWalker:
                 cuda_name = _MATH_FUNCTIONS[func_name]
                 result = self._fresh_name()
                 cuda_val = f'{cuda_name}({arg})'
-                self.tape.append(TapeEntry(result, func_name, [arg], cuda_val))
+                self.tape.append(TapeEntry(result, func_name, [arg]))
                 self.forward_lines.append(f'float {result} = {cuda_val};')
                 return result
 
