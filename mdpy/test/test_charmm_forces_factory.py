@@ -136,12 +136,12 @@ class TestNb14Force:
         nb14_force = [f for f in bonded._forces if f.name == 'nb14'][0]
         assert nb14_force._count > 0
 
-    def test_nb14_charge_scale_is_one(self, topology_and_table):
+    def test_nb14_has_two_params(self, topology_and_table):
         topology, table = topology_and_table
         forces = create_charmm_forces(topology, table, np.eye(3)*108.0)
         bonded = forces['bonded']
         nb14_force = [f for f in bonded._forces if f.name == 'nb14'][0]
-        assert nb14_force._parameters_per_term == 3
+        assert nb14_force._parameters_per_term == 2
 
 
 class TestNonbondedForce:

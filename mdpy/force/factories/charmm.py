@@ -16,9 +16,6 @@ from mdpy.force.pme_reciprocal_force import PMEReciprocalForce
 from mdpy.force.expressions.coulomb import coulomb
 
 
-CHARMM_14_CHARGE_SCALE = 1.0
-
-
 def _create_bond_force(topology, parameter_table):
     force = BondedForce(harmonic_bond)
     force.name = 'bond'
@@ -104,7 +101,6 @@ def _create_nb14_force(topology, parameter_table):
         force.add(
             [i_atom, j_atom],
             sigma=sigma, epsilon=epsilon,
-            charge_scale=CHARMM_14_CHARGE_SCALE,
         )
     return force
 

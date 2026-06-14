@@ -445,8 +445,8 @@ def test_per_particle_no_per_particle_props():
 COULOMB_CONSTANT = 0.13893556595455
 
 
-def _analytical_nb14_energy(r, q1, q2, sigma, epsilon, charge_scale):
-    e_coul = charge_scale * COULOMB_CONSTANT * q1 * q2 / r
+def _analytical_nb14_energy(r, q1, q2, sigma, epsilon):
+    e_coul = COULOMB_CONSTANT * q1 * q2 / r
     sr = sigma / r
     sr6 = sr ** 6
     e_lj = 4.0 * epsilon * (sr6 * sr6 - sr6)
@@ -462,12 +462,11 @@ def test_nb14_energy_analytical():
     q1, q2 = 1.0, -0.5
     sigma = 1.0
     epsilon = 0.1
-    charge_scale = 0.83333333
     r = 3.0
 
     charges = np.array([q1, q2], dtype=np.float32)
     force.set_parameter("charge", charges)
-    force.add([0, 1], sigma=sigma, epsilon=epsilon, charge_scale=charge_scale)
+    force.add([0, 1], sigma=sigma, epsilon=epsilon)
 
     positions = np.array([
         [0.0, 0.0, 0.0],
@@ -479,7 +478,7 @@ def test_nb14_energy_analytical():
     force.compute(context)
 
     energy = float(context.d_energy[0])
-    expected = _analytical_nb14_energy(r, q1, q2, sigma, epsilon, charge_scale)
+    expected = _analytical_nb14_energy(r, q1, q2, sigma, epsilon)
     assert abs(energy - expected) < 1e-3, f"Energy {energy} != {expected}"
 
 
@@ -488,7 +487,7 @@ def test_nb14_forces_balanced():
 
     charges = np.array([1.0, -0.5], dtype=np.float32)
     force.set_parameter("charge", charges)
-    force.add([0, 1], sigma=1.0, epsilon=0.1, charge_scale=0.83333333)
+    force.add([0, 1], sigma=1.0, epsilon=0.1)
 
     positions = np.array([
         [1.0, 2.0, 3.0],
@@ -511,10 +510,10 @@ def test_nb14_multiple_pairs():
     charges = np.array([1.0, -1.0, 0.5, -0.5], dtype=np.float32)
     force.set_parameter("charge", charges)
 
-    sigma1, eps1, cs1 = 1.0, 0.1, 0.83333333
-    sigma2, eps2, cs2 = 2.0, 0.2, 1.0
-    force.add([0, 1], sigma=sigma1, epsilon=eps1, charge_scale=cs1)
-    force.add([2, 3], sigma=sigma2, epsilon=eps2, charge_scale=cs2)
+    sigma1, eps1 = 1.0, 0.1
+    sigma2, eps2 = 2.0, 0.2
+    force.add([0, 1], sigma=sigma1, epsilon=eps1)
+    force.add([2, 3], sigma=sigma2, epsilon=eps2)
 
     positions = np.array([
         [0.0, 0.0, 0.0],
@@ -528,8 +527,8 @@ def test_nb14_multiple_pairs():
     force.compute(context)
 
     energy = float(context.d_energy[0])
-    e01 = _analytical_nb14_energy(2.5, 1.0, -1.0, sigma1, eps1, cs1)
-    e23 = _analytical_nb14_energy(2.5, 0.5, -0.5, sigma2, eps2, cs2)
+    e01 = _analytical_nb14_energy(2.5, 1.0, -1.0, sigma1, eps1)
+    e23 = _analytical_nb14_energy(2.5, 0.5, -0.5, sigma2, eps2)
     expected = e01 + e23
     assert abs(energy - expected) < 1e-2, f"Energy {energy} != {expected}"
 
@@ -540,11 +539,10 @@ def test_nb14_force_direction():
     q1, q2 = 1.0, -1.0
     sigma = 3.5
     epsilon = 0.1
-    charge_scale = 0.83333333
 
     charges = np.array([q1, q2], dtype=np.float32)
     force.set_parameter("charge", charges)
-    force.add([0, 1], sigma=sigma, epsilon=epsilon, charge_scale=charge_scale)
+    force.add([0, 1], sigma=sigma, epsilon=epsilon)
 
     positions = np.array([
         [0.0, 0.0, 0.0],

@@ -79,9 +79,9 @@ def _harmonic_improper(p1, p2, p3, p4, k=0.0, psi0=0.0):
 
 
 @bonded_expression(body=2)
-def _nb14_lj_coulomb(pos1, pos2, charge1, charge2, sigma=param, epsilon=param, charge_scale=param):
+def _nb14_lj_coulomb(pos1, pos2, charge1, charge2, sigma=param, epsilon=param):
     r = distance(pos1, pos2)
-    e_coul = charge_scale * 0.13893556595455 * charge1 * charge2 / r
+    e_coul = 0.13893556595455 * charge1 * charge2 / r
     sr = sigma / r
     sr6 = sr * sr * sr * sr * sr * sr
     e_lj = 4.0 * epsilon * (sr6 * sr6 - sr6)
@@ -240,7 +240,7 @@ class TestBondedExpressions:
 
         anal, num, max_err, energy = _compare_forces(
             _nb14_lj_coulomb, positions,
-            [([0, 1], {'sigma': 3.5, 'epsilon': 0.05, 'charge_scale': 0.8333})],
+            [([0, 1], {'sigma': 3.5, 'epsilon': 0.05})],
             per_particle_data=per_particle,
         )
         assert max_err < 0.01, (
