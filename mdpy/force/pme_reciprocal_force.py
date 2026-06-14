@@ -7,9 +7,17 @@ import numpy as np
 from scipy.special import erfc
 
 from mdpy.force.force_term import ForceTerm
+from mdpy.unit import EPSILON0
 
-COULOMB_CONST = 0.13893556595455
 SQRT_PI = 1.772453850905516
+
+# Coulomb constant 1/(4*pi*epsilon0) in mdpy internal units (file-local).
+COULOMB_CONST = 1.0 / (4.0 * math.pi * float(EPSILON0.value))
+
+# CUDA float-literal form of the Coulomb constant, used to inject the value into
+# the raw kernel strings below (which cannot be f-strings because CUDA braces
+# would need escaping).
+_COULOMB_CUDA = f'{COULOMB_CONST}f'
 
 from mdpy.force._utils import _REMAP_INDICES_KERNEL
 
@@ -398,10 +406,10 @@ void gather_kernel(
         }
     }
 
-    energy *= 0.5f * 0.13893556595455f * q;
-    ffx *= -0.13893556595455f * q * grid_x * recip_box_x;
-    ffy *= -0.13893556595455f * q * grid_y * recip_box_y;
-    ffz *= -0.13893556595455f * q * grid_z * recip_box_z;
+    energy *= 0.5f * __MDPY_COULOMB__ * q;
+    ffx *= -__MDPY_COULOMB__ * q * grid_x * recip_box_x;
+    ffy *= -__MDPY_COULOMB__ * q * grid_y * recip_box_y;
+    ffz *= -__MDPY_COULOMB__ * q * grid_z * recip_box_z;
 
     atomicAdd(&forces_x[i], ffx);
     atomicAdd(&forces_y[i], ffy);
@@ -414,7 +422,7 @@ void gather_kernel(
         atomicAdd(energy_buffer, energy);
     }
 }
-"""
+""".replace('__MDPY_COULOMB__', _COULOMB_CUDA)
 
 _SELF_ENERGY_KERNEL_SOURCE = r"""
 extern "C" __global__
@@ -471,7 +479,7 @@ void exclusion_kernel(
     float qq = qi * qj;
 
     float alpha_r = alpha * r;
-    float COULOMB_CONST = 0.13893556595455f;
+    float COULOMB_CONST = __MDPY_COULOMB__;
 
     float erf_val = erff(alpha_r);
 
@@ -515,7 +523,7 @@ void exclusion_kernel(
         atomicAdd(energy_buffer, corr_energy);
     }
 }
-"""
+""".replace('__MDPY_COULOMB__', _COULOMB_CUDA)
 
 _gather_kernel = None
 _self_energy_kernel = None

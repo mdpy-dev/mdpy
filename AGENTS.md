@@ -441,7 +441,7 @@ On tile list rebuild:
 | `mdpy/force/bonded_force.py` | Single CuPy RawKernel (bond/angle/dihedral/improper); owns indices, remaps via `d_remap` |
 | `mdpy/force/nonbonded_force.py` | CuPy RawKernel (self/cross tile) + expression transpiler; owns sorted posq, params |
 | `mdpy/force/expressions/lennard_jones.py` | LJ expression (returns dV/dr) |
-| `mdpy/force/expressions/coulomb.py` | Coulomb expression with constant `0.13893556595455` |
+| `mdpy/force/expressions/coulomb.py` | Coulomb expression (uses file-local derived `COULOMB_CONST`) |
 | `mdpy/forcefield/charmm_forcefield.py` | PSF+PDB+PRM → Topology + ParameterTable pipeline |
 | `mdpy/forcefield/parameters.py` | ParameterTable with `per_type` and `per_atom` dicts |
 | `mdpy/integrator/verlet.py` | `@cuda.jit` Verlet integrator (`step(system)`) |
@@ -462,8 +462,8 @@ On tile list rebuild:
 - All arrays default to `env.NUMPY_FLOAT` (float32) / `env.NUMPY_INT` (int32)
 - GPU kernel strategy: both `cupy.RawKernel` and `numba.cuda.jit` are valid; choose based on kernel needs
 - `Topology.join()` must be called before creating a System (`System.__init__` calls it automatically)
-- Coulomb constant in internal units: `0.13893556595455` (= 1/(4πε₀))
-- Boltzmann constant in internal units: `8.314462618e-7`
+- Unit-dependent constants are **derived**, never hardcoded, and defined **file-locally** in each module that uses them (scope = that file): `COULOMB_CONST = 1/(4π·EPSILON0)` ≈ 0.13893557 (in `expressions/coulomb.py`/`nb14.py`/`screened_coulomb.py`/`pme_reciprocal_force.py`) and `BOLTZMANN = KB → default_energy_unit/K` ≈ 8.31446e-7 (in `integrator/langevin.py`/`utils/velocity.py`). Base constants `EPSILON0`/`KB` live in `mdpy/unit`. Values are in the internal energy unit `dalton·Å²/fs²` (≈ 9999.93 kJ/mol) — **not** kcal/mol
+- The expression transpiler (nonbonded + bonded) resolves named module-level constants from a decorated function's `__globals__` and inlines them as CUDA float literals; hand-written CUDA strings (PME, screened_coulomb override) inject the value via the `__MDPY_COULOMB__` placeholder
 - Tile list rebuild: triggered when max atom displacement > skin/2; runs fully on GPU (Morton sort + block form + AABB + tile find + mask construction + tile classification)
 - Expression transpiler: converts Python AST to CUDA C for CuPy RawKernel (used by both bonded and nonbonded forces)
 
@@ -499,10 +499,16 @@ Scalar reads for kernel launch sizing and control flow. These are acceptable per
 
 ## Physical Constants (internal units: Å / dalton / fs / e / K)
 
-| Constant | Value | Source |
-|----------|-------|--------|
-| Coulomb constant (1/4πε₀) | `0.13893556595455` | kcal·Å/(mol·e²) |
-| Boltzmann constant | `8.314462618e-7` | kcal/(mol·K) in internal units |
-| Conversion: OpenMM energy → mdpy | `× 1e-4` | kJ/mol → kcal/mol |
-| Conversion: OpenMM force → mdpy | `× 1e-5` | kJ/(mol·nm) → kcal/(mol·Å) |
-| Conversion: OpenMM position → mdpy | `× 10.0` | nm → Å |
+The internal energy unit is the derived natural unit `dalton·Å²/fs²` (≈ 9999.93 kJ/mol ≈ 2390 kcal/mol) — **not** kcal/mol and **not** kJ/mol.
+
+Base physical constants (`EPSILON0`, `KB`, `NA`) live in `mdpy/unit/__init__.py`. The unit-dependent working constants below are **derived** from those bases and defined **file-locally** in each module that uses them (scope = that file), never hardcoded as magic numbers:
+
+| Constant | Value (internal unit) | Derivation (file-local) | Defined in |
+|----------|-------|--------|-----------|
+| Coulomb constant (1/4πε₀) | ≈ 0.13893557 | `1/(4π·EPSILON0.value)`, dimension `dalton·Å²·Å/(fs²·e²)` | `expressions/coulomb.py`, `expressions/nb14.py`, `expressions/screened_coulomb.py`, `pme_reciprocal_force.py` |
+| Boltzmann constant | ≈ 8.3144626e-7 | `KB.convert_to(default_energy_unit/kelvin).value` | `integrator/langevin.py`, `utils/velocity.py` |
+| Conversion: OpenMM energy → mdpy internal | `× 1e-4` | 1 kJ/mol = 1e-4 internal unit | (test/reference generation) |
+| Conversion: OpenMM force → mdpy internal | `× 1e-5` | 1 kJ/(mol·nm) = 1e-5 internal force unit | (test/reference generation) |
+| Conversion: OpenMM position → mdpy | `× 10.0` | nm → Å | (test/reference generation) |
+
+`dump_energy()` / `dump_forces()` return values in this internal unit. Converting to kJ/mol or any other unit is the caller's responsibility via `mdpy.unit.Quantity(...).convert_to(...)`.

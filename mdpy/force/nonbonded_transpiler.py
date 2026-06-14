@@ -3,7 +3,7 @@ import inspect
 import textwrap
 
 from mdpy.force.primitives import param as _param_marker, scalar as _scalar_marker
-from mdpy.force._utils import ExprInfo, _strip_trailing_digits, _MATH_FUNCTIONS
+from mdpy.force._utils import ExprInfo, _strip_trailing_digits, _MATH_FUNCTIONS, _numeric_literal
 from mdpy.force.ad_engine import TapeEntry, ForwardADEngine
 
 
@@ -28,9 +28,10 @@ def _classify_for_nonbonded(func):
 
 
 class _NonbondedASTWalker:
-    def __init__(self, position_names):
+    def __init__(self, position_names, module_globals=None):
         self._position_index = {name: i for i, name in enumerate(position_names)}
         self._name_map = {}
+        self._module_globals = module_globals if module_globals is not None else {}
         self.tape = []
         self.forward_lines = []
         self._counter = 0
@@ -93,6 +94,10 @@ class _NonbondedASTWalker:
             name = node.id
             if name in self._name_map:
                 return self._name_map[name]
+            if name in self._module_globals:
+                literal = _numeric_literal(self._module_globals[name])
+                if literal is not None:
+                    return literal
             return name
 
         if isinstance(node, ast.BinOp):
@@ -178,7 +183,7 @@ class _NonbondedExpression:
         if func_def is None:
             return
 
-        walker = _NonbondedASTWalker(self._expr_info.positions)
+        walker = _NonbondedASTWalker(self._expr_info.positions, self._func.__globals__)
 
         energy_var = None
         for stmt in func_def.body:

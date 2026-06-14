@@ -2,6 +2,11 @@ import pytest
 from mdpy.force.nonbonded_transpiler import nonbonded_expression
 from mdpy.force.primitives import param, scalar
 
+# Module-level constant used to verify the transpiler inlines named constants
+# resolved from the decorated function's module globals.
+_TEST_COULOMB = 0.13893556595455
+_TEST_INT_CONST = 4
+
 
 class TestNonbondedTranspiler:
     def test_lj_classification(self):
@@ -58,6 +63,32 @@ class TestNonbondedTranspiler:
         assert coulomb.dEdr_cuda is not None
         assert coulomb.grad_cuda is not None
         assert ('inv_dist' in coulomb.grad_cuda)
+
+    def test_module_level_constant_inlined(self):
+        @nonbonded_expression
+        def coul(pos1, pos2, charge1, charge2):
+            r = distance(pos1, pos2)
+            return _TEST_COULOMB * charge1 * charge2 / r
+
+        # The named constant must be inlined as a CUDA float literal, and the
+        # name itself must not leak into the generated CUDA source.
+        assert '0.13893556595455f' in coul.energy_cuda
+        assert '_TEST_COULOMB' not in coul.energy_cuda
+        # Parameters are still resolved normally
+        assert 'charge1' in coul.energy_cuda
+        assert 'charge2' in coul.energy_cuda
+        # The auto-diff gradient is still produced correctly
+        assert coul.dEdr_cuda is not None
+        assert coul.grad_cuda is not None
+
+    def test_module_level_int_constant_inlined(self):
+        @nonbonded_expression
+        def scaled(pos1, pos2, sigma=param):
+            r = distance(pos1, pos2)
+            return _TEST_INT_CONST * sigma / r
+
+        assert '4.0f' in scaled.energy_cuda
+        assert '_TEST_INT_CONST' not in scaled.energy_cuda
 
     def test_add_combines_expressions(self):
         @nonbonded_expression

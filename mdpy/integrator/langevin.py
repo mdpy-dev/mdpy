@@ -3,7 +3,10 @@ from __future__ import annotations
 import numpy as np
 import cupy as cp
 
-_BOLTZMANN = 8.314462618e-7
+from mdpy.unit import KB, default_energy_unit, kelvin
+
+# Boltzmann constant in mdpy internal units (file-local).
+BOLTZMANN = float(KB.convert_to(default_energy_unit / kelvin).value)
 
 _LANGEVIN_INIT_KERNEL = r"""
 extern "C" __global__
@@ -162,7 +165,7 @@ class LangevinBAOABIntegrator:
             np.float32(self.dt_half),
             np.float32(self.alpha),
             np.float32(self.temperature),
-            np.float32(_BOLTZMANN),
+            np.float32(BOLTZMANN),
             np.uint64(self._step_counter) * np.uint64(1000003),
             np.int32(number),
         ))
