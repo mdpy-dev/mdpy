@@ -444,6 +444,26 @@ class GPUContext:
         box_z = abs(float(pbc_2d[2, 2]))
         self.set_box_dims(box_x, box_y, box_z)
 
+    def upload_pbc(self, pbc_matrix):
+        """Overwrite device PBC buffers with new pbc_matrix.
+
+        Immediately updates d_pbc_matrix, d_pbc_inv, and box_dims.
+        Does NOT trigger neighbor list rebuild.
+        """
+        pbc_flat = np.ascontiguousarray(
+            np.asarray(pbc_matrix, dtype=np.float32)
+        ).ravel()
+        self.d_pbc_matrix[:] = cp.asarray(pbc_flat)
+        pbc_inv = np.linalg.inv(pbc_flat.reshape(3, 3))
+        self.d_pbc_inv[:] = cp.asarray(
+            np.ascontiguousarray(pbc_inv, dtype=np.float32).ravel()
+        )
+        pbc_2d = np.asarray(pbc_matrix).reshape(3, 3)
+        box_x = abs(float(pbc_2d[0, 0]))
+        box_y = abs(float(pbc_2d[1, 1]))
+        box_z = abs(float(pbc_2d[2, 2]))
+        self.set_box_dims(box_x, box_y, box_z)
+
     def upload_positions(self, positions):
         data = np.ascontiguousarray(np.asarray(positions, dtype=np.float32))
         self.d_positions_x[:] = cp.asarray(data[:, 0])

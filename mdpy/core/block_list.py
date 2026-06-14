@@ -813,6 +813,9 @@ class BlockList:
         self._block_pairs_np = None
         self._interacting_atoms_np = None
 
+    def set_cutoff(self, cutoff):
+        self._cutoff = float(cutoff)
+
     @property
     def block_atoms(self):
         if self._block_atoms_np is None and self.d_block_atoms.size > 0:
