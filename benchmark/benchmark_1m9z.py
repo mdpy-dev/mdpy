@@ -5,6 +5,7 @@ Usage:
 """
 
 import os, sys, time
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 import cupy as cp
@@ -24,14 +25,16 @@ from mdpy.utils import generate_velocity_from_temperature
 BOX_SIZE = 108.0
 CUTOFF = 12.0
 DT_FS = 2
-NUM_BLOCKS = 5
+NUM_BLOCKS = 10
 BLOCK_STEPS = 2500
 WARMUP_STEPS = 50
 
 psf = PSFParser(os.path.join(DATA_DIR, "1M9Z.psf"))
 pdb = PDBParser(os.path.join(DATA_DIR, "1M9Z_minimized.pdb"))
-toppar = CharmmTopparParser(os.path.join(DATA_DIR, "par_all36_prot.prm"),
-                             os.path.join(DATA_DIR, "toppar_water_ions.str"))
+toppar = CharmmTopparParser(
+    os.path.join(DATA_DIR, "par_all36_prot.prm"),
+    os.path.join(DATA_DIR, "toppar_water_ions.str"),
+)
 topology = psf.topology
 parameter_table = create_parameter_table(topology, toppar)
 pbc_matrix = np.eye(3, dtype=np.float64) * BOX_SIZE
@@ -40,11 +43,11 @@ forces = create_charmm_forces(topology, parameter_table, pbc_matrix, cutoff=CUTO
 
 system = System(topology)
 system.upload_pbc(pbc_matrix)
-system.add_force_term(forces['bonded'])
-system.add_force_term(forces['nonbonded'])
-system.add_force_term(forces['pme'])
+system.add_force_term(forces["bonded"])
+system.add_force_term(forces["nonbonded"])
+system.add_force_term(forces["pme"])
 
-constraints = create_constraints(topology, parameter_table, scheme='h-bonds')
+constraints = create_constraints(topology, parameter_table, scheme="h-bonds")
 for c in constraints:
     system.add_constraint(c)
 
@@ -55,12 +58,14 @@ system.upload_velocities(velocities)
 
 integrator = LangevinBAOABIntegrator(DT_FS, 300.0, 1.0)
 
+
 def _run_steps(n):
     for i in range(n):
         system.update_neighbor_list(sync_interval=10)
         system.compute_forces()
         integrator.step(system)
         system.apply_constraints(DT_FS)
+
 
 print("mdpy 1M9Z PME benchmark")
 print(f"  Atoms:      {topology.num_particles}")
@@ -69,7 +74,9 @@ print(f"  Cutoff:     {CUTOFF} A")
 print(f"  dt:         {DT_FS} fs")
 print(f"  Integrator: Langevin BAOAB")
 print(f"  PME alpha:  {forces['pme'].alpha:.4f}")
-print(f"  PME grid:   {forces['pme'].grid_x} x {forces['pme'].grid_y} x {forces['pme'].grid_z}")
+print(
+    f"  PME grid:   {forces['pme'].grid_x} x {forces['pme'].grid_y} x {forces['pme'].grid_z}"
+)
 print()
 
 print(f"Warmup ({WARMUP_STEPS} steps)...")
@@ -81,7 +88,9 @@ print(f"  {time.perf_counter()-t0:.1f}s")
 
 print(f"\nBenchmark: {NUM_BLOCKS} x {BLOCK_STEPS} steps")
 print(f"  {'Block':>6s}  {'ms/step':>10s}  {'ns/day':>10s}  {'E_pot (kcal/mol)':>18s}")
-print(f"  {'------':>6s}  {'----------':>10s}  {'----------':>10s}  {'------------------':>18s}")
+print(
+    f"  {'------':>6s}  {'----------':>10s}  {'----------':>10s}  {'------------------':>18s}"
+)
 
 block_times = []
 for i in range(NUM_BLOCKS):
