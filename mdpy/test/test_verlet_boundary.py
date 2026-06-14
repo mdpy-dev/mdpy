@@ -21,21 +21,14 @@ def _make_system(n_atoms, box_size, cutoff=None):
     )
     topology, _ = builder.build()
     pbc_matrix = np.eye(3, dtype=env.NUMPY_FLOAT) * box_size
-    system = System(topology, pbc_matrix, cutoff=cutoff)
+    system = System(topology)
+    system.upload_pbc(pbc_matrix)
+    system._cutoff = cutoff
     positions = np.zeros((n_atoms, 3), dtype=env.NUMPY_FLOAT)
     velocities = np.zeros((n_atoms, 3), dtype=env.NUMPY_FLOAT)
     system.upload_positions(positions)
     system.upload_velocities(velocities)
-    positions_soa = (
-        system.gpu.d_positions_x,
-        system.gpu.d_positions_y,
-        system.gpu.d_positions_z,
-    )
-    system.block_list.rebuild(
-        positions_soa, topology, system.pbc_matrix, system.pbc_inv
-    )
-    system._permute_all_arrays()
-    system.block_list.build_block_pairs(topology, system.pbc_matrix)
+    system.update_neighbor_list(force_rebuild=True)
     return system
 
 

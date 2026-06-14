@@ -37,7 +37,9 @@ def _setup_mdpy_system(psf_path, pdb_path, prm_path, cutoff=12.0):
     pbc_matrix = np.eye(3, dtype=np.float64) * 100.0
     pbc_inv = np.linalg.inv(pbc_matrix)
 
-    system = System(topology, pbc_matrix, cutoff=cutoff)
+    system = System(topology)
+
+    system.upload_pbc(pbc_matrix)
     system.add_force_term(create_bonded_group(topology, parameter_table))
     nb = NonbondedForce(lennard_jones + coulomb, cutoff=cutoff)
     lj_pair = parameter_table.type_pair_parameters['lj_pair']
@@ -52,20 +54,7 @@ def _setup_mdpy_system(psf_path, pdb_path, prm_path, cutoff=12.0):
 
     system.upload_positions(wrapped.astype(np.float32))
     system.upload_velocities(np.zeros((topology.num_particles, 3), dtype=np.float32))
-    positions_2d = (
-        system.gpu.d_positions_x,
-        system.gpu.d_positions_y,
-        system.gpu.d_positions_z,
-    )
-    system.block_list.rebuild(
-        positions_2d, topology,
-        system.pbc_matrix, system.pbc_inv,
-    )
-    system._permute_all_arrays()
-    system.block_list.build_block_pairs(topology, system.pbc_matrix)
-    for term in system.force_terms:
-        if hasattr(term, 'bind_sorted'):
-            term.bind_sorted(topology, system.block_list, system.gpu)
+    system.update_neighbor_list(force_rebuild=True)
     system.compute_forces()
     bl = system.block_list
     gpu = system.gpu

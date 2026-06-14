@@ -47,7 +47,10 @@ def _setup_system(include_bonded, include_nonbonded):
     pbc_matrix = np.eye(3, dtype=np.float64) * BOX_SIZE
     pbc_inv = np.linalg.inv(pbc_matrix)
 
-    system = System(topology, pbc_matrix, cutoff=CUTOFF)
+    system = System(topology)
+
+    system.upload_pbc(pbc_matrix)
+    system._cutoff = CUTOFF
 
     if include_bonded:
         system.add_force_term(create_bonded_group(topology, parameter_table))
@@ -68,19 +71,7 @@ def _setup_system(include_bonded, include_nonbonded):
         np.zeros((topology.num_particles, 3), dtype=np.float32),
     )
 
-    positions_soa = (
-        system.gpu.d_positions_x,
-        system.gpu.d_positions_y,
-        system.gpu.d_positions_z,
-    )
-    system.block_list.rebuild(
-        positions_soa, topology, system.pbc_matrix, system.pbc_inv,
-    )
-    system._permute_all_arrays()
-    system.block_list.build_block_pairs(topology, system.pbc_matrix)
-    for term in system.force_terms:
-        if hasattr(term, 'bind_sorted'):
-            term.bind_sorted(topology, system.block_list, system.gpu)
+    system.update_neighbor_list(force_rebuild=True)
 
     return system
 

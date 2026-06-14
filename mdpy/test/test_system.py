@@ -13,6 +13,18 @@ from mdpy.integrator.verlet import VerletIntegrator
 from mdpy.integrator.langevin import LangevinBAOABIntegrator
 
 
+def _make_system(topology, pbc_matrix, cutoff=12.0, skin=None,
+                 rebuild_check_interval=None):
+    system = System(topology)
+    system.upload_pbc(pbc_matrix)
+    system._cutoff = cutoff
+    if skin is not None:
+        system._skin = skin
+    if rebuild_check_interval is not None:
+        system._rebuild_check_interval = rebuild_check_interval
+    return system
+
+
 def _run_steps(system, integrator, n, sync_interval=10):
     for i in range(n):
         system.update_neighbor_list(sync_interval=sync_interval)
@@ -134,12 +146,11 @@ class TestSystem:
     def test_system_creation(self):
         topology, _ = _build_four_particle()
         pbc_matrix = _make_large_pbc()
-        system = System(topology, pbc_matrix, cutoff=12.0)
+        system = _make_system(topology, pbc_matrix, cutoff=12.0)
 
         assert system.topology is topology
         assert system.num_particles == 4
         assert isinstance(system.gpu, GPUContext)
-        assert isinstance(system.block_list, BlockList)
         assert system.cutoff == 12.0
         assert system.dump_energy() == {}
 
@@ -147,7 +158,7 @@ class TestSystem:
         topology, term_params = _build_four_particle()
         parameter_table = _make_parameter_table(term_params)
         pbc_matrix = _make_large_pbc()
-        system = System(topology, pbc_matrix)
+        system = _make_system(topology, pbc_matrix)
 
         bonded = create_bonded_group(topology, parameter_table)
         system.add_force_term(bonded)
@@ -157,7 +168,7 @@ class TestSystem:
         topology, term_params = _build_four_particle()
         parameter_table = _make_parameter_table(term_params)
         pbc_matrix = _make_large_pbc()
-        system = System(topology, pbc_matrix)
+        system = _make_system(topology, pbc_matrix)
 
         bonded = create_bonded_group(topology, parameter_table)
         system.add_force_term(bonded)
@@ -183,7 +194,7 @@ class TestSystem:
         topology, term_params = _build_simple_bond()
         parameter_table = _make_parameter_table(term_params)
         pbc_matrix = _make_large_pbc()
-        system = System(topology, pbc_matrix)
+        system = _make_system(topology, pbc_matrix)
 
         bonded = create_bonded_group(topology, parameter_table)
         system.add_force_term(bonded)
@@ -209,7 +220,7 @@ class TestSystem:
         topology, term_params = _build_simple_bond()
         parameter_table = _make_parameter_table(term_params)
         pbc_matrix = _make_large_pbc()
-        system = System(topology, pbc_matrix)
+        system = _make_system(topology, pbc_matrix)
 
         bonded = create_bonded_group(topology, parameter_table)
         system.add_force_term(bonded)
@@ -233,7 +244,7 @@ class TestSystem:
         topology, term_params = _build_simple_bond()
         parameter_table = _make_parameter_table(term_params)
         pbc_matrix = _make_large_pbc()
-        system = System(topology, pbc_matrix)
+        system = _make_system(topology, pbc_matrix)
 
         bonded = create_bonded_group(topology, parameter_table)
         system.add_force_term(bonded)
@@ -258,7 +269,7 @@ class TestVerletIntegrator:
     def test_free_particle_no_drift(self):
         topology, _ = _build_simple_bond()
         pbc_matrix = _make_large_pbc()
-        system = System(topology, pbc_matrix)
+        system = _make_system(topology, pbc_matrix)
 
         system.upload_positions(np.array([
             [10.0, 10.0, 10.0],
@@ -286,7 +297,7 @@ class TestVerletIntegrator:
         topology, term_params = _build_simple_bond()
         parameter_table = _make_parameter_table(term_params)
         pbc_matrix = _make_large_pbc()
-        system = System(topology, pbc_matrix)
+        system = _make_system(topology, pbc_matrix)
         bonded = create_bonded_group(topology, parameter_table)
         system.add_force_term(bonded)
 
@@ -315,7 +326,7 @@ class TestVerletIntegrator:
         topology, _ = _build_simple_bond()
         box = 20.0
         pbc_matrix = np.eye(3, dtype=env.NUMPY_FLOAT) * box
-        system = System(topology, pbc_matrix)
+        system = _make_system(topology, pbc_matrix)
 
         system.upload_positions(np.array([
             [1.0, 10.0, 10.0],
@@ -351,7 +362,7 @@ class TestVerletIntegrator:
         topology, _ = _build_simple_bond()
         box = 20.0
         pbc_matrix = np.eye(3, dtype=env.NUMPY_FLOAT) * box
-        system = System(topology, pbc_matrix)
+        system = _make_system(topology, pbc_matrix)
 
         system.upload_positions(np.array([
             [1.0, 10.0, 10.0],
@@ -386,7 +397,7 @@ class TestLangevinIntegrator:
         topology, term_params = _build_simple_bond()
         parameter_table = _make_parameter_table(term_params)
         pbc_matrix = _make_large_pbc()
-        system = System(topology, pbc_matrix)
+        system = _make_system(topology, pbc_matrix)
         bonded = create_bonded_group(topology, parameter_table)
         system.add_force_term(bonded)
 
@@ -409,7 +420,7 @@ class TestLangevinIntegrator:
         topology, term_params = _build_simple_bond()
         parameter_table = _make_parameter_table(term_params)
         pbc_matrix = _make_large_pbc()
-        system = System(topology, pbc_matrix)
+        system = _make_system(topology, pbc_matrix)
         bonded = create_bonded_group(topology, parameter_table)
         system.add_force_term(bonded)
 
@@ -451,7 +462,7 @@ class TestLangevinIntegrator:
         parameter_table = _make_parameter_table(term_params)
         box = 20.0
         pbc_matrix = np.eye(3, dtype=env.NUMPY_FLOAT) * box
-        system = System(topology, pbc_matrix)
+        system = _make_system(topology, pbc_matrix)
         bonded = create_bonded_group(topology, parameter_table)
         system.add_force_term(bonded)
 
@@ -490,7 +501,7 @@ class TestLangevinIntegrator:
         topology, term_params = _build_simple_bond()
         parameter_table = _make_parameter_table(term_params)
         pbc_matrix = _make_large_pbc()
-        system = System(topology, pbc_matrix)
+        system = _make_system(topology, pbc_matrix)
         bonded = create_bonded_group(topology, parameter_table)
         system.add_force_term(bonded)
 
@@ -522,7 +533,7 @@ class TestRebuildSortCorrectness:
         topology, term_params = _build_four_particle()
         parameter_table = _make_parameter_table(term_params)
         pbc_matrix = _make_large_pbc()
-        system = System(topology, pbc_matrix, cutoff=12.0, skin=1.0)
+        system = _make_system(topology, pbc_matrix, cutoff=12.0, skin=1.0)
         bonded = create_bonded_group(topology, parameter_table)
         system.add_force_term(bonded)
 
@@ -569,7 +580,7 @@ class TestRebuildSortCorrectness:
         topology, term_params = _build_four_particle()
         parameter_table = _make_parameter_table(term_params)
         pbc_matrix = _make_large_pbc()
-        system = System(topology, pbc_matrix, cutoff=12.0, skin=1.0)
+        system = _make_system(topology, pbc_matrix, cutoff=12.0, skin=1.0)
         bonded = create_bonded_group(topology, parameter_table)
         system.add_force_term(bonded)
 
@@ -631,7 +642,7 @@ class TestRebuildSortCorrectness:
 
         box = 80.0
         pbc_matrix = np.eye(3, dtype=env.NUMPY_FLOAT) * box
-        system = System(topology, pbc_matrix, cutoff=10.0, skin=2.0)
+        system = _make_system(topology, pbc_matrix, cutoff=10.0, skin=2.0)
         bonded = create_bonded_group(topology, parameter_table)
         system.add_force_term(bonded)
 
@@ -688,7 +699,7 @@ class TestRebuildSortCorrectness:
 
         box = 80.0
         pbc_matrix = np.eye(3, dtype=env.NUMPY_FLOAT) * box
-        system = System(topology, pbc_matrix, cutoff=10.0, skin=1.0)
+        system = _make_system(topology, pbc_matrix, cutoff=10.0, skin=1.0)
         bonded = create_bonded_group(topology, parameter_table)
         system.add_force_term(bonded)
 
@@ -746,7 +757,7 @@ class TestLazyEnergy:
         topology, term_params = _build_simple_bond()
         parameter_table = _make_parameter_table(term_params)
         pbc_matrix = _make_large_pbc()
-        system = System(topology, pbc_matrix)
+        system = _make_system(topology, pbc_matrix)
         bonded = create_bonded_group(topology, parameter_table)
         system.add_force_term(bonded)
 
@@ -765,7 +776,7 @@ class TestLazyEnergy:
         topology, term_params = _build_simple_bond()
         parameter_table = _make_parameter_table(term_params)
         pbc_matrix = _make_large_pbc()
-        system = System(topology, pbc_matrix)
+        system = _make_system(topology, pbc_matrix)
         bonded = create_bonded_group(topology, parameter_table)
         system.add_force_term(bonded)
 
@@ -790,7 +801,7 @@ class TestLazyEnergy:
         topology, term_params = _build_simple_bond()
         parameter_table = _make_parameter_table(term_params)
         pbc_matrix = _make_large_pbc()
-        system = System(topology, pbc_matrix)
+        system = _make_system(topology, pbc_matrix)
         bonded = create_bonded_group(topology, parameter_table)
         system.add_force_term(bonded)
 
@@ -819,7 +830,7 @@ class TestAsyncRebuild:
         topology, term_params = _build_four_particle()
         parameter_table = _make_parameter_table(term_params)
         pbc_matrix = _make_large_pbc()
-        system_a = System(topology, pbc_matrix, cutoff=12.0, skin=1.0)
+        system_a = _make_system(topology, pbc_matrix, cutoff=12.0, skin=1.0)
         bonded = create_bonded_group(topology, parameter_table)
         system_a.add_force_term(bonded)
         shared_positions = np.array([
@@ -831,7 +842,7 @@ class TestAsyncRebuild:
         system_a.upload_positions(shared_positions)
         system_a.upload_velocities(np.zeros((4, 3), dtype=env.NUMPY_FLOAT))
 
-        system_b = System(topology, pbc_matrix, cutoff=12.0, skin=1.0)
+        system_b = _make_system(topology, pbc_matrix, cutoff=12.0, skin=1.0)
         bonded_b = create_bonded_group(topology, parameter_table)
         system_b.add_force_term(bonded_b)
         system_b.upload_positions(shared_positions)
@@ -857,7 +868,7 @@ class TestAsyncRebuild:
         topology, term_params = _build_four_particle()
         parameter_table = _make_parameter_table(term_params)
         pbc_matrix = _make_large_pbc()
-        system = System(topology, pbc_matrix, cutoff=12.0, skin=1.0)
+        system = _make_system(topology, pbc_matrix, cutoff=12.0, skin=1.0)
         bonded = create_bonded_group(topology, parameter_table)
         system.add_force_term(bonded)
         system.upload_positions(np.array([
@@ -889,7 +900,7 @@ class TestAsyncRebuild:
         topology, term_params = builder.build()
         parameter_table = _make_parameter_table(term_params)
         pbc_matrix = np.eye(3, dtype=env.NUMPY_FLOAT) * 80.0
-        system = System(topology, pbc_matrix, cutoff=10.0, skin=1.0)
+        system = _make_system(topology, pbc_matrix, cutoff=10.0, skin=1.0)
         bonded = create_bonded_group(topology, parameter_table)
         system.add_force_term(bonded)
 
@@ -914,7 +925,7 @@ class TestAsyncRebuild:
         topology, term_params = _build_four_particle()
         parameter_table = _make_parameter_table(term_params)
         pbc_matrix = _make_large_pbc()
-        system = System(topology, pbc_matrix, cutoff=12.0, skin=0.5)
+        system = _make_system(topology, pbc_matrix, cutoff=12.0, skin=0.5)
         bonded = create_bonded_group(topology, parameter_table)
         system.add_force_term(bonded)
         system.upload_positions(np.array([
@@ -941,7 +952,7 @@ class TestAsyncRebuild:
         topology, term_params = _build_four_particle()
         parameter_table = _make_parameter_table(term_params)
         pbc_matrix = _make_large_pbc()
-        system = System(topology, pbc_matrix, cutoff=12.0, skin=1.0)
+        system = _make_system(topology, pbc_matrix, cutoff=12.0, skin=1.0)
         bonded = create_bonded_group(topology, parameter_table)
         system.add_force_term(bonded)
         system.upload_positions(np.array([
@@ -966,7 +977,7 @@ class TestAsyncRebuild:
         topology, term_params = _build_four_particle()
         parameter_table = _make_parameter_table(term_params)
         pbc_matrix = _make_large_pbc()
-        system = System(topology, pbc_matrix, cutoff=12.0, skin=1.0,
+        system = _make_system(topology, pbc_matrix, cutoff=12.0, skin=1.0,
                         rebuild_check_interval=3)
         bonded = create_bonded_group(topology, parameter_table)
         system.add_force_term(bonded)

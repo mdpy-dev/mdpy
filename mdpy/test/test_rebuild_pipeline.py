@@ -43,7 +43,9 @@ def _setup_system():
     pbc_matrix = np.eye(3, dtype=np.float64) * BOX_SIZE
     pbc_inv = np.linalg.inv(pbc_matrix)
 
-    system = System(topology, pbc_matrix, cutoff=CUTOFF)
+    system = System(topology)
+
+    system.upload_pbc(pbc_matrix)
     system.add_force_term(create_bonded_group(topology, parameter_table))
     nb = NonbondedForce(lennard_jones + coulomb, cutoff=CUTOFF)
     lj_pair = parameter_table.type_pair_parameters['lj_pair']
@@ -60,12 +62,7 @@ def _setup_system():
         np.zeros((topology.num_particles, 3), dtype=np.float32)
     )
 
-    positions_soa = (
-        system.gpu.d_positions_x,
-        system.gpu.d_positions_y,
-        system.gpu.d_positions_z,
-    )
-    system._do_rebuild(positions_soa)
+    system.update_neighbor_list(force_rebuild=True)
     return system
 
 

@@ -11,21 +11,19 @@ from mdpy.core.gpu_context import GPUContext
 
 class System:
 
-    def __init__(
-        self, topology, pbc_matrix, cutoff=12.0, skin=1.0, rebuild_check_interval=10
-    ):
+    def __init__(self, topology):
         self.topology = topology
         self.num_particles = topology.num_particles
-        self.pbc_matrix = np.ascontiguousarray(pbc_matrix, dtype=env.NUMPY_FLOAT)
-        self.pbc_inv = compute_pbc_inv(self.pbc_matrix)
-        self.cutoff = cutoff
-
         self.gpu = GPUContext()
-        self.gpu.initialize(topology, self.pbc_matrix.flatten())
+        self.gpu.initialize(topology, np.eye(3, dtype=np.float32))
 
-        self.block_list = BlockList(
-            cutoff, skin=skin, rebuild_check_interval=rebuild_check_interval
-        )
+        self._pbc_matrix = None
+        self._pbc_inv = None
+        self._cutoff = None
+        self._skin = 1.0
+        self._rebuild_check_interval = 10
+        self._block_list = None
+
         self.force_terms = []
         self.constraints = []
 
@@ -36,15 +34,48 @@ class System:
         self._d_cached_unique_j = None
         self._d_cached_unique_scale = None
 
+    def upload_pbc(self, pbc_matrix):
+        self._pbc_matrix = np.ascontiguousarray(pbc_matrix, dtype=env.NUMPY_FLOAT)
+        self._pbc_inv = compute_pbc_inv(self._pbc_matrix)
+        self.gpu.upload_pbc(self._pbc_matrix)
+
+    @property
+    def block_list(self):
+        if self._block_list is None:
+            raise RuntimeError(
+                "Neighbor list not initialized. Call update_neighbor_list() first."
+            )
+        return self._block_list
+
+    @property
+    def cutoff(self):
+        return self._cutoff
+
+    @property
+    def pbc_matrix(self):
+        return self._pbc_matrix
+
+    @property
+    def pbc_inv(self):
+        return self._pbc_inv
+
     def add_force_term(self, term):
         self.force_terms.append(term)
         self.gpu.allocate_energy_accumulator(len(self.force_terms))
+        term_cutoff = getattr(term, '_cutoff', None)
+        if term_cutoff is not None:
+            if self._cutoff is None:
+                self._cutoff = term_cutoff
+            else:
+                self._cutoff = max(self._cutoff, term_cutoff)
+            if self._block_list is not None:
+                self._block_list.set_cutoff(self._cutoff)
 
     def add_constraint(self, constraint):
         self.constraints.append(constraint)
 
     def apply_constraints(self, dt):
-        d_pdb_to_sorted = self.block_list.d_pdb_to_sorted
+        d_pdb_to_sorted = self._block_list.d_pdb_to_sorted
         for constraint in self.constraints:
             constraint.apply(self.gpu, dt, d_pdb_to_sorted=d_pdb_to_sorted)
 
@@ -67,16 +98,37 @@ class System:
         self._ensure_uploaded()
         self.gpu.zero_forces()
         for term_index, term in enumerate(self.force_terms):
-            term.compute(self.gpu, self.block_list, compute_energy=False)
+            term.compute(self.gpu, self._block_list, compute_energy=False)
 
-    def update_neighbor_list(self, sync_interval=10):
+    def update_neighbor_list(self, sync_interval=10, force_rebuild=False):
         self._ensure_uploaded()
+        if self._pbc_matrix is None:
+            raise RuntimeError("PBC not set. Call upload_pbc() first.")
+
+        if self._block_list is None:
+            if self._cutoff is None:
+                raise RuntimeError(
+                    "No cutoff available. Add a force term with cutoff first."
+                )
+            self._block_list = BlockList(
+                self._cutoff, skin=self._skin,
+                rebuild_check_interval=self._rebuild_check_interval,
+            )
+            force_rebuild = True
+
         positions_soa = (
             self.gpu.d_positions_x,
             self.gpu.d_positions_y,
             self.gpu.d_positions_z,
         )
-        needs_sync = self.block_list.check_rebuild_async(positions_soa)
+
+        if force_rebuild:
+            cp.cuda.Stream.null.synchronize()
+            self._do_rebuild(positions_soa)
+            self._step_counter = 0
+            return
+
+        needs_sync = self._block_list.check_rebuild_async(positions_soa)
         if needs_sync:
             cp.cuda.Stream.null.synchronize()
             self._do_rebuild(positions_soa)
@@ -86,23 +138,23 @@ class System:
         if self._step_counter < sync_interval:
             return
         cp.cuda.Stream.null.synchronize()
-        if int(self.block_list.d_rebuild_flag[0]) == 1:
+        if int(self._block_list.d_rebuild_flag[0]) == 1:
             self._do_rebuild(positions_soa)
         self._step_counter = 0
 
     def _do_rebuild(self, positions_soa):
-        self.block_list.rebuild(
+        self._block_list.rebuild(
             positions_soa,
             self.topology,
-            self.pbc_matrix,
-            self.pbc_inv,
+            self._pbc_matrix,
+            self._pbc_inv,
         )
         self._permute_all_arrays()
         self.gpu.wrap_positions_with_prev_correction()
-        self.block_list.build_block_pairs(self.topology, self.pbc_matrix)
+        self._block_list.build_block_pairs(self.topology, self._pbc_matrix)
         for term in self.force_terms:
             if hasattr(term, "bind_sorted"):
-                term.bind_sorted(self.topology, self.block_list, self.gpu)
+                term.bind_sorted(self.topology, self._block_list, self.gpu)
 
     def dump_energy(self):
         if self.gpu.d_energy_accumulator is None:
@@ -110,7 +162,7 @@ class System:
         self.gpu.zero_forces()
         for term_index, term in enumerate(self.force_terms):
             self.gpu.zero_energy()
-            term.compute(self.gpu, self.block_list, compute_energy=True)
+            term.compute(self.gpu, self._block_list, compute_energy=True)
             self.gpu.accumulate_energy(term_index)
         raw = cp.asnumpy(self.gpu.d_energy_accumulator)
         result = {}
@@ -121,9 +173,9 @@ class System:
         return result
 
     def dump_state(self):
-        bl = self.block_list
+        bl = self._block_list
         gpu = self.gpu
-        if bl.d_sorted_to_pdb.size > 0 and bl.num_particles > 0:
+        if bl is not None and bl.d_sorted_to_pdb.size > 0 and bl.num_particles > 0:
             sorted_to_pdb = bl.d_sorted_to_pdb
             pos = np.stack([
                 gpu.permute_from_sorted(sorted_to_pdb, gpu.d_positions_x).get(),
@@ -149,9 +201,9 @@ class System:
         return pos, vel
 
     def dump_forces(self):
-        bl = self.block_list
+        bl = self._block_list
         gpu = self.gpu
-        if bl.d_sorted_to_pdb.size > 0 and bl.num_particles > 0:
+        if bl is not None and bl.d_sorted_to_pdb.size > 0 and bl.num_particles > 0:
             sorted_to_pdb = bl.d_sorted_to_pdb
             return np.stack([
                 gpu.permute_from_sorted(sorted_to_pdb, gpu.d_forces_x).get(),
@@ -172,19 +224,23 @@ class System:
             self.gpu.d_positions_y,
             self.gpu.d_positions_z,
         )
-        if self.block_list.check_rebuild(positions_soa):
-            self.block_list.rebuild(
-                positions_soa,
-                self.topology,
-                self.pbc_matrix,
-                self.pbc_inv,
+        if self._block_list is None:
+            if self._pbc_matrix is None:
+                raise RuntimeError("PBC not set. Call upload_pbc() first.")
+            if self._cutoff is None:
+                raise RuntimeError(
+                    "No cutoff available. Add a force term with cutoff first."
+                )
+            self._block_list = BlockList(
+                self._cutoff, skin=self._skin,
+                rebuild_check_interval=self._rebuild_check_interval,
             )
-            self._permute_all_arrays()
-            self.gpu.wrap_positions_with_prev_correction()
-            self.block_list.build_block_pairs(self.topology, self.pbc_matrix)
+            self._do_rebuild(positions_soa)
+        elif self._block_list.check_rebuild(positions_soa):
+            self._do_rebuild(positions_soa)
         for term in self.force_terms:
             if hasattr(term, "bind_sorted"):
-                term.bind_sorted(self.topology, self.block_list, self.gpu)
+                term.bind_sorted(self.topology, self._block_list, self.gpu)
         self.compute_forces()
         for _ in range(number_steps):
             minimizer.step(self)
@@ -192,7 +248,7 @@ class System:
     def _permute_all_arrays(self):
         N = self.topology.num_particles
         gpu = self.gpu
-        bl = self.block_list
+        bl = self._block_list
 
         perm_gpu = bl.d_raw_order
 

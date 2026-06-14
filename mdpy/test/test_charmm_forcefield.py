@@ -114,9 +114,11 @@ class TestSystem:
         parameter_table = create_parameter_table(topology, toppar)
         pbc_matrix = np.eye(3, dtype=env.NUMPY_FLOAT) * 100.0
 
-        system = System(topology, pbc_matrix)
+        system = System(topology)
+
+        system.upload_pbc(pbc_matrix)
         system.add_force_term(create_bonded_group(topology, parameter_table))
-        nb = NonbondedForce(lennard_jones + coulomb, cutoff=system.cutoff)
+        nb = NonbondedForce(lennard_jones + coulomb, cutoff=12.0)
         lj_pair = parameter_table.type_pair_parameters['lj_pair']
         nb.set_pair_parameter('sigma', lj_pair[0::2].astype(env.NUMPY_FLOAT))
         nb.set_pair_parameter('epsilon', lj_pair[1::2].astype(env.NUMPY_FLOAT))
@@ -140,9 +142,11 @@ class TestSystem:
         parameter_table = create_parameter_table(topology, toppar)
         pbc_matrix = np.eye(3, dtype=env.NUMPY_FLOAT) * 100.0
 
-        system = System(topology, pbc_matrix)
+        system = System(topology)
+
+        system.upload_pbc(pbc_matrix)
         system.add_force_term(create_bonded_group(topology, parameter_table))
-        nb = NonbondedForce(lennard_jones + coulomb, cutoff=system.cutoff)
+        nb = NonbondedForce(lennard_jones + coulomb, cutoff=12.0)
         lj_pair = parameter_table.type_pair_parameters['lj_pair']
         nb.set_pair_parameter('sigma', lj_pair[0::2].astype(env.NUMPY_FLOAT))
         nb.set_pair_parameter('epsilon', lj_pair[1::2].astype(env.NUMPY_FLOAT))
@@ -170,9 +174,11 @@ class TestSystem:
         parameter_table = create_parameter_table(topology, toppar)
         pbc_matrix = np.eye(3, dtype=env.NUMPY_FLOAT) * 100.0
 
-        system = System(topology, pbc_matrix)
+        system = System(topology)
+
+        system.upload_pbc(pbc_matrix)
         system.add_force_term(create_bonded_group(topology, parameter_table))
-        nb = NonbondedForce(lennard_jones + coulomb, cutoff=system.cutoff)
+        nb = NonbondedForce(lennard_jones + coulomb, cutoff=12.0)
         lj_pair = parameter_table.type_pair_parameters['lj_pair']
         nb.set_pair_parameter('sigma', lj_pair[0::2].astype(env.NUMPY_FLOAT))
         nb.set_pair_parameter('epsilon', lj_pair[1::2].astype(env.NUMPY_FLOAT))
@@ -200,9 +206,11 @@ class TestSystem:
         parameter_table = create_parameter_table(topology, toppar)
         pbc_matrix = np.eye(3, dtype=env.NUMPY_FLOAT) * 100.0
 
-        system = System(topology, pbc_matrix)
+        system = System(topology)
+
+        system.upload_pbc(pbc_matrix)
         system.add_force_term(create_bonded_group(topology, parameter_table))
-        nb = NonbondedForce(lennard_jones + coulomb, cutoff=system.cutoff)
+        nb = NonbondedForce(lennard_jones + coulomb, cutoff=12.0)
         lj_pair = parameter_table.type_pair_parameters['lj_pair']
         nb.set_pair_parameter('sigma', lj_pair[0::2].astype(env.NUMPY_FLOAT))
         nb.set_pair_parameter('epsilon', lj_pair[1::2].astype(env.NUMPY_FLOAT))

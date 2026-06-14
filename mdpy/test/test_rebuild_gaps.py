@@ -38,7 +38,8 @@ def _make_system(box=30.0, cutoff=12.0):
     topology = psf.topology
     pt = create_parameter_table(topology, toppar)
     pbc = np.eye(3, dtype=np.float64) * box
-    system = System(topology, pbc, cutoff=cutoff)
+    system = System(topology)
+    system.upload_pbc(pbc)
     system.add_force_term(create_bonded_group(topology, pt))
     nb = NonbondedForce(lennard_jones + coulomb, cutoff=cutoff)
     lj_pair = pt.type_pair_parameters['lj_pair']

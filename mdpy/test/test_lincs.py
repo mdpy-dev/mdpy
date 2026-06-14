@@ -128,7 +128,11 @@ def test_lincs_multiple_rebuilds():
     from mdpy.integrator.verlet import VerletIntegrator
     from mdpy.constraint.lincs import LincsConstraint
 
-    system = System(topology, pbc_matrix, cutoff=12.0)
+    system = System(topology)
+
+    system.upload_pbc(pbc_matrix)
+
+    system._cutoff = 12.0
     bonded = create_bonded_group(topology, parameter_table)
     system.add_force_term(bonded)
 
@@ -316,7 +320,11 @@ def test_lincs_md_loop_bond_length_statistics():
     from mdpy.integrator.verlet import VerletIntegrator
     from mdpy.constraint.lincs import LincsConstraint
 
-    system = System(topology, pbc_matrix, cutoff=12.0)
+    system = System(topology)
+
+    system.upload_pbc(pbc_matrix)
+
+    system._cutoff = 12.0
     bonded = create_bonded_group(topology, parameter_table)
     system.add_force_term(bonded)
 

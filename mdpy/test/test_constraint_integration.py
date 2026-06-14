@@ -59,7 +59,11 @@ def _build_test_system():
 def test_constraint_loop():
     topology, pbc_matrix, parameter_table, positions = _build_test_system()
 
-    system = System(topology, pbc_matrix, cutoff=12.0)
+    system = System(topology)
+
+    system.upload_pbc(pbc_matrix)
+
+    system._cutoff = 12.0
 
     bonded = create_bonded_group(topology, parameter_table)
     system.add_force_term(bonded)
@@ -90,7 +94,11 @@ def test_constraint_loop():
 def test_constraint_loop_multiple_rebuilds():
     topology, pbc_matrix, parameter_table, positions = _build_test_system()
 
-    system = System(topology, pbc_matrix, cutoff=12.0)
+    system = System(topology)
+
+    system.upload_pbc(pbc_matrix)
+
+    system._cutoff = 12.0
 
     bonded = create_bonded_group(topology, parameter_table)
     system.add_force_term(bonded)
@@ -188,7 +196,11 @@ def _build_mixed_system():
 def test_settle_lincs_coexistence_bond_lengths():
     topology, pbc_matrix, parameter_table, positions = _build_mixed_system()
 
-    system = System(topology, pbc_matrix, cutoff=12.0)
+    system = System(topology)
+
+    system.upload_pbc(pbc_matrix)
+
+    system._cutoff = 12.0
     bonded = create_bonded_group(topology, parameter_table)
     system.add_force_term(bonded)
 
@@ -234,7 +246,11 @@ def test_settle_lincs_coexistence_bond_lengths():
 def test_settle_md_loop_rebuilds_bond_lengths():
     topology, pbc_matrix, parameter_table, positions = _build_test_system()
 
-    system = System(topology, pbc_matrix, cutoff=4.0)
+    system = System(topology)
+
+    system.upload_pbc(pbc_matrix)
+
+    system._cutoff = 4.0
     bonded = create_bonded_group(topology, parameter_table)
     system.add_force_term(bonded)
 
@@ -300,7 +316,9 @@ def test_lincs_md_loop_rebuilds_bond_lengths():
         pt.add_term_parameter(name, values)
 
     pbc_matrix = np.diag([15.0, 15.0, 15.0]).astype(np.float32)
-    system = System(topology, pbc_matrix, cutoff=4.0)
+    system = System(topology)
+    system.upload_pbc(pbc_matrix)
+    system._cutoff = 4.0
     bonded = create_bonded_group(topology, pt)
     system.add_force_term(bonded)
 

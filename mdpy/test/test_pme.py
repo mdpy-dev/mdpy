@@ -762,7 +762,9 @@ class TestPMEIntegration6PO6:
 
         pbc_matrix = np.eye(3, dtype=np.float32) * self.box
 
-        system = System(self.topology, pbc_matrix, cutoff=self.cutoff)
+        system = System(self.topology)
+
+        system.upload_pbc(pbc_matrix)
 
         system.add_force_term(create_bonded_group(self.topology, self.parameter_table))
 
@@ -785,20 +787,7 @@ class TestPMEIntegration6PO6:
         system.upload_positions(wrapped.astype(np.float32))
         system.upload_velocities(np.zeros((self.N, 3), dtype=np.float32))
 
-        positions_2d = (
-            system.gpu.d_positions_x,
-            system.gpu.d_positions_y,
-            system.gpu.d_positions_z,
-        )
-        system.block_list.rebuild(
-            positions_2d, self.topology,
-            system.pbc_matrix, system.pbc_inv,
-        )
-        system._permute_all_arrays()
-        system.block_list.build_block_pairs(self.topology, system.pbc_matrix)
-        for term in system.force_terms:
-            if hasattr(term, 'bind_sorted'):
-                term.bind_sorted(self.topology, system.block_list, system.gpu)
+        system.update_neighbor_list(force_rebuild=True)
 
         return system, pme
 

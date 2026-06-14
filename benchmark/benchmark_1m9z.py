@@ -57,7 +57,9 @@ def main():
 
     pbc_matrix = np.eye(3, dtype=np.float64) * BOX_SIZE
 
-    system = System(topology, pbc_matrix, cutoff=CUTOFF)
+    system = System(topology)
+
+    system.upload_pbc(pbc_matrix)
     system.add_force_term(create_bonded_group(topology, parameter_table))
 
     nb = NonbondedForce(lennard_jones + screened_coulomb, CUTOFF)
