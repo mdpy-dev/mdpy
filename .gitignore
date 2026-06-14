@@ -145,6 +145,7 @@ dmypy.json
 # Keep tracked project code and selected root files.
 !/.gitattributes
 !/.gitignore
+!/AGENTS.md
 !/README.md
 !/REMADME.md
 !/mdpy/
@@ -154,7 +155,6 @@ dmypy.json
 /.opencode/
 
 /.pytest_cache/
-/AGENTS.md
 /benchmark/
 /docs/
 /plan.md
@@ -162,3 +162,5 @@ dmypy.json
 /ROADMAP.md
 /WORKPLAN.md
 *.npz
+!mdpy/test/data/*.npz
+mdpy/test/data/bruteforce_reference_1M9Z.npz
