@@ -93,10 +93,11 @@ for i in range(NUM_BLOCKS):
 
     energy_dict = system.dump_energy()
     e_total = sum(energy_dict.values())
+    KCAL_PER_INTERNAL = 1.0 / 4.1840286576e-4
     ms = elapsed / BLOCK_STEPS * 1000
     ns = 86400.0 / (elapsed / BLOCK_STEPS) * DT_FS * 1e-6
     block_times.append(ms)
-    print(f"  {i+1:6d}  {ms:10.3f}  {ns:10.1f}  {e_total:18.1f}")
+    print(f"  {i+1:6d}  {ms:10.3f}  {ns:10.1f}  {e_total*KCAL_PER_INTERNAL:18.1f}")
 
 avg = np.mean(block_times)
 med = np.median(block_times)
