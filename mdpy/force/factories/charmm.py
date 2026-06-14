@@ -154,7 +154,6 @@ def create_charmm_forces(topology, parameter_table, pbc_matrix, cutoff=12.0):
             'bonded': ForceGroup (bond + angle + dihedral + improper + nb14)
             'nonbonded': NonbondedForce (LJ + screened Coulomb)
             'pme': PMEReciprocalForce
-            'constraints': list of constraint objects
     """
     from mdpy.force.expressions.screened_coulomb import screened_coulomb
 
@@ -173,12 +172,8 @@ def create_charmm_forces(topology, parameter_table, pbc_matrix, cutoff=12.0):
     pme.bind(topology, parameter_table, pbc_matrix=pbc_matrix)
     nb.set_scalar('alpha', pme.alpha)
 
-    from mdpy.constraint.constraint_scheme import create_constraints
-    constraints = create_constraints(topology, parameter_table, scheme='h-bonds')
-
     return {
         'bonded': bonded,
         'nonbonded': nb,
         'pme': pme,
-        'constraints': constraints,
     }

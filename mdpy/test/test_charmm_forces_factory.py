@@ -28,7 +28,7 @@ class TestFactoryCreation:
     def test_returns_dict_with_all_keys(self, topology_and_table):
         topology, table = topology_and_table
         forces = create_charmm_forces(topology, table, np.eye(3)*108.0)
-        expected_keys = {'bonded', 'nonbonded', 'pme', 'constraints'}
+        expected_keys = {'bonded', 'nonbonded', 'pme'}
         assert set(forces.keys()) == expected_keys
 
     def test_bonded_is_force_group(self, topology_and_table):

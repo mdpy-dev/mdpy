@@ -18,6 +18,7 @@ from mdpy.io.charmm_toppar_parser import create_parameter_table
 from mdpy.force.factories.charmm import create_charmm_forces
 from mdpy.integrator.langevin import LangevinBAOABIntegrator
 from mdpy.system import System
+from mdpy.constraint.constraint_scheme import create_constraints
 from mdpy.utils import generate_velocity_from_temperature
 
 BOX_SIZE = 108.0
@@ -42,7 +43,9 @@ system.upload_pbc(pbc_matrix)
 system.add_force_term(forces['bonded'])
 system.add_force_term(forces['nonbonded'])
 system.add_force_term(forces['pme'])
-for c in forces['constraints']:
+
+constraints = create_constraints(topology, parameter_table, scheme='h-bonds')
+for c in constraints:
     system.add_constraint(c)
 
 positions = pdb.positions
