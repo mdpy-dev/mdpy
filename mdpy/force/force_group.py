@@ -53,9 +53,13 @@ class ForceGroup(ForceTerm):
                     f"Cannot add ForceGroup of {other._force_type.__name__} "
                     f"to ForceGroup of {self._force_type.__name__}"
                 )
-            return ForceGroup(self._forces + other._forces)
+            group = ForceGroup(self._forces + other._forces)
+            group.name = self.name
+            return group
         if type(other) is self._force_type:
-            return ForceGroup(self._forces + [other])
+            group = ForceGroup(self._forces + [other])
+            group.name = self.name
+            return group
         if isinstance(other, ForceTerm) and type(other) is not self._force_type:
             raise TypeError(
                 f"Cannot add {type(other).__name__} to ForceGroup of "

@@ -157,7 +157,6 @@ def create_charmm_forces(topology, parameter_table, pbc_matrix, cutoff=12.0):
     nb14 = _create_nb14_force(topology, parameter_table)
     if nb14 is not None:
         bonded = bonded + nb14
-        bonded.name = 'bonded'
 
     nb = NonbondedForce(lennard_jones + screened_coulomb, cutoff)
     lj_pair = parameter_table.type_pair_parameters['lj_pair']
