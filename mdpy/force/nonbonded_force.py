@@ -35,17 +35,10 @@ def _prepare_energy_expression(energy_cuda):
     lines = energy_cuda.split('\n')
     result_vars = []
     new_lines = []
-    count = 0
     for line in lines:
-        m = re.match(r'^(\s*float\s+)(_result_energy)(\s*=.*)$', line)
+        m = re.match(r'^(\s*float\s+)(_result_energy(?:_\d+)?)(\s*=.*)$', line)
         if m:
-            if count == 0:
-                result_vars.append('_result_energy')
-            else:
-                new_var = f'_result_energy_{count + 1}'
-                line = m.group(1) + new_var + m.group(3)
-                result_vars.append(new_var)
-            count += 1
+            result_vars.append(m.group(2))
         new_lines.append(line)
     total_expr = ' + '.join(result_vars) if result_vars else '0.0f'
     return '\n'.join(new_lines), total_expr

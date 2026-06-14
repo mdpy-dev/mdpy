@@ -209,6 +209,7 @@ class _NonbondedExpression:
         self._local_vars = {line.split()[1].split('=')[0].strip()
                             for line in walker.forward_lines
                             if not line.startswith('//') and '=' in line}
+        self._local_vars.add('_result_energy')
 
         fwd_ad = ForwardADEngine()
         grad_lines, derivs = fwd_ad.differentiate(walker.tape)
