@@ -2,7 +2,7 @@ import ast
 import inspect
 import textwrap
 
-from mdpy.force.primitives import param as _param_marker, scalar as _scalar_marker
+from mdpy.force.primitives import param as _param_marker, scalar as _scalar_marker, point as _point_marker
 from mdpy.force._utils import ExprInfo, _strip_trailing_digits, _MATH_FUNCTIONS, _numeric_literal
 from mdpy.force.ad_engine import TapeEntry, ForwardADEngine, _HELPER_OPERATIONS
 
@@ -130,11 +130,14 @@ def _classify_for_bonded(func, body):
     per_particle = {}
     params = []
     scalars = []
+    point_params = []
     for i, (name, p) in enumerate(sig.parameters.items()):
         if i < body:
             positions.append(name)
         elif p.default is _param_marker:
             params.append(name)
+        elif p.default is _point_marker:
+            point_params.extend([f'{name}_x', f'{name}_y', f'{name}_z'])
         elif p.default is _scalar_marker:
             scalars.append(name)
         elif p.default is inspect.Parameter.empty:
@@ -142,6 +145,7 @@ def _classify_for_bonded(func, body):
             per_particle[name] = prop_name
         elif isinstance(p.default, (int, float)):
             params.append(name)
+    params.extend(point_params)
     return ExprInfo(positions, per_particle, params, scalars, body)
 
 

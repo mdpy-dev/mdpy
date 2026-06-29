@@ -70,6 +70,14 @@ __device__ __forceinline__ void add_force(
 
 
 _BODY_TEMPLATES = {
+    1: r'''
+    for (int idx = tid; idx < num_terms; idx += stride) {{
+        int a1 = d_indices[idx*1];
+        {param_loads}
+        {expression_fragment}
+        e += _result_energy;
+    }}
+''',
     2: r'''
     for (int idx = tid; idx < num_terms; idx += stride) {{
         int a1 = d_indices[idx*2];

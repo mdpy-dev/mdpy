@@ -12,6 +12,7 @@ class _Marker:
 
 param = _Marker("param")
 scalar = _Marker("scalar")
+point = _Marker("point")
 
 
 class _HelperPrimitive:

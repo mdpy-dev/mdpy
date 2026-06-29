@@ -59,3 +59,17 @@ class TestBondedTranspiler:
             dp = psi - psi0
             return k * dp * dp
         assert '_result_energy' in harmonic_improper.cuda_fragment
+
+
+def test_point_marker_classification():
+    from mdpy.force.primitives import param, point
+
+    @bonded_expression(body=1)
+    def expr(p1, ref=point, k=param):
+        return k
+
+    info = expr._expr_info
+    assert info.body == 1
+    assert info.positions == ['p1']
+    assert info.params == ['k', 'ref_x', 'ref_y', 'ref_z']
+    assert info.per_particle == {}
