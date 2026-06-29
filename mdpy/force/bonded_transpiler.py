@@ -28,29 +28,16 @@ _ANGLE_FORWARD = r'''
         float _ct_{rn} = dot_f3(_r1_{rn}, _r2_{rn}) * _inv_l1_{rn} * _inv_l2_{rn};
         _ct_{rn} = fmaxf(-1.0f, fminf(1.0f, _ct_{rn}));
         float {rn} = acosf(_ct_{rn});
-'''
-
-_ANGLE_FORCE = r'''
-        {{
-            float _neg_dEdtheta_{rn} = -({grad_expr});
-            float3 _n_{rn} = cross_f3(_r1_{rn}, _r2_{rn});
-            float3 _c1_{rn} = cross_f3(_r1_{rn}, _n_{rn});
-            float _lc1_{rn} = len_f3(_c1_{rn});
-            if (_lc1_{rn} > 1e-12f) {{
-                float _inv1_{rn} = _neg_dEdtheta_{rn} / (_lc1_{rn} * _l1_{rn});
-                float3 _fv1_{rn} = scale_f3(_c1_{rn}, _inv1_{rn});
-                add_force(f_x,f_y,f_z, {arm1}, _fv1_{rn});
-                add_force(f_x,f_y,f_z, {vertex}, scale_f3(_fv1_{rn}, -1.0f));
-            }}
-            float3 _c3_{rn} = cross_f3(scale_f3(_r2_{rn}, -1.0f), _n_{rn});
-            float _lc3_{rn} = len_f3(_c3_{rn});
-            if (_lc3_{rn} > 1e-12f) {{
-                float _inv3_{rn} = _neg_dEdtheta_{rn} / (_lc3_{rn} * _l2_{rn});
-                float3 _fv3_{rn} = scale_f3(_c3_{rn}, _inv3_{rn});
-                add_force(f_x,f_y,f_z, {arm2}, _fv3_{rn});
-                add_force(f_x,f_y,f_z, {vertex}, scale_f3(_fv3_{rn}, -1.0f));
-            }}
-        }}
+        float3 _n_{rn} = cross_f3(_r1_{rn}, _r2_{rn});
+        float3 _c1_{rn} = cross_f3(_r1_{rn}, _n_{rn});
+        float _lc1_{rn} = len_f3(_c1_{rn});
+        float3 _partial_{rn}_0 = make_f3(0.0f, 0.0f, 0.0f);
+        if (_lc1_{rn} > 1e-12f) _partial_{rn}_0 = scale_f3(_c1_{rn}, 1.0f / (_lc1_{rn} * _l1_{rn}));
+        float3 _c3_{rn} = cross_f3(scale_f3(_r2_{rn}, -1.0f), _n_{rn});
+        float _lc3_{rn} = len_f3(_c3_{rn});
+        float3 _partial_{rn}_2 = make_f3(0.0f, 0.0f, 0.0f);
+        if (_lc3_{rn} > 1e-12f) _partial_{rn}_2 = scale_f3(_c3_{rn}, 1.0f / (_lc3_{rn} * _l2_{rn}));
+        float3 _partial_{rn}_1 = scale_f3(add_f3(_partial_{rn}_0, _partial_{rn}_2), -1.0f);
 '''
 
 _DIHEDRAL_FORWARD = r'''
@@ -100,7 +87,6 @@ HELPER_REGISTRY = {
     'angle': {
         'position_args': ['arm1', 'vertex', 'arm2'],
         'forward': _ANGLE_FORWARD,
-        'force': _ANGLE_FORCE,
     },
     'dihedral': {
         'position_args': ['a', 'b', 'c', 'd'],
