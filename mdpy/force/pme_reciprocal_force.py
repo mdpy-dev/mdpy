@@ -4,6 +4,8 @@ import math
 
 import cupy as cp
 import numpy as np
+from cupy.cuda import cufft
+from cupy.fft._fft import _default_fft_func
 from scipy.special import erfc
 
 from mdpy.force.force_term import ForceTerm
@@ -385,7 +387,7 @@ void gather_kernel(
                 float dtz = dtheta[2][kz];
 
                 int idx = (gx * grid_y + gy) * grid_z + gz;
-                float phi = phi_grid[idx];
+                float phi = __ldg(&phi_grid[idx]);
                 float txyz = tx * ty * tz;
 
                 energy += txyz * phi;
@@ -623,6 +625,11 @@ class PMEReciprocalForce(ForceTerm):
         grid_size = self.grid_x * self.grid_y * self.grid_z
         self._d_charge_grid = cp.zeros(grid_size, dtype=np.float32)
 
+        nz_half = self.grid_z // 2 + 1
+        self._d_complex_buffer = cp.zeros(
+            (self.grid_x, self.grid_y, nz_half), dtype=cp.complex64
+        )
+
         bk = precompute_bk_factors(
             self.alpha,
             self.grid_x,
@@ -723,10 +730,13 @@ class PMEReciprocalForce(ForceTerm):
         )
 
         grid_3d = self._d_charge_grid.reshape(gx, gy, gz)
-        grid_complex = cp.fft.rfftn(grid_3d)
-        grid_complex = grid_complex * self._d_bk_factors
-        grid_3d = cp.fft.irfftn(grid_complex, s=(gx, gy, gz))
-        self._d_charge_grid = grid_3d.ravel()
+        _rfft_func = _default_fft_func(grid_3d, None, None, value_type='R2C')
+        _rfft_func(grid_3d, None, None, None, cufft.CUFFT_FORWARD, 'R2C',
+                   out=self._d_complex_buffer)
+        cp.multiply(self._d_complex_buffer, self._d_bk_factors, out=self._d_complex_buffer)
+        _irfft_func = _default_fft_func(self._d_complex_buffer, None, None, value_type='C2R')
+        _irfft_func(self._d_complex_buffer, (gx, gy, gz), None, None,
+                    cufft.CUFFT_INVERSE, 'C2R', out=grid_3d)
 
         gather_k = get_gather_kernel()
         gather_k(
