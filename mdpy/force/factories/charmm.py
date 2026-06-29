@@ -120,6 +120,35 @@ def _create_nonbonded_force(topology, parameter_table, cutoff):
     return group
 
 
+def _create_pme_exclusion_force(topology, alpha):
+    """Create a BondedForce that subtracts the PME reciprocal-space
+    contribution for every excluded atom pair.
+
+    The PME FFT includes ALL atom pairs in reciprocal space.  Excluded
+    pairs (1-2, 1-3, 1-4 from the bond graph) must have their erf(ar)/r
+    contribution subtracted so their net electrostatic interaction is
+    zero (or handled by nb14 for 1-4 pairs).
+    """
+    from mdpy.force.expressions.pme_exclusion import pme_exclusion_correction
+    from mdpy.core.topology import _build_bond_graph_exclusion_pairs
+
+    force = BondedForce(pme_exclusion_correction)
+    force.name = 'pme_exclusion'
+
+    charges = topology.charges
+    force.set_parameter('charge', charges)
+
+    bond_indices = topology.bond_indices
+    if len(bond_indices) > 0:
+        pair_i, pair_j, total = _build_bond_graph_exclusion_pairs(
+            bond_indices, topology.num_particles
+        )
+        for k in range(total):
+            force.add([int(pair_i[k]), int(pair_j[k])], alpha=float(alpha))
+
+    return force if force._count > 0 else None
+
+
 def create_bonded_group(topology, parameter_table):
     """Create a ForceGroup containing all CHARMM bonded force terms.
 
@@ -147,7 +176,7 @@ def create_charmm_forces(topology, parameter_table, pbc_matrix, cutoff=12.0):
 
     Returns:
         dict with keys:
-            'bonded': ForceGroup (bond + angle + dihedral + improper + nb14)
+            'bonded': ForceGroup (bond + angle + dihedral + improper + nb14 + pme_exclusion)
             'nonbonded': NonbondedForce (LJ + screened Coulomb)
             'pme': PMEReciprocalForce
     """
@@ -158,14 +187,17 @@ def create_charmm_forces(topology, parameter_table, pbc_matrix, cutoff=12.0):
     if nb14 is not None:
         bonded = bonded + nb14
 
+    pme = PMEReciprocalForce(cutoff)
+    pme.bind(topology, parameter_table, pbc_matrix=pbc_matrix)
+    pme_excl = _create_pme_exclusion_force(topology, pme.alpha)
+    if pme_excl is not None:
+        bonded = bonded + pme_excl
+
     nb = NonbondedForce(lennard_jones + screened_coulomb, cutoff)
     lj_pair = parameter_table.type_pair_parameters['lj_pair']
     nb.set_pair_parameter('sigma', lj_pair[0::2].astype(env.NUMPY_FLOAT))
     nb.set_pair_parameter('epsilon', lj_pair[1::2].astype(env.NUMPY_FLOAT))
     nb.name = 'nonbonded'
-
-    pme = PMEReciprocalForce(cutoff)
-    pme.bind(topology, parameter_table, pbc_matrix=pbc_matrix)
     nb.set_scalar('alpha', pme.alpha)
 
     return {
