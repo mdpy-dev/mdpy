@@ -13,18 +13,8 @@ _DISTANCE_FORWARD = r'''
         if ({rn} >= 1e-12f) {{
             _inv_r_{rn} = 1.0f / {rn};
         }}
-'''
-
-_DISTANCE_FORCE = r'''
-        {{
-            if ({rn} >= 1e-12f) {{
-                float _grad_{rn} = {grad_expr};
-                float _f_common_{rn} = _grad_{rn} * _inv_r_{rn};
-                float3 _fvec_{rn} = scale_f3(_delta_{rn}, _f_common_{rn});
-                add_force(f_x,f_y,f_z, {atom_a}, _fvec_{rn});
-                add_force(f_x,f_y,f_z, {atom_b}, scale_f3(_fvec_{rn}, -1.0f));
-            }}
-        }}
+        float3 _partial_{rn}_0 = scale_f3(_delta_{rn}, -_inv_r_{rn});
+        float3 _partial_{rn}_1 = scale_f3(_delta_{rn}, _inv_r_{rn});
 '''
 
 _ANGLE_FORWARD = r'''
@@ -104,20 +94,16 @@ _DIHEDRAL_FORCE = r'''
 
 HELPER_REGISTRY = {
     'distance': {
-        'n_args': 2,
-        'atom_params': ['atom_a', 'atom_b'],
+        'position_args': ['atom_a', 'atom_b'],
         'forward': _DISTANCE_FORWARD,
-        'force': _DISTANCE_FORCE,
     },
     'angle': {
-        'n_args': 3,
-        'atom_params': ['arm1', 'vertex', 'arm2'],
+        'position_args': ['arm1', 'vertex', 'arm2'],
         'forward': _ANGLE_FORWARD,
         'force': _ANGLE_FORCE,
     },
     'dihedral': {
-        'n_args': 4,
-        'atom_params': ['a', 'b', 'c', 'd'],
+        'position_args': ['a', 'b', 'c', 'd'],
         'forward': _DIHEDRAL_FORWARD,
         'force': _DIHEDRAL_FORCE,
     },
@@ -147,6 +133,23 @@ def _classify_for_bonded(func, body):
             params.append(name)
     params.extend(point_params)
     return ExprInfo(positions, per_particle, params, scalars, body)
+
+
+def _build_projection(result_name, position_args, arg_indices, grad_expr):
+    """Emit the generic force-projection CUDA for one helper call.
+
+    For each atom the geometry reads (slot i maps to atom a{arg_indices[i]+1}),
+    apply F_i = -(dE/dq) * partial_i.
+    """
+    lines = ['        {', f'            float _neg_grad_{result_name} = -({grad_expr});']
+    for i in range(len(position_args)):
+        atom = f'a{arg_indices[i] + 1}'
+        lines.append(
+            f'            add_force(f_x,f_y,f_z, {atom}, '
+            f'scale_f3(_partial_{result_name}_{i}, _neg_grad_{result_name}));'
+        )
+    lines.append('        }')
+    return '\n'.join(lines)
 
 
 class _BondedASTWalker:
@@ -289,10 +292,11 @@ class _BondedExpression:
         parts = []
 
         for helper_type, result_name, arg_indices in walker._helper_calls:
-            template = HELPER_REGISTRY[helper_type]['forward']
-            atom_params = HELPER_REGISTRY[helper_type]['atom_params']
+            entry = HELPER_REGISTRY[helper_type]
+            template = entry['forward']
+            position_args = entry['position_args']
             fmt = {'rn': result_name}
-            for ph, idx in zip(atom_params, arg_indices):
+            for ph, idx in zip(position_args, arg_indices):
                 fmt[ph] = f'a{idx + 1}'
             parts.append(template.format(**fmt))
 
@@ -308,6 +312,8 @@ class _BondedExpression:
                 parts.append(f'        {line}')
 
         for idx, (helper_type, result_name, arg_indices) in enumerate(walker._helper_calls):
+            entry = HELPER_REGISTRY[helper_type]
+            position_args = entry['position_args']
             if num_helpers > 1:
                 prefix = f'_g{idx}_'
                 grad_lines, derivs = fwd_ad.differentiate(
@@ -319,12 +325,15 @@ class _BondedExpression:
                 derivs = shared_derivs
 
             grad_expr = derivs.get(energy_var, '0.0f')
-            template = HELPER_REGISTRY[helper_type]['force']
-            atom_params = HELPER_REGISTRY[helper_type]['atom_params']
-            fmt = {'rn': result_name, 'grad_expr': grad_expr}
-            for ph, idx in zip(atom_params, arg_indices):
-                fmt[ph] = f'a{idx + 1}'
-            parts.append(template.format(**fmt))
+
+            if 'force' in entry:
+                template = entry['force']
+                fmt = {'rn': result_name, 'grad_expr': grad_expr}
+                for ph, idx2 in zip(position_args, arg_indices):
+                    fmt[ph] = f'a{idx2 + 1}'
+                parts.append(template.format(**fmt))
+            else:
+                parts.append(_build_projection(result_name, position_args, arg_indices, grad_expr))
 
         self.cuda_fragment = '\n'.join(parts)
 
