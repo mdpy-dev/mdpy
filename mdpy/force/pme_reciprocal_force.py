@@ -19,8 +19,6 @@ COULOMB_CONST = 1.0 / (4.0 * math.pi * float(EPSILON0.value))
 # would need escaping).
 _COULOMB_CUDA = f'{COULOMB_CONST}f'
 
-from mdpy.force._utils import _REMAP_INDICES_KERNEL
-
 
 def _calc_ewald_coefficient(cutoff: float, rtol: float = 1e-5) -> float:
     lo, hi = 0.0, 10.0
@@ -562,17 +560,6 @@ def get_cell_spread_kernel():
         )
     return _cell_spread_kernel
 
-
-_pme_remap_kernel = None
-
-
-def _get_pme_remap_kernel():
-    global _pme_remap_kernel
-    if _pme_remap_kernel is None:
-        _pme_remap_kernel = cp.RawKernel(_REMAP_INDICES_KERNEL, "remap_indices_kernel")
-    return _pme_remap_kernel
-
-
 class PMEReciprocalForce(ForceTerm):
     name = "pme_reciprocal"
 
@@ -597,11 +584,6 @@ class PMEReciprocalForce(ForceTerm):
         self._d_bk_factors = None
         self._d_charge_grid = None
         self._self_energy_factor = 0.0
-
-        self._d_pair_i = None
-        self._d_pair_j = None
-        self._d_pair_scale = None
-        self._num_exclusion_pairs = 0
 
         self._box_x = 0.0
         self._box_y = 0.0
@@ -668,34 +650,7 @@ class PMEReciprocalForce(ForceTerm):
             * float(np.sum(charges.astype(np.float64) ** 2))
         )
 
-        self._build_exclusion_arrays(topology)
-
         self._warm_fft()
-
-    def _build_exclusion_arrays(self, topology):
-        offset = topology.exclusion_offset
-        neighbors = topology.exclusion_neighbors
-        scale = topology.exclusion_scale
-
-        pair_i = []
-        pair_j = []
-        pair_scale = []
-        N = topology.num_particles
-        for i in range(N):
-            start = int(offset[i])
-            end = int(offset[i + 1])
-            for idx in range(start, end):
-                j = int(neighbors[idx])
-                if j > i:
-                    pair_i.append(i)
-                    pair_j.append(j)
-                    pair_scale.append(float(scale[idx]))
-
-        self._num_exclusion_pairs = len(pair_i)
-        if self._num_exclusion_pairs > 0:
-            self._d_pair_i = cp.asarray(np.array(pair_i, dtype=np.int32))
-            self._d_pair_j = cp.asarray(np.array(pair_j, dtype=np.int32))
-            self._d_pair_scale = cp.asarray(np.array(pair_scale, dtype=np.float32))
 
     def _warm_fft(self):
         if self._fft_warmed:
@@ -720,14 +675,6 @@ class PMEReciprocalForce(ForceTerm):
             grid, (tpb,), (self._d_charges, permutation, np.int32(N), sorted_charges)
         )
         self._d_charges = sorted_charges
-
-        if self._num_exclusion_pairs > 0:
-            kernel = _get_pme_remap_kernel()
-            n = self._num_exclusion_pairs
-            pair_grid = ((n + tpb - 1) // tpb,)
-            d_remap = block_list.d_pdb_to_sorted
-            kernel(pair_grid, (tpb,), (d_remap, self._d_pair_i, np.int32(n)))
-            kernel(pair_grid, (tpb,), (d_remap, self._d_pair_j, np.int32(n)))
 
     def compute(self, gpu_context, block_list=None, compute_energy=True):
         N = self._N
@@ -817,29 +764,3 @@ class PMEReciprocalForce(ForceTerm):
         self_k = get_self_energy_kernel()
         self_k((1,), (1,), (np.float32(self._self_energy_factor), gpu_context.d_energy))
 
-        if self._num_exclusion_pairs > 0:
-            num_pairs = self._num_exclusion_pairs
-            pair_grid = ((num_pairs + tpb - 1) // tpb,)
-            excl_k = get_exclusion_kernel()
-            excl_k(
-                pair_grid,
-                (tpb,),
-                (
-                    gpu_context.d_positions_x,
-                    gpu_context.d_positions_y,
-                    gpu_context.d_positions_z,
-                    self._d_charges,
-                    self._d_pair_i,
-                    self._d_pair_j,
-                    self._d_pair_scale,
-                    np.int32(num_pairs),
-                    np.float32(self.alpha),
-                    np.float32(box_x),
-                    np.float32(box_y),
-                    np.float32(box_z),
-                    gpu_context.d_forces_x,
-                    gpu_context.d_forces_y,
-                    gpu_context.d_forces_z,
-                    gpu_context.d_energy,
-                ),
-            )
