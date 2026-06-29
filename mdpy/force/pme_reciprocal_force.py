@@ -149,26 +149,15 @@ void cell_spread_kernel(
         float theta[3][4];
         for (int dim = 0; dim < 3; dim++) {
             float u = u_arr[dim];
-            float data[4];
-            data[0] = 1.0f - u;
-            data[1] = u;
-            data[2] = 0.0f;
-            data[3] = 0.0f;
-            for (int j = 3; j < order; j++) {
-                float div = 1.0f / (float)(j - 1);
-                data[j - 1] = div * u * data[j - 2];
-                for (int k = 1; k < j - 1; k++) {
-                    data[j - k - 1] = div * ((u + (float)k) * data[j - k - 2] + ((float)(j - k) - u) * data[j - k - 1]);
-                }
-                data[0] = div * (1.0f - u) * data[0];
-            }
-            float scale = 1.0f / (float)(order - 1);
-            data[order - 1] = scale * u * data[order - 2];
-            for (int j = 1; j < order - 1; j++) {
-                data[order - j - 1] = scale * ((u + (float)j) * data[order - j - 2] + ((float)(order - j) - u) * data[order - j - 1]);
-            }
-            data[0] = scale * (1.0f - u) * data[0];
-            for (int k = 0; k < order; k++) theta[dim][k] = data[k];
+            float u2 = u * u;
+            float u3 = u2 * u;
+            float om = 1.0f - u;
+            float om3 = om * om * om;
+            float inv6 = 0.166666667f;
+            theta[dim][0] = om3 * inv6;
+            theta[dim][1] = (3.0f*u3 - 6.0f*u2 + 4.0f) * inv6;
+            theta[dim][2] = (-3.0f*u3 + 3.0f*u2 + 3.0f*u + 1.0f) * inv6;
+            theta[dim][3] = u3 * inv6;
         }
 
         float q = charges[atom_id];
