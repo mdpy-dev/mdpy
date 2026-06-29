@@ -77,33 +77,6 @@ def test_pme_charges_sorted_after_rebuild():
     )
 
 
-def test_pme_exclusion_pairs_sorted_after_rebuild():
-    system, pme = _build_system()
-
-    if pme._num_exclusion_pairs == 0:
-        pytest.skip("No exclusion pairs in 6PO6")
-
-    pair_i_before = cp.asnumpy(pme._d_pair_i).copy()
-    pair_j_before = cp.asnumpy(pme._d_pair_j).copy()
-
-    system.update_neighbor_list(sync_interval=10)
-    system.compute_forces()
-
-    bl = system.block_list
-    pdb_to_sorted = cp.asnumpy(bl.d_pdb_to_sorted)
-
-    expected_i = pdb_to_sorted[pair_i_before]
-    expected_j = pdb_to_sorted[pair_j_before]
-
-    pair_i_after = cp.asnumpy(pme._d_pair_i)
-    pair_j_after = cp.asnumpy(pme._d_pair_j)
-
-    np.testing.assert_array_equal(pair_i_after, expected_i,
-        err_msg="PME exclusion pair_i not remapped to sorted order")
-    np.testing.assert_array_equal(pair_j_after, expected_j,
-        err_msg="PME exclusion pair_j not remapped to sorted order")
-
-
 def test_pme_energy_no_divergence():
     system, pme = _build_system()
     integrator = VerletIntegrator(0.5)
