@@ -125,56 +125,6 @@ class Topology:
         )
 
 
-_GENERATE_PAIRS_KERNEL = r'''
-extern "C" __global__
-void generate_pairs_kernel(
-    const int* __restrict__ bond_idx, const int num_bonds,
-    const int* __restrict__ angle_idx, const int num_angles,
-    const int* __restrict__ dihedral_idx, const int num_dihedrals,
-    const int* __restrict__ improper_idx, const int num_impropers,
-    const float scale_14,
-    int* __restrict__ out_i, int* __restrict__ out_j,
-    float* __restrict__ out_scale,
-    const int total_pairs
-) {
-    int tid = blockIdx.x * blockDim.x + threadIdx.x;
-    if (tid >= total_pairs) return;
-
-    int bond_end = num_bonds;
-    int angle_end = bond_end + num_angles;
-    int dihedral_end = angle_end + num_dihedrals;
-
-    if (tid < bond_end) {
-        int a = bond_idx[tid * 2];
-        int b = bond_idx[tid * 2 + 1];
-        out_i[tid] = min(a, b);
-        out_j[tid] = max(a, b);
-        out_scale[tid] = 0.0f;
-    } else if (tid < angle_end) {
-        int idx = tid - bond_end;
-        int a = angle_idx[idx * 3];
-        int c = angle_idx[idx * 3 + 2];
-        out_i[tid] = min(a, c);
-        out_j[tid] = max(a, c);
-        out_scale[tid] = 0.0f;
-    } else if (tid < dihedral_end) {
-        int idx = tid - angle_end;
-        int a = dihedral_idx[idx * 4];
-        int d = dihedral_idx[idx * 4 + 3];
-        out_i[tid] = min(a, d);
-        out_j[tid] = max(a, d);
-        out_scale[tid] = 0.0f;
-    } else {
-        int idx = tid - dihedral_end;
-        int a = improper_idx[idx * 4];
-        int d = improper_idx[idx * 4 + 3];
-        out_i[tid] = min(a, d);
-        out_j[tid] = max(a, d);
-        out_scale[tid] = 0.0f;
-    }
-}
-'''
-
 _PARALLEL_CSR_KERNEL = r'''
 extern "C" __global__
 void parallel_csr_kernel(
@@ -292,7 +242,6 @@ def _get_gpu_kernels():
     global _gpu_kernels
     if _gpu_kernels is None:
         _gpu_kernels = {
-            'generate': cp.RawKernel(_GENERATE_PAIRS_KERNEL, 'generate_pairs_kernel'),
             'parallel_csr': cp.RawKernel(_PARALLEL_CSR_KERNEL, 'parallel_csr_kernel'),
             'fill_csr_gaps': cp.RawKernel(_FILL_CSR_GAPS_KERNEL, 'fill_csr_gaps_kernel'),
             'parallel_dedup': cp.RawKernel(_PARALLEL_DEDUP_KERNEL, 'parallel_dedup_kernel'),
@@ -303,14 +252,61 @@ def _get_gpu_kernels():
     return _gpu_kernels
 
 
+def _build_bond_graph_exclusion_pairs(bond_indices, num_particles):
+    adj = [[] for _ in range(num_particles)]
+    for i, j in bond_indices:
+        i, j = int(i), int(j)
+        adj[i].append(j)
+        adj[j].append(i)
+
+    pair_12 = set()
+    pair_13 = set()
+    pair_14 = set()
+    for bond_i, bond_j in bond_indices:
+        a2, a3 = int(bond_i), int(bond_j)
+        pair_12.add((min(a2, a3), max(a2, a3)))
+        for a1 in adj[a2]:
+            if a1 != a3:
+                pair_13.add((min(a1, a3), max(a1, a3)))
+        for a4 in adj[a3]:
+            if a4 != a2:
+                pair_13.add((min(a2, a4), max(a2, a4)))
+    for bond_i, bond_j in bond_indices:
+        a2, a3 = int(bond_i), int(bond_j)
+        for a1 in adj[a2]:
+            for a4 in adj[a3]:
+                if a1 != a3 and a2 != a4 and a1 != a4:
+                    pair_14.add((min(a1, a4), max(a1, a4)))
+
+    pair_13 -= pair_12
+    pair_14 -= pair_12
+    pair_14 -= pair_13
+
+    all_i = []
+    all_j = []
+    for lo, hi in pair_12:
+        all_i.append(lo)
+        all_j.append(hi)
+    for lo, hi in pair_13:
+        all_i.append(lo)
+        all_j.append(hi)
+    for lo, hi in pair_14:
+        all_i.append(lo)
+        all_j.append(hi)
+
+    if not all_i:
+        return np.empty(0, dtype=np.int32), np.empty(0, dtype=np.int32), 0
+    return (np.array(all_i, dtype=np.int32),
+            np.array(all_j, dtype=np.int32),
+            len(all_i))
+
+
 def build_exclusion_map_gpu(topology, scale_14=1.0):
-    num_bonds = topology.num_bonds
-    num_angles = topology.num_angles
-    num_dihedrals = topology.num_dihedrals
-    num_impropers = topology.num_impropers
-    total_pairs = num_bonds + num_angles + num_dihedrals + num_impropers
     num_particles = topology.num_particles
 
+    pair_i_np, pair_j_np, total_pairs = _build_bond_graph_exclusion_pairs(
+        topology.bond_indices, num_particles
+    )
     if total_pairs == 0:
         d_offset = cp.zeros(num_particles + 1, dtype=cp.int32)
         d_neighbors = cp.empty(0, dtype=cp.int32)
@@ -319,27 +315,9 @@ def build_exclusion_map_gpu(topology, scale_14=1.0):
 
     kernels = _get_gpu_kernels()
 
-    d_bond_idx = cp.asarray(topology.bond_indices.ravel().astype(np.int32))
-    d_angle_idx = cp.asarray(topology.angle_indices.ravel().astype(np.int32))
-    d_dihedral_idx = cp.asarray(topology.dihedral_indices.ravel().astype(np.int32))
-    d_improper_idx = cp.asarray(topology.improper_indices.ravel().astype(np.int32))
-
-    d_pair_i = cp.empty(total_pairs, dtype=cp.int32)
-    d_pair_j = cp.empty(total_pairs, dtype=cp.int32)
-    d_pair_scale = cp.empty(total_pairs, dtype=cp.float32)
-
-    block = 256
-    grid = (total_pairs + block - 1) // block
-    kernels['generate'](
-        (grid,), (block,),
-        (d_bond_idx, np.int32(num_bonds),
-         d_angle_idx, np.int32(num_angles),
-         d_dihedral_idx, np.int32(num_dihedrals),
-         d_improper_idx, np.int32(num_impropers),
-         np.float32(scale_14),
-         d_pair_i, d_pair_j, d_pair_scale,
-         np.int32(total_pairs))
-    )
+    d_pair_i = cp.asarray(pair_i_np)
+    d_pair_j = cp.asarray(pair_j_np)
+    d_pair_scale = cp.zeros(total_pairs, dtype=cp.float32)
 
     scale_rank = (d_pair_scale > 0.0).astype(cp.int64)
     sort_key = (d_pair_i.astype(cp.int64) * np.int64(2000000000)

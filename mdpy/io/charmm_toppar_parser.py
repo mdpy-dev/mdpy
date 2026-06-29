@@ -74,18 +74,33 @@ class CharmmTopparParser:
         """
         with open(file_path, "r") as f:
             info = f.read().split("\n")
-        info_dict = self._fine_par_info(info)
+        info_dict =         self._fine_par_info(info)
         self._parse_par_mass_block(info_dict["ATOMS"])
-        self._parse_par_bond_block(info_dict["BONDS"])
-        self._parse_par_angle_block(info_dict["ANGLES"])
-        self._parse_par_dihedral_block(info_dict["DIHEDRALS"])
-        self._parse_par_improper_block(info_dict["IMPROPER"])
-        self._parse_par_nonbonded_block(info_dict["NONBONDED"])
+        self._parse_par_bond_block(info_dict.get("BONDS", []))
+        self._parse_par_angle_block(info_dict.get("ANGLES", []))
+        self._parse_par_dihedral_block(info_dict.get("DIHEDRALS", []))
+        self._parse_par_improper_block(info_dict.get("IMPROPER", []))
+        self._parse_par_nonbonded_block(info_dict.get("NONBONDED", []))
         if "NBFIX" in info_dict:
             self._parse_par_nbfix_block(info_dict["NBFIX"])
 
     @staticmethod
     def _fine_par_info(info):
+        joined = []
+        i = 0
+        while i < len(info):
+            line = info[i].rstrip()
+            while line.endswith('-'):
+                line = line[:-1]
+                i += 1
+                if i < len(info):
+                    line += ' ' + info[i].strip()
+                else:
+                    break
+            joined.append(line)
+            i += 1
+        info = joined
+
         new_info = []
         start_index = 0
         for cur_index, cur_info in enumerate(info):
@@ -248,7 +263,7 @@ class CharmmTopparParser:
                     self._parameters["improper"][key] = res
 
     def _parse_par_nonbonded_block(self, infos):
-        for info in infos[1:]:
+        for info in infos:
             if len(info) == 4:
                 self._parameters["nonbonded"][info[0]] = [
                     -Quantity(float(info[2]), kilocalorie_permol)
