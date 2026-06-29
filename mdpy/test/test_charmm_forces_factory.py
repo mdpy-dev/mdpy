@@ -49,6 +49,14 @@ class TestFactoryCreation:
         names = [forces['bonded'].name, forces['nonbonded'].name, forces['pme'].name]
         assert len(names) == len(set(names)), f"Duplicate names: {names}"
 
+    def test_pme_exclusion_in_bonded_group(self, topology_and_table):
+        topology, table = topology_and_table
+        forces = create_charmm_forces(topology, table, np.eye(3)*108.0)
+        from mdpy.force.force_group import ForceGroup
+        assert isinstance(forces['bonded'], ForceGroup)
+        sub_names = [f.name for f in forces['bonded']._sub_forces]
+        assert 'pme_exclusion' in sub_names, f"pme_exclusion not in {sub_names}"
+
 
 class TestBondForce:
 
