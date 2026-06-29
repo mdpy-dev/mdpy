@@ -335,28 +335,31 @@ void gather_kernel(
     float dtheta[3][4];
     for (int dim = 0; dim < 3; dim++) {
         float u = u_arr[dim];
-        float data[4];
-        data[0] = 1.0f - u;
-        data[1] = u;
-        data[2] = 0.0f;
-        data[3] = 0.0f;
-        for (int j = 3; j < order; j++) {
-            float div = 1.0f / (float)(j - 1);
-            data[j - 1] = div * u * data[j - 2];
-            for (int k = 1; k < j - 1; k++) {
-                data[j - k - 1] = div * ((u + (float)k) * data[j - k - 2] + ((float)(j - k) - u) * data[j - k - 1]);
-            }
-            data[0] = div * (1.0f - u) * data[0];
-        }
-        dtheta[dim][0] = -data[0];
-        for (int k = 1; k < order; k++) dtheta[dim][k] = data[k - 1] - data[k];
-        float scale = 1.0f / (float)(order - 1);
-        data[order - 1] = scale * u * data[order - 2];
-        for (int j = 1; j < order - 1; j++) {
-            data[order - j - 1] = scale * ((u + (float)j) * data[order - j - 2] + ((float)(order - j) - u) * data[order - j - 1]);
-        }
-        data[0] = scale * (1.0f - u) * data[0];
-        for (int k = 0; k < order; k++) theta[dim][k] = data[k];
+        float d0, d1, d2, d3;
+
+        d0 = 1.0f - u;
+        d1 = u;
+        d2 = 0.0f;
+        d3 = 0.0f;
+
+        d2 = 0.5f * u * d1;
+        d1 = 0.5f * ((u + 1.0f) * d0 + (2.0f - u) * d1);
+        d0 = 0.5f * (1.0f - u) * d0;
+
+        dtheta[dim][0] = -d0;
+        dtheta[dim][1] = d0 - d1;
+        dtheta[dim][2] = d1 - d2;
+        dtheta[dim][3] = d2 - d3;
+
+        d3 = (1.0f/3.0f) * u * d2;
+        d2 = (1.0f/3.0f) * ((u + 1.0f) * d1 + (3.0f - u) * d2);
+        d1 = (1.0f/3.0f) * ((u + 2.0f) * d0 + (2.0f - u) * d1);
+        d0 = (1.0f/3.0f) * (1.0f - u) * d0;
+
+        theta[dim][0] = d0;
+        theta[dim][1] = d1;
+        theta[dim][2] = d2;
+        theta[dim][3] = d3;
     }
 
     float q = charges[i];
