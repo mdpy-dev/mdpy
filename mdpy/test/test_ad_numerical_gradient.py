@@ -12,7 +12,7 @@ import pytest
 from mdpy import env
 from mdpy.force.bonded_force import BondedForce
 from mdpy.force.bonded_transpiler import bonded_expression
-from mdpy.force.primitives import param, scalar as scalar_marker
+from mdpy.force.primitives import param, scalar as scalar_marker, distance_to_point, distance, angle, dihedral
 
 
 class MockGPUContext:
@@ -86,6 +86,12 @@ def _nb14_lj_coulomb(pos1, pos2, charge1, charge2, sigma=param, epsilon=param):
     sr6 = sr * sr * sr * sr * sr * sr
     e_lj = 4.0 * epsilon * (sr6 * sr6 - sr6)
     return e_coul + e_lj
+
+
+@bonded_expression(body=1)
+def _position_restraint(p1, k=0.0, ref_x=0.0, ref_y=0.0, ref_z=0.0):
+    r = distance_to_point(p1, ref_x, ref_y, ref_z)
+    return k * r * r
 
 
 def _compute_bonded_energy(expression, positions, params_list, per_particle_data=None, pbc=None):
@@ -251,3 +257,17 @@ class TestBondedExpressions:
 
 class TestNonbondedExpressions:
     pass
+
+
+class TestPositionRestraint:
+
+    def test_restraint_gradient(self):
+        positions = np.array([
+            [5.0, 5.0, 5.0],
+        ], dtype=np.float32)
+        anal, num, max_err, energy = _compare_forces(
+            _position_restraint, positions,
+            [([0], {'k': 10.0, 'ref_x': 4.0, 'ref_y': 5.0, 'ref_z': 6.0})],
+            tol=1e-2,
+        )
+        assert max_err < 1e-2, f"restraint force rel err {max_err}"
