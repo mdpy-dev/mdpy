@@ -7,7 +7,7 @@ class TapeEntry:
         self.operands = operands
 
 
-_HELPER_OPERATIONS = frozenset({'distance', 'angle', 'dihedral'})
+_HELPER_OPERATIONS = frozenset({'distance', 'angle', 'dihedral', 'distance_to_point'})
 
 
 _TWO_OVER_SQRT_PI = 1.1283791670955126

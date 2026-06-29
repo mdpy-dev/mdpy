@@ -73,3 +73,19 @@ def test_point_marker_classification():
     assert info.positions == ['p1']
     assert info.params == ['k', 'ref_x', 'ref_y', 'ref_z']
     assert info.per_particle == {}
+
+
+def test_distance_to_point_compiles():
+    from mdpy.force.primitives import param, point
+
+    @bonded_expression(body=1)
+    def restraint(p1, ref=point, k=param):
+        r = distance_to_point(p1, ref)
+        return k * r * r
+
+    frag = restraint.cuda_fragment
+    assert '_result_energy' in frag
+    assert '_partial_' in frag
+    assert 'ref_x' in frag and 'ref_y' in frag and 'ref_z' in frag
+    assert frag.count('add_force(f_x,f_y,f_z, a1,') == 1
+    assert restraint._expr_info.params == ['k', 'ref_x', 'ref_y', 'ref_z']

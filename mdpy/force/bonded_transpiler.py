@@ -40,6 +40,16 @@ _ANGLE_FORWARD = r'''
         float3 _partial_{rn}_1 = scale_f3(add_f3(_partial_{rn}_0, _partial_{rn}_2), -1.0f);
 '''
 
+_DISTANCE_TO_POINT_FORWARD = r'''
+        float3 _dpt_{rn} = pbc_wrap_vec(sub_f3(load_pos(pos_x,pos_y,pos_z,{atom_a}), make_f3(ref_x, ref_y, ref_z)), pbc_inv, pbc_matrix);
+        float {rn} = len_f3(_dpt_{rn});
+        float _inv_r_{rn} = 0.0f;
+        if ({rn} >= 1e-12f) {{
+            _inv_r_{rn} = 1.0f / {rn};
+        }}
+        float3 _partial_{rn}_0 = scale_f3(_dpt_{rn}, _inv_r_{rn});
+'''
+
 _DIHEDRAL_FORWARD = r'''
         float3 _rab_{rn} = pbc_wrap_vec(sub_f3(load_pos(pos_x,pos_y,pos_z,{b}), load_pos(pos_x,pos_y,pos_z,{a})), pbc_inv, pbc_matrix);
         float3 _rbc_{rn} = pbc_wrap_vec(sub_f3(load_pos(pos_x,pos_y,pos_z,{c}), load_pos(pos_x,pos_y,pos_z,{b})), pbc_inv, pbc_matrix);
@@ -79,6 +89,10 @@ HELPER_REGISTRY = {
     'dihedral': {
         'position_args': ['a', 'b', 'c', 'd'],
         'forward': _DIHEDRAL_FORWARD,
+    },
+    'distance_to_point': {
+        'position_args': ['atom_a'],
+        'forward': _DISTANCE_TO_POINT_FORWARD,
     },
 }
 
@@ -192,7 +206,7 @@ class _BondedASTWalker:
             if isinstance(node.func, ast.Name):
                 func_name = node.func.id
 
-            if func_name in ('distance', 'angle', 'dihedral'):
+            if func_name in ('distance', 'angle', 'dihedral', 'distance_to_point'):
                 result = self._fresh_name('_h')
                 arg_indices = []
                 for arg in node.args:

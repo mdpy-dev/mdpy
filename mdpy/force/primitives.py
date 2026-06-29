@@ -31,3 +31,4 @@ class _HelperPrimitive:
 distance = _HelperPrimitive('distance')
 angle = _HelperPrimitive('angle')
 dihedral = _HelperPrimitive('dihedral')
+distance_to_point = _HelperPrimitive('distance_to_point')
