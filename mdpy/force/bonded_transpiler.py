@@ -54,29 +54,17 @@ _DIHEDRAL_FORWARD = r'''
         float _n1s_{rn} = dot_f3(_n1_{rn}, _n1_{rn});
         float _n2s_{rn} = dot_f3(_n2_{rn}, _n2_{rn});
         if (_n1s_{rn} < 1e-12f || _n2s_{rn} < 1e-12f) continue;
-'''
-
-_DIHEDRAL_FORCE = r'''
-        {{
-            float _fv_{rn} = -({grad_expr});
-            float _fa_{rn} = _fv_{rn} * _lbc_{rn} / _n1s_{rn};
-            float _fd_{rn} = _fv_{rn} * _lbc_{rn} / _n2s_{rn};
-            float3 _f_a_{rn} = scale_f3(_n1_{rn}, -_fa_{rn});
-            float3 _f_d_{rn} = scale_f3(_n2_{rn}, _fd_{rn});
-            float3 _voc_{rn} = scale_f3(_rbc_{rn}, 0.5f);
-            float _loc_{rn} = _lbc_{rn} * 0.5f;
-            float _ils_{rn} = 1.0f / (_loc_{rn} * _loc_{rn});
-            float3 _t1_{rn} = cross_f3(_voc_{rn}, _f_d_{rn});
-            float3 _t2_{rn} = scale_f3(cross_f3(_rcd_{rn}, _f_d_{rn}), 0.5f);
-            float3 _t3_{rn} = scale_f3(cross_f3(scale_f3(_rab_{rn}, -1.0f), _f_a_{rn}), 0.5f);
-            float3 _st_{rn} = scale_f3(add_f3(_t1_{rn}, add_f3(_t2_{rn}, _t3_{rn})), -1.0f);
-            float3 _f_c_{rn} = scale_f3(cross_f3(_st_{rn}, _voc_{rn}), _ils_{rn});
-            float3 _f_b_{rn} = scale_f3(add_f3(_f_a_{rn}, add_f3(_f_c_{rn}, _f_d_{rn})), -1.0f);
-            add_force(f_x,f_y,f_z, {a}, _f_a_{rn});
-            add_force(f_x,f_y,f_z, {b}, _f_b_{rn});
-            add_force(f_x,f_y,f_z, {c}, _f_c_{rn});
-            add_force(f_x,f_y,f_z, {d}, _f_d_{rn});
-        }}
+        float3 _partial_{rn}_0 = scale_f3(_n1_{rn}, -_lbc_{rn} / _n1s_{rn});
+        float3 _partial_{rn}_3 = scale_f3(_n2_{rn}, _lbc_{rn} / _n2s_{rn});
+        float3 _voc_{rn} = scale_f3(_rbc_{rn}, 0.5f);
+        float _loc_{rn} = _lbc_{rn} * 0.5f;
+        float _ils_{rn} = 1.0f / (_loc_{rn} * _loc_{rn});
+        float3 _t1_{rn} = cross_f3(_voc_{rn}, _partial_{rn}_3);
+        float3 _t2_{rn} = scale_f3(cross_f3(_rcd_{rn}, _partial_{rn}_3), 0.5f);
+        float3 _t3_{rn} = scale_f3(cross_f3(scale_f3(_rab_{rn}, -1.0f), _partial_{rn}_0), 0.5f);
+        float3 _st_{rn} = scale_f3(add_f3(_t1_{rn}, add_f3(_t2_{rn}, _t3_{rn})), -1.0f);
+        float3 _partial_{rn}_2 = scale_f3(cross_f3(_st_{rn}, _voc_{rn}), _ils_{rn});
+        float3 _partial_{rn}_1 = scale_f3(add_f3(_partial_{rn}_0, add_f3(_partial_{rn}_2, _partial_{rn}_3)), -1.0f);
 '''
 
 HELPER_REGISTRY = {
@@ -91,7 +79,6 @@ HELPER_REGISTRY = {
     'dihedral': {
         'position_args': ['a', 'b', 'c', 'd'],
         'forward': _DIHEDRAL_FORWARD,
-        'force': _DIHEDRAL_FORCE,
     },
 }
 
@@ -311,15 +298,7 @@ class _BondedExpression:
                 derivs = shared_derivs
 
             grad_expr = derivs.get(energy_var, '0.0f')
-
-            if 'force' in entry:
-                template = entry['force']
-                fmt = {'rn': result_name, 'grad_expr': grad_expr}
-                for ph, idx2 in zip(position_args, arg_indices):
-                    fmt[ph] = f'a{idx2 + 1}'
-                parts.append(template.format(**fmt))
-            else:
-                parts.append(_build_projection(result_name, position_args, arg_indices, grad_expr))
+            parts.append(_build_projection(result_name, position_args, arg_indices, grad_expr))
 
         self.cuda_fragment = '\n'.join(parts)
 
