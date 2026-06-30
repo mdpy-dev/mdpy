@@ -75,8 +75,16 @@ def _create_improper_force(topology, parameter_table):
 
 
 def _create_nb14_force(topology, parameter_table):
-    if topology.num_dihedrals == 0 or 'lj_pair_14' not in parameter_table.type_pair_parameters:
+    if 'lj_pair_14' not in parameter_table.type_pair_parameters:
         return None
+
+    from mdpy.core.topology import _build_bond_graph_exclusion_pairs
+    pair_i, pair_j, total, n12, n13, n14 = _build_bond_graph_exclusion_pairs(
+        topology.bond_indices, topology.num_particles
+    )
+    if n14 == 0:
+        return None
+
     force = BondedForce(nb14_lj_coulomb)
     force.name = 'nb14'
     charges = parameter_table.particle_parameters.get('charge')
@@ -85,14 +93,11 @@ def _create_nb14_force(topology, parameter_table):
     lj_pair_14 = parameter_table.type_pair_parameters['lj_pair_14']
     n_types = int(np.sqrt(len(lj_pair_14) // 2))
     particle_types = topology.particle_types
-    seen_pairs = set()
-    for idx in range(topology.num_dihedrals):
-        a, b, c, d = topology.dihedral_indices[idx]
-        pair = (min(int(a), int(d)), max(int(a), int(d)))
-        if pair in seen_pairs:
-            continue
-        seen_pairs.add(pair)
-        i_atom, j_atom = pair
+
+    offset = n12 + n13
+    for k in range(offset, offset + n14):
+        i_atom = int(pair_i[k])
+        j_atom = int(pair_j[k])
         type_i = int(particle_types[i_atom])
         type_j = int(particle_types[j_atom])
         pair_idx = type_i * n_types + type_j
@@ -140,7 +145,7 @@ def _create_pme_exclusion_force(topology, alpha):
 
     bond_indices = topology.bond_indices
     if len(bond_indices) > 0:
-        pair_i, pair_j, total = _build_bond_graph_exclusion_pairs(
+        pair_i, pair_j, total, _, _, _ = _build_bond_graph_exclusion_pairs(
             bond_indices, topology.num_particles
         )
         for k in range(total):
@@ -165,7 +170,8 @@ def create_bonded_group(topology, parameter_table):
     return group
 
 
-def create_charmm_forces(topology, parameter_table, pbc_matrix, cutoff=12.0):
+def create_charmm_forces(topology, parameter_table, pbc_matrix, cutoff=12.0,
+                         ewald_rtol=1e-5, fourier_spacing=1.2):
     """Create all CHARMM force terms for a PME simulation.
 
     Args:
@@ -187,7 +193,7 @@ def create_charmm_forces(topology, parameter_table, pbc_matrix, cutoff=12.0):
     if nb14 is not None:
         bonded = bonded + nb14
 
-    pme = PMEReciprocalForce(cutoff)
+    pme = PMEReciprocalForce(cutoff, fourier_spacing=fourier_spacing, ewald_rtol=ewald_rtol)
     pme.bind(topology, parameter_table, pbc_matrix=pbc_matrix)
     pme_excl = _create_pme_exclusion_force(topology, pme.alpha)
     if pme_excl is not None:

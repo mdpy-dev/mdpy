@@ -294,17 +294,21 @@ def _build_bond_graph_exclusion_pairs(bond_indices, num_particles):
         all_i.append(lo)
         all_j.append(hi)
 
+    n12 = len(pair_12)
+    n13 = len(pair_13)
+    n14 = len(pair_14)
     if not all_i:
-        return np.empty(0, dtype=np.int32), np.empty(0, dtype=np.int32), 0
+        return (np.empty(0, dtype=np.int32), np.empty(0, dtype=np.int32),
+                0, 0, 0, 0)
     return (np.array(all_i, dtype=np.int32),
             np.array(all_j, dtype=np.int32),
-            len(all_i))
+            len(all_i), n12, n13, n14)
 
 
 def build_exclusion_map_gpu(topology, scale_14=1.0):
     num_particles = topology.num_particles
 
-    pair_i_np, pair_j_np, total_pairs = _build_bond_graph_exclusion_pairs(
+    pair_i_np, pair_j_np, total_pairs, _, _, _ = _build_bond_graph_exclusion_pairs(
         topology.bond_indices, num_particles
     )
     if total_pairs == 0:
