@@ -2,6 +2,9 @@
 
 Usage:
     conda run -n md_analysis python benchmark/benchmark_1m9z.py
+
+Tune PME precision via environment variables:
+    EWALD_RTOL=5e-4 FOURIER_SPACING=1.44 conda run -n md_analysis python benchmark/benchmark_1m9z.py
 """
 
 import os, sys, time
@@ -28,6 +31,8 @@ DT_FS = 2
 NUM_BLOCKS = 10
 BLOCK_STEPS = 2500
 WARMUP_STEPS = 50
+EWALD_RTOL = float(os.environ.get("EWALD_RTOL", "1e-5"))
+FOURIER_SPACING = float(os.environ.get("FOURIER_SPACING", "1.2"))
 
 psf = PSFParser(os.path.join(DATA_DIR, "1M9Z.psf"))
 pdb = PDBParser(os.path.join(DATA_DIR, "1M9Z_minimized.pdb"))
@@ -39,7 +44,14 @@ topology = psf.topology
 parameter_table = create_parameter_table(topology, toppar)
 pbc_matrix = np.eye(3, dtype=np.float64) * BOX_SIZE
 
-forces = create_charmm_forces(topology, parameter_table, pbc_matrix, cutoff=CUTOFF)
+forces = create_charmm_forces(
+    topology,
+    parameter_table,
+    pbc_matrix,
+    cutoff=CUTOFF,
+    ewald_rtol=EWALD_RTOL,
+    fourier_spacing=FOURIER_SPACING,
+)
 
 system = System(topology)
 system.upload_pbc(pbc_matrix)
@@ -68,14 +80,16 @@ def _run_steps(n):
 
 
 print("mdpy 1M9Z PME benchmark")
-print(f"  Atoms:      {topology.num_particles}")
-print(f"  Box:        {BOX_SIZE} A")
-print(f"  Cutoff:     {CUTOFF} A")
-print(f"  dt:         {DT_FS} fs")
-print(f"  Integrator: Langevin BAOAB")
-print(f"  PME alpha:  {forces['pme'].alpha:.4f}")
+print(f"  Atoms:         {topology.num_particles}")
+print(f"  Box:           {BOX_SIZE} A")
+print(f"  Cutoff:        {CUTOFF} A")
+print(f"  dt:            {DT_FS} fs")
+print(f"  Integrator:    Langevin BAOAB")
+print(f"  ewald_rtol:    {EWALD_RTOL}")
+print(f"  fourier_spacing: {FOURIER_SPACING} A")
+print(f"  PME alpha:     {forces['pme'].alpha:.4f}")
 print(
-    f"  PME grid:   {forces['pme'].grid_x} x {forces['pme'].grid_y} x {forces['pme'].grid_z}"
+    f"  PME grid:      {forces['pme'].grid_x} x {forces['pme'].grid_y} x {forces['pme'].grid_z}"
 )
 print()
 

@@ -1,7 +1,7 @@
-"""mdpy ion system (39,657 atoms: SiN membrane + TIP3 water + K+/Cl-) PME performance benchmark.
+"""mdpy ion (39,657 atoms) PME performance benchmark.
 
 Usage:
-    conda run -n md_analysis python benchmark/benchmark_ion.py
+    CUDA_VISIBLE_DEVICES=0 conda run -n md_analysis python benchmark/benchmark_ion.py
 """
 
 import os, sys, time
@@ -16,11 +16,8 @@ from mdpy.io.pdb_parser import PDBParser
 from mdpy.io.charmm_toppar_parser import CharmmTopparParser
 from mdpy.io.charmm_toppar_parser import create_parameter_table
 from mdpy.force.factories.charmm import create_charmm_forces
-from mdpy.force.bonded_force import BondedForce
-from mdpy.force.expressions.position_restraint import position_restraint
 from mdpy.integrator.langevin import LangevinBAOABIntegrator
 from mdpy.system import System
-from mdpy.constraint.constraint_scheme import create_constraints
 from mdpy.utils import generate_velocity_from_temperature
 
 DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
@@ -50,25 +47,7 @@ system.add_force_term(forces["bonded"])
 system.add_force_term(forces["nonbonded"])
 system.add_force_term(forces["pme"])
 
-restraint = BondedForce(position_restraint)
 positions = pdb.positions
-sin_indices = [
-    i for i, resname in enumerate(topology.molecule_types) if resname == "SIN"
-]
-for i in sin_indices:
-    restraint.add(
-        [i], k=0.02,
-        ref_x=float(positions[i][0]),
-        ref_y=float(positions[i][1]),
-        ref_z=float(positions[i][2]),
-    )
-restraint.name = 'position_restraint'
-system.add_force_term(restraint)
-
-constraints = create_constraints(topology, parameter_table, scheme="h-bonds")
-for c in constraints:
-    system.add_constraint(c)
-
 velocities = generate_velocity_from_temperature(300.0, topology.masses, seed=42)
 system.upload_positions(positions)
 system.upload_velocities(velocities)
@@ -81,13 +60,11 @@ def _run_steps(n):
         system.update_neighbor_list(sync_interval=10)
         system.compute_forces()
         integrator.step(system)
-        system.apply_constraints(DT_FS)
 
 
-print("mdpy ion system PME benchmark")
+print("mdpy ion PME benchmark")
 print(f"  Atoms:      {topology.num_particles}")
-print(f"  SiN restrained: {len(sin_indices)} atoms")
-print(f"  Box:        {BOX[0]:.3f} x {BOX[1]:.3f} x {BOX[2]:.3f} A")
+print(f"  Box:        {BOX[0]:.1f} x {BOX[1]:.1f} x {BOX[2]:.1f} A")
 print(f"  Cutoff:     {CUTOFF} A")
 print(f"  dt:         {DT_FS} fs")
 print(f"  Integrator: Langevin BAOAB")
