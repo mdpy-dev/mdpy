@@ -25,6 +25,11 @@ class System:
         self._block_list = None
 
         self.force_terms = []
+        self._primary_force_terms = []
+        self._pme_force_terms = []
+        self._pme_stream = None
+        self._ev_zero_forces = None
+        self._ev_pme_done = None
         self.constraints = []
 
         self._positions_uploaded = False
@@ -33,6 +38,14 @@ class System:
         self._d_cached_unique_i = None
         self._d_cached_unique_j = None
         self._d_cached_unique_scale = None
+
+    def _ensure_pme_stream(self):
+        if self._pme_stream is None:
+            self._pme_stream = cp.cuda.Stream(non_blocking=True)
+            # disable_timing: these are hot-path per-step ordering events;
+            # timing-enabled events add ~1-2 us of sync overhead each.
+            self._ev_zero_forces = cp.cuda.Event(disable_timing=True)
+            self._ev_pme_done = cp.cuda.Event(disable_timing=True)
 
     def upload_pbc(self, pbc_matrix):
         self._pbc_matrix = np.ascontiguousarray(pbc_matrix, dtype=env.NUMPY_FLOAT)
@@ -59,8 +72,13 @@ class System:
     def pbc_inv(self):
         return self._pbc_inv
 
-    def add_force_term(self, term):
+    def add_force_term(self, term, stream=None):
         self.force_terms.append(term)
+        if stream == 'pme':
+            self._ensure_pme_stream()
+            self._pme_force_terms.append(term)
+        else:
+            self._primary_force_terms.append(term)
         self.gpu.allocate_energy_accumulator(len(self.force_terms))
         term_cutoff = getattr(term, '_cutoff', None)
         if term_cutoff is not None:
