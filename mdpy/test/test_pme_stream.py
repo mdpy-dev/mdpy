@@ -136,3 +136,25 @@ class TestPmeStreamMultiStep:
         assert np.all(np.isfinite(vel)), "velocities contain NaN/Inf after 20 steps"
         e = system.dump_energy()
         assert all(np.isfinite(v) for v in e.values()), "energy contains NaN/Inf"
+
+
+class TestPmeStreamRebuildInteraction:
+
+    def test_forces_match_after_midloop_rebuild(self):
+        # Two rebuilds happen during the loop (sync_interval=5, 12 steps).
+        # Asserts the PME stream is correctly ordered against the null-stream
+        # rebuild: forces after a rebuild-mid-run must match the single-stream
+        # path (no stale PME state leaking across the rebuild boundary).
+        system_primary, _ = _build_system(pme_stream=False)
+        system_pme, _ = _build_system(pme_stream=True)
+
+        for _ in range(12):
+            system_primary.update_neighbor_list(sync_interval=5)
+            system_primary.compute_forces()
+            system_pme.update_neighbor_list(sync_interval=5)
+            system_pme.compute_forces()
+
+        f_primary = system_primary.dump_forces()
+        f_pme = system_pme.dump_forces()
+        np.testing.assert_allclose(f_pme, f_primary, atol=1e-4, rtol=1e-4,
+                                   err_msg="forces diverge after rebuild mid-loop")

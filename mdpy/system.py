@@ -73,6 +73,10 @@ class System:
         return self._pbc_inv
 
     def add_force_term(self, term, stream=None):
+        if stream not in (None, 'pme'):
+            raise ValueError(
+                f"stream must be None or 'pme', got {stream!r}"
+            )
         self.force_terms.append(term)
         if stream == 'pme':
             self._ensure_pme_stream()
