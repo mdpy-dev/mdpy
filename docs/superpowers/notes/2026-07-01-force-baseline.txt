@@ -1,0 +1,6 @@
+/usr/bin/bash: /home/ubuntu/Programs/anaconda3/envs/md_analysis/lib/libtinfo.so.6: no version information available (required by /usr/bin/bash)
+
+rms_force= 0.005118671339005232
+max_force= 0.07977642863988876
+num_particles= 39657
+
