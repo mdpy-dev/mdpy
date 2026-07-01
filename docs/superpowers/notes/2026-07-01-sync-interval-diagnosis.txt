@@ -1,0 +1,10 @@
+$ CUDA_VISIBLE_DEVICES=0 conda run -n md_analysis python benchmark/diag_sync_interval.py
+
+ sync_interval    ms/step     ns/day   rebuilds
+             1      1.518      113.8        330
+             2      1.052      164.3        200
+             5      0.643      268.7         80
+            10      0.515      335.3         40
+            20      0.438      394.2         20
+            50      0.406      425.5          8
+           100      0.382      452.0          4
