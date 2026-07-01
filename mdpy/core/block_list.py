@@ -33,6 +33,7 @@ void cell_assign_kernel(
     int number_particles,
     int nc_x, int nc_y, int nc_z,
     int* __restrict__ cell_counts,
+    int* __restrict__ composite_counts,
     unsigned long long* __restrict__ sort_keys,
     int* __restrict__ cell_indices
 ) {
@@ -70,7 +71,9 @@ void cell_assign_kernel(
     unsigned int lz = min((unsigned int)(lfz * (float)n), n - 1u);
     unsigned int h = hilbert_encode(lx, ly, lz, L);
 
-    sort_keys[i] = ((unsigned long long)cell_index << (3 * L)) | (unsigned long long)h;
+    unsigned long long ckey = ((unsigned long long)cell_index << (3 * L)) | (unsigned long long)h;
+    sort_keys[i] = ckey;
+    atomicAdd(&composite_counts[(int)ckey], 1);
 }
 """
 
@@ -534,17 +537,37 @@ void cell_prefix_sum_kernel(
 }
 """
 
+_COMPOSITE_PREFIX_SUM_KERNEL = r"""
+extern "C" __global__
+void composite_prefix_sum_kernel(
+    const int* __restrict__ composite_counts,
+    int K,
+    int* __restrict__ composite_offset
+) {
+    if (threadIdx.x == 0 && blockIdx.x == 0) {
+        int offset = 0;
+        for (int i = 0; i < K; i++) {
+            composite_offset[i] = offset;
+            offset += composite_counts[i];
+        }
+        composite_offset[K] = offset;
+    }
+}
+"""
+
 _COUNTING_SCATTER_KERNEL = r"""
 extern "C" __global__
 void counting_scatter_kernel(
     const int* __restrict__ cell_indices,
+    const unsigned long long* __restrict__ sort_keys,
+    const int* __restrict__ composite_offset,
+    int* __restrict__ composite_cursor,
     const int* __restrict__ cell_offset,
     const int* __restrict__ cell_offset_padded,
     const float* __restrict__ src_x,
     const float* __restrict__ src_y,
     const float* __restrict__ src_z,
     int number_particles,
-    int* __restrict__ cell_cursor,
     float* __restrict__ dst_x, float* __restrict__ dst_y, float* __restrict__ dst_z,
     int* __restrict__ block_atoms,
     int* __restrict__ raw_order,
@@ -556,9 +579,11 @@ void counting_scatter_kernel(
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= number_particles) return;
     int cell = cell_indices[i];
-    int local = atomicAdd(&cell_cursor[cell], 1);
-    int slot = cell_offset[cell] + local;
-    int padded = cell_offset_padded[cell] + local;
+    int ckey = (int)sort_keys[i];
+    int local = atomicAdd(&composite_cursor[ckey], 1);
+    int slot = composite_offset[ckey] + local;
+    int intra = slot - cell_offset[cell];
+    int padded = cell_offset_padded[cell] + intra;
     dst_x[slot] = src_x[i]; dst_y[slot] = src_y[i]; dst_z[slot] = src_z[i];
     block_atoms[padded] = slot;
     raw_order[slot] = i;
@@ -586,6 +611,7 @@ def _compile_gpu_kernels():
         "check_rebuild": cp.RawKernel(_CHECK_REBUILD_KERNEL, "check_rebuild_kernel"),
         "counting_scatter": cp.RawKernel(_COUNTING_SCATTER_KERNEL, "counting_scatter_kernel"),
         "cell_prefix_sum": cp.RawKernel(_CELL_PREFIX_SUM_KERNEL, "cell_prefix_sum_kernel"),
+        "composite_prefix_sum": cp.RawKernel(_COMPOSITE_PREFIX_SUM_KERNEL, "composite_prefix_sum_kernel"),
     }
 
 
@@ -803,10 +829,16 @@ class BlockList:
             pos_y = data[1::3].copy()
             pos_z = data[2::3].copy()
 
-        # K1: Fused cell-assign (cell_index + Hilbert key + atomic cell_counts)
+        # K1: Fused cell-assign (cell_index + Hilbert key + atomic cell_counts
+        # and composite_counts). The composite key (cell << (3*L)) | hilbert
+        # indexes a finer bucket grid so counting_scatter can preserve the
+        # intra-cell Hilbert ordering instead of scattering in arrival order.
+        hilbert_levels = 2
+        composite_buckets = self.nc_total * (1 << (3 * hilbert_levels))
         sort_keys = cp.empty(N, dtype=np.uint64)
         cell_indices = cp.empty(N, dtype=env.NUMPY_INT)
         d_cell_counts = cp.zeros(self.nc_total, dtype=env.NUMPY_INT)
+        d_composite_counts = cp.zeros(composite_buckets, dtype=env.NUMPY_INT)
         nm = (N + tpb - 1) // tpb
         self._kernels["cell_assign"](
             (nm,), (tpb,),
@@ -815,7 +847,7 @@ class BlockList:
                 self._d_pbc_matrix, self._d_pbc_inv,
                 np.int32(N),
                 np.int32(self.nc_x), np.int32(self.nc_y), np.int32(self.nc_z),
-                d_cell_counts, sort_keys, cell_indices,
+                d_cell_counts, d_composite_counts, sort_keys, cell_indices,
             ),
         )
         self._d_cell_counts = d_cell_counts
@@ -850,15 +882,26 @@ class BlockList:
         self.d_cell_block_offset = cell_block_offset
         self.d_cell_block_count = cell_block_count
 
-        # K3: counting-sort scatter. Each atom claims a unique slot in its cell's
-        # range via atomicAdd on a per-cell cursor, then writes every output:
-        # sorted positions, block_atoms, order maps, cell_indices_sorted, and the
-        # rebuild-time position snapshot. Replaces cp.argsort + post_argsort +
-        # scatter_padded + fused_copy3. cell_cursor must be zeroed and
-        # block_atoms pre-filled with -1 (padding) before launch.
+        # K2b: prefix sum over composite_counts (cell x Hilbert buckets) so
+        # counting_scatter scatters atoms in Hilbert order within each cell.
+        # The composite buckets for a cell are contiguous (cell c occupies keys
+        # [c*2^(3L), (c+1)*2^(3L))), so composite_offset aligns with cell_offset.
+        composite_offset = cp.empty(composite_buckets + 1, dtype=env.NUMPY_INT)
+        self._kernels["composite_prefix_sum"](
+            (1,), (1,),
+            (d_composite_counts, np.int32(composite_buckets), composite_offset),
+        )
+
+        # K3: counting-sort scatter. Each atom claims a unique slot in its
+        # composite (cell x Hilbert) bucket via atomicAdd on a per-bucket
+        # cursor, then writes every output: sorted positions, block_atoms,
+        # order maps, cell_indices_sorted, and the rebuild-time position
+        # snapshot. Scattering on composite buckets preserves the intra-cell
+        # Hilbert ordering, keeping blocks Hilbert-compact -> tight AABBs.
+        # block_atoms must be pre-filled with -1 (padding) before launch.
         block_atoms = cp.empty(total_padded, dtype=env.NUMPY_INT)
         fill_constant(block_atoms, -1)
-        cell_cursor = cp.zeros(self.nc_total, dtype=env.NUMPY_INT)
+        composite_cursor = cp.zeros(composite_buckets, dtype=env.NUMPY_INT)
         sorted_pos_x = cp.empty(N, dtype=env.NUMPY_FLOAT)
         sorted_pos_y = cp.empty(N, dtype=env.NUMPY_FLOAT)
         sorted_pos_z = cp.empty(N, dtype=env.NUMPY_FLOAT)
@@ -872,8 +915,9 @@ class BlockList:
         self._kernels["counting_scatter"](
             (nm,), (tpb,),
             (
-                cell_indices, cell_offset, cell_offset_padded,
-                pos_x, pos_y, pos_z, np.int32(N), cell_cursor,
+                cell_indices, sort_keys, composite_offset, composite_cursor,
+                cell_offset, cell_offset_padded,
+                pos_x, pos_y, pos_z, np.int32(N),
                 sorted_pos_x, sorted_pos_y, sorted_pos_z,
                 block_atoms, raw_order, pdb_to_sorted, sorted_to_pdb,
                 cell_indices_sorted,
