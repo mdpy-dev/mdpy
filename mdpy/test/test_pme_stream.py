@@ -4,16 +4,12 @@ import os
 
 import cupy as cp
 import numpy as np
-import pytest
 
 from mdpy.io.psf_parser import PSFParser
 from mdpy.io.pdb_parser import PDBParser
 from mdpy.io.charmm_toppar_parser import CharmmTopparParser
 from mdpy.io.charmm_toppar_parser import create_parameter_table
 from mdpy.force.factories.charmm import create_charmm_forces
-from mdpy.force.nonbonded_force import NonbondedForce
-from mdpy.force.expressions.lennard_jones import lennard_jones
-from mdpy.force.expressions.coulomb import coulomb
 from mdpy.integrator.verlet import VerletIntegrator
 from mdpy.system import System
 from mdpy import env
@@ -106,6 +102,10 @@ class TestPmeStreamCorrectness:
                                    err_msg="PME-on-separate-stream forces diverge from primary")
 
     def test_energies_match_primary_vs_pme_stream(self):
+        # dump_energy() recomputes energy sequentially on the null stream
+        # (it does not use compute_forces's two-stream path). This is a smoke
+        # check that routing the PME term does not corrupt its term state,
+        # NOT a two-stream energy-correctness guard.
         system_primary, _ = _build_system(pme_stream=False)
         system_pme, _ = _build_system(pme_stream=True)
 
@@ -125,7 +125,7 @@ class TestPmeStreamCorrectness:
 
 class TestPmeStreamMultiStep:
 
-    def test_20_steps_no_nan_no_drift(self):
+    def test_20_steps_remain_finite(self):
         system, integrator = _build_system(pme_stream=True)
         for _ in range(20):
             system.update_neighbor_list(sync_interval=10)
