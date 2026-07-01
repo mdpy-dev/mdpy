@@ -96,182 +96,6 @@ void pack_sorted_posq_kernel(
 """
 
 
-def _assemble_main_kernel(
-    expr_info, energy_cuda, grad_cuda, dEdr_cuda, total_energy_expr, compute_energy=True
-):
-    i_props, j_props = _split_per_particle(expr_info.per_particle)
-    bases = _unique_prop_bases(expr_info.per_particle)
-    non_charge_bases = [b for b in bases if b != "charge"]
-
-    sorted_decls = ""
-    for base in non_charge_bases:
-        sorted_decls += f",\n    const float* __restrict__ sorted_{base}"
-
-    unsorted_decls = ""
-    for base in non_charge_bases:
-        unsorted_decls += f",\n    const float* __restrict__ d_{base}"
-
-    pair_decls = ""
-    for name in expr_info.params:
-        pair_decls += f",\n    const float* __restrict__ d_{name}_matrix"
-
-    scalar_decls = ""
-    for name in expr_info.scalars:
-        scalar_decls += f",\n    float {name}"
-
-    load_i = ""
-    for arg_name, base_name in i_props.items():
-        if base_name == "charge":
-            load_i += f"\n        float {arg_name} = posq_i.w;"
-        else:
-            load_i += (
-                f"\n        float {arg_name} = sorted_{base_name}[block_x * 32 + tgx];"
-            )
-
-    load_j_init = ""
-    for arg_name in j_props:
-        load_j_init += f"\n        float {arg_name} = 0.0f;"
-
-    load_j_from_array = ""
-    for arg_name, base_name in j_props.items():
-        if base_name == "charge":
-            load_j_from_array += f"\n            {arg_name} = _pj.w;"
-        else:
-            load_j_from_array += f"\n            {arg_name} = d_{base_name}[gj];"
-
-    shuffle_j = ""
-    for arg_name in j_props:
-        shuffle_j += f"\n            {arg_name} = __shfl_sync(0xffffffff, {arg_name}, (tgx + 1) & 31);"
-
-    load_pair = ""
-    for name in expr_info.params:
-        load_pair += f"\n                float {name} = d_{name}_matrix[pair_idx];"
-
-    if compute_energy:
-        energy_buffer_arg = "    float* __restrict__ energy_buffer,"
-        energy_init = "    float total_energy = 0.0f;"
-        energy_accum = "                total_energy += energy_val;"
-        energy_reduce = """
-    for (int offset = 16; offset > 0; offset >>= 1) {{
-        total_energy += __shfl_down_sync(0xffffffff, total_energy, offset);
-    }}
-    if (tgx == 0) atomicAdd(energy_buffer, total_energy);
-"""
-    else:
-        energy_buffer_arg = ""
-        energy_init = ""
-        energy_accum = ""
-        energy_reduce = ""
-
-    kernel = f"""extern "C" __global__
-void main_block_pair_kernel(
-    const float4* __restrict__ sorted_posq,
-    const float4* __restrict__ posq,
-    const float* __restrict__ shift_x,
-    const float* __restrict__ shift_y,
-    const float* __restrict__ shift_z,
-    float* __restrict__ f_x,
-    float* __restrict__ f_y,
-    float* __restrict__ f_z,
-{energy_buffer_arg}
-    const int* __restrict__ block_atoms,
-    const int* __restrict__ block_pairs,
-    const int* __restrict__ interacting_atoms,
-    float cutoff_sq,
-    int num_block_pairs,
-    int num_particles
-    {sorted_decls}{unsorted_decls}{pair_decls},
-    const int* __restrict__ d_types,
-    int n_types
-    {scalar_decls}
-) {{
-    int total_warps = (blockDim.x * gridDim.x) / 32;
-    int warp_id = (blockIdx.x * blockDim.x + threadIdx.x) / 32;
-    int tgx = threadIdx.x & 31;
-    int tbx = threadIdx.x - tgx;
-    int pos = (int)((long long)warp_id * num_block_pairs / total_warps);
-    int end = (int)((long long)(warp_id + 1) * num_block_pairs / total_warps);
-{energy_init}
-    __shared__ int atom_indices_shared[256];
-    for (; pos < end; pos++) {{
-        int block_x = block_pairs[pos];
-        int gi = block_atoms[block_x * 32 + tgx];
-        float4 posq_i = sorted_posq[block_x * 32 + tgx];
-        float px_i = posq_i.x;
-        float py_i = posq_i.y;
-        float pz_i = posq_i.z;
-        float sx = shift_x[pos];
-        float sy = shift_y[pos];
-        float sz = shift_z[pos];
-{load_i}
-        int type_i = 0;
-        if (gi >= 0 && gi < num_particles) {{
-            type_i = __ldg(&d_types[gi]);
-        }}
-        int gj = interacting_atoms[pos * 32 + tgx];
-        float shfl_px = 0.0f, shfl_py = 0.0f, shfl_pz = 0.0f;
-{load_j_init}
-        if (gj >= 0 && gj < num_particles) {{
-            float4 _pj = posq[gj];
-            shfl_px = _pj.x;
-            shfl_py = _pj.y;
-            shfl_pz = _pj.z;
-{load_j_from_array}
-        }}
-        atom_indices_shared[threadIdx.x] = gj;
-        float force_x = 0.0f, force_y = 0.0f, force_z = 0.0f;
-        float shfl_fx = 0.0f, shfl_fy = 0.0f, shfl_fz = 0.0f;
-        int tj = tgx;
-        for (int j = 0; j < 32; j++) {{
-            int atom2 = atom_indices_shared[tbx + tj];
-            float dx = shfl_px - px_i + sx;
-            float dy = shfl_py - py_i + sy;
-            float dz = shfl_pz - pz_i + sz;
-            float dist_sq = dx * dx + dy * dy + dz * dz;
-            if (atom2 >= 0 && atom2 < num_particles && dist_sq > 1.0e-12f && dist_sq <= cutoff_sq && gi >= 0 && gi < num_particles) {{
-                float inv_dist = rsqrtf(dist_sq);
-                float r = dist_sq * inv_dist;
-                int type_j = __ldg(&d_types[atom2]);
-                int pair_idx = type_i * n_types + type_j;
-{load_pair}
-{energy_cuda}
-{grad_cuda if grad_cuda else ''}
-                float force_magnitude = ({dEdr_cuda});
-                float energy_val = {total_energy_expr};
-                float inv_dist_force = force_magnitude * inv_dist;
-                float fx = dx * inv_dist_force;
-                float fy = dy * inv_dist_force;
-                float fz = dz * inv_dist_force;
-                force_x += fx; force_y += fy; force_z += fz;
-                shfl_fx -= fx; shfl_fy -= fy; shfl_fz -= fz;
-{energy_accum}
-            }}
-            shfl_px = __shfl_sync(0xffffffff, shfl_px, (tgx + 1) & 31);
-            shfl_py = __shfl_sync(0xffffffff, shfl_py, (tgx + 1) & 31);
-            shfl_pz = __shfl_sync(0xffffffff, shfl_pz, (tgx + 1) & 31);
-            shfl_fx = __shfl_sync(0xffffffff, shfl_fx, (tgx + 1) & 31);
-            shfl_fy = __shfl_sync(0xffffffff, shfl_fy, (tgx + 1) & 31);
-            shfl_fz = __shfl_sync(0xffffffff, shfl_fz, (tgx + 1) & 31);
-{shuffle_j}
-            tj = (tj + 1) & 31;
-        }}
-        if (gi >= 0 && gi < num_particles) {{
-            atomicAdd(&f_x[gi], force_x);
-            atomicAdd(&f_y[gi], force_y);
-            atomicAdd(&f_z[gi], force_z);
-        }}
-        int gj_out = atom_indices_shared[threadIdx.x];
-        if (gj_out >= 0 && gj_out < num_particles) {{
-            atomicAdd(&f_x[gj_out], shfl_fx);
-            atomicAdd(&f_y[gj_out], shfl_fy);
-            atomicAdd(&f_z[gj_out], shfl_fz);
-        }}
-    }}
-{energy_reduce}
-}}"""
-    return kernel
-
-
 def _assemble_exclusion_kernel(
     expr_info, energy_cuda, grad_cuda, dEdr_cuda, total_energy_expr, compute_energy=True
 ):
@@ -475,9 +299,7 @@ class NonbondedForce(ForceTerm):
         self._d_sorted_per_particle = {}
         self._d_pair_params = {}
 
-        self._main_kernel = None
         self._excl_kernel = None
-        self._main_kernel_fo = None
         self._excl_kernel_fo = None
         self._pack_posq_kernel = None
         self._gather_kernels = None
@@ -519,14 +341,6 @@ class NonbondedForce(ForceTerm):
             self._energy_cuda_raw
         )
 
-        main_src = _assemble_main_kernel(
-            self._expr_info,
-            self._energy_cuda,
-            self._grad_cuda,
-            self._dEdr_cuda,
-            self._total_energy_expr,
-            compute_energy=True,
-        )
         excl_src = _assemble_exclusion_kernel(
             self._expr_info,
             self._energy_cuda,
@@ -534,14 +348,6 @@ class NonbondedForce(ForceTerm):
             self._dEdr_cuda,
             self._total_energy_expr,
             compute_energy=True,
-        )
-        main_src_fo = _assemble_main_kernel(
-            self._expr_info,
-            self._energy_cuda,
-            self._grad_cuda,
-            self._dEdr_cuda,
-            self._total_energy_expr,
-            compute_energy=False,
         )
         excl_src_fo = _assemble_exclusion_kernel(
             self._expr_info,
@@ -552,9 +358,7 @@ class NonbondedForce(ForceTerm):
             compute_energy=False,
         )
 
-        self._main_kernel = cp.RawKernel(main_src, "main_block_pair_kernel")
         self._excl_kernel = cp.RawKernel(excl_src, "exclusion_block_pair_kernel")
-        self._main_kernel_fo = cp.RawKernel(main_src_fo, "main_block_pair_kernel")
         self._excl_kernel_fo = cp.RawKernel(excl_src_fo, "exclusion_block_pair_kernel")
         self._pack_posq_kernel = cp.RawKernel(
             _PACK_SORTED_POSQ_KERNEL, "pack_sorted_posq_kernel"

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ctypes
+import math
 
 import numpy as np
 import cupy as cp
@@ -10,17 +11,6 @@ from mdpy.core.radix_sort import fill_constant
 
 BLOCK_SIZE = 32
 NUM_ATOMS_SENTINEL = 0x7FFFFFFF
-
-_MORTON_SPLIT_FUNC = r"""
-__device__ unsigned long long morton_split(unsigned int v) {
-    v = v & 0x000003FFu;
-    v = (v | (v << 16)) & 0x030000FFu;
-    v = (v | (v << 8))  & 0x0300F00Fu;
-    v = (v | (v << 4))  & 0x030C30C3u;
-    v = (v | (v << 2))  & 0x09249249u;
-    return (unsigned long long)v;
-}
-"""
 
 _CELL_ASSIGN_KERNEL = HILBERT_ENCODE_KERNEL + r"""
 extern "C" __global__
@@ -32,6 +22,7 @@ void cell_assign_kernel(
     const float* __restrict__ pbc_inv,
     int number_particles,
     int nc_x, int nc_y, int nc_z,
+    int hilbert_L,
     int* __restrict__ cell_counts,
     int* __restrict__ composite_counts,
     unsigned long long* __restrict__ sort_keys,
@@ -63,8 +54,9 @@ void cell_assign_kernel(
     float lfz = fz * nc_z - cz;
     lfz = fmaxf(0.0f, fminf(lfz, 1.0f - 1e-6f));
 
-    /* intra-cell Hilbert key, L=2 -> 2^2 sub-cells per axis, 6-bit key */
-    const int L = 2;
+    /* intra-cell Hilbert key: 2^L sub-cells per axis, 3*L-bit key.
+     * L is density-derived (see _compute_cell_grid). */
+    const int L = hilbert_L;
     unsigned int n = (unsigned int)(1 << L);
     unsigned int lx = min((unsigned int)(lfx * (float)n), n - 1u);
     unsigned int ly = min((unsigned int)(lfy * (float)n), n - 1u);
@@ -604,6 +596,8 @@ class BlockList:
         self.nc_y = 0
         self.nc_z = 0
         self.nc_total = 0
+        self._hilbert_levels = 2
+        self._hilbert_bits = 6
 
         self.d_block_atoms = cp.empty(0, dtype=env.NUMPY_INT)
         self.d_block_center_x = cp.empty(0, dtype=env.NUMPY_FLOAT)
@@ -757,7 +751,7 @@ class BlockList:
         cp.cuda.Stream.null.synchronize()
         return int(self._pinned_int_view[0])
 
-    def _compute_cell_grid(self, pbc_matrix):
+    def _compute_cell_grid(self, pbc_matrix, num_particles):
         pbc_2d = np.asarray(pbc_matrix).reshape(3, 3)
         a_vec = pbc_2d[0]
         b_vec = pbc_2d[1]
@@ -770,6 +764,18 @@ class BlockList:
         self.nc_y = max(1, int(box_b / cell_size))
         self.nc_z = max(1, int(box_c / cell_size))
         self.nc_total = self.nc_x * self.nc_y * self.nc_z
+
+        # Density-derived Hilbert level L. Targets ~4 atoms per sub-cell:
+        # atoms_per_cell / (2^L)^3 ~= 4  ->  B_raw = round(log2(apc/4)), L =
+        # (B_raw+2)//3 clamped to [1, 4]. Also cap K = nc_total * 2^(3L) at
+        # 1e6 so the counting-sort bucket arrays stay small.
+        atoms_per_cell = num_particles / self.nc_total
+        b_raw = int(round(math.log2(max(1.0, atoms_per_cell / 4.0))))
+        L = max(1, min(4, (b_raw + 2) // 3))
+        while L > 1 and self.nc_total * (1 << (3 * L)) > 1_000_000:
+            L -= 1
+        self._hilbert_levels = L
+        self._hilbert_bits = 3 * L
 
     def rebuild(self, positions, topology, pbc_matrix, pbc_inv):
         """Sort particles into cell-aligned blocks. Returns (pdb_to_sorted, None)."""
@@ -785,7 +791,7 @@ class BlockList:
         self.num_particles = N
         tpb = 256
 
-        self._compute_cell_grid(pbc_matrix)
+        self._compute_cell_grid(pbc_matrix, N)
         self._upload_pbc(pbc_matrix, pbc_inv)
 
         if isinstance(positions, tuple):
@@ -804,7 +810,7 @@ class BlockList:
         # and composite_counts). The composite key (cell << (3*L)) | hilbert
         # indexes a finer bucket grid so counting_scatter can preserve the
         # intra-cell Hilbert ordering instead of scattering in arrival order.
-        hilbert_levels = 2
+        hilbert_levels = self._hilbert_levels
         composite_buckets = self.nc_total * (1 << (3 * hilbert_levels))
         sort_keys = cp.empty(N, dtype=np.uint64)
         cell_indices = cp.empty(N, dtype=env.NUMPY_INT)
@@ -818,6 +824,7 @@ class BlockList:
                 self._d_pbc_matrix, self._d_pbc_inv,
                 np.int32(N),
                 np.int32(self.nc_x), np.int32(self.nc_y), np.int32(self.nc_z),
+                np.int32(hilbert_levels),
                 d_cell_counts, d_composite_counts, sort_keys, cell_indices,
             ),
         )

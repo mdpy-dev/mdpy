@@ -5,7 +5,6 @@ import cupy as cp
 from mdpy.force.nonbonded_transpiler import nonbonded_expression
 from mdpy.force.nonbonded_force import (
     NonbondedForce,
-    _assemble_main_kernel,
     _assemble_exclusion_kernel,
     _prepare_energy_expression,
     _split_per_particle,
@@ -66,7 +65,7 @@ class TestKernelAssembly:
 
     def test_combined_kernel_charge_from_posq(self):
         energy_cuda, total_expr = _prepare_energy_expression(combined_lj_coulomb.energy_cuda)
-        src = _assemble_main_kernel(
+        src = _assemble_exclusion_kernel(
             combined_lj_coulomb.expr_info, energy_cuda,
             combined_lj_coulomb.grad_cuda, combined_lj_coulomb.dEdr_cuda, total_expr
         )
@@ -77,7 +76,7 @@ class TestKernelAssembly:
 
     def test_kernel_has_pair_param_matrices(self):
         energy_cuda, total_expr = _prepare_energy_expression(lj_ad.energy_cuda)
-        src = _assemble_main_kernel(
+        src = _assemble_exclusion_kernel(
             lj_ad.expr_info, energy_cuda, lj_ad.grad_cuda, lj_ad.dEdr_cuda, total_expr
         )
         assert 'd_sigma_matrix' in src
@@ -94,7 +93,7 @@ class TestKernelAssembly:
 
     def test_kernel_has_warp_structure(self):
         energy_cuda, total_expr = _prepare_energy_expression(combined_lj_coulomb.energy_cuda)
-        src = _assemble_main_kernel(
+        src = _assemble_exclusion_kernel(
             combined_lj_coulomb.expr_info, energy_cuda,
             combined_lj_coulomb.grad_cuda, combined_lj_coulomb.dEdr_cuda, total_expr
         )
@@ -104,7 +103,7 @@ class TestKernelAssembly:
 
     def test_kernel_valid_braces(self):
         energy_cuda, total_expr = _prepare_energy_expression(combined_lj_coulomb.energy_cuda)
-        src = _assemble_main_kernel(
+        src = _assemble_exclusion_kernel(
             combined_lj_coulomb.expr_info, energy_cuda,
             combined_lj_coulomb.grad_cuda, combined_lj_coulomb.dEdr_cuda, total_expr
         )
@@ -112,7 +111,7 @@ class TestKernelAssembly:
 
     def test_force_only_kernel_no_energy(self):
         energy_cuda, total_expr = _prepare_energy_expression(combined_lj_coulomb.energy_cuda)
-        src = _assemble_main_kernel(
+        src = _assemble_exclusion_kernel(
             combined_lj_coulomb.expr_info, energy_cuda,
             combined_lj_coulomb.grad_cuda, combined_lj_coulomb.dEdr_cuda,
             total_expr, compute_energy=False
@@ -161,27 +160,27 @@ class TestHelpers:
 class TestKernelCompilation:
     def test_lj_kernel_compiles(self):
         energy_cuda, total_expr = _prepare_energy_expression(lj_ad.energy_cuda)
-        src = _assemble_main_kernel(
+        src = _assemble_exclusion_kernel(
             lj_ad.expr_info, energy_cuda, lj_ad.grad_cuda, lj_ad.dEdr_cuda, total_expr
         )
-        kernel = cp.RawKernel(src, 'main_block_pair_kernel_v2')
+        kernel = cp.RawKernel(src, 'exclusion_block_pair_kernel')
         assert kernel is not None
 
     def test_coulomb_kernel_compiles(self):
         energy_cuda, total_expr = _prepare_energy_expression(coulomb_ad.energy_cuda)
-        src = _assemble_main_kernel(
+        src = _assemble_exclusion_kernel(
             coulomb_ad.expr_info, energy_cuda, coulomb_ad.grad_cuda, coulomb_ad.dEdr_cuda, total_expr
         )
-        kernel = cp.RawKernel(src, 'main_block_pair_kernel_v2')
+        kernel = cp.RawKernel(src, 'exclusion_block_pair_kernel')
         assert kernel is not None
 
     def test_combined_kernel_compiles(self):
         energy_cuda, total_expr = _prepare_energy_expression(combined_lj_coulomb.energy_cuda)
-        src = _assemble_main_kernel(
+        src = _assemble_exclusion_kernel(
             combined_lj_coulomb.expr_info, energy_cuda,
             combined_lj_coulomb.grad_cuda, combined_lj_coulomb.dEdr_cuda, total_expr
         )
-        kernel = cp.RawKernel(src, 'main_block_pair_kernel_v2')
+        kernel = cp.RawKernel(src, 'exclusion_block_pair_kernel')
         assert kernel is not None
 
     def test_exclusion_kernel_compiles(self):
@@ -195,11 +194,11 @@ class TestKernelCompilation:
 
     def test_screened_coulomb_kernel_compiles(self):
         energy_cuda, total_expr = _prepare_energy_expression(screened_coulomb_ad.energy_cuda)
-        src = _assemble_main_kernel(
+        src = _assemble_exclusion_kernel(
             screened_coulomb_ad.expr_info, energy_cuda,
             screened_coulomb_ad.grad_cuda, screened_coulomb_ad.dEdr_cuda, total_expr
         )
-        kernel = cp.RawKernel(src, 'main_block_pair_kernel_v2')
+        kernel = cp.RawKernel(src, 'exclusion_block_pair_kernel')
         assert kernel is not None
 
 

@@ -177,3 +177,17 @@ def test_block_meta_fused():
         bi = a2b[atom_idx]
         si = a2s[atom_idx]
         assert ba[bi, si] >= 0, f"atom {atom_idx} maps to empty slot"
+
+
+def test_hilbert_B_derived_from_density():
+    """The Hilbert level L is density-derived so the sub-cell resolution adapts
+    to the system. For the ion box (~317 atoms/cell) this gives L=2 (6-bit key)."""
+    s = _build_ion_system()
+    s.update_neighbor_list(force_rebuild=True)
+    bl = s._block_list
+    assert 1 <= bl._hilbert_levels <= 4
+    # ion: ~317 atoms/cell -> B_raw=round(log2(79))=6 -> L=(6+2)//3=2
+    assert bl._hilbert_levels == 2
+    assert bl._hilbert_bits == 6
+    K = bl.nc_total * (1 << (3 * bl._hilbert_levels))
+    assert K <= 1_000_000
