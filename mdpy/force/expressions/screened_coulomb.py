@@ -6,7 +6,7 @@ from mdpy.force.primitives import scalar as scalar_marker
 
 # Coulomb constant 1/(4*pi*epsilon0) in mdpy internal units (file-local).
 COULOMB_CONST = 1.0 / (4.0 * math.pi * float(EPSILON0.value))
-_COULOMB_CUDA = f'{COULOMB_CONST}f'
+_COULOMB_CUDA = f"{COULOMB_CONST}f"
 
 # NOTE: This expression uses a "decorate then override" pattern.
 # The @nonbonded_expression decorator auto-compiles the energy via AD,
@@ -23,7 +23,7 @@ def screened_coulomb(pos1, pos2, charge1, charge2, alpha=scalar_marker):
     return COULOMB_CONST * charge1 * charge2 * erfc(alpha * r) / r
 
 
-screened_coulomb.energy_cuda = '''\
+screened_coulomb.energy_cuda = """\
         float qq = (charge1 * charge2);
         float alpha_r = (alpha * r);
         float z2 = (alpha_r * alpha_r);
@@ -43,15 +43,32 @@ screened_coulomb.energy_cuda = '''\
         float alpha3 = ((alpha * alpha) * alpha);
         float _coulomb_force = (((-__MDPY_COULOMB__) * qq) * ((inv_dist * inv_dist) + ((alpha3 * r) * corr)));
         float erf_val = erff(alpha_r);
-        float _result_energy = (((__MDPY_COULOMB__ * qq) * (1.0f - erf_val)) * inv_dist);'''.replace(
-    '__MDPY_COULOMB__', _COULOMB_CUDA)
+        float _result_energy = (((__MDPY_COULOMB__ * qq) * (1.0f - erf_val)) * inv_dist);""".replace(
+    "__MDPY_COULOMB__", _COULOMB_CUDA
+)
 
-screened_coulomb.dEdr_cuda = '_coulomb_force'
+screened_coulomb.dEdr_cuda = "_coulomb_force"
 
 screened_coulomb._local_vars = {
-    'qq', 'alpha_r', 'z2', 'z4', '_result_energy',
-    'fd_a', 'fd_b', 'fd_c', 'fd_d', 'inv_fd',
-    'fn_a', 'fn_b', 'fn_c', 'fn_d', 'fn_e', 'fn_f',
-    'corr', 'alpha3', '_coulomb_force', 'erf_val',
+    "qq",
+    "alpha_r",
+    "z2",
+    "z4",
+    "_result_energy",
+    "fd_a",
+    "fd_b",
+    "fd_c",
+    "fd_d",
+    "inv_fd",
+    "fn_a",
+    "fn_b",
+    "fn_c",
+    "fn_d",
+    "fn_e",
+    "fn_f",
+    "corr",
+    "alpha3",
+    "_coulomb_force",
+    "erf_val",
 }
 screened_coulomb.grad_cuda = None
