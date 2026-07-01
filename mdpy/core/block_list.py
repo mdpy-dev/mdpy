@@ -5,6 +5,7 @@ import ctypes
 import numpy as np
 import cupy as cp
 from mdpy import env
+from mdpy.core.hilbert import HILBERT_ENCODE_KERNEL
 from mdpy.core.radix_sort import fill_constant
 
 BLOCK_SIZE = 32
@@ -21,9 +22,9 @@ __device__ unsigned long long morton_split(unsigned int v) {
 }
 """
 
-_CELL_MORTON_KERNEL = _MORTON_SPLIT_FUNC + r"""
+_CELL_ASSIGN_KERNEL = HILBERT_ENCODE_KERNEL + r"""
 extern "C" __global__
-void cell_morton_kernel(
+void cell_assign_kernel(
     const float* __restrict__ pos_x,
     const float* __restrict__ pos_y,
     const float* __restrict__ pos_z,
@@ -31,6 +32,7 @@ void cell_morton_kernel(
     const float* __restrict__ pbc_inv,
     int number_particles,
     int nc_x, int nc_y, int nc_z,
+    int* __restrict__ cell_counts,
     unsigned long long* __restrict__ sort_keys,
     int* __restrict__ cell_indices
 ) {
@@ -48,7 +50,10 @@ void cell_morton_kernel(
     cy = max(0, min(cy, nc_y - 1));
     int cz = (int)(fz * nc_z);
     cz = max(0, min(cz, nc_z - 1));
-    cell_indices[i] = cx + cy * nc_x + cz * nc_x * nc_y;
+    int cell_index = cx + cy * nc_x + cz * nc_x * nc_y;
+
+    atomicAdd(&cell_counts[cell_index], 1);
+    cell_indices[i] = cell_index;
 
     float lfx = fx * nc_x - cx;
     lfx = fmaxf(0.0f, fminf(lfx, 1.0f - 1e-6f));
@@ -57,12 +62,15 @@ void cell_morton_kernel(
     float lfz = fz * nc_z - cz;
     lfz = fmaxf(0.0f, fminf(lfz, 1.0f - 1e-6f));
 
-    unsigned int lx = min((unsigned int)(lfx * 1024.f), 1023u);
-    unsigned int ly = min((unsigned int)(lfy * 1024.f), 1023u);
-    unsigned int lz = min((unsigned int)(lfz * 1024.f), 1023u);
-    unsigned int wm = morton_split(lx) | (morton_split(ly) << 1) | (morton_split(lz) << 2);
+    /* intra-cell Hilbert key, L=2 -> 2^2 sub-cells per axis, 6-bit key */
+    const int L = 2;
+    unsigned int n = (unsigned int)(1 << L);
+    unsigned int lx = min((unsigned int)(lfx * (float)n), n - 1u);
+    unsigned int ly = min((unsigned int)(lfy * (float)n), n - 1u);
+    unsigned int lz = min((unsigned int)(lfz * (float)n), n - 1u);
+    unsigned int h = hilbert_encode(lx, ly, lz, L);
 
-    sort_keys[i] = ((unsigned long long)cell_indices[i] << 30) | wm;
+    sort_keys[i] = ((unsigned long long)cell_index << (3 * L)) | (unsigned long long)h;
 }
 """
 
@@ -537,19 +545,6 @@ void post_argsort_kernel(
 }
 """
 
-_CELL_BINCOUNT_KERNEL = r"""
-extern "C" __global__
-void cell_bincount_kernel(
-    const int* __restrict__ cell_indices_sorted,
-    int number_particles,
-    int nc_total,
-    int* __restrict__ cell_counts
-) {
-    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < number_particles; i += blockDim.x * gridDim.x)
-        atomicAdd(&cell_counts[cell_indices_sorted[i]], 1);
-}
-"""
-
 _CELL_PREFIX_SUM_KERNEL = r"""
 extern "C" __global__
 void cell_prefix_sum_kernel(
@@ -625,7 +620,7 @@ void fused_copy3_kernel(
 
 def _compile_gpu_kernels():
     return {
-        "cell_morton": cp.RawKernel(_CELL_MORTON_KERNEL, "cell_morton_kernel"),
+        "cell_assign": cp.RawKernel(_CELL_ASSIGN_KERNEL, "cell_assign_kernel"),
         "scatter_padded": cp.RawKernel(_SCATTER_PADDED_KERNEL, "scatter_padded_kernel"),
         "compute_bounds": cp.RawKernel(
             _COMPUTE_BLOCK_BOUNDS_KERNEL, "compute_block_bounds_kernel"
@@ -640,7 +635,6 @@ def _compile_gpu_kernels():
         "check_rebuild": cp.RawKernel(_CHECK_REBUILD_KERNEL, "check_rebuild_kernel"),
         "fused_copy3": cp.RawKernel(_FUSED_COPY3_KERNEL, "fused_copy3_kernel"),
         "post_argsort": cp.RawKernel(_POST_ARGSORT_KERNEL, "post_argsort_kernel"),
-        "cell_bincount": cp.RawKernel(_CELL_BINCOUNT_KERNEL, "cell_bincount_kernel"),
         "cell_prefix_sum": cp.RawKernel(_CELL_PREFIX_SUM_KERNEL, "cell_prefix_sum_kernel"),
         "expand_block_to_cell": cp.RawKernel(
             _EXPAND_BLOCK_TO_CELL_KERNEL, "expand_block_to_cell_kernel"
@@ -862,20 +856,23 @@ class BlockList:
             pos_y = data[1::3].copy()
             pos_z = data[2::3].copy()
 
-        # K1: Fused cell-assign + within-cell morton
+        # K1: Fused cell-assign (cell_index + Hilbert key + atomic cell_counts)
         sort_keys = cp.empty(N, dtype=np.uint64)
         cell_indices = cp.empty(N, dtype=env.NUMPY_INT)
+        d_cell_counts = cp.zeros(self.nc_total, dtype=env.NUMPY_INT)
         nm = (N + tpb - 1) // tpb
-        self._kernels["cell_morton"](
+        self._kernels["cell_assign"](
             (nm,), (tpb,),
             (
                 pos_x, pos_y, pos_z,
                 self._d_pbc_matrix, self._d_pbc_inv,
                 np.int32(N),
                 np.int32(self.nc_x), np.int32(self.nc_y), np.int32(self.nc_z),
-                sort_keys, cell_indices,
+                d_cell_counts, sort_keys, cell_indices,
             ),
         )
+        self._d_cell_counts = d_cell_counts
+        self._d_cell_indices = cell_indices
 
         sorted_indices = cp.argsort(sort_keys).astype(env.NUMPY_INT)
         self.d_raw_order = cp.empty(N, dtype=env.NUMPY_INT)
@@ -897,13 +894,6 @@ class BlockList:
         )
         pos_x, pos_y, pos_z = sorted_pos_x, sorted_pos_y, sorted_pos_z
         self._sorted_positions = (pos_x, pos_y, pos_z)
-
-        d_cell_counts = cp.zeros(self.nc_total, dtype=env.NUMPY_INT)
-        nb_bc = min((N + 255) // 256, 128)
-        self._kernels["cell_bincount"](
-            (nb_bc,), (256,),
-            (cell_indices_sorted, np.int32(N), np.int32(self.nc_total), d_cell_counts),
-        )
 
         cell_offset = cp.empty(self.nc_total + 1, dtype=env.NUMPY_INT)
         cell_block_offset = cp.empty(self.nc_total + 1, dtype=env.NUMPY_INT)

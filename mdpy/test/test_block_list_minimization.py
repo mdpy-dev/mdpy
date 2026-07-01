@@ -98,3 +98,19 @@ def test_hilbert_b3_order1_table():
     from mdpy.core.hilbert import hilbert_index
     indices = [hilbert_index(x, y, z, 1) for x in (0, 1) for y in (0, 1) for z in (0, 1)]
     assert sorted(indices) == list(range(8)), "order-1 must be a permutation of 0..7"
+
+
+def test_cell_assign_fused_produces_counts():
+    """cell_assign must atomically fill cell_counts in the same kernel that
+    computes cell_index, so cell_bincount is no longer needed."""
+    s = _build_ion_system()
+    s.update_neighbor_list(force_rebuild=True)
+    bl = s._block_list
+    # cell_counts must be populated and sum to num_particles
+    counts = bl._d_cell_counts.get()
+    assert counts.sum() == bl.num_particles
+    assert (counts >= 0).all()
+    # cell_indices computed for every atom, all in valid range
+    ci = bl._d_cell_indices.get() if hasattr(bl, '_d_cell_indices') else None
+    if ci is not None:
+        assert (ci >= 0).all() and (ci < bl.nc_total).all()
