@@ -116,6 +116,28 @@ def test_cell_assign_fused_produces_counts():
         assert (ci >= 0).all() and (ci < bl.nc_total).all()
 
 
+def test_counting_sort_groups_by_cell():
+    """After counting_scatter, atoms are contiguous by cell_index (ascending).
+    This replaces cp.argsort."""
+    s = _build_ion_system()
+    s.update_neighbor_list(force_rebuild=True)
+    bl = s._block_list
+    # cell_indices_sorted must be non-decreasing (atoms grouped by cell)
+    cis = bl._d_cell_indices_sorted.get() if hasattr(bl, '_d_cell_indices_sorted') else None
+    if cis is not None:
+        assert (np.diff(cis) >= 0).all(), "atoms not grouped by cell"
+    # sorted positions array exists and has the right size
+    sx, sy, sz = bl._sorted_positions
+    assert sx.shape[0] == bl.num_particles
+    # block_atoms covers total_padded slots, real slots are valid sorted indices
+    ba = bl.d_block_atoms.get()
+    real = ba[ba >= 0]
+    assert (real >= 0).all() and (real < bl.num_particles).all()
+    # order maps are consistent: raw_order is a permutation of 0..N-1
+    ro = bl.d_raw_order.get()
+    assert sorted(ro) == list(range(bl.num_particles)), "raw_order must be a permutation"
+
+
 def test_cell_layout_emits_block_to_cell():
     """cell_layout must write block_to_cell[bi] for every block during the
     prefix sum, so expand_block_to_cell is no longer needed."""

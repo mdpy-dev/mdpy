@@ -74,24 +74,6 @@ void cell_assign_kernel(
 }
 """
 
-_SCATTER_PADDED_KERNEL = r"""
-extern "C" __global__
-void scatter_padded_kernel(
-    const int* __restrict__ cell_offset,
-    const int* __restrict__ cell_offset_padded,
-    const int* __restrict__ cell_indices_sorted,
-    int number_particles,
-    int* __restrict__ block_atoms_out
-) {
-    int i = blockIdx.x * blockDim.x + threadIdx.x;
-    if (i >= number_particles) return;
-    int cell = cell_indices_sorted[i];
-    int local = i - cell_offset[cell];
-    int padded_pos = cell_offset_padded[cell] + local;
-    block_atoms_out[padded_pos] = i;
-}
-"""
-
 _COMPUTE_BLOCK_BOUNDS_KERNEL = r"""
 extern "C" __global__
 void compute_block_bounds_kernel(
@@ -515,36 +497,6 @@ void check_rebuild_kernel(
 }
 """
 
-_POST_ARGSORT_KERNEL = r"""
-extern "C" __global__
-void post_argsort_kernel(
-    const int* __restrict__ sorted_indices,
-    int number_particles,
-    int* __restrict__ raw_order,
-    int* __restrict__ pdb_to_sorted,
-    int* __restrict__ sorted_to_pdb,
-    const float* __restrict__ src_x,
-    const float* __restrict__ src_y,
-    const float* __restrict__ src_z,
-    float* __restrict__ dst_x,
-    float* __restrict__ dst_y,
-    float* __restrict__ dst_z,
-    const int* __restrict__ cell_in,
-    int* __restrict__ cell_out
-) {
-    int i = blockIdx.x * blockDim.x + threadIdx.x;
-    if (i >= number_particles) return;
-    int si = sorted_indices[i];
-    raw_order[i] = si;
-    pdb_to_sorted[si] = i;
-    sorted_to_pdb[i] = si;
-    dst_x[i] = src_x[si];
-    dst_y[i] = src_y[si];
-    dst_z[i] = src_z[si];
-    cell_out[i] = cell_in[si];
-}
-"""
-
 _CELL_PREFIX_SUM_KERNEL = r"""
 extern "C" __global__
 void cell_prefix_sum_kernel(
@@ -582,22 +534,38 @@ void cell_prefix_sum_kernel(
 }
 """
 
-_FUSED_COPY3_KERNEL = r"""
+_COUNTING_SCATTER_KERNEL = r"""
 extern "C" __global__
-void fused_copy3_kernel(
-    const float* __restrict__ src0,
-    const float* __restrict__ src1,
-    const float* __restrict__ src2,
-    int num_elements,
-    float* __restrict__ dst0,
-    float* __restrict__ dst1,
-    float* __restrict__ dst2
+void counting_scatter_kernel(
+    const int* __restrict__ cell_indices,
+    const int* __restrict__ cell_offset,
+    const int* __restrict__ cell_offset_padded,
+    const float* __restrict__ src_x,
+    const float* __restrict__ src_y,
+    const float* __restrict__ src_z,
+    int number_particles,
+    int* __restrict__ cell_cursor,
+    float* __restrict__ dst_x, float* __restrict__ dst_y, float* __restrict__ dst_z,
+    int* __restrict__ block_atoms,
+    int* __restrict__ raw_order,
+    int* __restrict__ pdb_to_sorted,
+    int* __restrict__ sorted_to_pdb,
+    int* __restrict__ cell_indices_sorted,
+    float* __restrict__ snap_x, float* __restrict__ snap_y, float* __restrict__ snap_z
 ) {
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (idx >= num_elements) return;
-    dst0[idx] = src0[idx];
-    dst1[idx] = src1[idx];
-    dst2[idx] = src2[idx];
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= number_particles) return;
+    int cell = cell_indices[i];
+    int local = atomicAdd(&cell_cursor[cell], 1);
+    int slot = cell_offset[cell] + local;
+    int padded = cell_offset_padded[cell] + local;
+    dst_x[slot] = src_x[i]; dst_y[slot] = src_y[i]; dst_z[slot] = src_z[i];
+    block_atoms[padded] = slot;
+    raw_order[slot] = i;
+    pdb_to_sorted[i] = slot;
+    sorted_to_pdb[slot] = i;
+    cell_indices_sorted[slot] = cell;
+    snap_x[slot] = src_x[i]; snap_y[slot] = src_y[i]; snap_z[slot] = src_z[i];
 }
 """
 
@@ -605,7 +573,6 @@ void fused_copy3_kernel(
 def _compile_gpu_kernels():
     return {
         "cell_assign": cp.RawKernel(_CELL_ASSIGN_KERNEL, "cell_assign_kernel"),
-        "scatter_padded": cp.RawKernel(_SCATTER_PADDED_KERNEL, "scatter_padded_kernel"),
         "compute_bounds": cp.RawKernel(
             _COMPUTE_BLOCK_BOUNDS_KERNEL, "compute_block_bounds_kernel"
         ),
@@ -617,8 +584,7 @@ def _compile_gpu_kernels():
         "rev_fill": cp.RawKernel(_FILL_REVERSE_KERNEL, "fill_reverse_kernel"),
         "build_masks": cp.RawKernel(_BUILD_MASKS_KERNEL, "build_masks_kernel"),
         "check_rebuild": cp.RawKernel(_CHECK_REBUILD_KERNEL, "check_rebuild_kernel"),
-        "fused_copy3": cp.RawKernel(_FUSED_COPY3_KERNEL, "fused_copy3_kernel"),
-        "post_argsort": cp.RawKernel(_POST_ARGSORT_KERNEL, "post_argsort_kernel"),
+        "counting_scatter": cp.RawKernel(_COUNTING_SCATTER_KERNEL, "counting_scatter_kernel"),
         "cell_prefix_sum": cp.RawKernel(_CELL_PREFIX_SUM_KERNEL, "cell_prefix_sum_kernel"),
     }
 
@@ -855,27 +821,11 @@ class BlockList:
         self._d_cell_counts = d_cell_counts
         self._d_cell_indices = cell_indices
 
-        sorted_indices = cp.argsort(sort_keys).astype(env.NUMPY_INT)
-        self.d_raw_order = cp.empty(N, dtype=env.NUMPY_INT)
-        self.d_pdb_to_sorted = cp.empty(N, dtype=env.NUMPY_INT)
-        self.d_sorted_to_pdb = cp.empty(N, dtype=env.NUMPY_INT)
-        sorted_pos_x = cp.empty(N, dtype=env.NUMPY_FLOAT)
-        sorted_pos_y = cp.empty(N, dtype=env.NUMPY_FLOAT)
-        sorted_pos_z = cp.empty(N, dtype=env.NUMPY_FLOAT)
-        cell_indices_sorted = cp.empty(N, dtype=env.NUMPY_INT)
-        self._kernels["post_argsort"](
-            (nm,), (tpb,),
-            (
-                sorted_indices, np.int32(N),
-                self.d_raw_order, self.d_pdb_to_sorted, self.d_sorted_to_pdb,
-                pos_x, pos_y, pos_z,
-                sorted_pos_x, sorted_pos_y, sorted_pos_z,
-                cell_indices, cell_indices_sorted,
-            ),
-        )
-        pos_x, pos_y, pos_z = sorted_pos_x, sorted_pos_y, sorted_pos_z
-        self._sorted_positions = (pos_x, pos_y, pos_z)
-
+        # K2: prefix sum over cell_counts -> cell_offset, padded block layout,
+        # block_to_cell, num_blocks. Runs BEFORE the scatter because
+        # counting_scatter needs cell_offset and cell_offset_padded. prefix_sum
+        # consumes only d_cell_counts (not the sorted data), so it is safe to
+        # run immediately after cell_assign.
         cell_offset = cp.empty(self.nc_total + 1, dtype=env.NUMPY_INT)
         cell_block_offset = cp.empty(self.nc_total + 1, dtype=env.NUMPY_INT)
         cell_block_count = cp.empty(self.nc_total, dtype=env.NUMPY_INT)
@@ -900,17 +850,46 @@ class BlockList:
         self.d_cell_block_offset = cell_block_offset
         self.d_cell_block_count = cell_block_count
 
-        # K2: Scatter to padded layout
+        # K3: counting-sort scatter. Each atom claims a unique slot in its cell's
+        # range via atomicAdd on a per-cell cursor, then writes every output:
+        # sorted positions, block_atoms, order maps, cell_indices_sorted, and the
+        # rebuild-time position snapshot. Replaces cp.argsort + post_argsort +
+        # scatter_padded + fused_copy3. cell_cursor must be zeroed and
+        # block_atoms pre-filled with -1 (padding) before launch.
         block_atoms = cp.empty(total_padded, dtype=env.NUMPY_INT)
         fill_constant(block_atoms, -1)
-        self._kernels["scatter_padded"](
+        cell_cursor = cp.zeros(self.nc_total, dtype=env.NUMPY_INT)
+        sorted_pos_x = cp.empty(N, dtype=env.NUMPY_FLOAT)
+        sorted_pos_y = cp.empty(N, dtype=env.NUMPY_FLOAT)
+        sorted_pos_z = cp.empty(N, dtype=env.NUMPY_FLOAT)
+        raw_order = cp.empty(N, dtype=env.NUMPY_INT)
+        pdb_to_sorted = cp.empty(N, dtype=env.NUMPY_INT)
+        sorted_to_pdb = cp.empty(N, dtype=env.NUMPY_INT)
+        cell_indices_sorted = cp.empty(N, dtype=env.NUMPY_INT)
+        snap_x = cp.empty(N, dtype=env.NUMPY_FLOAT)
+        snap_y = cp.empty(N, dtype=env.NUMPY_FLOAT)
+        snap_z = cp.empty(N, dtype=env.NUMPY_FLOAT)
+        self._kernels["counting_scatter"](
             (nm,), (tpb,),
             (
-                cell_offset, cell_offset_padded, cell_indices_sorted,
-                np.int32(N), block_atoms,
+                cell_indices, cell_offset, cell_offset_padded,
+                pos_x, pos_y, pos_z, np.int32(N), cell_cursor,
+                sorted_pos_x, sorted_pos_y, sorted_pos_z,
+                block_atoms, raw_order, pdb_to_sorted, sorted_to_pdb,
+                cell_indices_sorted,
+                snap_x, snap_y, snap_z,
             ),
         )
         self.d_block_atoms = block_atoms
+        self.d_raw_order = raw_order
+        self.d_pdb_to_sorted = pdb_to_sorted
+        self.d_sorted_to_pdb = sorted_to_pdb
+        self._d_cell_indices_sorted = cell_indices_sorted
+        self.d_positions_at_rebuild_x = snap_x
+        self.d_positions_at_rebuild_y = snap_y
+        self.d_positions_at_rebuild_z = snap_z
+        pos_x, pos_y, pos_z = sorted_pos_x, sorted_pos_y, sorted_pos_z
+        self._sorted_positions = (pos_x, pos_y, pos_z)
 
         self.d_block_to_cell = block_to_cell[:num_blocks]
 
@@ -950,7 +929,6 @@ class BlockList:
 
         self._is_initialized = True
 
-        self.d_positions_at_rebuild_x, self.d_positions_at_rebuild_y, self.d_positions_at_rebuild_z = self.fused_copy3(pos_x, pos_y, pos_z)
         self.d_rebuild_flag[0] = 0
 
         raw_order = self.d_raw_order
@@ -1015,21 +993,6 @@ class BlockList:
 
         self._build_masks_gpu(topology)
         self._extract_exclusion_block_pairs()
-
-    def fused_copy3(self, src0, src1, src2):
-        N = src0.size
-        self._ensure_kernels()
-        tpb = 256
-        grid = ((N + tpb - 1) // tpb,)
-        dst0 = cp.empty(N, dtype=env.NUMPY_FLOAT)
-        dst1 = cp.empty(N, dtype=env.NUMPY_FLOAT)
-        dst2 = cp.empty(N, dtype=env.NUMPY_FLOAT)
-        self._kernels["fused_copy3"](
-            grid,
-            (tpb,),
-            (src0, src1, src2, np.int32(N), dst0, dst1, dst2),
-        )
-        return dst0, dst1, dst2
 
     def set_gpu_exclusion(self, d_offset, d_neighbors, d_scale):
         self._d_excl_offset = d_offset
