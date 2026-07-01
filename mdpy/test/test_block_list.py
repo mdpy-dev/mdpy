@@ -660,3 +660,80 @@ class TestBlockToCellExpand:
                 assert block_to_cell[bi] == c, (
                     f"block {bi} should be in cell {c}, got {block_to_cell[bi]}"
                 )
+
+
+class TestCellSubsetDecomposition:
+
+    def test_cell_subsets_gt1_for_small_system(self):
+        bl, *_ = _rebuild_and_build_block_pairs(100, 50.0, cutoff=10.0, skin=2.0)
+        assert bl.num_cell_subsets > 1, (
+            f"Expected cell_subsets > 1 for small system, got {bl.num_cell_subsets}"
+        )
+
+    def test_interacting_atoms_within_cutoff_with_subset(self):
+        n, box = 200, 50.0
+        cutoff, skin = 10.0, 2.0
+        bl, positions, pbc_matrix, _, _ = _rebuild_and_build_block_pairs(n, box, cutoff, skin)
+        assert bl.num_cell_subsets > 1, "Test requires K > 1 to be meaningful"
+
+        sorted_to_pdb = cp.asnumpy(bl.d_sorted_to_pdb)
+        block_pairs = bl.block_pairs
+        interacting = bl.interacting_atoms
+        ba = bl.block_atoms
+        build_radius_sq = bl.build_radius ** 2
+        pbc_2d = pbc_matrix.reshape(3, 3)
+        box_diag = np.array([pbc_2d[0, 0], pbc_2d[1, 1], pbc_2d[2, 2]])
+
+        for ti in range(bl.num_block_pairs):
+            source_block = block_pairs[ti]
+            interacting_row = interacting[ti]
+            source_atoms = ba[source_block]
+            for slot in range(BLOCK_SIZE):
+                aj = interacting_row[slot]
+                if aj < 0 or aj == NUM_ATOMS_SENTINEL:
+                    continue
+                pdb_j = sorted_to_pdb[aj]
+                pos_j = positions[pdb_j]
+                found_close = False
+                for si in range(BLOCK_SIZE):
+                    ak = source_atoms[si]
+                    if ak < 0:
+                        continue
+                    pdb_k = sorted_to_pdb[ak]
+                    pos_k = positions[pdb_k]
+                    dx = pos_j - pos_k
+                    dx -= box_diag * np.round(dx / box_diag)
+                    dist_sq = np.sum(dx ** 2)
+                    if dist_sq <= build_radius_sq:
+                        found_close = True
+                        break
+                assert found_close, (
+                    f"Block-pair {ti}: interacting atom sorted_idx={aj} pdb={pdb_j} "
+                    f"is not within build_radius of any atom in source block {source_block}"
+                )
+
+    def test_no_duplicate_self_pairs(self):
+        n, box = 100, 50.0
+        cutoff, skin = 10.0, 2.0
+        bl, *_ = _rebuild_and_build_block_pairs(n, box, cutoff, skin)
+        assert bl.num_cell_subsets > 1
+
+        block_pairs = bl.block_pairs
+        interacting = bl.interacting_atoms
+
+        self_pair_count = 0
+        for ti in range(bl.num_block_pairs):
+            source_block = block_pairs[ti]
+            source_atoms = set(int(a) for a in bl.block_atoms[source_block] if a >= 0)
+            interacting_row = interacting[ti]
+            interacting_set = set(
+                int(a) for a in interacting_row
+                if a >= 0 and a != NUM_ATOMS_SENTINEL
+            )
+            if source_atoms == interacting_set:
+                self_pair_count += 1
+
+        assert self_pair_count <= bl.num_blocks, (
+            f"Found {self_pair_count} self-pairs but only {bl.num_blocks} blocks exist. "
+            f"Self-interaction may be duplicated by cell-subset decomposition."
+        )
