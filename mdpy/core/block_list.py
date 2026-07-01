@@ -156,7 +156,7 @@ void find_interacting_blocks_kernel(
     const int* __restrict__ cell_block_count,
     const int* __restrict__ block_to_cell,
     int nc_x, int nc_y, int nc_z,
-    int num_blocks, int num_particles,
+    int num_blocks, int num_particles, int K,
     float build_radius_sq,
     const float* __restrict__ pbc_matrix,
     int* __restrict__ block_pairs_out,
@@ -170,9 +170,10 @@ void find_interacting_blocks_kernel(
     int tgx = threadIdx.x & 31;
     int warp_in_block = threadIdx.x >> 5;
     int global_warp = (blockIdx.x * blockDim.x + threadIdx.x) >> 5;
-    if (global_warp >= num_blocks) return;
+    if (global_warp >= num_blocks * K) return;
 
-    int bx = global_warp;
+    int bx = global_warp / K;
+    int cell_subset = global_warp % K;
     int my_cell = block_to_cell[bx];
 
     int cz_idx = my_cell / (nc_x * nc_y);
@@ -208,6 +209,8 @@ void find_interacting_blocks_kernel(
     for (int dz = -1; dz <= 1; dz++) {
         for (int dy = -1; dy <= 1; dy++) {
             for (int dx = -1; dx <= 1; dx++) {
+                int cell_id = (dz + 1) * 9 + (dy + 1) * 3 + (dx + 1);
+                if (K > 1 && cell_id % K != cell_subset) continue;
                 int nx = (cx_idx + dx + nc_x) % nc_x;
                 int ny = (cy_idx + dy + nc_y) % nc_y;
                 int nz = (cz_idx + dz + nc_z) % nc_z;
@@ -329,7 +332,7 @@ void find_interacting_blocks_kernel(
         }
     }
 
-    {
+    if (cell_subset == 0) {
         int gj = block_atoms[bx * 32 + tgx];
         int interacts = (gj >= 0 && gj < num_particles) ? 1 : 0;
         unsigned int ballot = __ballot_sync(0xffffffff, interacts);
@@ -356,7 +359,7 @@ void find_interacting_blocks_kernel(
         }
     }
 
-    if (nBuf > 0) {
+    if (cell_subset == 0 && nBuf > 0) {
         int ti = 0;
         if (tgx == 0) ti = atomicAdd(interaction_count, 1);
         ti = __shfl_sync(0xffffffff, ti, 0);
@@ -1053,6 +1056,10 @@ class BlockList:
 
         pos_x, pos_y, pos_z = self._sorted_positions
         num_blocks = self.num_blocks
+        # Cell-subset decomposition: split the 27-cell scan into K subsets
+        # to fill the GPU. Target ~2 full waves (80 SMs x 4 blocks/SM = 320/wave).
+        target_total_warps = 640 * 8
+        cell_subsets = max(1, min(8, (target_total_warps + num_blocks - 1) // num_blocks))
         build_radius_sq = self.build_radius ** 2
 
         max_block_pairs = max(num_blocks * 100, 10000)
@@ -1066,7 +1073,7 @@ class BlockList:
         self._d_counters[0] = 0
 
         tpb = 256
-        grid_blocks = max((num_blocks + 7) // 8, 1)
+        grid_blocks = max((num_blocks * cell_subsets + 7) // 8, 1)
         self._kernels["find_interacting"](
             (grid_blocks,), (tpb,),
             (
@@ -1078,6 +1085,7 @@ class BlockList:
                 self.d_block_to_cell,
                 np.int32(self.nc_x), np.int32(self.nc_y), np.int32(self.nc_z),
                 np.int32(num_blocks), np.int32(self.num_particles),
+                np.int32(cell_subsets),
                 np.float32(build_radius_sq),
                 self._d_pbc_matrix,
                 self._d_block_pair_buf, self._d_interacting_buf,
@@ -1087,6 +1095,7 @@ class BlockList:
         )
 
         self.num_block_pairs = int(self._d_counters[0])
+        self.num_cell_subsets = cell_subsets
         self.d_block_pairs = self._d_block_pair_buf
         self.d_interacting_atoms = self._d_interacting_buf
         self.d_block_pair_shift_x = self._d_block_pair_shift_x_buf
