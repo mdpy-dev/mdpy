@@ -77,60 +77,34 @@ void cell_assign_kernel(
 }
 """
 
-_COMPUTE_BLOCK_BOUNDS_KERNEL = r"""
+_BLOCK_META_KERNEL = r"""
 extern "C" __global__
-void compute_block_bounds_kernel(
+void block_meta_kernel(
     const float* __restrict__ pos_x,
     const float* __restrict__ pos_y,
     const float* __restrict__ pos_z,
     const int* __restrict__ block_atoms,
-    int num_blocks,
-    float* __restrict__ block_center_x_out,
-    float* __restrict__ block_center_y_out,
-    float* __restrict__ block_center_z_out,
-    float* __restrict__ block_size_x_out,
-    float* __restrict__ block_size_y_out,
-    float* __restrict__ block_size_z_out
+    int num_blocks, int num_particles,
+    float* __restrict__ center_x, float* __restrict__ center_y, float* __restrict__ center_z,
+    float* __restrict__ size_x, float* __restrict__ size_y, float* __restrict__ size_z,
+    int* __restrict__ atom_to_block,
+    int* __restrict__ atom_to_slot
 ) {
     int bi = blockIdx.x * blockDim.x + threadIdx.x;
     if (bi >= num_blocks) return;
-    float min_x = 1e30f, min_y = 1e30f, min_z = 1e30f;
-    float max_x = -1e30f, max_y = -1e30f, max_z = -1e30f;
+    float minx=1e30f,miny=1e30f,minz=1e30f,maxx=-1e30f,maxy=-1e30f,maxz=-1e30f;
     for (int s = 0; s < 32; s++) {
         int a = block_atoms[bi * 32 + s];
         if (a < 0) continue;
         float x = pos_x[a], y = pos_y[a], z = pos_z[a];
-        min_x = fminf(min_x, x); max_x = fmaxf(max_x, x);
-        min_y = fminf(min_y, y); max_y = fmaxf(max_y, y);
-        min_z = fminf(min_z, z); max_z = fmaxf(max_z, z);
+        minx = fminf(minx, x); maxx = fmaxf(maxx, x);
+        miny = fminf(miny, y); maxy = fmaxf(maxy, y);
+        minz = fminf(minz, z); maxz = fmaxf(maxz, z);
+        atom_to_block[a] = bi;
+        atom_to_slot[a] = s;
     }
-    block_center_x_out[bi] = 0.5f * (min_x + max_x);
-    block_center_y_out[bi] = 0.5f * (min_y + max_y);
-    block_center_z_out[bi] = 0.5f * (min_z + max_z);
-    block_size_x_out[bi]   = 0.5f * (max_x - min_x);
-    block_size_y_out[bi]   = 0.5f * (max_y - min_y);
-    block_size_z_out[bi]   = 0.5f * (max_z - min_z);
-}
-"""
-
-_BUILD_ATOM_MAP_KERNEL = r"""
-extern "C" __global__
-void build_atom_map_kernel(
-    const int* __restrict__ block_atoms,
-    const int num_blocks,
-    const int BLOCK_SIZE,
-    int* __restrict__ atom_to_block,
-    int* __restrict__ atom_to_slot
-) {
-    int block_index = blockIdx.x * blockDim.x + threadIdx.x;
-    if (block_index >= num_blocks) return;
-    for (int slot = 0; slot < BLOCK_SIZE; slot++) {
-        int atom_id = block_atoms[block_index * BLOCK_SIZE + slot];
-        if (atom_id >= 0) {
-            atom_to_block[atom_id] = block_index;
-            atom_to_slot[atom_id] = slot;
-        }
-    }
+    center_x[bi] = 0.5f*(minx+maxx); center_y[bi] = 0.5f*(miny+maxy); center_z[bi] = 0.5f*(minz+maxz);
+    size_x[bi]   = 0.5f*(maxx-minx); size_y[bi]   = 0.5f*(maxy-miny); size_z[bi]   = 0.5f*(maxz-minz);
 }
 """
 
@@ -598,10 +572,7 @@ void counting_scatter_kernel(
 def _compile_gpu_kernels():
     return {
         "cell_assign": cp.RawKernel(_CELL_ASSIGN_KERNEL, "cell_assign_kernel"),
-        "compute_bounds": cp.RawKernel(
-            _COMPUTE_BLOCK_BOUNDS_KERNEL, "compute_block_bounds_kernel"
-        ),
-        "atom_map": cp.RawKernel(_BUILD_ATOM_MAP_KERNEL, "build_atom_map_kernel"),
+        "block_meta": cp.RawKernel(_BLOCK_META_KERNEL, "block_meta_kernel"),
         "find_interacting": cp.RawKernel(
             _FIND_INTERACTING_BLOCKS_KERNEL, "find_interacting_blocks_kernel"
         ),
@@ -944,25 +915,18 @@ class BlockList:
         self.d_block_size_x = cp.empty(num_blocks, dtype=env.NUMPY_FLOAT)
         self.d_block_size_y = cp.empty(num_blocks, dtype=env.NUMPY_FLOAT)
         self.d_block_size_z = cp.empty(num_blocks, dtype=env.NUMPY_FLOAT)
-        self._kernels["compute_bounds"](
+        # K4: compute block AABB bounds and atom_to_block/slot reverse map in a
+        # single per-block pass. Every real atom is in exactly one block at one
+        # slot, so all N entries are written here -> no -1 pre-fill needed.
+        self.d_atom_to_block = cp.empty(N, dtype=env.NUMPY_INT)
+        self.d_atom_to_slot = cp.empty(N, dtype=env.NUMPY_INT)
+        self._kernels["block_meta"](
             (nb,), (tpb,),
             (
                 pos_x, pos_y, pos_z, self.d_block_atoms,
-                np.int32(num_blocks),
+                np.int32(num_blocks), np.int32(N),
                 self.d_block_center_x, self.d_block_center_y, self.d_block_center_z,
                 self.d_block_size_x, self.d_block_size_y, self.d_block_size_z,
-            ),
-        )
-
-        # K4: Build atom-to-block map
-        self.d_atom_to_block = cp.empty(N, dtype=env.NUMPY_INT)
-        fill_constant(self.d_atom_to_block, -1)
-        self.d_atom_to_slot = cp.empty(N, dtype=env.NUMPY_INT)
-        fill_constant(self.d_atom_to_slot, -1)
-        self._kernels["atom_map"](
-            (nb,), (tpb,),
-            (
-                self.d_block_atoms, np.int32(num_blocks), np.int32(BLOCK_SIZE),
                 self.d_atom_to_block, self.d_atom_to_slot,
             ),
         )

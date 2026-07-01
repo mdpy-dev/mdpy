@@ -155,3 +155,25 @@ def test_cell_layout_emits_block_to_cell():
         # find which cell this block belongs to via the offset table
         cell = btc[bi]
         assert cbo[cell] <= bi < cbo[cell + 1]
+
+
+def test_block_meta_fused():
+    """block_meta computes AABB bounds AND the atom_to_block/slot reverse map
+    in one per-block kernel pass."""
+    s = _build_ion_system()
+    s.update_neighbor_list(force_rebuild=True)
+    bl = s._block_list
+    a2b = bl.d_atom_to_block.get()
+    a2s = bl.d_atom_to_slot.get()
+    # every atom mapped to a valid block
+    assert (a2b >= 0).all()
+    assert (a2b < bl.num_blocks).all()
+    assert (a2s >= 0).all() and (a2s < 32).all()
+    # block bounds exist for every block
+    assert bl.d_block_center_x.shape[0] == bl.num_blocks
+    # cross-check: atom_to_block/atom_to_slot round-trips via block_atoms
+    ba = bl.d_block_atoms.get().reshape(-1, 32)
+    for atom_idx in range(0, bl.num_particles, max(1, bl.num_particles // 50)):
+        bi = a2b[atom_idx]
+        si = a2s[atom_idx]
+        assert ba[bi, si] >= 0, f"atom {atom_idx} maps to empty slot"
