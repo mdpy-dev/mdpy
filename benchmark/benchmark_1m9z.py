@@ -57,7 +57,7 @@ system = System(topology)
 system.upload_pbc(pbc_matrix)
 system.add_force_term(forces["bonded"])
 system.add_force_term(forces["nonbonded"])
-system.add_force_term(forces["pme"])
+system.add_force_term(forces["pme"], stream='pme')
 
 constraints = create_constraints(topology, parameter_table, scheme="h-bonds")
 for c in constraints:
