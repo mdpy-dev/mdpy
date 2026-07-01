@@ -554,6 +554,7 @@ void cell_prefix_sum_kernel(
     int* __restrict__ cell_block_offset,
     int* __restrict__ cell_block_count,
     int* __restrict__ cell_offset_padded,
+    int* __restrict__ block_to_cell,
     int* __restrict__ num_blocks_out,
     int* __restrict__ total_padded_out
 ) {
@@ -566,6 +567,9 @@ void cell_prefix_sum_kernel(
             cell_block_count[i] = bc;
             cell_block_offset[i] = block_offset;
             cell_offset_padded[i] = block_offset * 32;
+            for (int b = 0; b < bc; b++) {
+                block_to_cell[block_offset + b] = i;
+            }
             offset += cell_counts[i];
             block_offset += bc;
         }
@@ -575,26 +579,6 @@ void cell_prefix_sum_kernel(
         *num_blocks_out = block_offset;
         *total_padded_out = block_offset * 32;
     }
-}
-"""
-
-_EXPAND_BLOCK_TO_CELL_KERNEL = r"""
-extern "C" __global__
-void expand_block_to_cell_kernel(
-    const int* __restrict__ cell_block_offset,
-    int nc_total,
-    int num_blocks,
-    int* __restrict__ block_to_cell
-) {
-    int bi = blockIdx.x * blockDim.x + threadIdx.x;
-    if (bi >= num_blocks) return;
-    int lo = 0, hi = nc_total - 1;
-    while (lo < hi) {
-        int mid = (lo + hi + 1) / 2;
-        if (cell_block_offset[mid] <= bi) lo = mid;
-        else hi = mid - 1;
-    }
-    block_to_cell[bi] = lo;
 }
 """
 
@@ -636,9 +620,6 @@ def _compile_gpu_kernels():
         "fused_copy3": cp.RawKernel(_FUSED_COPY3_KERNEL, "fused_copy3_kernel"),
         "post_argsort": cp.RawKernel(_POST_ARGSORT_KERNEL, "post_argsort_kernel"),
         "cell_prefix_sum": cp.RawKernel(_CELL_PREFIX_SUM_KERNEL, "cell_prefix_sum_kernel"),
-        "expand_block_to_cell": cp.RawKernel(
-            _EXPAND_BLOCK_TO_CELL_KERNEL, "expand_block_to_cell_kernel"
-        ),
     }
 
 
@@ -901,12 +882,15 @@ class BlockList:
         cell_offset_padded = cp.empty(self.nc_total + 1, dtype=env.NUMPY_INT)
         d_num_blocks = cp.empty(1, dtype=env.NUMPY_INT)
         d_total_padded = cp.empty(1, dtype=env.NUMPY_INT)
+        # num_blocks is unknown until the prefix sum writes it; num_blocks <= N
+        # (each block holds >=1 atom), so N is a safe upper bound. Sliced below.
+        block_to_cell = cp.empty(N, dtype=env.NUMPY_INT)
         self._kernels["cell_prefix_sum"](
             (1,), (1,),
             (
                 d_cell_counts, np.int32(self.nc_total),
                 cell_offset, cell_block_offset, cell_block_count,
-                cell_offset_padded, d_num_blocks, d_total_padded,
+                cell_offset_padded, block_to_cell, d_num_blocks, d_total_padded,
             ),
         )
         num_blocks = self._read_device_int(d_num_blocks)
@@ -928,18 +912,9 @@ class BlockList:
         )
         self.d_block_atoms = block_atoms
 
-        self.d_block_to_cell = cp.empty(num_blocks, dtype=env.NUMPY_INT)
-        nb = (num_blocks + tpb - 1) // tpb
-        self._kernels["expand_block_to_cell"](
-            (nb,), (tpb,),
-            (
-                cell_block_offset,
-                np.int32(self.nc_total),
-                np.int32(num_blocks),
-                self.d_block_to_cell,
-            ),
-        )
+        self.d_block_to_cell = block_to_cell[:num_blocks]
 
+        nb = (num_blocks + tpb - 1) // tpb
         self.d_block_center_x = cp.empty(num_blocks, dtype=env.NUMPY_FLOAT)
         self.d_block_center_y = cp.empty(num_blocks, dtype=env.NUMPY_FLOAT)
         self.d_block_center_z = cp.empty(num_blocks, dtype=env.NUMPY_FLOAT)

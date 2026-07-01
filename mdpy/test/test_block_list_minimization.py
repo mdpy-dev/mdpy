@@ -114,3 +114,22 @@ def test_cell_assign_fused_produces_counts():
     ci = bl._d_cell_indices.get() if hasattr(bl, '_d_cell_indices') else None
     if ci is not None:
         assert (ci >= 0).all() and (ci < bl.nc_total).all()
+
+
+def test_cell_layout_emits_block_to_cell():
+    """cell_layout must write block_to_cell[bi] for every block during the
+    prefix sum, so expand_block_to_cell is no longer needed."""
+    s = _build_ion_system()
+    s.update_neighbor_list(force_rebuild=True)
+    bl = s._block_list
+    btc = bl.d_block_to_cell.get()
+    assert btc.shape[0] == bl.num_blocks
+    assert (btc >= 0).all() and (btc < bl.nc_total).all()
+    # block_to_cell must be non-decreasing (blocks ordered by cell)
+    assert (np.diff(btc) >= 0).all()
+    # cross-check: each block's cell matches the cell_block_offset ranges
+    cbo = bl.d_cell_block_offset.get()
+    for bi in range(0, bl.num_blocks, max(1, bl.num_blocks // 10)):
+        # find which cell this block belongs to via the offset table
+        cell = btc[bi]
+        assert cbo[cell] <= bi < cbo[cell + 1]
