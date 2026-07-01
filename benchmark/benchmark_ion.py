@@ -43,6 +43,7 @@ forces = create_charmm_forces(topology, parameter_table, pbc_matrix, cutoff=CUTO
 
 system = System(topology)
 system.upload_pbc(pbc_matrix)
+print(forces["bonded"])
 system.add_force_term(forces["bonded"])
 system.add_force_term(forces["nonbonded"])
 system.add_force_term(forces["pme"])
@@ -57,7 +58,7 @@ integrator = LangevinBAOABIntegrator(DT_FS, 300.0, 1.0)
 
 def _run_steps(n):
     for i in range(n):
-        system.update_neighbor_list(sync_interval=10)
+        system.update_neighbor_list(sync_interval=20)
         system.compute_forces()
         integrator.step(system)
 

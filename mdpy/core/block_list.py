@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import ctypes
+
 import numpy as np
 import cupy as cp
 from mdpy import env
@@ -812,6 +814,11 @@ class BlockList:
         self.d_positions_at_rebuild_y = cp.empty(0, dtype=env.NUMPY_FLOAT)
         self.d_positions_at_rebuild_z = cp.empty(0, dtype=env.NUMPY_FLOAT)
 
+        self._pinned_int_buf = cp.cuda.alloc_pinned_memory(4)
+        self._pinned_int_view = (ctypes.c_int32 * 1).from_address(
+            self._pinned_int_buf.ptr
+        )
+
         self._block_atoms_np = None
         self._block_pairs_np = None
         self._interacting_atoms_np = None
@@ -872,6 +879,17 @@ class BlockList:
             self._d_pbc_inv = cp.asarray(
                 np.ascontiguousarray(pbc_inv, dtype=env.NUMPY_FLOAT).ravel()
             )
+
+    def _read_device_int(self, d_int32):
+        cp.cuda.runtime.memcpyAsync(
+            self._pinned_int_buf.ptr,
+            d_int32.data.ptr,
+            4,
+            cp.cuda.runtime.memcpyDeviceToHost,
+            cp.cuda.Stream.null.ptr,
+        )
+        cp.cuda.Stream.null.synchronize()
+        return int(self._pinned_int_view[0])
 
     def _compute_cell_grid(self, pbc_matrix):
         pbc_2d = np.asarray(pbc_matrix).reshape(3, 3)
@@ -973,9 +991,9 @@ class BlockList:
                 cell_offset_padded, d_num_blocks, d_total_padded,
             ),
         )
-        num_blocks = int(d_num_blocks[0])
+        num_blocks = self._read_device_int(d_num_blocks)
         self.num_blocks = num_blocks
-        total_padded = int(d_total_padded[0])
+        total_padded = self._read_device_int(d_total_padded)
 
         self.d_cell_block_offset = cell_block_offset
         self.d_cell_block_count = cell_block_count
@@ -1094,7 +1112,7 @@ class BlockList:
             ),
         )
 
-        self.num_block_pairs = int(self._d_counters[0])
+        self.num_block_pairs = self._read_device_int(self._d_counters)
         self.num_cell_subsets = cell_subsets
         self.d_block_pairs = self._d_block_pair_buf
         self.d_interacting_atoms = self._d_interacting_buf
@@ -1290,8 +1308,8 @@ class BlockList:
             ),
         )
 
-        self.num_exclusion_block_pairs = int(self._d_classify_excl_counter[0])
-        self.num_main_block_pairs = int(self._d_classify_main_counter[0])
+        self.num_exclusion_block_pairs = self._read_device_int(self._d_classify_excl_counter)
+        self.num_main_block_pairs = self._read_device_int(self._d_classify_main_counter)
 
         self.d_excl_block_pairs = self._d_classify_excl_block_pairs
         self.d_excl_interacting_atoms = self._d_classify_excl_int_atoms
@@ -1340,7 +1358,7 @@ class BlockList:
                 self.d_rebuild_flag,
             ),
         )
-        flag = int(self.d_rebuild_flag[0])
+        flag = self._read_device_int(self.d_rebuild_flag)
         return flag == 1
 
     def check_rebuild_async(self, positions) -> bool:

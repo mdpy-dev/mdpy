@@ -138,7 +138,7 @@ class System:
         if self._step_counter < sync_interval:
             return
         cp.cuda.Stream.null.synchronize()
-        if int(self._block_list.d_rebuild_flag[0]) == 1:
+        if self._block_list._read_device_int(self._block_list.d_rebuild_flag) == 1:
             self._do_rebuild(positions_soa)
         self._step_counter = 0
 
