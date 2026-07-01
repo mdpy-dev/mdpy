@@ -115,8 +115,34 @@ class System:
     def compute_forces(self):
         self._ensure_uploaded()
         self.gpu.zero_forces()
-        for term_index, term in enumerate(self.force_terms):
+
+        if not self._pme_force_terms:
+            for term in self._primary_force_terms:
+                term.compute(self.gpu, self._block_list, compute_energy=False)
+            return
+
+        # PME runs on a non-blocking stream concurrent with primary terms.
+        # zero_forces just ran on the null stream; record an event so the PME
+        # stream does not atomicAdd into d_forces before the zeroing completes.
+        self._ev_zero_forces.record()
+
+        # Launch PME pipeline on its stream, gated on zero_forces.
+        self._pme_stream.wait_event(self._ev_zero_forces)
+        with self._pme_stream:
+            for term in self._pme_force_terms:
+                term.compute(self.gpu, self._block_list, compute_energy=False)
+            # Record INSIDE the with-block so the event is recorded on the
+            # pme stream, not the null stream (record() uses the current stream).
+            self._ev_pme_done.record()
+
+        # Primary terms run on the null stream, overlapping with PME.
+        for term in self._primary_force_terms:
             term.compute(self.gpu, self._block_list, compute_energy=False)
+
+        # Make the null stream wait for PME to finish writing forces before
+        # compute_forces returns, so the next null-stream op (integrator) sees
+        # fully-accumulated forces.
+        cp.cuda.Stream.null.wait_event(self._ev_pme_done)
 
     def update_neighbor_list(self, sync_interval=10, force_rebuild=False):
         self._ensure_uploaded()
