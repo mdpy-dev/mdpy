@@ -681,45 +681,6 @@ class NonbondedForce(ForceTerm):
             ),
         )
 
-    def _build_main_args(self, gpu_context, block_list, compute_energy):
-        args = [
-            self._d_sorted_posq,
-            self._d_posq,
-            block_list.d_main_shift_x,
-            block_list.d_main_shift_y,
-            block_list.d_main_shift_z,
-            gpu_context.d_forces_x,
-            gpu_context.d_forces_y,
-            gpu_context.d_forces_z,
-        ]
-        if compute_energy:
-            args.append(gpu_context.d_energy)
-        args.extend(
-            [
-                block_list.d_block_atoms,
-                block_list.d_main_block_pairs,
-                block_list.d_main_interacting_atoms,
-                np.float32(self._cutoff_sq),
-                np.int32(block_list.num_main_block_pairs),
-                np.int32(gpu_context.number_particles),
-            ]
-        )
-        for base in self._prop_bases:
-            if base == "charge":
-                continue
-            args.append(self._d_sorted_per_particle[base])
-        for base in self._prop_bases:
-            if base == "charge":
-                continue
-            args.append(self._d_per_particle[base])
-        for name in self._expr_info.params:
-            args.append(self._d_pair_params[name])
-        args.append(self._d_types)
-        args.append(np.int32(self._n_types))
-        for name in self._expr_info.scalars:
-            args.append(np.float32(self._scalar_data.get(name, 0.0)))
-        return tuple(args)
-
     def _build_excl_args(self, gpu_context, block_list, compute_energy):
         args = [
             self._d_sorted_posq,
@@ -740,7 +701,7 @@ class NonbondedForce(ForceTerm):
                 block_list.d_excl_interacting_atoms,
                 block_list.d_excl_exclusion_masks,
                 np.float32(self._cutoff_sq),
-                np.int32(block_list.num_exclusion_block_pairs),
+                np.int32(block_list.num_main_block_pairs),
                 np.int32(gpu_context.number_particles),
             ]
         )
@@ -766,10 +727,7 @@ class NonbondedForce(ForceTerm):
 
         self._resolve_per_particle(gpu_context)
 
-        if block_list is None or (
-            block_list.num_main_block_pairs == 0
-            and block_list.num_exclusion_block_pairs == 0
-        ):
+        if block_list is None or block_list.num_main_block_pairs == 0:
             return
 
         self._refresh_posq(gpu_context, block_list)
@@ -778,19 +736,14 @@ class NonbondedForce(ForceTerm):
         grid_size = 16 * num_sm
 
         if compute_energy:
-            main_kernel = self._main_kernel
             excl_kernel = self._excl_kernel
         else:
-            main_kernel = self._main_kernel_fo
             excl_kernel = self._excl_kernel_fo
 
         num_main = block_list.num_main_block_pairs
         if num_main > 0:
-            main_args = self._build_main_args(gpu_context, block_list, compute_energy)
-            main_kernel((grid_size,), (256,), main_args)
-
-        num_excl = block_list.num_exclusion_block_pairs
-        if num_excl > 0:
-            excl_grid_size = max(grid_size, (num_excl + 7) // 8)
+            # Unified path: the exclusion kernel applies masks (zero mask = full
+            # force). All block pairs run through it.
             excl_args = self._build_excl_args(gpu_context, block_list, compute_energy)
+            excl_grid_size = max(grid_size, (num_main + 7) // 8)
             excl_kernel((excl_grid_size,), (256,), excl_args)

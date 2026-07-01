@@ -62,10 +62,11 @@ def test_gpu_block_pair_classification():
     _ensure_ready(system)
     _run_steps(system, integrator, 1)
     bl = system.block_list
-    assert bl.num_exclusion_block_pairs + bl.num_main_block_pairs == bl.num_block_pairs
-    assert bl.num_exclusion_block_pairs > 0
-    assert bl.d_excl_block_pairs.shape[0] >= bl.num_exclusion_block_pairs
+    # Phase 2 unified mask path: all pairs run through the exclusion kernel.
+    # num_main_block_pairs covers every block pair; excl count is 0 by design.
+    assert bl.num_main_block_pairs == bl.num_block_pairs
+    assert bl.num_exclusion_block_pairs == 0
     assert bl.d_main_block_pairs.shape[0] >= bl.num_main_block_pairs
-    assert bl.d_excl_interacting_atoms.shape[0] >= bl.num_exclusion_block_pairs * 32
-    assert bl.d_excl_exclusion_masks.shape[0] >= bl.num_exclusion_block_pairs * 32
     assert bl.d_main_interacting_atoms.shape[0] >= bl.num_main_block_pairs * 32
+    # masks cover every main pair (zero mask = no exclusion = full force)
+    assert bl.d_excl_exclusion_masks.shape[0] >= bl.num_main_block_pairs * 32

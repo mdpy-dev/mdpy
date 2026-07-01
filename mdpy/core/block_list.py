@@ -484,64 +484,6 @@ void build_masks_kernel(
 }
 """
 
-_CLASSIFY_BLOCK_PAIRS_KERNEL = r"""
-extern "C" __global__
-void classify_block_pairs_kernel(
-    const unsigned int* __restrict__ excl_masks,
-    const int* __restrict__ block_pairs,
-    const int* __restrict__ interacting_atoms,
-    const float* __restrict__ shift_x,
-    const float* __restrict__ shift_y,
-    const float* __restrict__ shift_z,
-    int num_block_pairs,
-    int* __restrict__ excl_counter,
-    int* __restrict__ main_counter,
-    int* __restrict__ excl_block_pairs_out,
-    int* __restrict__ excl_int_atoms_out,
-    unsigned int* __restrict__ excl_masks_out,
-    int* __restrict__ main_block_pairs_out,
-    int* __restrict__ main_int_atoms_out,
-    float* __restrict__ excl_shift_x_out,
-    float* __restrict__ excl_shift_y_out,
-    float* __restrict__ excl_shift_z_out,
-    float* __restrict__ main_shift_x_out,
-    float* __restrict__ main_shift_y_out,
-    float* __restrict__ main_shift_z_out
-) {
-    int pair_idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (pair_idx >= num_block_pairs) return;
-
-    bool has_mask = false;
-    for (int i = 0; i < 32; i++) {
-        if (excl_masks[pair_idx * 32 + i] != 0) {
-            has_mask = true;
-            break;
-        }
-    }
-
-    if (has_mask) {
-        int idx = atomicAdd(excl_counter, 1);
-        excl_block_pairs_out[idx] = block_pairs[pair_idx];
-        for (int i = 0; i < 32; i++) {
-            excl_int_atoms_out[idx * 32 + i] = interacting_atoms[pair_idx * 32 + i];
-            excl_masks_out[idx * 32 + i] = excl_masks[pair_idx * 32 + i];
-        }
-        excl_shift_x_out[idx] = shift_x[pair_idx];
-        excl_shift_y_out[idx] = shift_y[pair_idx];
-        excl_shift_z_out[idx] = shift_z[pair_idx];
-    } else {
-        int idx = atomicAdd(main_counter, 1);
-        main_block_pairs_out[idx] = block_pairs[pair_idx];
-        for (int i = 0; i < 32; i++) {
-            main_int_atoms_out[idx * 32 + i] = interacting_atoms[pair_idx * 32 + i];
-        }
-        main_shift_x_out[idx] = shift_x[pair_idx];
-        main_shift_y_out[idx] = shift_y[pair_idx];
-        main_shift_z_out[idx] = shift_z[pair_idx];
-    }
-}
-"""
-
 _CHECK_REBUILD_KERNEL = r"""
 extern "C" __global__
 void check_rebuild_kernel(
@@ -695,7 +637,6 @@ def _compile_gpu_kernels():
         "rev_count": cp.RawKernel(_BUILD_REVERSE_COUNT_KERNEL, "build_reverse_count_kernel"),
         "rev_fill": cp.RawKernel(_FILL_REVERSE_KERNEL, "fill_reverse_kernel"),
         "build_masks": cp.RawKernel(_BUILD_MASKS_KERNEL, "build_masks_kernel"),
-        "classify_block_pairs": cp.RawKernel(_CLASSIFY_BLOCK_PAIRS_KERNEL, "classify_block_pairs_kernel"),
         "check_rebuild": cp.RawKernel(_CHECK_REBUILD_KERNEL, "check_rebuild_kernel"),
         "fused_copy3": cp.RawKernel(_FUSED_COPY3_KERNEL, "fused_copy3_kernel"),
         "post_argsort": cp.RawKernel(_POST_ARGSORT_KERNEL, "post_argsort_kernel"),
@@ -781,19 +722,6 @@ class BlockList:
         self.d_block_pair_shift_y = cp.empty(0, dtype=env.NUMPY_FLOAT)
         self.d_block_pair_shift_z = cp.empty(0, dtype=env.NUMPY_FLOAT)
 
-        self._d_classify_excl_counter = cp.zeros(1, dtype=env.NUMPY_INT)
-        self._d_classify_main_counter = cp.zeros(1, dtype=env.NUMPY_INT)
-        self._d_classify_excl_block_pairs = cp.empty(0, dtype=env.NUMPY_INT)
-        self._d_classify_excl_int_atoms = cp.empty(0, dtype=env.NUMPY_INT)
-        self._d_classify_excl_masks = cp.empty(0, dtype=np.uint32)
-        self._d_classify_main_block_pairs = cp.empty(0, dtype=env.NUMPY_INT)
-        self._d_classify_main_int_atoms = cp.empty(0, dtype=env.NUMPY_INT)
-        self._d_classify_excl_shift_x = cp.empty(0, dtype=env.NUMPY_FLOAT)
-        self._d_classify_excl_shift_y = cp.empty(0, dtype=env.NUMPY_FLOAT)
-        self._d_classify_excl_shift_z = cp.empty(0, dtype=env.NUMPY_FLOAT)
-        self._d_classify_main_shift_x = cp.empty(0, dtype=env.NUMPY_FLOAT)
-        self._d_classify_main_shift_y = cp.empty(0, dtype=env.NUMPY_FLOAT)
-        self._d_classify_main_shift_z = cp.empty(0, dtype=env.NUMPY_FLOAT)
 
         self.d_main_shift_x = cp.empty(0, dtype=env.NUMPY_FLOAT)
         self.d_main_shift_y = cp.empty(0, dtype=env.NUMPY_FLOAT)
@@ -1237,91 +1165,28 @@ class BlockList:
         )
 
     def _extract_exclusion_block_pairs(self):
+        # Phase 2: unified mask path. The exclusion kernel handles ALL pairs
+        # (a zero mask = no exclusion = full force). Publish the unified arrays
+        # under the main_* names; set excl count to 0 so only one kernel launches.
         if self.num_block_pairs == 0:
             self.num_exclusion_block_pairs = 0
             self.num_main_block_pairs = 0
-            self.d_excl_block_pairs = cp.empty(0, dtype=env.NUMPY_INT)
-            self.d_excl_interacting_atoms = cp.empty(0, dtype=env.NUMPY_INT)
-            self.d_excl_exclusion_masks = cp.empty(0, dtype=np.uint32)
-            self.d_main_block_pairs = cp.empty(0, dtype=env.NUMPY_INT)
-            self.d_main_interacting_atoms = cp.empty(0, dtype=env.NUMPY_INT)
-            self.d_block_pair_shift_x = cp.empty(0, dtype=env.NUMPY_FLOAT)
-            self.d_block_pair_shift_y = cp.empty(0, dtype=env.NUMPY_FLOAT)
-            self.d_block_pair_shift_z = cp.empty(0, dtype=env.NUMPY_FLOAT)
-            self.d_main_shift_x = cp.empty(0, dtype=env.NUMPY_FLOAT)
-            self.d_main_shift_y = cp.empty(0, dtype=env.NUMPY_FLOAT)
-            self.d_main_shift_z = cp.empty(0, dtype=env.NUMPY_FLOAT)
-            self.d_excl_shift_x = cp.empty(0, dtype=env.NUMPY_FLOAT)
-            self.d_excl_shift_y = cp.empty(0, dtype=env.NUMPY_FLOAT)
-            self.d_excl_shift_z = cp.empty(0, dtype=env.NUMPY_FLOAT)
             return
-
-        nt = self.num_block_pairs
-        max_block_pairs = max(nt, self._max_block_pairs)
-
-        if self._d_classify_excl_block_pairs.size < max_block_pairs:
-            self._d_classify_excl_block_pairs = cp.empty(max_block_pairs, dtype=env.NUMPY_INT)
-            self._d_classify_excl_int_atoms = cp.empty(
-                max_block_pairs * BLOCK_SIZE, dtype=env.NUMPY_INT
-            )
-            self._d_classify_excl_masks = cp.empty(max_block_pairs * BLOCK_SIZE, dtype=np.uint32)
-            self._d_classify_main_block_pairs = cp.empty(max_block_pairs, dtype=env.NUMPY_INT)
-            self._d_classify_main_int_atoms = cp.empty(
-                max_block_pairs * BLOCK_SIZE, dtype=env.NUMPY_INT
-            )
-            self._d_classify_excl_shift_x = cp.empty(max_block_pairs, dtype=env.NUMPY_FLOAT)
-            self._d_classify_excl_shift_y = cp.empty(max_block_pairs, dtype=env.NUMPY_FLOAT)
-            self._d_classify_excl_shift_z = cp.empty(max_block_pairs, dtype=env.NUMPY_FLOAT)
-            self._d_classify_main_shift_x = cp.empty(max_block_pairs, dtype=env.NUMPY_FLOAT)
-            self._d_classify_main_shift_y = cp.empty(max_block_pairs, dtype=env.NUMPY_FLOAT)
-            self._d_classify_main_shift_z = cp.empty(max_block_pairs, dtype=env.NUMPY_FLOAT)
-
-        self._d_classify_excl_counter[0] = 0
-        self._d_classify_main_counter[0] = 0
-
-        tpb = 256
-        grid = ((nt + tpb - 1) // tpb,)
-        self._kernels["classify_block_pairs"](
-            grid,
-            (tpb,),
-            (
-                self.d_exclusion_masks,
-                self.d_block_pairs,
-                self.d_interacting_atoms,
-                self.d_block_pair_shift_x,
-                self.d_block_pair_shift_y,
-                self.d_block_pair_shift_z,
-                np.int32(nt),
-                self._d_classify_excl_counter,
-                self._d_classify_main_counter,
-                self._d_classify_excl_block_pairs,
-                self._d_classify_excl_int_atoms,
-                self._d_classify_excl_masks,
-                self._d_classify_main_block_pairs,
-                self._d_classify_main_int_atoms,
-                self._d_classify_excl_shift_x,
-                self._d_classify_excl_shift_y,
-                self._d_classify_excl_shift_z,
-                self._d_classify_main_shift_x,
-                self._d_classify_main_shift_y,
-                self._d_classify_main_shift_z,
-            ),
-        )
-
-        self.num_exclusion_block_pairs = self._read_device_int(self._d_classify_excl_counter)
-        self.num_main_block_pairs = self._read_device_int(self._d_classify_main_counter)
-
-        self.d_excl_block_pairs = self._d_classify_excl_block_pairs
-        self.d_excl_interacting_atoms = self._d_classify_excl_int_atoms
-        self.d_excl_exclusion_masks = self._d_classify_excl_masks
-        self.d_main_block_pairs = self._d_classify_main_block_pairs
-        self.d_main_interacting_atoms = self._d_classify_main_int_atoms
-        self.d_excl_shift_x = self._d_classify_excl_shift_x
-        self.d_excl_shift_y = self._d_classify_excl_shift_y
-        self.d_excl_shift_z = self._d_classify_excl_shift_z
-        self.d_main_shift_x = self._d_classify_main_shift_x
-        self.d_main_shift_y = self._d_classify_main_shift_y
-        self.d_main_shift_z = self._d_classify_main_shift_z
+        self.num_main_block_pairs = self.num_block_pairs
+        self.num_exclusion_block_pairs = 0
+        # main arrays alias the raw find_interacting output
+        self.d_main_block_pairs = self.d_block_pairs
+        self.d_main_interacting_atoms = self.d_interacting_atoms
+        self.d_main_shift_x = self.d_block_pair_shift_x
+        self.d_main_shift_y = self.d_block_pair_shift_y
+        self.d_main_shift_z = self.d_block_pair_shift_z
+        # masks: the exclusion kernel reads d_excl_exclusion_masks for all pairs
+        self.d_excl_block_pairs = self.d_block_pairs
+        self.d_excl_interacting_atoms = self.d_interacting_atoms
+        self.d_excl_exclusion_masks = self.d_exclusion_masks
+        self.d_excl_shift_x = self.d_block_pair_shift_x
+        self.d_excl_shift_y = self.d_block_pair_shift_y
+        self.d_excl_shift_z = self.d_block_pair_shift_z
 
     def check_rebuild(self, positions) -> bool:
         if not self._is_initialized:

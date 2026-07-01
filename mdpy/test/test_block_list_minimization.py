@@ -49,3 +49,20 @@ def test_ion_forces_parity_baseline():
     np.testing.assert_allclose(forces, forces, rtol=0, atol=0)  # self-consistency
     assert forces.shape == (s.topology.num_particles, 3)
     assert np.isfinite(forces).all()
+
+
+def test_unified_mask_path_all_pairs_have_masks():
+    """After Phase 2, num_main_block_pairs == num_block_pairs and every
+    block pair carries a mask entry (exclusion kernel used for all pairs)."""
+    s = _build_ion_system()
+    s.update_neighbor_list(force_rebuild=True)
+    bl = s._block_list
+    assert bl.num_main_block_pairs == bl.num_block_pairs
+    assert bl.num_exclusion_block_pairs == 0
+    # masks array covers every main pair
+    assert bl.d_excl_exclusion_masks.size >= bl.num_main_block_pairs * 32
+    # most masks are zero (no exclusion), a few nonzero (1-2/1-3 pairs)
+    masks = bl.d_excl_exclusion_masks[:bl.num_main_block_pairs * 32].get()
+    assert (masks != 0).any(), "expected some exclusions in the ion system"
+    zero_fraction = float((masks == 0).mean())
+    assert zero_fraction > 0.9, f"most masks should be zero, got {zero_fraction}"
