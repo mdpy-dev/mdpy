@@ -66,3 +66,35 @@ def test_unified_mask_path_all_pairs_have_masks():
     assert (masks != 0).any(), "expected some exclusions in the ion system"
     zero_fraction = float((masks == 0).mean())
     assert zero_fraction > 0.9, f"most masks should be zero, got {zero_fraction}"
+
+
+def test_hilbert_face_adjacency_all_levels():
+    """A correct Hilbert curve of order L visits cells such that consecutive
+    cells (in index order) are ALWAYS face-adjacent (differ in exactly one
+    coordinate). This is the defining property and the correctness gate."""
+    from mdpy.core.hilbert import hilbert_index
+    for L in (1, 2, 3):  # B = 3, 6, 9  -> 8, 64, 512 cells
+        n = 1 << L
+        # compute index for every cell
+        cells = []
+        for x in range(n):
+            for y in range(n):
+                for z in range(n):
+                    cells.append((hilbert_index(x, y, z, L), x, y, z))
+        cells.sort()  # sort by Hilbert index
+        # check consecutive cells are face-adjacent
+        for i in range(1, len(cells)):
+            _, x0, y0, z0 = cells[i - 1]
+            _, x1, y1, z1 = cells[i]
+            hamming = abs(x1 - x0) + abs(y1 - y0) + abs(z1 - z0)
+            assert hamming == 1, (
+                f"L={L}: indices {cells[i-1][0]}->{cells[i][0]} not face-adjacent "
+                f"({x0},{y0},{z0})->({x1},{y1},{z1}) hamming={hamming}"
+            )
+
+
+def test_hilbert_b3_order1_table():
+    """The order-1 (B=3) traversal table must visit all 8 octants exactly once."""
+    from mdpy.core.hilbert import hilbert_index
+    indices = [hilbert_index(x, y, z, 1) for x in (0, 1) for y in (0, 1) for z in (0, 1)]
+    assert sorted(indices) == list(range(8)), "order-1 must be a permutation of 0..7"
