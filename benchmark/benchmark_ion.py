@@ -58,7 +58,7 @@ integrator = LangevinBAOABIntegrator(DT_FS, 300.0, 1.0)
 
 def _run_steps(n):
     for i in range(n):
-        system.update_neighbor_list(sync_interval=50)
+        system.update_neighbor_list(sync_interval=10)
         system.compute_forces()
         integrator.step(system)
 
