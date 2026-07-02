@@ -136,3 +136,23 @@ def test_no_cp_arange_in_permute_path():
     src = inspect.getsource(system)
     count = sum(1 for line in src.split('\n') if 'cp.arange' in line and not line.strip().startswith('#'))
     assert count == 0, f"system.py still uses cp.arange ({count} occurrences)"
+
+
+def test_excl_buffers_no_aliasing_across_rebuilds():
+    """permute_exclusion_pairs_gpu double-buffers: a call's output buffers
+    (returned as the next call's input) must never be the same memory as the
+    previous call's output. Aliasing would corrupt the permute_pairs kernel,
+    which reads d_cached_* and writes d_new_* simultaneously."""
+    s = _build_ion()
+    # Prime: first rebuild goes through the else-branch (build_exclusion_map_gpu,
+    # no pool). Only subsequent rebuilds use permute_exclusion_pairs_gpu.
+    s.update_neighbor_list(force_rebuild=True)
+    # Now each rebuild calls permute_exclusion_pairs_gpu with double-buffering.
+    s.update_neighbor_list(force_rebuild=True)  # pool A
+    ptr_A = s._d_cached_unique_i.data.ptr
+    s.update_neighbor_list(force_rebuild=True)  # pool B
+    ptr_B = s._d_cached_unique_i.data.ptr
+    assert ptr_A != ptr_B, "Double-buffering failed: same buffer reused (aliasing risk)"
+    s.update_neighbor_list(force_rebuild=True)  # pool A again
+    ptr_A2 = s._d_cached_unique_i.data.ptr
+    assert ptr_A2 == ptr_A, "Double-buffering flip pattern wrong (should cycle A->B->A)"

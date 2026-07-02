@@ -399,20 +399,37 @@ def build_exclusion_map_gpu(topology, scale_14=1.0):
     return d_offset, d_unique_j, d_unique_scale, d_unique_i
 
 
+def _excl_get(name, size, dtype, pool, fill=None):
+    """Return a reusable buffer from the given exclusion pool. The pool is
+    double-buffered: the caller selects pool A or B once per call, so a call's
+    outputs (next call's inputs) never alias."""
+    key = (name, dtype)
+    arr = pool.get(key)
+    if arr is None or arr.size < size:
+        arr = cp.empty(size, dtype=dtype)
+        pool[key] = arr
+    arr = arr[:size]
+    if fill == 0:
+        cp.cuda.runtime.memsetAsync(
+            arr.data.ptr, 0, size * arr.itemsize, cp.cuda.Stream.null.ptr
+        )
+    return arr
+
+
 def permute_exclusion_pairs_gpu(d_cached_i, d_cached_j, d_cached_scale,
-                                 d_composed_perm, num_particles):
+                                 d_composed_perm, num_particles, pool):
     num_pairs = len(d_cached_i)
     if num_pairs == 0:
-        d_offset = cp.zeros(num_particles + 1, dtype=cp.int32)
-        d_neighbors = cp.empty(0, dtype=cp.int32)
-        d_scale = cp.empty(0, dtype=cp.float32)
+        d_offset = _excl_get("offset", num_particles + 1, np.int32, pool, fill=0)
+        d_neighbors = _excl_get("neighbors", 0, np.int32, pool)
+        d_scale = _excl_get("scale_out", 0, np.float32, pool)
         return d_offset, d_neighbors, d_scale, d_cached_i, d_cached_j, d_cached_scale
 
     kernels = _get_gpu_kernels()
 
-    d_new_i = cp.empty(num_pairs, dtype=cp.int32)
-    d_new_j = cp.empty(num_pairs, dtype=cp.int32)
-    d_new_scale = cp.empty(num_pairs, dtype=cp.float32)
+    d_new_i = _excl_get("new_i", num_pairs, np.int32, pool)
+    d_new_j = _excl_get("new_j", num_pairs, np.int32, pool)
+    d_new_scale = _excl_get("new_scale", num_pairs, np.float32, pool)
 
     tpb = 256
     grid = ((num_pairs + tpb - 1) // tpb,)
@@ -421,15 +438,17 @@ def permute_exclusion_pairs_gpu(d_cached_i, d_cached_j, d_cached_scale,
          d_composed_perm, np.int32(num_pairs),
          d_new_i, d_new_j, d_new_scale))
 
-    d_count = cp.zeros(num_particles + 1, dtype=cp.int32)
+    d_count = _excl_get("count", num_particles + 1, np.int32, pool, fill=0)
     kernels['count_row'](grid, (tpb,),
         (d_new_i, np.int32(num_pairs), d_count))
 
-    d_offset = cp.cumsum(d_count, dtype=cp.int32)
+    d_offset = _excl_get("offset", num_particles + 1, np.int32, pool)
+    cp.cumsum(d_count, dtype=cp.int32, out=d_offset)
 
-    d_neighbors = cp.empty(num_pairs, dtype=cp.int32)
-    d_scale_out = cp.empty(num_pairs, dtype=cp.float32)
-    d_temp = d_offset.copy()
+    d_neighbors = _excl_get("neighbors", num_pairs, np.int32, pool)
+    d_scale_out = _excl_get("scale_out", num_pairs, np.float32, pool)
+    d_temp = _excl_get("temp", num_particles + 1, np.int32, pool)
+    d_temp[:] = d_offset
 
     kernels['scatter_pairs'](grid, (tpb,),
         (d_new_i, d_new_j, d_new_scale, d_offset,

@@ -39,6 +39,9 @@ class System:
         self._d_cached_unique_i = None
         self._d_cached_unique_j = None
         self._d_cached_unique_scale = None
+        self._excl_pool_A = {}
+        self._excl_pool_B = {}
+        self._excl_flip = False
 
     def _ensure_pme_stream(self):
         if self._pme_stream is None:
@@ -326,12 +329,15 @@ class System:
             rk = compile_rebuild_kernels()
             grid = ((N + 255) // 256,)
             rk["compose_perm"](grid, (256,), (d_composed_perm, perm_gpu, np.int32(N)))
+            pool = self._excl_pool_B if self._excl_flip else self._excl_pool_A
+            self._excl_flip = not self._excl_flip
             result = permute_exclusion_pairs_gpu(
                 self._d_cached_unique_i,
                 self._d_cached_unique_j,
                 self._d_cached_unique_scale,
                 d_composed_perm,
                 N,
+                pool,
             )
             d_excl_offset = result[0]
             d_excl_neighbors = result[1]
