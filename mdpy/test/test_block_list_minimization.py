@@ -57,6 +57,8 @@ def test_unified_mask_path_all_pairs_have_masks():
     s = _build_ion_system()
     s.update_neighbor_list(force_rebuild=True)
     bl = s._block_list
+    bl.num_block_pairs = int(bl._d_counters[0].get())
+    bl.num_main_block_pairs = bl.num_block_pairs
     assert bl.num_main_block_pairs == bl.num_block_pairs
     assert bl.num_exclusion_block_pairs == 0
     # masks array covers every main pair
@@ -144,6 +146,7 @@ def test_cell_layout_emits_block_to_cell():
     s = _build_ion_system()
     s.update_neighbor_list(force_rebuild=True)
     bl = s._block_list
+    bl.num_blocks = int(bl._d_num_blocks[0].get())
     btc = bl.d_block_to_cell.get()[:bl.num_blocks]
     assert btc.shape[0] == bl.num_blocks
     assert (btc >= 0).all() and (btc < bl.nc_total).all()

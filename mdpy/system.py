@@ -189,17 +189,21 @@ class System:
         self._step_counter += 1
         if self._step_counter < sync_interval:
             return
-        cp.cuda.Stream.null.synchronize()
-        if self._block_list._read_device_int(self._block_list.d_rebuild_flag) == 1:
-            self._do_rebuild(positions_soa)
+        # No sync, no readback. check_rebuild_async (line above) queued the
+        # check_rebuild kernel on this stream; cell_assign (inside _do_rebuild)
+        # is queued after it, so stream ordering guarantees cell_assign sees the
+        # flag written by check_rebuild. flag=1 → full rebuild; flag=0 →
+        # cell_assign skips → num_blocks=0 → all rebuild kernels self-skip.
+        self._do_rebuild(positions_soa, force=False)
         self._step_counter = 0
 
-    def _do_rebuild(self, positions_soa):
+    def _do_rebuild(self, positions_soa, *, force=True):
         self._block_list.rebuild(
             positions_soa,
             self.topology,
             self._pbc_matrix,
             self._pbc_inv,
+            force=force,
         )
         self._permute_all_arrays()
         self.gpu.wrap_positions_with_prev_correction()

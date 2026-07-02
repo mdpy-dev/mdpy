@@ -558,8 +558,11 @@ void counting_scatter_kernel(
     int* __restrict__ pdb_to_sorted,
     int* __restrict__ sorted_to_pdb,
     int* __restrict__ cell_indices_sorted,
-    float* __restrict__ snap_x, float* __restrict__ snap_y, float* __restrict__ snap_z
+    float* __restrict__ snap_x, float* __restrict__ snap_y, float* __restrict__ snap_z,
+    const int* __restrict__ d_rebuild_flag
 ) {
+    if (d_rebuild_flag[0] == 0) return;
+
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= number_particles) return;
     int cell = cell_indices[i];
@@ -736,22 +739,25 @@ class BlockList:
     @property
     def block_pairs(self):
         if self._block_pairs_np is None and self.d_block_pairs.size > 0:
-            self._block_pairs_np = cp.asnumpy(self.d_block_pairs[: self.num_block_pairs])
+            n = int(self._d_counters[0].get())
+            self._block_pairs_np = cp.asnumpy(self.d_block_pairs[:n])
         return self._block_pairs_np
 
     @property
     def interacting_atoms(self):
         if self._interacting_atoms_np is None and self.d_interacting_atoms.size > 0:
+            n = int(self._d_counters[0].get())
             self._interacting_atoms_np = cp.asnumpy(
-                self.d_interacting_atoms[: self.num_block_pairs * BLOCK_SIZE]
+                self.d_interacting_atoms[: n * BLOCK_SIZE]
             ).reshape(-1, BLOCK_SIZE)
         return self._interacting_atoms_np
 
     @property
     def exclusion_masks(self):
         if self._exclusion_masks_np is None and self.d_exclusion_masks.size > 0:
+            n = int(self._d_counters[0].get())
             self._exclusion_masks_np = cp.asnumpy(
-                self.d_exclusion_masks[:self.num_block_pairs * BLOCK_SIZE]
+                self.d_exclusion_masks[: n * BLOCK_SIZE]
             ).reshape(-1, BLOCK_SIZE)
         return self._exclusion_masks_np
 
@@ -824,8 +830,14 @@ class BlockList:
         self._hilbert_levels = L
         self._hilbert_bits = 3 * L
 
-    def rebuild(self, positions, topology, pbc_matrix, pbc_inv):
-        """Sort particles into cell-aligned blocks. Returns (pdb_to_sorted, None)."""
+    def rebuild(self, positions, topology, pbc_matrix, pbc_inv, *, force=True):
+        """Sort particles into cell-aligned blocks. Returns (pdb_to_sorted, None).
+
+        When force=True (default), d_rebuild_flag is set to 1 so cell_assign runs
+        unconditionally. When force=False, the flag is left as-is — the
+        sync_interval path relies on check_rebuild_async to have set it, enabling
+        zero-propagation skip when atoms have not moved.
+        """
         N = topology.num_particles
         if N == 0:
             self._init_empty()
@@ -841,12 +853,8 @@ class BlockList:
         self._compute_cell_grid(pbc_matrix, N)
         self._upload_pbc(pbc_matrix, pbc_inv)
 
-        # rebuild() is the unconditional "do a full rebuild" entry point, so
-        # guarantee d_rebuild_flag=1 before cell_assign launches. The cell_assign
-        # GPU-side guard (skip when flag=0) is infrastructure for the future
-        # zero-readback pipeline, which will call rebuild() without forcing the
-        # flag; this line will be removed at that point.
-        self.d_rebuild_flag[0] = 1
+        if force:
+            self.d_rebuild_flag[0] = 1
 
         if isinstance(positions, tuple):
             pos_x = positions[0]
@@ -908,9 +916,8 @@ class BlockList:
                 cell_offset_padded, block_to_cell, d_num_blocks, d_total_padded,
             ),
         )
-        num_blocks = self._read_device_int(d_num_blocks)
-        self.num_blocks = num_blocks
-        total_padded = self._read_device_int(d_total_padded)
+        self.num_blocks = self.max_blocks
+        self._d_num_blocks = d_num_blocks
 
         self.d_cell_block_offset = cell_block_offset
         self.d_cell_block_count = cell_block_count
@@ -958,6 +965,7 @@ class BlockList:
                 block_atoms, raw_order, pdb_to_sorted, sorted_to_pdb,
                 cell_indices_sorted,
                 snap_x, snap_y, snap_z,
+                self.d_rebuild_flag,
             ),
         )
         self.d_block_atoms = block_atoms
@@ -1057,7 +1065,7 @@ class BlockList:
             ),
         )
 
-        self.num_block_pairs = self._read_device_int(self._d_counters)
+        self.num_block_pairs = self._max_block_pairs
         self.num_cell_subsets = cell_subsets
         self.d_block_pairs = self._d_block_pair_buf
         self.d_interacting_atoms = self._d_interacting_buf

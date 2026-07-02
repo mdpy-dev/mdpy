@@ -35,6 +35,10 @@ def _rebuild_and_build_block_pairs(n, box=50.0, cutoff=10.0, skin=2.0, seed=42, 
     bl = BlockList(cutoff=cutoff, skin=skin)
     bl.rebuild(positions, topology, pbc_matrix, pbc_inv)
     bl.build_block_pairs(topology, pbc_matrix)
+    # Read actual counts for test assertions (syncs — acceptable in tests,
+    # NOT in the hot path where kernels read from device directly).
+    bl.num_blocks = int(bl._d_num_blocks[0].get())
+    bl.num_block_pairs = int(bl._d_counters[0].get())
     return bl, positions, pbc_matrix, pbc_inv, topology
 
 
@@ -423,6 +427,8 @@ class TestExclusionMasks:
         bl = BlockList(cutoff=10.0, skin=2.0)
         bl.rebuild(positions, topology, pbc_matrix, pbc_inv)
         bl.build_block_pairs(topology, pbc_matrix)
+        bl.num_blocks = int(bl._d_num_blocks[0].get())
+        bl.num_block_pairs = int(bl._d_counters[0].get())
 
         excl = bl.exclusion_masks
         ia = bl.interacting_atoms
@@ -466,6 +472,8 @@ class TestExclusionMasks:
         bl = BlockList(cutoff=10.0, skin=2.0)
         bl.rebuild(positions, topology, pbc_matrix, pbc_inv)
         bl.build_block_pairs(topology, pbc_matrix)
+        bl.num_blocks = int(bl._d_num_blocks[0].get())
+        bl.num_block_pairs = int(bl._d_counters[0].get())
 
         excl = bl.exclusion_masks
         ia = bl.interacting_atoms

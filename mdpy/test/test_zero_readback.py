@@ -109,61 +109,27 @@ class TestMaxBlocksUpperBound:
 
 class TestCellAssignFlagCheck:
     def test_flag_zero_skips_cell_assign(self):
-        """cell_assign must early-exit when d_rebuild_flag=0, leaving cell_counts zero.
-
-        rebuild() unconditionally sets the flag to 1 before launching cell_assign
-        (it is the "do a full rebuild" entry point), so this test launches the
-        cell_assign kernel directly with flag=0 to verify the GPU-side guard that
-        will power the future zero-readback pipeline.
-        """
+        """When force=False and d_rebuild_flag=0, cell_assign + counting_scatter
+        skip entirely, so d_num_blocks stays 0 (zero-propagation)."""
         import cupy as cp
 
-        n = 100
+        n = 1000
         topology = _make_topology(n)
         positions = _make_positions(n)
         pbc = np.eye(3, dtype=np.float32) * 50.0
         pbc_inv = np.linalg.inv(pbc)
 
         bl = BlockList(cutoff=10.0, skin=2.0)
-        bl._ensure_kernels()
-        bl.d_rebuild_flag[0] = 1
+
+        # force=True (default): normal rebuild produces blocks
         bl.rebuild(positions, topology, pbc, pbc_inv)
-        assert bl.num_blocks > 0  # normal rebuild produces blocks
+        d_num_blocks = bl._pool.get(("num_blocks", env.NUMPY_INT))
+        assert int(d_num_blocks[0].get()) > 0
 
-        # Re-launch cell_assign directly with flag=0. rebuild() already set up
-        # _d_pbc_matrix/_d_pbc_inv/nc_*/_hilbert_levels, so reuse them.
-        data = cp.asarray(np.ascontiguousarray(positions.ravel(), dtype=np.float32))
-        pos_x = data[0::3].copy()
-        pos_y = data[1::3].copy()
-        pos_z = data[2::3].copy()
-
-        cell_counts = bl._d_cell_counts
-        cell_counts[:] = 0  # zero so we can detect any write by cell_assign
+        # force=False with flag=0: zero-propagation → num_blocks=0
         bl.d_rebuild_flag[0] = 0
-
-        composite_buckets = bl.nc_total * (1 << (3 * bl._hilbert_levels))
-        d_composite_counts = bl._pool_get(
-            "composite_counts", composite_buckets, env.NUMPY_INT, fill=0
-        )
-        sort_keys = bl._pool_get("sort_keys", n, np.uint64)
-        cell_indices = bl._pool_get("cell_indices", n, env.NUMPY_INT)
-
-        tpb = 256
-        nm = (n + tpb - 1) // tpb
-        bl._kernels["cell_assign"](
-            (nm,), (tpb,),
-            (
-                pos_x, pos_y, pos_z,
-                bl._d_pbc_matrix, bl._d_pbc_inv,
-                np.int32(n),
-                np.int32(bl.nc_x), np.int32(bl.nc_y), np.int32(bl.nc_z),
-                np.int32(bl._hilbert_levels),
-                cell_counts, d_composite_counts, sort_keys, cell_indices,
-                bl.d_rebuild_flag,
-            ),
-        )
-
-        total = int(cell_counts.sum().get())
-        assert total == 0, (
-            f"cell_assign should have skipped (flag=0), but cell_counts sum={total}"
+        bl.rebuild(positions, topology, pbc, pbc_inv, force=False)
+        actual = int(d_num_blocks[0].get())
+        assert actual == 0, (
+            f"flag=0 should zero-propagate to num_blocks=0, got {actual}"
         )

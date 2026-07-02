@@ -179,13 +179,18 @@ void exclusion_block_pair_kernel(
     const int* __restrict__ interacting_atoms,
     const unsigned int* __restrict__ exclusion_masks,
     float cutoff_sq,
-    int num_block_pairs,
+    const int* __restrict__ d_block_pair_count,
     int num_particles
     {sorted_decls}{unsorted_decls}{pair_decls},
     const int* __restrict__ d_types,
     int n_types
     {scalar_decls}
 ) {{
+    __shared__ int s_num_pairs;
+    if (threadIdx.x == 0) s_num_pairs = d_block_pair_count[0];
+    __syncthreads();
+    int num_block_pairs = s_num_pairs;
+
     int total_warps = (blockDim.x * gridDim.x) / 32;
     int warp_id = (blockIdx.x * blockDim.x + threadIdx.x) / 32;
     int tgx = threadIdx.x & 31;
@@ -505,7 +510,7 @@ class NonbondedForce(ForceTerm):
                 block_list.d_excl_interacting_atoms,
                 block_list.d_excl_exclusion_masks,
                 np.float32(self._cutoff_sq),
-                np.int32(block_list.num_main_block_pairs),
+                block_list._d_counters,
                 np.int32(gpu_context.number_particles),
             ]
         )
@@ -531,7 +536,7 @@ class NonbondedForce(ForceTerm):
 
         self._resolve_per_particle(gpu_context)
 
-        if block_list is None or block_list.num_main_block_pairs == 0:
+        if block_list is None:
             return
 
         self._refresh_posq(gpu_context, block_list)
@@ -544,10 +549,5 @@ class NonbondedForce(ForceTerm):
         else:
             excl_kernel = self._excl_kernel_fo
 
-        num_main = block_list.num_main_block_pairs
-        if num_main > 0:
-            # Unified path: the exclusion kernel applies masks (zero mask = full
-            # force). All block pairs run through it.
-            excl_args = self._build_excl_args(gpu_context, block_list, compute_energy)
-            excl_grid_size = max(grid_size, (num_main + 7) // 8)
-            excl_kernel((excl_grid_size,), (256,), excl_args)
+        excl_args = self._build_excl_args(gpu_context, block_list, compute_energy)
+        excl_kernel((grid_size,), (256,), excl_args)
