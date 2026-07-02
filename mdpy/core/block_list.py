@@ -591,6 +591,8 @@ class BlockList:
         self.num_block_pairs = 0
         self.num_particles = 0
         self._max_block_pairs = 0
+        self.max_blocks = 0
+        self.max_total_padded = 0
 
         self.nc_x = 0
         self.nc_y = 0
@@ -786,6 +788,12 @@ class BlockList:
         self.nc_z = max(1, int(box_c / cell_size))
         self.nc_total = self.nc_x * self.nc_y * self.nc_z
 
+        # Upper bounds for pre-allocation: num_blocks = sum of ceil(count_c/32)
+        # over all cells.  Since ceil(x) < x+1, num_blocks < N/32 + nc_total,
+        # so ceil(N/32) + nc_total is a safe integer upper bound (strict >).
+        self.max_blocks = (num_particles + BLOCK_SIZE - 1) // BLOCK_SIZE + self.nc_total
+        self.max_total_padded = self.max_blocks * BLOCK_SIZE
+
         # Density-derived Hilbert level L. Targets ~4 atoms per sub-cell:
         # atoms_per_cell / (2^L)^3 ~= 4  ->  B_raw = round(log2(apc/4)), L =
         # (B_raw+2)//3 clamped to [1, 4]. Also cap K = nc_total * 2^(3L) at
@@ -898,7 +906,7 @@ class BlockList:
         # snapshot. Scattering on composite buckets preserves the intra-cell
         # Hilbert ordering, keeping blocks Hilbert-compact -> tight AABBs.
         # block_atoms must be pre-filled with -1 (padding) before launch.
-        block_atoms = self._pool_get("block_atoms", total_padded, env.NUMPY_INT, fill=-1)
+        block_atoms = self._pool_get("block_atoms", self.max_total_padded, env.NUMPY_INT, fill=-1)
         composite_cursor = self._pool_get("composite_cursor", composite_buckets, env.NUMPY_INT, fill=0)
         sorted_pos_x = self._pool_get("sorted_pos_x", N, env.NUMPY_FLOAT)
         sorted_pos_y = self._pool_get("sorted_pos_y", N, env.NUMPY_FLOAT)
@@ -937,15 +945,15 @@ class BlockList:
         pos_x, pos_y, pos_z = sorted_pos_x, sorted_pos_y, sorted_pos_z
         self._sorted_positions = (pos_x, pos_y, pos_z)
 
-        self.d_block_to_cell = block_to_cell[:num_blocks]
+        self.d_block_to_cell = block_to_cell[:self.max_blocks]
 
-        nb = (num_blocks + tpb - 1) // tpb
-        self.d_block_center_x = self._pool_get("block_center_x", num_blocks, env.NUMPY_FLOAT)
-        self.d_block_center_y = self._pool_get("block_center_y", num_blocks, env.NUMPY_FLOAT)
-        self.d_block_center_z = self._pool_get("block_center_z", num_blocks, env.NUMPY_FLOAT)
-        self.d_block_size_x = self._pool_get("block_size_x", num_blocks, env.NUMPY_FLOAT)
-        self.d_block_size_y = self._pool_get("block_size_y", num_blocks, env.NUMPY_FLOAT)
-        self.d_block_size_z = self._pool_get("block_size_z", num_blocks, env.NUMPY_FLOAT)
+        nb = (self.max_blocks + tpb - 1) // tpb
+        self.d_block_center_x = self._pool_get("block_center_x", self.max_blocks, env.NUMPY_FLOAT)
+        self.d_block_center_y = self._pool_get("block_center_y", self.max_blocks, env.NUMPY_FLOAT)
+        self.d_block_center_z = self._pool_get("block_center_z", self.max_blocks, env.NUMPY_FLOAT)
+        self.d_block_size_x = self._pool_get("block_size_x", self.max_blocks, env.NUMPY_FLOAT)
+        self.d_block_size_y = self._pool_get("block_size_y", self.max_blocks, env.NUMPY_FLOAT)
+        self.d_block_size_z = self._pool_get("block_size_z", self.max_blocks, env.NUMPY_FLOAT)
         # K4: compute block AABB bounds and atom_to_block/slot reverse map in a
         # single per-block pass. Every real atom is in exactly one block at one
         # slot, so all N entries are written here -> no -1 pre-fill needed.

@@ -144,7 +144,7 @@ def test_cell_layout_emits_block_to_cell():
     s = _build_ion_system()
     s.update_neighbor_list(force_rebuild=True)
     bl = s._block_list
-    btc = bl.d_block_to_cell.get()
+    btc = bl.d_block_to_cell.get()[:bl.num_blocks]
     assert btc.shape[0] == bl.num_blocks
     assert (btc >= 0).all() and (btc < bl.nc_total).all()
     # block_to_cell must be non-decreasing (blocks ordered by cell)
@@ -170,7 +170,7 @@ def test_block_meta_fused():
     assert (a2b < bl.num_blocks).all()
     assert (a2s >= 0).all() and (a2s < 32).all()
     # block bounds exist for every block
-    assert bl.d_block_center_x.shape[0] == bl.num_blocks
+    assert bl.d_block_center_x.shape[0] >= bl.num_blocks
     # cross-check: atom_to_block/atom_to_slot round-trips via block_atoms
     ba = bl.d_block_atoms.get().reshape(-1, 32)
     for atom_idx in range(0, bl.num_particles, max(1, bl.num_particles // 50)):
