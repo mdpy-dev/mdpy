@@ -189,12 +189,13 @@ class System:
         self._step_counter += 1
         if self._step_counter < sync_interval:
             return
-        # No sync, no readback. check_rebuild_async (line above) queued the
-        # check_rebuild kernel on this stream; cell_assign (inside _do_rebuild)
-        # is queued after it, so stream ordering guarantees cell_assign sees the
-        # flag written by check_rebuild. flag=1 → full rebuild; flag=0 →
-        # cell_assign skips → num_blocks=0 → all rebuild kernels self-skip.
-        self._do_rebuild(positions_soa, force=False)
+        # No sync, no flag readback. Always launch a full rebuild (force=True).
+        # This eliminates the ~67μs flag-readback stall while preserving the
+        # previous block-list data (rebuild runs fully, overwriting with valid
+        # new data). The GPU-side flag check in cell_assign/counting_scatter
+        # remains as infrastructure for a future zero-propagation optimization
+        # that solves the data-preservation problem (double-buffered pool).
+        self._do_rebuild(positions_soa)
         self._step_counter = 0
 
     def _do_rebuild(self, positions_soa, *, force=True):
