@@ -227,6 +227,15 @@ class GPUContext:
         self._wrap_kernel = None
         self._wrap_correct_kernel = None
 
+        # Double-buffered pool for permute_state_arrays. The fused permutation
+        # kernel reads src[perm[i]] and writes dst[i] in one launch — if src and
+        # dst aliased the same memory the gather would corrupt. Alternating
+        # between pool_A and pool_B each rebuild keeps src != dst.
+        self._perm_pool_A = None
+        self._perm_pool_B = None
+        self._perm_pool_N = 0
+        self._perm_flip = False
+
     def _ensure_wrap_kernel(self):
         if self._wrap_kernel is not None:
             return
@@ -306,6 +315,15 @@ class GPUContext:
             ),
         }
 
+    def _ensure_perm_pool(self, N):
+        """Allocate 14 float32 buffers of size N, once. Double-buffered."""
+        if self._perm_pool_A is not None and self._perm_pool_N >= N:
+            return
+        self._perm_pool_A = [cp.empty(N, dtype=cp.float32) for _ in range(14)]
+        self._perm_pool_B = [cp.empty(N, dtype=cp.float32) for _ in range(14)]
+        self._perm_pool_N = N
+        self._perm_flip = False
+
     def permute_to_sorted(
         self, permutation, arrays_float, arrays_int=None, arrays_2comp=None
     ):
@@ -348,7 +366,10 @@ class GPUContext:
         self._ensure_permutation_kernels()
         tpb = 256
         grid = ((N + tpb - 1) // tpb,)
-        dst_list = [cp.empty_like(src) for src in src_list]
+        self._ensure_perm_pool(N)
+        pool = self._perm_pool_B if self._perm_flip else self._perm_pool_A
+        self._perm_flip = not self._perm_flip
+        dst_list = [pool[i][:N] for i in range(14)]
         self._permutation_kernels["permute_state_arrays"](
             grid,
             (tpb,),

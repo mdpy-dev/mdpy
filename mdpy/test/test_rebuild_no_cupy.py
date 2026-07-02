@@ -79,3 +79,20 @@ def test_rebuild_no_cudamalloc_on_second_rebuild():
         f"rebuild() made {call_count[0]} cp.empty/cp.zeros calls "
         "— allocations not pooled"
     )
+
+
+def test_permute_state_arrays_no_alloc_on_second_rebuild():
+    """Second rebuild must not allocate new state-permutation buffers."""
+    s = _build_ion()
+    s.update_neighbor_list(force_rebuild=True)  # warm: allocates pool_A + pool_B
+    gpu = s.gpu
+    assert gpu._perm_pool_A is not None
+    assert gpu._perm_pool_B is not None
+    # Snapshot the pool buffer data pointers
+    ptrs_A_before = [arr.data.ptr for arr in gpu._perm_pool_A]
+    ptrs_B_before = [arr.data.ptr for arr in gpu._perm_pool_B]
+    s.update_neighbor_list(force_rebuild=True)  # should reuse same buffers
+    ptrs_A_after = [arr.data.ptr for arr in gpu._perm_pool_A]
+    ptrs_B_after = [arr.data.ptr for arr in gpu._perm_pool_B]
+    assert ptrs_A_before == ptrs_A_after, "pool_A was reallocated"
+    assert ptrs_B_before == ptrs_B_after, "pool_B was reallocated"
