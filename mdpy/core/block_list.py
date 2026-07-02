@@ -76,12 +76,16 @@ void block_meta_kernel(
     const float* __restrict__ pos_y,
     const float* __restrict__ pos_z,
     const int* __restrict__ block_atoms,
-    int num_blocks, int num_particles,
+    const int* __restrict__ d_num_blocks, int num_particles,
     float* __restrict__ center_x, float* __restrict__ center_y, float* __restrict__ center_z,
     float* __restrict__ size_x, float* __restrict__ size_y, float* __restrict__ size_z,
     int* __restrict__ atom_to_block,
     int* __restrict__ atom_to_slot
 ) {
+    __shared__ int s_num_blocks;
+    if (threadIdx.x == 0) s_num_blocks = d_num_blocks[0];
+    __syncthreads();
+    int num_blocks = s_num_blocks;
     int bi = blockIdx.x * blockDim.x + threadIdx.x;
     if (bi >= num_blocks) return;
     float minx=1e30f,miny=1e30f,minz=1e30f,maxx=-1e30f,maxy=-1e30f,maxz=-1e30f;
@@ -117,7 +121,7 @@ void find_interacting_blocks_kernel(
     const int* __restrict__ cell_block_count,
     const int* __restrict__ block_to_cell,
     int nc_x, int nc_y, int nc_z,
-    int num_blocks, int num_particles, int K,
+    const int* __restrict__ d_num_blocks, int num_particles, int K,
     float build_radius_sq,
     const float* __restrict__ pbc_matrix,
     int* __restrict__ block_pairs_out,
@@ -128,6 +132,10 @@ void find_interacting_blocks_kernel(
     int* __restrict__ interaction_count,
     int max_block_pairs
 ) {
+    __shared__ int s_num_blocks;
+    if (threadIdx.x == 0) s_num_blocks = d_num_blocks[0];
+    __syncthreads();
+    int num_blocks = s_num_blocks;
     int tgx = threadIdx.x & 31;
     int warp_in_block = threadIdx.x >> 5;
     int global_warp = (blockIdx.x * blockDim.x + threadIdx.x) >> 5;
@@ -395,10 +403,14 @@ void build_masks_kernel(
     const int* __restrict__ exclusion_neighbors,
     const int* __restrict__ reverse_offset,
     const int* __restrict__ reverse_neighbors,
-    int num_block_pairs,
+    const int* __restrict__ d_block_pair_count,
     int num_particles,
     unsigned int* __restrict__ exclusion_masks_out
 ) {
+    __shared__ int s_num_pairs;
+    if (threadIdx.x == 0) s_num_pairs = d_block_pair_count[0];
+    __syncthreads();
+    int num_block_pairs = s_num_pairs;
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= num_block_pairs * 32) return;
 
@@ -963,7 +975,7 @@ class BlockList:
             (nb,), (tpb,),
             (
                 pos_x, pos_y, pos_z, self.d_block_atoms,
-                np.int32(num_blocks), np.int32(N),
+                d_num_blocks, np.int32(N),
                 self.d_block_center_x, self.d_block_center_y, self.d_block_center_z,
                 self.d_block_size_x, self.d_block_size_y, self.d_block_size_z,
                 self.d_atom_to_block, self.d_atom_to_slot,
@@ -995,7 +1007,7 @@ class BlockList:
         # Cell-subset decomposition: split the 27-cell scan into K subsets
         # to fill the GPU. Target ~2 full waves (80 SMs x 4 blocks/SM = 320/wave).
         target_total_warps = 640 * 8
-        cell_subsets = max(1, min(8, (target_total_warps + num_blocks - 1) // num_blocks))
+        cell_subsets = max(1, min(8, (target_total_warps + self.max_blocks - 1) // self.max_blocks))
         build_radius_sq = self.build_radius ** 2
 
         max_block_pairs = max(num_blocks * 100, 10000)
@@ -1009,7 +1021,8 @@ class BlockList:
         self._d_counters[0] = 0
 
         tpb = 256
-        grid_blocks = max((num_blocks * cell_subsets + 7) // 8, 1)
+        grid_blocks = max((self.max_blocks * cell_subsets + 7) // 8, 1)
+        d_num_blocks = self._pool.get(("num_blocks", env.NUMPY_INT))
         self._kernels["find_interacting"](
             (grid_blocks,), (tpb,),
             (
@@ -1020,7 +1033,7 @@ class BlockList:
                 self.d_cell_block_offset, self.d_cell_block_count,
                 self.d_block_to_cell,
                 np.int32(self.nc_x), np.int32(self.nc_y), np.int32(self.nc_z),
-                np.int32(num_blocks), np.int32(self.num_particles),
+                d_num_blocks, np.int32(self.num_particles),
                 np.int32(cell_subsets),
                 np.float32(build_radius_sq),
                 self._d_pbc_matrix,
@@ -1115,10 +1128,10 @@ class BlockList:
             self._d_reverse_neighbors = d_rev_neighbors
             self._d_reverse_scale = d_rev_scale
 
-        total_work = self.num_block_pairs * BLOCK_SIZE
-        grid = ((total_work + tpb - 1) // tpb,)
-        if self._d_exclusion_masks_buf.size < total_work:
-            self._d_exclusion_masks_buf = cp.empty(total_work, dtype=np.uint32)
+        max_total_work = self._max_block_pairs * BLOCK_SIZE
+        grid = ((max_total_work + tpb - 1) // tpb,)
+        if self._d_exclusion_masks_buf.size < max_total_work:
+            self._d_exclusion_masks_buf = cp.empty(max_total_work, dtype=np.uint32)
         self.d_exclusion_masks = self._d_exclusion_masks_buf
         self._kernels["build_masks"](
             grid,
@@ -1133,7 +1146,7 @@ class BlockList:
                 self._d_excl_neighbors,
                 self._d_reverse_offset,
                 self._d_reverse_neighbors,
-                np.int32(self.num_block_pairs),
+                self._d_counters,
                 np.int32(N),
                 self.d_exclusion_masks,
             ),
