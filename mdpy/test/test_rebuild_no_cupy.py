@@ -127,3 +127,12 @@ def test_copy_int32_kernel():
     k["copy_int32"]((1,), (4,), (src, dst, np.int32(4)))
     cp.cuda.Device().synchronize()
     assert (dst.get() == src.get()).all()
+
+
+def test_no_cp_arange_in_permute_path():
+    """The permute path must not use cp.arange."""
+    import inspect
+    from mdpy import system
+    src = inspect.getsource(system)
+    count = sum(1 for line in src.split('\n') if 'cp.arange' in line and not line.strip().startswith('#'))
+    assert count == 0, f"system.py still uses cp.arange ({count} occurrences)"

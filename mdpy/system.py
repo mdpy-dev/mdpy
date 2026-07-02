@@ -5,6 +5,7 @@ import numpy as np
 from mdpy import env
 from mdpy.core.block_list import BlockList
 from mdpy.core.topology import build_exclusion_map_gpu, permute_exclusion_pairs_gpu
+from mdpy.core._rebuild_kernels import compile_rebuild_kernels
 from mdpy.core.pbc import compute_pbc_inv
 from mdpy.core.gpu_context import GPUContext
 
@@ -321,8 +322,10 @@ class System:
         d_remap = bl.d_pdb_to_sorted
 
         if self._d_cached_unique_i is not None:
-            d_composed_perm = cp.empty(N, dtype=cp.int32)
-            d_composed_perm[perm_gpu] = cp.arange(N, dtype=cp.int32)
+            d_composed_perm = bl._pool_get("composed_perm", N, env.NUMPY_INT)
+            rk = compile_rebuild_kernels()
+            grid = ((N + 255) // 256,)
+            rk["compose_perm"](grid, (256,), (d_composed_perm, perm_gpu, np.int32(N)))
             result = permute_exclusion_pairs_gpu(
                 self._d_cached_unique_i,
                 self._d_cached_unique_j,

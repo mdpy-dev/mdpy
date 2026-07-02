@@ -425,7 +425,7 @@ def permute_exclusion_pairs_gpu(d_cached_i, d_cached_j, d_cached_scale,
     kernels['count_row'](grid, (tpb,),
         (d_new_i, np.int32(num_pairs), d_count))
 
-    d_offset = cp.cumsum(d_count, dtype=cp.int32).astype(cp.int32)
+    d_offset = cp.cumsum(d_count, dtype=cp.int32)
 
     d_neighbors = cp.empty(num_pairs, dtype=cp.int32)
     d_scale_out = cp.empty(num_pairs, dtype=cp.float32)
