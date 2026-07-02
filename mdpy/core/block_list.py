@@ -26,8 +26,14 @@ void cell_assign_kernel(
     int* __restrict__ cell_counts,
     int* __restrict__ composite_counts,
     unsigned long long* __restrict__ sort_keys,
-    int* __restrict__ cell_indices
+    int* __restrict__ cell_indices,
+    const int* __restrict__ d_rebuild_flag
 ) {
+    // GPU-side conditional: if flag=0, skip entirely so cell_counts stays
+    // zero-filled and cell_prefix_sum writes d_num_blocks[0] = 0, causing the
+    // whole rebuild chain to self-skip with no CPU readback.
+    if (d_rebuild_flag[0] == 0) return;
+
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= number_particles) return;
 
@@ -835,6 +841,13 @@ class BlockList:
         self._compute_cell_grid(pbc_matrix, N)
         self._upload_pbc(pbc_matrix, pbc_inv)
 
+        # rebuild() is the unconditional "do a full rebuild" entry point, so
+        # guarantee d_rebuild_flag=1 before cell_assign launches. The cell_assign
+        # GPU-side guard (skip when flag=0) is infrastructure for the future
+        # zero-readback pipeline, which will call rebuild() without forcing the
+        # flag; this line will be removed at that point.
+        self.d_rebuild_flag[0] = 1
+
         if isinstance(positions, tuple):
             pos_x = positions[0]
             pos_y = positions[1]
@@ -867,6 +880,7 @@ class BlockList:
                 np.int32(self.nc_x), np.int32(self.nc_y), np.int32(self.nc_z),
                 np.int32(hilbert_levels),
                 d_cell_counts, d_composite_counts, sort_keys, cell_indices,
+                self.d_rebuild_flag,
             ),
         )
         self._d_cell_counts = d_cell_counts
