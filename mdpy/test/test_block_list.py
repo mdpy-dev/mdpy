@@ -33,7 +33,7 @@ def _rebuild_and_build_block_pairs(n, box=50.0, cutoff=10.0, skin=2.0, seed=42, 
     pbc_matrix = _make_pbc(box)
     pbc_inv = np.linalg.inv(pbc_matrix)
     bl = BlockList(cutoff=cutoff, skin=skin)
-    bl.rebuild(positions, topology, pbc_matrix, pbc_inv)
+    bl.rebuild(positions, topology, pbc_matrix, pbc_inv, force=True)
     bl.build_block_pairs(topology, pbc_matrix)
     # Read actual counts for test assertions (syncs — acceptable in tests,
     # NOT in the hot path where kernels read from device directly).
@@ -425,7 +425,7 @@ class TestExclusionMasks:
         pbc_matrix = _make_pbc(box)
         pbc_inv = np.linalg.inv(pbc_matrix)
         bl = BlockList(cutoff=10.0, skin=2.0)
-        bl.rebuild(positions, topology, pbc_matrix, pbc_inv)
+        bl.rebuild(positions, topology, pbc_matrix, pbc_inv, force=True)
         bl.build_block_pairs(topology, pbc_matrix)
         bl.num_blocks = int(bl._d_num_blocks[0].get())
         bl.num_block_pairs = int(bl._d_counters[0].get())
@@ -470,7 +470,7 @@ class TestExclusionMasks:
         pbc_matrix = _make_pbc(box)
         pbc_inv = np.linalg.inv(pbc_matrix)
         bl = BlockList(cutoff=10.0, skin=2.0)
-        bl.rebuild(positions, topology, pbc_matrix, pbc_inv)
+        bl.rebuild(positions, topology, pbc_matrix, pbc_inv, force=True)
         bl.build_block_pairs(topology, pbc_matrix)
         bl.num_blocks = int(bl._d_num_blocks[0].get())
         bl.num_block_pairs = int(bl._d_counters[0].get())
@@ -517,7 +517,7 @@ class TestBlockPairClassification:
         pbc_matrix = _make_pbc(box)
         pbc_inv = np.linalg.inv(pbc_matrix)
         bl = BlockList(cutoff=10.0, skin=2.0)
-        bl.rebuild(positions, topology, pbc_matrix, pbc_inv)
+        bl.rebuild(positions, topology, pbc_matrix, pbc_inv, force=True)
         bl.build_block_pairs(topology, pbc_matrix)
 
         assert bl.num_main_block_pairs + bl.num_exclusion_block_pairs == bl.num_block_pairs
@@ -531,7 +531,7 @@ class TestBlockPairClassification:
         pbc_matrix = _make_pbc(30.0)
         pbc_inv = np.linalg.inv(pbc_matrix)
         bl = BlockList(cutoff=8.0, skin=2.0)
-        bl.rebuild(positions, topology, pbc_matrix, pbc_inv)
+        bl.rebuild(positions, topology, pbc_matrix, pbc_inv, force=True)
         bl.build_block_pairs(topology, pbc_matrix)
 
         assert bl.num_main_block_pairs + bl.num_exclusion_block_pairs == bl.num_block_pairs
@@ -550,7 +550,7 @@ class TestCheckRebuild:
         pbc_matrix = _make_pbc(50.0)
         pbc_inv = np.linalg.inv(pbc_matrix)
         bl = BlockList(cutoff=10.0, skin=2.0)
-        bl.rebuild(positions, topology, pbc_matrix, pbc_inv)
+        bl.rebuild(positions, topology, pbc_matrix, pbc_inv, force=True)
 
         for _ in range(19):
             assert not bl.check_rebuild(positions)
@@ -572,7 +572,7 @@ class TestCheckRebuild:
         pbc_matrix = _make_pbc(box)
         pbc_inv = np.linalg.inv(pbc_matrix)
         bl = BlockList(cutoff=10.0, skin=2.0)
-        bl.rebuild(positions, topology, pbc_matrix, pbc_inv)
+        bl.rebuild(positions, topology, pbc_matrix, pbc_inv, force=True)
 
         pos_x = bl.d_positions_at_rebuild_x.copy()
         pos_y = bl.d_positions_at_rebuild_y.copy()
@@ -600,7 +600,7 @@ class TestPostArgsortFusion:
         pbc_matrix = _make_pbc(box)
         pbc_inv = np.linalg.inv(pbc_matrix)
         bl = BlockList(cutoff=10.0, skin=2.0)
-        bl.rebuild(positions, topology, pbc_matrix, pbc_inv)
+        bl.rebuild(positions, topology, pbc_matrix, pbc_inv, force=True)
 
         assert bl.d_raw_order.shape == (n,)
         assert bl.d_pdb_to_sorted.shape == (n,)
@@ -630,7 +630,7 @@ class TestCellProcessingBatch:
         pbc_matrix = _make_pbc(box)
         pbc_inv = np.linalg.inv(pbc_matrix)
         bl = BlockList(cutoff=10.0, skin=2.0)
-        bl.rebuild(positions, topology, pbc_matrix, pbc_inv)
+        bl.rebuild(positions, topology, pbc_matrix, pbc_inv, force=True)
 
         assert bl.num_blocks > 0
         assert bl.d_cell_block_offset is not None
@@ -656,7 +656,7 @@ class TestBlockToCellExpand:
         pbc_matrix = _make_pbc(box)
         pbc_inv = np.linalg.inv(pbc_matrix)
         bl = BlockList(cutoff=10.0, skin=2.0)
-        bl.rebuild(positions, topology, pbc_matrix, pbc_inv)
+        bl.rebuild(positions, topology, pbc_matrix, pbc_inv, force=True)
 
         block_to_cell = cp.asnumpy(bl.d_block_to_cell)
         block_count = cp.asnumpy(bl.d_cell_block_count)

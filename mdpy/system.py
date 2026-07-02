@@ -176,29 +176,32 @@ class System:
 
         if force_rebuild:
             cp.cuda.Stream.null.synchronize()
-            self._do_rebuild(positions_soa)
+            self._do_rebuild(positions_soa, force=True)
             self._step_counter = 0
             return
 
         needs_sync = self._block_list.check_rebuild_async(positions_soa)
         if needs_sync:
             cp.cuda.Stream.null.synchronize()
-            self._do_rebuild(positions_soa)
+            self._do_rebuild(positions_soa, force=True)
             self._step_counter = 0
             return
         self._step_counter += 1
         if self._step_counter < sync_interval:
             return
         # No sync, no flag readback. Always launch a full rebuild (force=True).
-        # This eliminates the ~67μs flag-readback stall while preserving the
-        # previous block-list data (rebuild runs fully, overwriting with valid
-        # new data). The GPU-side flag check in cell_assign/counting_scatter
-        # remains as infrastructure for a future zero-propagation optimization
-        # that solves the data-preservation problem (double-buffered pool).
-        self._do_rebuild(positions_soa)
+        #
+        # The GPU-side flag check + conditional_fill infrastructure IS in place
+        # (cell_assign/counting_scatter skip when flag=0, block_atoms/d_counters
+        # are preserved). But _permute_all_arrays applies d_raw_order
+        # unconditionally — when flag=0 and counting_scatter skips, d_raw_order
+        # is stale, and re-applying it double-permutes the already-sorted state
+        # arrays, scrambling positions. Until permute is also made flag-aware
+        # (or moved into the GPU rebuild chain), we use force=True.
+        self._do_rebuild(positions_soa, force=True)
         self._step_counter = 0
 
-    def _do_rebuild(self, positions_soa, *, force=True):
+    def _do_rebuild(self, positions_soa, *, force=False):
         self._block_list.rebuild(
             positions_soa,
             self.topology,
@@ -292,9 +295,9 @@ class System:
                 self._cutoff, skin=self._skin,
                 rebuild_check_interval=self._rebuild_check_interval,
             )
-            self._do_rebuild(positions_soa)
+            self._do_rebuild(positions_soa, force=True)
         elif self._block_list.check_rebuild(positions_soa):
-            self._do_rebuild(positions_soa)
+            self._do_rebuild(positions_soa, force=True)
         for term in self.force_terms:
             if hasattr(term, "bind_sorted"):
                 term.bind_sorted(self.topology, self._block_list, self.gpu)

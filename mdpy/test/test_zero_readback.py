@@ -68,7 +68,7 @@ class TestMaxBlocksUpperBound:
         pbc_matrix = np.eye(3, dtype=np.float32) * box
         pbc_inv = np.linalg.inv(pbc_matrix)
         bl = BlockList(cutoff=10.0, skin=2.0)
-        bl.rebuild(positions, topology, pbc_matrix, pbc_inv)
+        bl.rebuild(positions, topology, pbc_matrix, pbc_inv, force=True)
         assert bl.num_blocks <= bl.max_blocks, (
             f"num_blocks={bl.num_blocks} exceeds max_blocks={bl.max_blocks}"
         )
@@ -85,7 +85,7 @@ class TestMaxBlocksUpperBound:
         pbc_matrix = np.eye(3, dtype=np.float32) * box
         pbc_inv = np.linalg.inv(pbc_matrix)
         bl = BlockList(cutoff=10.0, skin=2.0)
-        bl.rebuild(positions, topology, pbc_matrix, pbc_inv)
+        bl.rebuild(positions, topology, pbc_matrix, pbc_inv, force=True)
         ba = cp.asnumpy(bl.d_block_atoms)
         assert ba.size == bl.max_total_padded
         real = ba[ba >= 0]
@@ -98,7 +98,7 @@ class TestMaxBlocksUpperBound:
         pbc_matrix = np.eye(3, dtype=np.float32) * 50.0
         pbc_inv = np.linalg.inv(pbc_matrix)
         bl = BlockList(cutoff=10.0, skin=2.0)
-        bl.rebuild(positions, topology, pbc_matrix, pbc_inv)
+        bl.rebuild(positions, topology, pbc_matrix, pbc_inv, force=True)
         for attr in ("d_block_center_x", "d_block_center_y", "d_block_center_z",
                       "d_block_size_x", "d_block_size_y", "d_block_size_z"):
             arr = getattr(bl, attr)
@@ -121,8 +121,8 @@ class TestCellAssignFlagCheck:
 
         bl = BlockList(cutoff=10.0, skin=2.0)
 
-        # force=True (default): normal rebuild produces blocks
-        bl.rebuild(positions, topology, pbc, pbc_inv)
+        # force=True: normal rebuild produces blocks
+        bl.rebuild(positions, topology, pbc, pbc_inv, force=True)
         d_num_blocks = bl._pool.get(("num_blocks", env.NUMPY_INT))
         assert int(d_num_blocks[0].get()) > 0
 
@@ -133,3 +133,45 @@ class TestCellAssignFlagCheck:
         assert actual == 0, (
             f"flag=0 should zero-propagate to num_blocks=0, got {actual}"
         )
+
+    def test_flag_zero_preserves_force_data(self):
+        """When flag=0 rebuild is skipped, block_atoms and d_counters are
+        preserved so the force kernel can reuse the previous valid block list.
+
+        In production, update_neighbor_list returns early (no _do_rebuild call)
+        when no rebuild is needed — neither rebuild nor build_block_pairs runs.
+        This test verifies that rebuild(force=False) alone does NOT corrupt
+        block_atoms (via conditional_fill) and that d_counters is untouched
+        because build_block_pairs is not called (matching production flow)."""
+        import cupy as cp
+
+        n = 1000
+        topology = _make_topology(n)
+        positions = _make_positions(n)
+        pbc = np.eye(3, dtype=np.float32) * 50.0
+        pbc_inv = np.linalg.inv(pbc)
+
+        bl = BlockList(cutoff=10.0, skin=2.0)
+        bl.rebuild(positions, topology, pbc, pbc_inv, force=True)
+        bl.build_block_pairs(topology, pbc)
+
+        prev_ba = cp.asnumpy(bl.d_block_atoms).copy()
+        prev_pairs = int(bl._d_counters[0].get())
+        assert prev_pairs > 0, "expected nonzero pair count after full rebuild"
+
+        # Simulate production: when no rebuild needed, rebuild(force=False)
+        # is called but build_block_pairs is NOT (update_neighbor_list returns
+        # early). The conditional_fill in rebuild preserves block_atoms.
+        bl.d_rebuild_flag[0] = 0
+        bl.rebuild(positions, topology, pbc, pbc_inv, force=False)
+        # NOTE: build_block_pairs is intentionally NOT called here (matches
+        # production flow where update_neighbor_list returns early).
+
+        curr_ba = cp.asnumpy(bl.d_block_atoms)
+        curr_pairs = int(bl._d_counters[0].get())
+
+        npt = np.testing
+        npt.assert_array_equal(curr_ba, prev_ba,
+            err_msg="block_atoms changed during flag=0 rebuild")
+        assert curr_pairs == prev_pairs, (
+            f"d_counters changed: {prev_pairs} → {curr_pairs}")

@@ -82,7 +82,7 @@ class TestRebuildPipeline:
         pos_before, _ = system.dump_state()
 
         positions_soa = _get_positions_soa(system)
-        system._do_rebuild(positions_soa)
+        system._do_rebuild(positions_soa, force=True)
 
         pos_after, _ = system.dump_state()
 
@@ -100,12 +100,12 @@ class TestRebuildPipeline:
 
         system.compute_forces()
         positions_soa = _get_positions_soa(system)
-        system._do_rebuild(positions_soa)
+        system._do_rebuild(positions_soa, force=True)
 
         integrator.step(system)
 
         positions_soa = _get_positions_soa(system)
-        system._do_rebuild(positions_soa)
+        system._do_rebuild(positions_soa, force=True)
         system.compute_forces()
 
         energies = system.dump_energy()
@@ -140,7 +140,7 @@ class TestRebuildPipeline:
 
         system.compute_forces()
         positions_soa = _get_positions_soa(system)
-        system._do_rebuild(positions_soa)
+        system._do_rebuild(positions_soa, force=True)
 
         integrator.step(system)
 
@@ -153,7 +153,7 @@ class TestRebuildPipeline:
         )
 
         positions_soa = _get_positions_soa(system)
-        system._do_rebuild(positions_soa)
+        system._do_rebuild(positions_soa, force=True)
 
         positions2, _ = system.dump_state()
 

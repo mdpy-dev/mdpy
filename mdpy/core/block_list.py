@@ -581,6 +581,20 @@ void counting_scatter_kernel(
 }
 """
 
+_CONDITIONAL_FILL_INT = r"""
+extern "C" __global__
+void conditional_fill_int_kernel(
+    const int* __restrict__ d_rebuild_flag,
+    int* __restrict__ buf,
+    int n,
+    int fill_value
+) {
+    if (d_rebuild_flag[0] == 0) return;
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < n) buf[i] = fill_value;
+}
+"""
+
 
 def _compile_gpu_kernels():
     return {
@@ -596,6 +610,7 @@ def _compile_gpu_kernels():
         "counting_scatter": cp.RawKernel(_COUNTING_SCATTER_KERNEL, "counting_scatter_kernel"),
         "cell_prefix_sum": cp.RawKernel(_CELL_PREFIX_SUM_KERNEL, "cell_prefix_sum_kernel"),
         "composite_prefix_sum": cp.RawKernel(_COMPOSITE_PREFIX_SUM_KERNEL, "composite_prefix_sum_kernel"),
+        "conditional_fill": cp.RawKernel(_CONDITIONAL_FILL_INT, "conditional_fill_int_kernel"),
     }
 
 
@@ -830,13 +845,13 @@ class BlockList:
         self._hilbert_levels = L
         self._hilbert_bits = 3 * L
 
-    def rebuild(self, positions, topology, pbc_matrix, pbc_inv, *, force=True):
+    def rebuild(self, positions, topology, pbc_matrix, pbc_inv, *, force=False):
         """Sort particles into cell-aligned blocks. Returns (pdb_to_sorted, None).
 
-        When force=True (default), d_rebuild_flag is set to 1 so cell_assign runs
-        unconditionally. When force=False, the flag is left as-is — the
+        When force=False (default), d_rebuild_flag is left untouched — the
         sync_interval path relies on check_rebuild_async to have set it, enabling
-        zero-propagation skip when atoms have not moved.
+        zero-propagation skip when atoms have not moved. When force=True, flag
+        is set to 1 so cell_assign runs unconditionally (first build, minimize).
         """
         N = topology.num_particles
         if N == 0:
@@ -939,7 +954,15 @@ class BlockList:
         # snapshot. Scattering on composite buckets preserves the intra-cell
         # Hilbert ordering, keeping blocks Hilbert-compact -> tight AABBs.
         # block_atoms must be pre-filled with -1 (padding) before launch.
-        block_atoms = self._pool_get("block_atoms", self.max_total_padded, env.NUMPY_INT, fill=-1)
+        # Use conditional_fill: when flag=0, skip the fill so the previous
+        # rebuild's valid block_atoms data is preserved for the force kernel.
+        block_atoms = self._pool_get("block_atoms", self.max_total_padded, env.NUMPY_INT)
+        n_ba = max((self.max_total_padded + tpb - 1) // tpb, 1)
+        self._kernels["conditional_fill"](
+            (n_ba,), (tpb,),
+            (self.d_rebuild_flag, block_atoms,
+             np.int32(self.max_total_padded), np.int32(-1)),
+        )
         composite_cursor = self._pool_get("composite_cursor", composite_buckets, env.NUMPY_INT, fill=0)
         sorted_pos_x = self._pool_get("sorted_pos_x", N, env.NUMPY_FLOAT)
         sorted_pos_y = self._pool_get("sorted_pos_y", N, env.NUMPY_FLOAT)
