@@ -172,6 +172,9 @@ class BondedForce(ForceTerm):
         self._kernel_source = None
         self._num_sm = None
         self._dirty = True
+        self._bind_pool_A = {}    # prop_name -> cp.ndarray (float32)
+        self._bind_pool_B = {}
+        self._bind_flip = False
 
     def set_parameter(self, name, array):
         arr = np.asarray(array, dtype=env.NUMPY_FLOAT).ravel()
@@ -248,11 +251,18 @@ class BondedForce(ForceTerm):
 
     def bind_sorted(self, topology, block_list, gpu_context):
         sort_order = block_list.d_raw_order
+        pool_dst = self._bind_pool_B if self._bind_flip else self._bind_pool_A
+        self._bind_flip = not self._bind_flip
         for prop_name in self._per_particle_properties:
             d_arr = self._per_particle_gpu[prop_name]
-            arrays = {prop_name: d_arr}
-            gpu_context.permute_to_sorted(sort_order, arrays)
-            self._per_particle_gpu[prop_name] = arrays[prop_name]
+            N = d_arr.size
+            dst = pool_dst.get(prop_name)
+            if dst is None or dst.size < N:
+                dst = cp.empty(N, dtype=np.float32)
+                pool_dst[prop_name] = dst
+            dst = dst[:N]
+            gpu_context.permute_to_sorted_inplace(sort_order, d_arr, dst)
+            self._per_particle_gpu[prop_name] = dst
 
     def _ensure_compiled(self):
         if self._kernel is not None:

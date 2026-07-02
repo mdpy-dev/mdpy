@@ -354,6 +354,19 @@ class GPUContext:
                 )
                 arrays_2comp[name] = dst
 
+    def permute_to_sorted_inplace(self, permutation, src, dst):
+        """Permute float32 src into pre-allocated dst: dst[i] = src[permutation[i]].
+        No allocation. Caller ensures dst is float32 with size >= src.size."""
+        N = permutation.size
+        if N == 0:
+            return
+        self._ensure_permutation_kernels()
+        tpb = 256
+        grid = ((N + tpb - 1) // tpb,)
+        self._permutation_kernels["permute"](
+            grid, (tpb,), (src, permutation, np.int32(N), dst)
+        )
+
     def permute_state_arrays(self, permutation, name_array_pairs):
         assert (
             len(name_array_pairs) == 14
