@@ -683,6 +683,27 @@ class BlockList:
         self._block_pairs_np = None
         self._interacting_atoms_np = None
 
+        self._pool = {}
+
+    def _pool_get(self, name, size, dtype, fill=None):
+        """Return a reusable buffer of the given size. Allocates on first call
+        or when size grows; otherwise returns the cached array. If fill is not
+        None, fill the buffer (memsetAsync for 0, fill_constant for others)."""
+        key = (name, dtype)
+        arr = self._pool.get(key)
+        if arr is None or arr.size < size:
+            arr = cp.empty(size, dtype=dtype)
+            self._pool[key] = arr
+        arr = arr[:size]
+        if fill is not None:
+            if fill == 0:
+                cp.cuda.runtime.memsetAsync(
+                    arr.data.ptr, 0, size * arr.itemsize, cp.cuda.Stream.null.ptr
+                )
+            else:
+                fill_constant(arr, fill)
+        return arr
+
     def set_cutoff(self, cutoff):
         self._cutoff = float(cutoff)
 
@@ -812,10 +833,10 @@ class BlockList:
         # intra-cell Hilbert ordering instead of scattering in arrival order.
         hilbert_levels = self._hilbert_levels
         composite_buckets = self.nc_total * (1 << (3 * hilbert_levels))
-        sort_keys = cp.empty(N, dtype=np.uint64)
-        cell_indices = cp.empty(N, dtype=env.NUMPY_INT)
-        d_cell_counts = cp.zeros(self.nc_total, dtype=env.NUMPY_INT)
-        d_composite_counts = cp.zeros(composite_buckets, dtype=env.NUMPY_INT)
+        sort_keys = self._pool_get("sort_keys", N, np.uint64)
+        cell_indices = self._pool_get("cell_indices", N, env.NUMPY_INT)
+        d_cell_counts = self._pool_get("cell_counts", self.nc_total, env.NUMPY_INT, fill=0)
+        d_composite_counts = self._pool_get("composite_counts", composite_buckets, env.NUMPY_INT, fill=0)
         nm = (N + tpb - 1) // tpb
         self._kernels["cell_assign"](
             (nm,), (tpb,),
@@ -836,15 +857,15 @@ class BlockList:
         # counting_scatter needs cell_offset and cell_offset_padded. prefix_sum
         # consumes only d_cell_counts (not the sorted data), so it is safe to
         # run immediately after cell_assign.
-        cell_offset = cp.empty(self.nc_total + 1, dtype=env.NUMPY_INT)
-        cell_block_offset = cp.empty(self.nc_total + 1, dtype=env.NUMPY_INT)
-        cell_block_count = cp.empty(self.nc_total, dtype=env.NUMPY_INT)
-        cell_offset_padded = cp.empty(self.nc_total + 1, dtype=env.NUMPY_INT)
-        d_num_blocks = cp.empty(1, dtype=env.NUMPY_INT)
-        d_total_padded = cp.empty(1, dtype=env.NUMPY_INT)
+        cell_offset = self._pool_get("cell_offset", self.nc_total + 1, env.NUMPY_INT)
+        cell_block_offset = self._pool_get("cell_block_offset", self.nc_total + 1, env.NUMPY_INT)
+        cell_block_count = self._pool_get("cell_block_count", self.nc_total, env.NUMPY_INT)
+        cell_offset_padded = self._pool_get("cell_offset_padded", self.nc_total + 1, env.NUMPY_INT)
+        d_num_blocks = self._pool_get("num_blocks", 1, env.NUMPY_INT)
+        d_total_padded = self._pool_get("total_padded", 1, env.NUMPY_INT)
         # num_blocks is unknown until the prefix sum writes it; num_blocks <= N
         # (each block holds >=1 atom), so N is a safe upper bound. Sliced below.
-        block_to_cell = cp.empty(N, dtype=env.NUMPY_INT)
+        block_to_cell = self._pool_get("block_to_cell", N, env.NUMPY_INT)
         self._kernels["cell_prefix_sum"](
             (1,), (1,),
             (
@@ -864,7 +885,7 @@ class BlockList:
         # counting_scatter scatters atoms in Hilbert order within each cell.
         # The composite buckets for a cell are contiguous (cell c occupies keys
         # [c*2^(3L), (c+1)*2^(3L))), so composite_offset aligns with cell_offset.
-        composite_offset = cp.empty(composite_buckets + 1, dtype=env.NUMPY_INT)
+        composite_offset = self._pool_get("composite_offset", composite_buckets + 1, env.NUMPY_INT)
         self._kernels["composite_prefix_sum"](
             (1,), (1,),
             (d_composite_counts, np.int32(composite_buckets), composite_offset),
@@ -877,19 +898,22 @@ class BlockList:
         # snapshot. Scattering on composite buckets preserves the intra-cell
         # Hilbert ordering, keeping blocks Hilbert-compact -> tight AABBs.
         # block_atoms must be pre-filled with -1 (padding) before launch.
-        block_atoms = cp.empty(total_padded, dtype=env.NUMPY_INT)
-        fill_constant(block_atoms, -1)
-        composite_cursor = cp.zeros(composite_buckets, dtype=env.NUMPY_INT)
-        sorted_pos_x = cp.empty(N, dtype=env.NUMPY_FLOAT)
-        sorted_pos_y = cp.empty(N, dtype=env.NUMPY_FLOAT)
-        sorted_pos_z = cp.empty(N, dtype=env.NUMPY_FLOAT)
-        raw_order = cp.empty(N, dtype=env.NUMPY_INT)
-        pdb_to_sorted = cp.empty(N, dtype=env.NUMPY_INT)
+        block_atoms = self._pool_get("block_atoms", total_padded, env.NUMPY_INT, fill=-1)
+        composite_cursor = self._pool_get("composite_cursor", composite_buckets, env.NUMPY_INT, fill=0)
+        sorted_pos_x = self._pool_get("sorted_pos_x", N, env.NUMPY_FLOAT)
+        sorted_pos_y = self._pool_get("sorted_pos_y", N, env.NUMPY_FLOAT)
+        sorted_pos_z = self._pool_get("sorted_pos_z", N, env.NUMPY_FLOAT)
+        raw_order = self._pool_get("raw_order", N, env.NUMPY_INT)
+        pdb_to_sorted = self._pool_get("pdb_to_sorted", N, env.NUMPY_INT)
+        # sorted_to_pdb is NOT pooled: line 808 captures prev_sorted_to_pdb =
+        # self.d_sorted_to_pdb, and counting_scatter below overwrites the
+        # buffer. If pooled, prev_sorted_to_pdb would alias the same buffer
+        # and be corrupted before line 971 uses it.
         sorted_to_pdb = cp.empty(N, dtype=env.NUMPY_INT)
-        cell_indices_sorted = cp.empty(N, dtype=env.NUMPY_INT)
-        snap_x = cp.empty(N, dtype=env.NUMPY_FLOAT)
-        snap_y = cp.empty(N, dtype=env.NUMPY_FLOAT)
-        snap_z = cp.empty(N, dtype=env.NUMPY_FLOAT)
+        cell_indices_sorted = self._pool_get("cell_indices_sorted", N, env.NUMPY_INT)
+        snap_x = self._pool_get("snap_x", N, env.NUMPY_FLOAT)
+        snap_y = self._pool_get("snap_y", N, env.NUMPY_FLOAT)
+        snap_z = self._pool_get("snap_z", N, env.NUMPY_FLOAT)
         self._kernels["counting_scatter"](
             (nm,), (tpb,),
             (
@@ -916,17 +940,17 @@ class BlockList:
         self.d_block_to_cell = block_to_cell[:num_blocks]
 
         nb = (num_blocks + tpb - 1) // tpb
-        self.d_block_center_x = cp.empty(num_blocks, dtype=env.NUMPY_FLOAT)
-        self.d_block_center_y = cp.empty(num_blocks, dtype=env.NUMPY_FLOAT)
-        self.d_block_center_z = cp.empty(num_blocks, dtype=env.NUMPY_FLOAT)
-        self.d_block_size_x = cp.empty(num_blocks, dtype=env.NUMPY_FLOAT)
-        self.d_block_size_y = cp.empty(num_blocks, dtype=env.NUMPY_FLOAT)
-        self.d_block_size_z = cp.empty(num_blocks, dtype=env.NUMPY_FLOAT)
+        self.d_block_center_x = self._pool_get("block_center_x", num_blocks, env.NUMPY_FLOAT)
+        self.d_block_center_y = self._pool_get("block_center_y", num_blocks, env.NUMPY_FLOAT)
+        self.d_block_center_z = self._pool_get("block_center_z", num_blocks, env.NUMPY_FLOAT)
+        self.d_block_size_x = self._pool_get("block_size_x", num_blocks, env.NUMPY_FLOAT)
+        self.d_block_size_y = self._pool_get("block_size_y", num_blocks, env.NUMPY_FLOAT)
+        self.d_block_size_z = self._pool_get("block_size_z", num_blocks, env.NUMPY_FLOAT)
         # K4: compute block AABB bounds and atom_to_block/slot reverse map in a
         # single per-block pass. Every real atom is in exactly one block at one
         # slot, so all N entries are written here -> no -1 pre-fill needed.
-        self.d_atom_to_block = cp.empty(N, dtype=env.NUMPY_INT)
-        self.d_atom_to_slot = cp.empty(N, dtype=env.NUMPY_INT)
+        self.d_atom_to_block = self._pool_get("atom_to_block", N, env.NUMPY_INT)
+        self.d_atom_to_slot = self._pool_get("atom_to_slot", N, env.NUMPY_INT)
         self._kernels["block_meta"](
             (nb,), (tpb,),
             (
