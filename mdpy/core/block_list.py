@@ -534,7 +534,7 @@ void check_rebuild_kernel(
 }
 """
 
-_CELL_PREFIX_SUM_KERNEL = r"""
+_CELL_PREFIX_SUM_KERNEL = _BLOCK_SCAN_PREAMBLE + r"""
 extern "C" __global__
 void cell_prefix_sum_kernel(
     const int* __restrict__ cell_counts,
@@ -547,26 +547,56 @@ void cell_prefix_sum_kernel(
     int* __restrict__ num_blocks_out,
     int* __restrict__ total_padded_out
 ) {
-    if (threadIdx.x == 0 && blockIdx.x == 0) {
-        int offset = 0;
-        int block_offset = 0;
-        for (int i = 0; i < nc_total; i++) {
-            cell_offset[i] = offset;
-            int bc = (cell_counts[i] + 31) / 32;
-            cell_block_count[i] = bc;
-            cell_block_offset[i] = block_offset;
-            cell_offset_padded[i] = block_offset * 32;
-            for (int b = 0; b < bc; b++) {
-                block_to_cell[block_offset + b] = i;
-            }
-            offset += cell_counts[i];
-            block_offset += bc;
+    const int tid = threadIdx.x;
+    const int B = SCAN_BLOCK;
+    __shared__ int s_part[SCAN_BLOCK];
+    __shared__ int s_total_atoms;
+    __shared__ int s_total_blocks;
+
+    // Scan 1: cell_counts -> cell_offset (exclusive) + total atom count.
+    scan_block_excl(cell_counts, cell_offset, nc_total, s_part, &s_total_atoms);
+    __syncthreads();
+
+    // Element-wise: cell_block_count[c] = ceil(cell_counts[c] / 32).
+    const int n_per = (nc_total + B - 1) / B;
+    const int lo = tid * n_per;
+    const int hi = (lo + n_per < nc_total) ? (lo + n_per) : nc_total;
+    for (int j = lo; j < hi; ++j)
+        cell_block_count[j] = (cell_counts[j] + 31) / 32;
+    __syncthreads();
+
+    // Scan 2: cell_block_count -> cell_block_offset (exclusive) + total blocks.
+    scan_block_excl(cell_block_count, cell_block_offset, nc_total, s_part,
+                    &s_total_blocks);
+    __syncthreads();
+
+    // Element-wise padded offsets.
+    for (int j = lo; j < hi; ++j)
+        cell_offset_padded[j] = cell_block_offset[j] * 32;
+
+    // Sentinel slots + scalar totals (single writer, thread 0).
+    if (tid == 0) {
+        cell_offset[nc_total] = s_total_atoms;
+        cell_block_offset[nc_total] = s_total_blocks;
+        cell_offset_padded[nc_total] = s_total_blocks * 32;
+        *num_blocks_out = s_total_blocks;
+        *total_padded_out = s_total_blocks * 32;
+    }
+    __syncthreads();  // cell_block_offset[] fully visible before binary search
+
+    // Scatter-fill block_to_cell[b] = owning cell. Each output block index b
+    // is mapped to its cell by an upper-bound search over the monotonic
+    // cell_block_offset (largest c with cell_block_offset[c] <= b).
+    const int b_per = (s_total_blocks + B - 1) / B;
+    const int blo = tid * b_per;
+    const int bhi = (blo + b_per < s_total_blocks) ? (blo + b_per) : s_total_blocks;
+    for (int b = blo; b < bhi; ++b) {
+        int l = 0, r = nc_total;
+        while (l < r) {
+            int m = (l + r + 1) >> 1;
+            if (cell_block_offset[m] <= b) l = m; else r = m - 1;
         }
-        cell_offset[nc_total] = offset;
-        cell_block_offset[nc_total] = block_offset;
-        cell_offset_padded[nc_total] = block_offset * 32;
-        *num_blocks_out = block_offset;
-        *total_padded_out = block_offset * 32;
+        block_to_cell[b] = l;
     }
 }
 """

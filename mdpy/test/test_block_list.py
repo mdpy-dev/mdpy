@@ -787,3 +787,74 @@ class TestParallelPrefixSumKernels:
         counts = np.zeros(2048, dtype=np.int32)
         out = self._run_composite(counts)
         assert np.array_equal(out, np.zeros(2049, dtype=np.int32))
+
+    def _run_cell(self, cell_counts):
+        import cupy as cp
+        nc_total = len(cell_counts)
+        d_counts = cp.asarray(cell_counts)
+        d_cell_offset = cp.empty(nc_total + 1, dtype=cp.int32)
+        d_cell_block_offset = cp.empty(nc_total + 1, dtype=cp.int32)
+        d_cell_block_count = cp.empty(nc_total, dtype=cp.int32)
+        d_cell_offset_padded = cp.empty(nc_total + 1, dtype=cp.int32)
+        cbc_ref = ((cell_counts + 31) // 32).astype(np.int32)
+        total_blocks_ref = int(cbc_ref.sum())
+        d_block_to_cell = cp.empty(max(1, total_blocks_ref), dtype=cp.int32)
+        d_num_blocks = cp.zeros(1, dtype=cp.int32)
+        d_total_padded = cp.zeros(1, dtype=cp.int32)
+        kernel = cp.RawKernel(_CELL_PREFIX_SUM_KERNEL, "cell_prefix_sum_kernel")
+        kernel(
+            (1,), (SCAN_BLOCK,),
+            (
+                d_counts, np.int32(nc_total),
+                d_cell_offset, d_cell_block_offset, d_cell_block_count,
+                d_cell_offset_padded, d_block_to_cell, d_num_blocks, d_total_padded,
+            ),
+        )
+        return {
+            "cell_offset": cp.asnumpy(d_cell_offset),
+            "cell_block_offset": cp.asnumpy(d_cell_block_offset),
+            "cell_block_count": cp.asnumpy(d_cell_block_count),
+            "cell_offset_padded": cp.asnumpy(d_cell_offset_padded),
+            "block_to_cell": cp.asnumpy(d_block_to_cell)[:total_blocks_ref],
+            "num_blocks": int(d_num_blocks[0].get()),
+            "total_padded": int(d_total_padded[0].get()),
+        }
+
+    def _assert_cell_against_reference(self, cell_counts):
+        res = self._run_cell(cell_counts)
+        cbc = ((cell_counts + 31) // 32).astype(np.int32)
+        ref = {
+            "cell_offset": np.concatenate([[0], np.cumsum(cell_counts)]).astype(np.int32),
+            "cell_block_offset": np.concatenate([[0], np.cumsum(cbc)]).astype(np.int32),
+            "cell_block_count": cbc,
+            "cell_offset_padded": (np.concatenate([[0], np.cumsum(cbc)]) * 32).astype(np.int32),
+            "block_to_cell": np.repeat(np.arange(len(cell_counts)), cbc).astype(np.int32),
+            "num_blocks": int(cbc.sum()),
+            "total_padded": int(cbc.sum()) * 32,
+        }
+        for key in ref:
+            assert np.array_equal(res[key], ref[key]), (
+                f"mismatch in {key}:\n got={res[key]}\n ref={ref[key]}"
+            )
+
+    def test_cell_matches_reference_large(self):
+        rng = np.random.RandomState(2)
+        cell_counts = rng.randint(0, 200, size=5000).astype(np.int32)
+        self._assert_cell_against_reference(cell_counts)
+
+    def test_cell_matches_reference_small(self):
+        rng = np.random.RandomState(3)
+        cell_counts = rng.randint(0, 64, size=8).astype(np.int32)
+        self._assert_cell_against_reference(cell_counts)
+
+    def test_cell_matches_reference_empty_cells(self):
+        # Many empty cells -> bc=0, exercises scatter binary search gaps.
+        cell_counts = np.zeros(3000, dtype=np.int32)
+        cell_counts[::17] = 5
+        self._assert_cell_against_reference(cell_counts)
+
+    def test_cell_single_block(self):
+        # One non-empty cell with < 32 atoms -> exactly one block.
+        cell_counts = np.zeros(10, dtype=np.int32)
+        cell_counts[3] = 10
+        self._assert_cell_against_reference(cell_counts)
