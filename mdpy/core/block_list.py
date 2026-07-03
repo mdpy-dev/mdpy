@@ -970,7 +970,7 @@ class BlockList:
         # (each block holds >=1 atom), so N is a safe upper bound. Sliced below.
         block_to_cell = self._pool_get("block_to_cell", N, env.NUMPY_INT)
         self._kernels["cell_prefix_sum"](
-            (1,), (1,),
+            (1,), (SCAN_BLOCK,),
             (
                 d_cell_counts, np.int32(self.nc_total),
                 cell_offset, cell_block_offset, cell_block_count,
@@ -989,7 +989,7 @@ class BlockList:
         # [c*2^(3L), (c+1)*2^(3L))), so composite_offset aligns with cell_offset.
         composite_offset = self._pool_get("composite_offset", composite_buckets + 1, env.NUMPY_INT)
         self._kernels["composite_prefix_sum"](
-            (1,), (1,),
+            (1,), (SCAN_BLOCK,),
             (d_composite_counts, np.int32(composite_buckets), composite_offset),
         )
 
