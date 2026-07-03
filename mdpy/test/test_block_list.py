@@ -2,7 +2,10 @@ import numpy as np
 import cupy as cp
 import pytest
 from mdpy.core.topology import Builder
-from mdpy.core.block_list import BlockList, BLOCK_SIZE, NUM_ATOMS_SENTINEL
+from mdpy.core.block_list import (
+    BlockList, BLOCK_SIZE, NUM_ATOMS_SENTINEL, SCAN_BLOCK,
+    _COMPOSITE_PREFIX_SUM_KERNEL, _CELL_PREFIX_SUM_KERNEL,
+)
 
 
 def _make_topology(n):
@@ -745,3 +748,42 @@ class TestCellSubsetDecomposition:
             f"Found {self_pair_count} self-pairs but only {bl.num_blocks} blocks exist. "
             f"Self-interaction may be duplicated by cell-subset decomposition."
         )
+
+
+class TestParallelPrefixSumKernels:
+    """Direct RawKernel unit tests for the parallel prefix-sum kernels,
+    isolated from the full rebuild pipeline."""
+
+    def _run_composite(self, counts):
+        import cupy as cp
+        K = len(counts)
+        d_counts = cp.asarray(counts)
+        d_offset = cp.empty(K + 1, dtype=cp.int32)
+        kernel = cp.RawKernel(_COMPOSITE_PREFIX_SUM_KERNEL, "composite_prefix_sum_kernel")
+        kernel((1,), (SCAN_BLOCK,), (d_counts, np.int32(K), d_offset))
+        return cp.asnumpy(d_offset)
+
+    def test_composite_matches_numpy_large(self):
+        rng = np.random.RandomState(0)
+        counts = rng.randint(0, 8, size=32768).astype(np.int32)
+        out = self._run_composite(counts)
+        ref = np.concatenate([[0], np.cumsum(counts)]).astype(np.int32)
+        assert np.array_equal(out, ref)
+
+    def test_composite_matches_numpy_small(self):
+        # n < SCAN_BLOCK: many threads idle, exercises tile boundary
+        rng = np.random.RandomState(1)
+        counts = rng.randint(0, 5, size=5).astype(np.int32)
+        out = self._run_composite(counts)
+        ref = np.concatenate([[0], np.cumsum(counts)]).astype(np.int32)
+        assert np.array_equal(out, ref)
+
+    def test_composite_single_element(self):
+        counts = np.array([7], dtype=np.int32)
+        out = self._run_composite(counts)
+        assert np.array_equal(out, np.array([0, 7], dtype=np.int32))
+
+    def test_composite_all_zero(self):
+        counts = np.zeros(2048, dtype=np.int32)
+        out = self._run_composite(counts)
+        assert np.array_equal(out, np.zeros(2049, dtype=np.int32))

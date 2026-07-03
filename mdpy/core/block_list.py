@@ -12,6 +12,56 @@ from mdpy.core.radix_sort import fill_constant
 BLOCK_SIZE = 32
 NUM_ATOMS_SENTINEL = 0x7FFFFFFF
 
+# Thread count for the single-block parallel prefix-sum kernels
+# (cell_prefix_sum_kernel, composite_prefix_sum_kernel). Must be a power of
+# two and must match the #define SCAN_BLOCK in _BLOCK_SCAN_PREAMBLE.
+SCAN_BLOCK = 1024
+
+_BLOCK_SCAN_PREAMBLE = r"""
+#define SCAN_BLOCK 1024
+
+// Single-block exclusive prefix sum. Contract:
+//   - gridDim.x == 1, blockDim.x == SCAN_BLOCK.
+//   - Each of the SCAN_BLOCK threads owns a contiguous tile of the n inputs.
+//   - Kogge-Stone inclusive scan over per-tile partial sums (in s_part, a
+//     shared int[SCAN_BLOCK]) fixes cross-tile carries.
+// Writes out[0..n-1] = exclusive prefix sums and *total_out = sum(in[0..n-1]).
+__device__ __forceinline__
+void scan_block_excl(const int* __restrict__ in, int* __restrict__ out,
+                     int n, int* __restrict__ s_part,
+                     int* __restrict__ total_out) {
+    const int tid = threadIdx.x;
+    const int B = SCAN_BLOCK;
+    const int n_per = (n + B - 1) / B;
+    const int lo = tid * n_per;
+    const int hi = (lo + n_per < n) ? (lo + n_per) : n;
+
+    int my_sum = 0;
+    for (int j = lo; j < hi; ++j) my_sum += in[j];
+    s_part[tid] = my_sum;
+    __syncthreads();
+
+    for (int stride = 1; stride < B; stride <<= 1) {
+        int v = (tid >= stride) ? s_part[tid - stride] : 0;
+        __syncthreads();
+        s_part[tid] += v;
+        __syncthreads();
+    }
+
+    const int total = s_part[B - 1];
+    const int my_base = (tid == 0) ? 0 : s_part[tid - 1];
+    __syncthreads();
+
+    int acc = my_base;
+    for (int j = lo; j < hi; ++j) {
+        out[j] = acc;
+        acc += in[j];
+    }
+    __syncthreads();
+    if (tid == 0) *total_out = total;
+}
+"""
+
 _CELL_ASSIGN_KERNEL = HILBERT_ENCODE_KERNEL + r"""
 extern "C" __global__
 void cell_assign_kernel(
@@ -521,21 +571,17 @@ void cell_prefix_sum_kernel(
 }
 """
 
-_COMPOSITE_PREFIX_SUM_KERNEL = r"""
+_COMPOSITE_PREFIX_SUM_KERNEL = _BLOCK_SCAN_PREAMBLE + r"""
 extern "C" __global__
 void composite_prefix_sum_kernel(
     const int* __restrict__ composite_counts,
     int K,
     int* __restrict__ composite_offset
 ) {
-    if (threadIdx.x == 0 && blockIdx.x == 0) {
-        int offset = 0;
-        for (int i = 0; i < K; i++) {
-            composite_offset[i] = offset;
-            offset += composite_counts[i];
-        }
-        composite_offset[K] = offset;
-    }
+    __shared__ int s_part[SCAN_BLOCK];
+    __shared__ int s_total;
+    scan_block_excl(composite_counts, composite_offset, K, s_part, &s_total);
+    if (threadIdx.x == 0) composite_offset[K] = s_total;
 }
 """
 
