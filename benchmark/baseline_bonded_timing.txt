@@ -1,4 +1,0 @@
-/usr/bin/bash: /home/ubuntu/Programs/anaconda3/envs/md_analysis/lib/libtinfo.so.6: no version information available (required by /usr/bin/bash)
-
-bonded compute: 0.0296 ms/call over 200 calls
-
