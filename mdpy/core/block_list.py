@@ -210,13 +210,7 @@ void find_interacting_blocks_kernel(
     __shared__ float s_pos_y[8][32];
     __shared__ float s_pos_z[8][32];
     __shared__ int s_buffer[8 * 256];
-    __shared__ float s_shift_buf_x[8 * 256];
-    __shared__ float s_shift_buf_y[8 * 256];
-    __shared__ float s_shift_buf_z[8 * 256];
     int* my_buf = s_buffer + warp_in_block * 256;
-    float* my_shift_x = s_shift_buf_x + warp_in_block * 256;
-    float* my_shift_y = s_shift_buf_y + warp_in_block * 256;
-    float* my_shift_z = s_shift_buf_z + warp_in_block * 256;
     int nBuf = 0;
 
     {
@@ -322,12 +316,7 @@ void find_interacting_blocks_kernel(
 
                         unsigned int ballot = __ballot_sync(0xffffffff, interacts);
                         int rank = __popc(ballot & ((1u << tgx) - 1));
-                        if (interacts) {
-                            my_buf[nBuf + rank] = gj;
-                            my_shift_x[nBuf + rank] = sx;
-                            my_shift_y[nBuf + rank] = sy;
-                            my_shift_z[nBuf + rank] = sz;
-                        }
+                        if (interacts) my_buf[nBuf + rank] = gj;
                         nBuf += __popc(ballot);
 
                         while (nBuf >= 32) {
@@ -335,21 +324,34 @@ void find_interacting_blocks_kernel(
                             if (tgx == 0) ti = atomicAdd(interaction_count, 1);
                             ti = __shfl_sync(0xffffffff, ti, 0);
                             if (ti < max_block_pairs) {
-                                if (tgx < 1) block_pairs_out[ti] = bx;
-                                shift_x_out[ti * 32 + tgx] = my_shift_x[tgx];
-                                shift_y_out[ti * 32 + tgx] = my_shift_y[tgx];
-                                shift_z_out[ti * 32 + tgx] = my_shift_z[tgx];
+                                if (tgx < 1) {
+                                    block_pairs_out[ti] = bx;
+                                    shift_x_out[ti] = sx;
+                                    shift_y_out[ti] = sy;
+                                    shift_z_out[ti] = sz;
+                                }
                                 interacting_atoms_out[ti * 32 + tgx] = my_buf[tgx];
                             }
-                            for (int s = tgx; s < nBuf - 32; s += 32) {
+                            for (int s = tgx; s < nBuf - 32; s += 32)
                                 my_buf[s] = my_buf[s + 32];
-                                my_shift_x[s] = my_shift_x[s + 32];
-                                my_shift_y[s] = my_shift_y[s + 32];
-                                my_shift_z[s] = my_shift_z[s + 32];
-                            }
                             nBuf -= 32;
                         }
                     }
+                }
+                if (nBuf > 0) {
+                    int ti = 0;
+                    if (tgx == 0) ti = atomicAdd(interaction_count, 1);
+                    ti = __shfl_sync(0xffffffff, ti, 0);
+                    if (ti < max_block_pairs) {
+                        if (tgx < 1) {
+                            block_pairs_out[ti] = bx;
+                            shift_x_out[ti] = sx;
+                            shift_y_out[ti] = sy;
+                            shift_z_out[ti] = sz;
+                        }
+                        interacting_atoms_out[ti * 32 + tgx] = (tgx < nBuf) ? my_buf[tgx] : -1;
+                    }
+                    nBuf = 0;
                 }
             }
         }
@@ -360,12 +362,7 @@ void find_interacting_blocks_kernel(
         int interacts = (gj >= 0 && gj < num_particles) ? 1 : 0;
         unsigned int ballot = __ballot_sync(0xffffffff, interacts);
         int rank = __popc(ballot & ((1u << tgx) - 1));
-        if (interacts) {
-            my_buf[nBuf + rank] = gj;
-            my_shift_x[nBuf + rank] = 0.0f;
-            my_shift_y[nBuf + rank] = 0.0f;
-            my_shift_z[nBuf + rank] = 0.0f;
-        }
+        if (interacts) my_buf[nBuf + rank] = gj;
         nBuf += __popc(ballot);
 
         while (nBuf >= 32) {
@@ -373,32 +370,33 @@ void find_interacting_blocks_kernel(
             if (tgx == 0) ti = atomicAdd(interaction_count, 1);
             ti = __shfl_sync(0xffffffff, ti, 0);
             if (ti < max_block_pairs) {
-                                if (tgx < 1) block_pairs_out[ti] = bx;
-                                shift_x_out[ti * 32 + tgx] = my_shift_x[tgx];
-                                shift_y_out[ti * 32 + tgx] = my_shift_y[tgx];
-                                shift_z_out[ti * 32 + tgx] = my_shift_z[tgx];
-                                interacting_atoms_out[ti * 32 + tgx] = my_buf[tgx];
+                if (tgx < 1) {
+                    block_pairs_out[ti] = bx;
+                    shift_x_out[ti] = 0.0f;
+                    shift_y_out[ti] = 0.0f;
+                    shift_z_out[ti] = 0.0f;
+                }
+                interacting_atoms_out[ti * 32 + tgx] = my_buf[tgx];
             }
-            for (int s = tgx; s < nBuf - 32; s += 32) {
+            for (int s = tgx; s < nBuf - 32; s += 32)
                 my_buf[s] = my_buf[s + 32];
-                my_shift_x[s] = my_shift_x[s + 32];
-                my_shift_y[s] = my_shift_y[s + 32];
-                my_shift_z[s] = my_shift_z[s + 32];
-            }
             nBuf -= 32;
         }
     }
 
-    if (nBuf > 0) {
+    if (cell_subset == 0 && nBuf > 0) {
         int ti = 0;
         if (tgx == 0) ti = atomicAdd(interaction_count, 1);
         ti = __shfl_sync(0xffffffff, ti, 0);
         if (ti < max_block_pairs) {
-            if (tgx < 1) block_pairs_out[ti] = bx;
-            shift_x_out[ti * 32 + tgx] = (tgx < nBuf) ? my_shift_x[tgx] : 0.0f;
-            shift_y_out[ti * 32 + tgx] = (tgx < nBuf) ? my_shift_y[tgx] : 0.0f;
-            shift_z_out[ti * 32 + tgx] = (tgx < nBuf) ? my_shift_z[tgx] : 0.0f;
-            interacting_atoms_out[ti * 32 + tgx] = (tgx < nBuf) ? my_buf[tgx] : -1;
+            if (tgx < 1) {
+                block_pairs_out[ti] = bx;
+                shift_x_out[ti] = 0.0f;
+                shift_y_out[ti] = 0.0f;
+                shift_z_out[ti] = 0.0f;
+            }
+            interacting_atoms_out[ti * 32 + tgx] =
+                (tgx < nBuf) ? my_buf[tgx] : 0x7FFFFFFF;
         }
     }
 }
@@ -1133,13 +1131,13 @@ class BlockList:
         cell_subsets = max(1, min(8, (target_total_warps + self.max_blocks - 1) // self.max_blocks))
         build_radius_sq = self.build_radius ** 2
 
-        max_block_pairs = max(self._read_device_int(self._d_num_blocks) * 40, 10000)
+        max_block_pairs = max(num_blocks * 100, 10000)
         if self._d_block_pair_buf.size < max_block_pairs:
             self._d_block_pair_buf = cp.empty(max_block_pairs, dtype=env.NUMPY_INT)
             self._d_interacting_buf = cp.empty(max_block_pairs * BLOCK_SIZE, dtype=env.NUMPY_INT)
-            self._d_block_pair_shift_x_buf = cp.empty(max_block_pairs * BLOCK_SIZE, dtype=env.NUMPY_FLOAT)
-            self._d_block_pair_shift_y_buf = cp.empty(max_block_pairs * BLOCK_SIZE, dtype=env.NUMPY_FLOAT)
-            self._d_block_pair_shift_z_buf = cp.empty(max_block_pairs * BLOCK_SIZE, dtype=env.NUMPY_FLOAT)
+            self._d_block_pair_shift_x_buf = cp.empty(max_block_pairs, dtype=env.NUMPY_FLOAT)
+            self._d_block_pair_shift_y_buf = cp.empty(max_block_pairs, dtype=env.NUMPY_FLOAT)
+            self._d_block_pair_shift_z_buf = cp.empty(max_block_pairs, dtype=env.NUMPY_FLOAT)
             self._max_block_pairs = max_block_pairs
         self._d_counters[0] = 0
 

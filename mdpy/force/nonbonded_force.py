@@ -207,9 +207,9 @@ void exclusion_block_pair_kernel(
         float px_i = posq_i.x;
         float py_i = posq_i.y;
         float pz_i = posq_i.z;
-        float shfl_sx = shift_x[pos * 32 + tgx];
-        float shfl_sy = shift_y[pos * 32 + tgx];
-        float shfl_sz = shift_z[pos * 32 + tgx];
+        float sx = shift_x[pos];
+        float sy = shift_y[pos];
+        float sz = shift_z[pos];
 {load_i}
         int type_i = 0;
         if (gi >= 0 && gi < num_particles) {{
@@ -233,9 +233,9 @@ void exclusion_block_pair_kernel(
         for (int j = 0; j < 32; j++) {{
             unsigned int excl_j = excl_shared[tbx + tj];
             int atom2 = atom_indices_shared[tbx + tj];
-            float dx = shfl_px - px_i + shfl_sx;
-            float dy = shfl_py - py_i + shfl_sy;
-            float dz = shfl_pz - pz_i + shfl_sz;
+            float dx = shfl_px - px_i + sx;
+            float dy = shfl_py - py_i + sy;
+            float dz = shfl_pz - pz_i + sz;
             float dist_sq = dx * dx + dy * dy + dz * dz;
             bool excluded = (atom2 < 0 || atom2 >= num_particles)
                          || ((excl_j >> tgx) & 1);
@@ -263,9 +263,6 @@ void exclusion_block_pair_kernel(
             shfl_fx = __shfl_sync(0xffffffff, shfl_fx, (tgx + 1) & 31);
             shfl_fy = __shfl_sync(0xffffffff, shfl_fy, (tgx + 1) & 31);
             shfl_fz = __shfl_sync(0xffffffff, shfl_fz, (tgx + 1) & 31);
-            shfl_sx = __shfl_sync(0xffffffff, shfl_sx, (tgx + 1) & 31);
-            shfl_sy = __shfl_sync(0xffffffff, shfl_sy, (tgx + 1) & 31);
-            shfl_sz = __shfl_sync(0xffffffff, shfl_sz, (tgx + 1) & 31);
 {shuffle_j}
             tj = (tj + 1) & 31;
         }}
