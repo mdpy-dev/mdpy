@@ -200,6 +200,9 @@ void exclusion_block_pair_kernel(
 {energy_init}
     __shared__ int atom_indices_shared[256];
     __shared__ unsigned int excl_shared[256];
+    __shared__ float shift_x_shared[256];
+    __shared__ float shift_y_shared[256];
+    __shared__ float shift_z_shared[256];
     for (; pos < end; pos++) {{
         int block_x = block_pairs[pos];
         int gi = block_atoms[block_x * 32 + tgx];
@@ -207,9 +210,9 @@ void exclusion_block_pair_kernel(
         float px_i = posq_i.x;
         float py_i = posq_i.y;
         float pz_i = posq_i.z;
-        float sx = shift_x[pos];
-        float sy = shift_y[pos];
-        float sz = shift_z[pos];
+        shift_x_shared[threadIdx.x] = shift_x[pos * 32 + tgx];
+        shift_y_shared[threadIdx.x] = shift_y[pos * 32 + tgx];
+        shift_z_shared[threadIdx.x] = shift_z[pos * 32 + tgx];
 {load_i}
         int type_i = 0;
         if (gi >= 0 && gi < num_particles) {{
@@ -233,9 +236,12 @@ void exclusion_block_pair_kernel(
         for (int j = 0; j < 32; j++) {{
             unsigned int excl_j = excl_shared[tbx + tj];
             int atom2 = atom_indices_shared[tbx + tj];
-            float dx = shfl_px - px_i + sx;
-            float dy = shfl_py - py_i + sy;
-            float dz = shfl_pz - pz_i + sz;
+            float sx_j = shift_x_shared[tbx + tj];
+            float sy_j = shift_y_shared[tbx + tj];
+            float sz_j = shift_z_shared[tbx + tj];
+            float dx = shfl_px - px_i + sx_j;
+            float dy = shfl_py - py_i + sy_j;
+            float dz = shfl_pz - pz_i + sz_j;
             float dist_sq = dx * dx + dy * dy + dz * dz;
             bool excluded = (atom2 < 0 || atom2 >= num_particles)
                          || ((excl_j >> tgx) & 1);
