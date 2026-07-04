@@ -858,3 +858,37 @@ class TestParallelPrefixSumKernels:
         cell_counts = np.zeros(10, dtype=np.int32)
         cell_counts[3] = 10
         self._assert_cell_against_reference(cell_counts)
+
+
+class TestShiftGroupedPacking:
+    """Verify that neighbor cells with the same PBC shift pack their
+    j-atoms into shared tiles, producing fewer tiles with higher fill."""
+
+    def test_interior_cells_merge_into_fewer_tiles(self):
+        """Place atoms in a dense cluster at box center — all 27 neighbor
+        cells share shift (0,0,0). Under shift-grouped packing, at least
+        one tile should be nearly full (>=28)."""
+        n = 128
+        box = 60.0
+        cutoff, skin = 4.0, 1.0
+        rng = np.random.RandomState(42)
+        positions = np.zeros((n, 3), dtype=np.float32)
+        # Cluster around (30, 30, 30) — center of a 60 box,
+        # far from any PBC boundary so all shifts are zero.
+        positions[:] = 30.0 + rng.uniform(-3.0, 3.0, (n, 3))
+        bl, *_ = _rebuild_and_build_block_pairs(n, box, cutoff, skin, positions=positions)
+
+        int_atoms = cp.asnumpy(
+            bl.d_interacting_atoms[:bl.num_block_pairs * 32]
+        ).reshape(bl.num_block_pairs, 32)
+        fills = np.sum(
+            (int_atoms >= 0) & (int_atoms != NUM_ATOMS_SENTINEL),
+            axis=1
+        )
+        max_fill = int(np.max(fills))
+        assert max_fill >= 28, (
+            f"Expected at least one tile with fill >= 28 "
+            f"(shift-grouped packing of same-shift cells), "
+            f"but max fill is {max_fill}. "
+            f"Fills: {dict(zip(*np.unique(fills, return_counts=True)))}"
+        )
