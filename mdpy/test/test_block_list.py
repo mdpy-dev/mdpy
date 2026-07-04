@@ -273,18 +273,19 @@ class TestInteractingBlocks:
         positions[:, 2] = 12.5 + rng.uniform(-0.1, 0.1, n)
         bl, *_ = _rebuild_and_build_block_pairs(n, box, cutoff, skin, positions=positions)
 
-        shift_x = cp.asnumpy(bl.d_block_pair_shift_x[:bl.num_block_pairs])
-        shift_y = cp.asnumpy(bl.d_block_pair_shift_y[:bl.num_block_pairs])
-        shift_z = cp.asnumpy(bl.d_block_pair_shift_z[:bl.num_block_pairs])
+        P = int(bl._d_counters[0])
+        shift_x = cp.asnumpy(bl.d_block_pair_shift_x[:P * 32]).reshape(P, 32)
+        shift_y = cp.asnumpy(bl.d_block_pair_shift_y[:P * 32]).reshape(P, 32)
+        shift_z = cp.asnumpy(bl.d_block_pair_shift_z[:P * 32]).reshape(P, 32)
 
         total_shift = np.sum(np.abs(shift_x)) + np.sum(np.abs(shift_y)) + np.sum(np.abs(shift_z))
         assert total_shift > 0, "Expected at least some block pairs with nonzero PBC shift"
 
-        block_pairs = cp.asnumpy(bl.d_block_pairs[:bl.num_block_pairs])
-        int_atoms = cp.asnumpy(bl.d_interacting_atoms[:bl.num_block_pairs * 32]).reshape(bl.num_block_pairs, 32)
+        block_pairs = cp.asnumpy(bl.d_block_pairs[:P])
+        int_atoms = cp.asnumpy(bl.d_interacting_atoms[:P * 32]).reshape(P, 32)
         block_atoms_np = cp.asnumpy(bl.d_block_atoms).reshape(-1, 32)
 
-        for t in range(bl.num_block_pairs):
+        for t in range(P):
             bx = block_pairs[t]
             j_atoms = int_atoms[t]
             all_from_self = True
@@ -300,7 +301,7 @@ class TestInteractingBlocks:
                     all_from_self = False
                     break
             if all_from_self:
-                assert shift_x[t] == 0.0 and shift_y[t] == 0.0 and shift_z[t] == 0.0, \
+                assert np.all(shift_x[t] == 0.0) and np.all(shift_y[t] == 0.0) and np.all(shift_z[t] == 0.0), \
                     f"Self-block-pair {t} should have zero shift"
 
     def test_shift_distance_matches_roundf(self):
@@ -323,21 +324,22 @@ class TestInteractingBlocks:
         box_y = float(pbc_2d[1, 1])
         box_z = float(pbc_2d[2, 2])
 
-        block_pairs = cp.asnumpy(bl.d_block_pairs[:bl.num_block_pairs])
-        shift_x = cp.asnumpy(bl.d_block_pair_shift_x[:bl.num_block_pairs])
-        shift_y = cp.asnumpy(bl.d_block_pair_shift_y[:bl.num_block_pairs])
-        shift_z = cp.asnumpy(bl.d_block_pair_shift_z[:bl.num_block_pairs])
-        int_atoms = cp.asnumpy(bl.d_interacting_atoms[:bl.num_block_pairs * 32]).reshape(bl.num_block_pairs, 32)
+        P = int(bl._d_counters[0])
+        block_pairs = cp.asnumpy(bl.d_block_pairs[:P])
+        shift_x = cp.asnumpy(bl.d_block_pair_shift_x[:P * 32]).reshape(P, 32)
+        shift_y = cp.asnumpy(bl.d_block_pair_shift_y[:P * 32]).reshape(P, 32)
+        shift_z = cp.asnumpy(bl.d_block_pair_shift_z[:P * 32]).reshape(P, 32)
+        int_atoms = cp.asnumpy(bl.d_interacting_atoms[:P * 32]).reshape(P, 32)
         block_atoms_np = cp.asnumpy(bl.d_block_atoms).reshape(-1, 32)
 
         max_err = 0.0
-        for t in range(bl.num_block_pairs):
+        for t in range(P):
             bx = block_pairs[t]
-            sx, sy, sz = shift_x[t], shift_y[t], shift_z[t]
             for lane in range(32):
                 gj = int_atoms[t, lane]
                 if gj < 0 or gj == NUM_ATOMS_SENTINEL:
                     continue
+                sx, sy, sz = shift_x[t, lane], shift_y[t, lane], shift_z[t, lane]
                 xj, yj, zj = pos_x[gj], pos_y[gj], pos_z[gj]
                 for k in range(32):
                     gi = block_atoms_np[bx, k]

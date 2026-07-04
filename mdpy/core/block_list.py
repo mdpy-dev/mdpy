@@ -1133,7 +1133,7 @@ class BlockList:
         cell_subsets = max(1, min(8, (target_total_warps + self.max_blocks - 1) // self.max_blocks))
         build_radius_sq = self.build_radius ** 2
 
-        max_block_pairs = max(num_blocks * 100, 10000)
+        max_block_pairs = max(self._read_device_int(self._d_num_blocks) * 40, 10000)
         if self._d_block_pair_buf.size < max_block_pairs:
             self._d_block_pair_buf = cp.empty(max_block_pairs, dtype=env.NUMPY_INT)
             self._d_interacting_buf = cp.empty(max_block_pairs * BLOCK_SIZE, dtype=env.NUMPY_INT)
