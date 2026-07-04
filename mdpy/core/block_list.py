@@ -231,6 +231,12 @@ void find_interacting_blocks_kernel(
     float mcx = block_center_x[bx], mcy = block_center_y[bx], mcz = block_center_z[bx];
     float msx = block_size_x[bx],   msy = block_size_y[bx],   msz = block_size_z[bx];
 
+    // Shift-grouped packing: track the previous cell's shift so we can
+    // drain the buffer only when the PBC shift actually changes.  This
+    // lets atoms from same-shift neighbour cells fill tiles together.
+    float prev_sx = 0.0f, prev_sy = 0.0f, prev_sz = 0.0f;
+    bool has_prev_shift = false;
+
     for (int dz = -1; dz <= 1; dz++) {
         for (int dy = -1; dy <= 1; dy++) {
             for (int dx = -1; dx <= 1; dx++) {
@@ -256,6 +262,30 @@ void find_interacting_blocks_kernel(
                     if (raw_nz < 0) { sx -= pbc_matrix[6]; sy -= pbc_matrix[7]; sz -= pbc_matrix[8]; }
                     else if (raw_nz >= nc_z) { sx += pbc_matrix[6]; sy += pbc_matrix[7]; sz += pbc_matrix[8]; }
                 }
+
+                // Drain-on-shift-change: if this cell's shift differs
+                // from the previous cell's, flush the buffer first so
+                // that all atoms in the buffer share one shift value.
+                if (has_prev_shift && (sx != prev_sx || sy != prev_sy || sz != prev_sz)) {
+                    if (nBuf > 0) {
+                        int ti_drain = 0;
+                        if (tgx == 0) ti_drain = atomicAdd(interaction_count, 1);
+                        ti_drain = __shfl_sync(0xffffffff, ti_drain, 0);
+                        if (ti_drain < max_block_pairs) {
+                            if (tgx < 1) {
+                                block_pairs_out[ti_drain] = bx;
+                                shift_x_out[ti_drain] = prev_sx;
+                                shift_y_out[ti_drain] = prev_sy;
+                                shift_z_out[ti_drain] = prev_sz;
+                            }
+                            interacting_atoms_out[ti_drain * 32 + tgx] =
+                                (tgx < nBuf) ? my_buf[tgx] : -1;
+                        }
+                        nBuf = 0;
+                    }
+                }
+                prev_sx = sx; prev_sy = sy; prev_sz = sz;
+                has_prev_shift = true;
 
                 int b_start = cell_block_offset[nc];
                 int b_count = cell_block_count[nc];
@@ -338,23 +368,27 @@ void find_interacting_blocks_kernel(
                         }
                     }
                 }
-                if (nBuf > 0) {
-                    int ti = 0;
-                    if (tgx == 0) ti = atomicAdd(interaction_count, 1);
-                    ti = __shfl_sync(0xffffffff, ti, 0);
-                    if (ti < max_block_pairs) {
-                        if (tgx < 1) {
-                            block_pairs_out[ti] = bx;
-                            shift_x_out[ti] = sx;
-                            shift_y_out[ti] = sy;
-                            shift_z_out[ti] = sz;
-                        }
-                        interacting_atoms_out[ti * 32 + tgx] = (tgx < nBuf) ? my_buf[tgx] : -1;
-                    }
-                    nBuf = 0;
-                }
             }
         }
+    }
+
+    // Final drain: flush remaining atoms from the last shift group.
+    // Empties the buffer before the self-cell path (which uses zero shift).
+    if (nBuf > 0) {
+        int ti_final = 0;
+        if (tgx == 0) ti_final = atomicAdd(interaction_count, 1);
+        ti_final = __shfl_sync(0xffffffff, ti_final, 0);
+        if (ti_final < max_block_pairs) {
+            if (tgx < 1) {
+                block_pairs_out[ti_final] = bx;
+                shift_x_out[ti_final] = prev_sx;
+                shift_y_out[ti_final] = prev_sy;
+                shift_z_out[ti_final] = prev_sz;
+            }
+            interacting_atoms_out[ti_final * 32 + tgx] =
+                (tgx < nBuf) ? my_buf[tgx] : -1;
+        }
+        nBuf = 0;
     }
 
     if (cell_subset == 0) {
