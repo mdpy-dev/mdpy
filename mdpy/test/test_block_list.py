@@ -892,3 +892,187 @@ class TestShiftGroupedPacking:
             f"but max fill is {max_fill}. "
             f"Fills: {dict(zip(*np.unique(fills, return_counts=True)))}"
         )
+
+    def test_all_atoms_in_tile_share_shift(self):
+        """Every j-atom in a tile must be shift-compatible: applying the
+        tile's shift must place it within build_radius of some i-atom."""
+        n = 200
+        box = 50.0
+        cutoff, skin = 10.0, 2.0
+        bl, positions, pbc_matrix, _, _ = _rebuild_and_build_block_pairs(
+            n, box, cutoff, skin
+        )
+
+        sorted_to_pdb = cp.asnumpy(bl.d_sorted_to_pdb)
+        block_pairs = bl.block_pairs
+        interacting = bl.interacting_atoms
+        ba = bl.block_atoms
+        shift_x = cp.asnumpy(bl.d_block_pair_shift_x[:bl.num_block_pairs])
+        shift_y = cp.asnumpy(bl.d_block_pair_shift_y[:bl.num_block_pairs])
+        shift_z = cp.asnumpy(bl.d_block_pair_shift_z[:bl.num_block_pairs])
+        build_radius_sq = bl.build_radius ** 2
+
+        for ti in range(bl.num_block_pairs):
+            bx = block_pairs[ti]
+            sx = float(shift_x[ti])
+            sy = float(shift_y[ti])
+            sz = float(shift_z[ti])
+            source_atoms = ba[bx]
+            interacting_row = interacting[ti]
+            for slot in range(BLOCK_SIZE):
+                aj = int(interacting_row[slot])
+                if aj < 0 or aj == NUM_ATOMS_SENTINEL:
+                    continue
+                pdb_j = sorted_to_pdb[aj]
+                pos_j = positions[pdb_j]
+                found_close = False
+                for si in range(BLOCK_SIZE):
+                    ak = source_atoms[si]
+                    if ak < 0:
+                        continue
+                    pdb_k = sorted_to_pdb[ak]
+                    pos_k = positions[pdb_k]
+                    dx = (pos_j[0] + sx) - pos_k[0]
+                    dy = (pos_j[1] + sy) - pos_k[1]
+                    dz = (pos_j[2] + sz) - pos_k[2]
+                    if dx * dx + dy * dy + dz * dz <= build_radius_sq:
+                        found_close = True
+                        break
+                assert found_close, (
+                    f"Tile {ti}: j-atom sorted={aj} (pdb={pdb_j}) "
+                    f"with shift ({sx},{sy},{sz}) not within build_radius "
+                    f"of any i-atom in block {bx}. "
+                    f"Incompatible shifts may have been packed together."
+                )
+
+    def test_pair_completeness_shift_grouped(self):
+        """Every atom pair within build_radius must appear in some tile."""
+        n = 200
+        box = 50.0
+        cutoff, skin = 10.0, 2.0
+        bl, positions, pbc_matrix, _, _ = _rebuild_and_build_block_pairs(
+            n, box, cutoff, skin
+        )
+
+        block_pairs = bl.block_pairs
+        interacting = bl.interacting_atoms
+        ba = bl.block_atoms
+        build_radius_sq = bl.build_radius ** 2
+        pbc_2d = pbc_matrix.reshape(3, 3)
+        box_diag = np.array([pbc_2d[0, 0], pbc_2d[1, 1], pbc_2d[2, 2]])
+
+        found_pairs = set()
+        for ti in range(bl.num_block_pairs):
+            source_block = block_pairs[ti]
+            source_atoms = ba[source_block]
+            interacting_row = interacting[ti]
+            for si in range(BLOCK_SIZE):
+                ak = source_atoms[si]
+                if ak < 0:
+                    continue
+                for sj in range(BLOCK_SIZE):
+                    aj = int(interacting_row[sj])
+                    if aj < 0 or aj == NUM_ATOMS_SENTINEL:
+                        continue
+                    if ak != aj:
+                        found_pairs.add(
+                            (min(int(ak), aj), max(int(ak), aj))
+                        )
+
+        spx = cp.asnumpy(bl._sorted_positions[0])
+        spy = cp.asnumpy(bl._sorted_positions[1])
+        spz = cp.asnumpy(bl._sorted_positions[2])
+
+        for i in range(n):
+            for j in range(i + 1, n):
+                dx = spx[j] - spx[i]
+                dy = spy[j] - spy[i]
+                dz = spz[j] - spz[i]
+                dx -= box_diag[0] * round(dx / box_diag[0])
+                dy -= box_diag[1] * round(dy / box_diag[1])
+                dz -= box_diag[2] * round(dz / box_diag[2])
+                if dx * dx + dy * dy + dz * dz <= build_radius_sq:
+                    assert (i, j) in found_pairs, (
+                        f"Pair (sorted {i}, {j}) within build_radius "
+                        f"but missing from block_pairs — "
+                        f"cross-cell packing dropped it."
+                    )
+
+    def test_no_duplicate_pairs_shift_grouped(self):
+        """No duplicate (source_block, j_atom) pairs."""
+        n = 200
+        box = 50.0
+        cutoff, skin = 10.0, 2.0
+        bl, *_ = _rebuild_and_build_block_pairs(n, box, cutoff, skin)
+        block_pairs = bl.block_pairs
+        interacting = bl.interacting_atoms
+        seen = set()
+        for ti in range(bl.num_block_pairs):
+            source_block = int(block_pairs[ti])
+            for sj in range(BLOCK_SIZE):
+                aj = int(interacting[ti, sj])
+                if aj < 0 or aj == NUM_ATOMS_SENTINEL:
+                    continue
+                pair = (source_block, aj)
+                assert pair not in seen, (
+                    f"Duplicate (block={source_block}, atom={aj}) — "
+                    f"cross-cell packing created a duplicate."
+                )
+                seen.add(pair)
+
+    def test_pbc_boundary_incompatible_shifts_separated(self):
+        """Atoms near a PBC boundary: tiles spanning the boundary must
+        have correct shifts. No tile should mix incompatible images."""
+        n = 128
+        box = 20.0
+        cutoff, skin = 4.0, 1.0
+        rng = np.random.RandomState(42)
+        positions = np.zeros((n, 3), dtype=np.float32)
+        positions[:64, 0] = 1.0 + rng.uniform(-0.5, 0.5, 64)
+        positions[64:, 0] = box - 1.0 + rng.uniform(-0.5, 0.5, 64)
+        positions[:, 1] = 10.0 + rng.uniform(-1.0, 1.0, n)
+        positions[:, 2] = 10.0 + rng.uniform(-1.0, 1.0, n)
+        bl, positions, pbc_matrix, _, _ = _rebuild_and_build_block_pairs(
+            n, box, cutoff, skin, positions=positions
+        )
+
+        sorted_to_pdb = cp.asnumpy(bl.d_sorted_to_pdb)
+        block_pairs = bl.block_pairs
+        interacting = bl.interacting_atoms
+        ba = bl.block_atoms
+        shift_x = cp.asnumpy(bl.d_block_pair_shift_x[:bl.num_block_pairs])
+        shift_y = cp.asnumpy(bl.d_block_pair_shift_y[:bl.num_block_pairs])
+        shift_z = cp.asnumpy(bl.d_block_pair_shift_z[:bl.num_block_pairs])
+        build_radius_sq = bl.build_radius ** 2
+
+        for ti in range(bl.num_block_pairs):
+            bx = block_pairs[ti]
+            sx = float(shift_x[ti])
+            sy = float(shift_y[ti])
+            sz = float(shift_z[ti])
+            source_atoms = ba[bx]
+            interacting_row = interacting[ti]
+            for slot in range(BLOCK_SIZE):
+                aj = int(interacting_row[slot])
+                if aj < 0 or aj == NUM_ATOMS_SENTINEL:
+                    continue
+                pdb_j = sorted_to_pdb[aj]
+                pos_j = positions[pdb_j]
+                found_close = False
+                for si in range(BLOCK_SIZE):
+                    ak = source_atoms[si]
+                    if ak < 0:
+                        continue
+                    pdb_k = sorted_to_pdb[ak]
+                    pos_k = positions[pdb_k]
+                    dx = (pos_j[0] + sx) - pos_k[0]
+                    dy = (pos_j[1] + sy) - pos_k[1]
+                    dz = (pos_j[2] + sz) - pos_k[2]
+                    if dx * dx + dy * dy + dz * dz <= build_radius_sq:
+                        found_close = True
+                        break
+                assert found_close, (
+                    f"PBC tile {ti}: j-atom {aj} (pdb={pdb_j}) with shift "
+                    f"({sx},{sy},{sz}) not within build_radius of block {bx}. "
+                    f"Incompatible shifts may have been packed together."
+                )
