@@ -668,7 +668,6 @@ void counting_scatter_kernel(
     int* __restrict__ pdb_to_sorted,
     int* __restrict__ sorted_to_pdb,
     int* __restrict__ cell_indices_sorted,
-    float* __restrict__ snap_x, float* __restrict__ snap_y, float* __restrict__ snap_z,
     const int* __restrict__ d_rebuild_flag
 ) {
     if (d_rebuild_flag[0] == 0) return;
@@ -687,7 +686,6 @@ void counting_scatter_kernel(
     pdb_to_sorted[i] = slot;
     sorted_to_pdb[slot] = i;
     cell_indices_sorted[slot] = cell;
-    snap_x[slot] = src_x[i]; snap_y[slot] = src_y[i]; snap_z[slot] = src_z[i];
 }
 """
 
@@ -1085,9 +1083,6 @@ class BlockList:
         # and be corrupted before line 971 uses it.
         sorted_to_pdb = cp.empty(N, dtype=env.NUMPY_INT)
         cell_indices_sorted = self._pool_get("cell_indices_sorted", N, env.NUMPY_INT)
-        snap_x = self._pool_get("snap_x", N, env.NUMPY_FLOAT)
-        snap_y = self._pool_get("snap_y", N, env.NUMPY_FLOAT)
-        snap_z = self._pool_get("snap_z", N, env.NUMPY_FLOAT)
         self._kernels["counting_scatter"](
             (nm,), (tpb,),
             (
@@ -1097,7 +1092,6 @@ class BlockList:
                 sorted_pos_x, sorted_pos_y, sorted_pos_z,
                 block_atoms, raw_order, pdb_to_sorted, sorted_to_pdb,
                 cell_indices_sorted,
-                snap_x, snap_y, snap_z,
                 self.d_rebuild_flag,
             ),
         )
@@ -1106,9 +1100,6 @@ class BlockList:
         self.d_pdb_to_sorted = pdb_to_sorted
         self.d_sorted_to_pdb = sorted_to_pdb
         self._d_cell_indices_sorted = cell_indices_sorted
-        self.d_positions_at_rebuild_x = snap_x
-        self.d_positions_at_rebuild_y = snap_y
-        self.d_positions_at_rebuild_z = snap_z
         pos_x, pos_y, pos_z = sorted_pos_x, sorted_pos_y, sorted_pos_z
         self._sorted_positions = (pos_x, pos_y, pos_z)
 

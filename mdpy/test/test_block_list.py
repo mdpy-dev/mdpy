@@ -554,6 +554,11 @@ class TestCheckRebuild:
         pbc_inv = np.linalg.inv(pbc_matrix)
         bl = BlockList(cutoff=10.0, skin=2.0)
         bl.rebuild(positions, topology, pbc_matrix, pbc_inv, force=True)
+        bl.capture_snapshot((
+            cp.asarray(np.ascontiguousarray(positions[:, 0], dtype=np.float32)),
+            cp.asarray(np.ascontiguousarray(positions[:, 1], dtype=np.float32)),
+            cp.asarray(np.ascontiguousarray(positions[:, 2], dtype=np.float32)),
+        ))
 
         for _ in range(19):
             assert not bl.check_rebuild(positions)
@@ -576,6 +581,11 @@ class TestCheckRebuild:
         pbc_inv = np.linalg.inv(pbc_matrix)
         bl = BlockList(cutoff=10.0, skin=2.0)
         bl.rebuild(positions, topology, pbc_matrix, pbc_inv, force=True)
+        bl.capture_snapshot((
+            cp.asarray(np.ascontiguousarray(positions[:, 0], dtype=np.float32)),
+            cp.asarray(np.ascontiguousarray(positions[:, 1], dtype=np.float32)),
+            cp.asarray(np.ascontiguousarray(positions[:, 2], dtype=np.float32)),
+        ))
 
         pos_x = bl.d_positions_at_rebuild_x.copy()
         pos_y = bl.d_positions_at_rebuild_y.copy()
@@ -615,6 +625,59 @@ class TestCheckRebuild:
         assert snap_x[0] == pytest.approx(0.3, abs=1e-5)
         assert snap_y[1] == pytest.approx(0.7, abs=1e-5)
         assert snap_z.shape == (n,)
+
+    def test_post_wrap_snapshot_no_false_trigger(self):
+        """Regression: snapshot captured AFTER wrap must not false-trigger.
+
+        Before fix: snapshot held pre-wrap positions (counting_scatter ran
+        before wrap). A particle at L+0.2 wrapped to 0.2, but snapshot
+        stayed at L+0.2. Next check_rebuild saw displacement ~= L.
+        After fix: capture_snapshot is called AFTER wrap, snapshot holds 0.2.
+        """
+        n = 4
+        box = 50.0
+        cutoff, skin = 10.0, 2.0
+        positions = np.array([
+            [1.0, 1.0, 1.0],
+            [2.0, 1.0, 1.0],
+            [3.0, 1.0, 1.0],
+            [4.0, 1.0, 1.0],
+        ], dtype=np.float32)
+        topology = _make_topology(n)
+        pbc_matrix = _make_pbc(box)
+        pbc_inv = np.linalg.inv(pbc_matrix)
+        bl = BlockList(cutoff=cutoff, skin=skin)
+        bl.rebuild(positions, topology, pbc_matrix, pbc_inv, force=True)
+        bl.capture_snapshot((
+            cp.asarray(positions[:, 0].astype(np.float32)),
+            cp.asarray(positions[:, 1].astype(np.float32)),
+            cp.asarray(positions[:, 2].astype(np.float32)),
+        ))
+
+        # Simulate: particle 0 drifts to box+0.2 (pre-wrap), rebuild, wrap to 0.2
+        drifted = positions.copy()
+        drifted[0, 0] = box + 0.2
+        bl.rebuild(drifted, topology, pbc_matrix, pbc_inv, force=True)
+        wrapped = drifted.copy()
+        wrapped[0, 0] = 0.2
+        bl.capture_snapshot((
+            cp.asarray(np.ascontiguousarray(wrapped[:, 0], dtype=np.float32)),
+            cp.asarray(np.ascontiguousarray(wrapped[:, 1], dtype=np.float32)),
+            cp.asarray(np.ascontiguousarray(wrapped[:, 2], dtype=np.float32)),
+        ))
+
+        # Next step: particle 0 drifts 0.05 from wrapped position
+        next_pos = wrapped.copy()
+        next_pos[0, 0] = 0.25
+        result = bl.check_rebuild((
+            cp.asarray(np.ascontiguousarray(next_pos[:, 0], dtype=np.float32)),
+            cp.asarray(np.ascontiguousarray(next_pos[:, 1], dtype=np.float32)),
+            cp.asarray(np.ascontiguousarray(next_pos[:, 2], dtype=np.float32)),
+        ))
+        assert not result, (
+            "check_rebuild false-triggered: snapshot likely holds pre-wrap "
+            "position (box+0.2) instead of post-wrap (0.2)"
+        )
 
 
 class TestPostArgsortFusion:
