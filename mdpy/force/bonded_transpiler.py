@@ -4,7 +4,7 @@ import textwrap
 
 from mdpy.force.primitives import param as _param_marker, scalar as _scalar_marker, point as _point_marker
 from mdpy.force._utils import ExprInfo, _strip_trailing_digits, _MATH_FUNCTIONS, _numeric_literal
-from mdpy.force.ad_engine import TapeEntry, ForwardADEngine, _HELPER_OPERATIONS
+from mdpy.force.ad_engine import TapeEntry, ForwardADEngine
 
 _DISTANCE_FORWARD = r'''
         float3 _delta_{rn} = pbc_wrap_vec(sub_f3(load_pos(pos_x,pos_y,pos_z,{atom_b}), load_pos(pos_x,pos_y,pos_z,{atom_a})), pbc_inv, pbc_matrix);
