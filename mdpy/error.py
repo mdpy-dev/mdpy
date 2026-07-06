@@ -45,23 +45,11 @@ class FileFormatError(Exception):
     '''
     pass
 
-class PBCPoorlyDefinedError(Exception):
-    '''This error occurs when:
-    - Two or more column vector in pbc_matrix is linear corellated
-    '''
-    pass
-
 class ParserPoorlyDefinedError(Exception):
     '''This error occurs when:
     - A complementary property is required while parser init with keywords `is_parse_all=False`
 
     Used in:
     - mdpy.io.pdb_parser
-    '''
-    pass
-
-class ParticleLossError(Exception):
-    '''This error occurs when:
-    - The particle go beyond the range of two PBC images
     '''
     pass
