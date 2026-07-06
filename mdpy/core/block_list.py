@@ -1406,6 +1406,25 @@ class BlockList:
         )
         return False
 
+    def capture_snapshot(self, positions_soa):
+        """Capture current positions as the rebuild-baseline snapshot.
+
+        Must be called AFTER pbc wrapping so the snapshot is in the same
+        PBC image as subsequent positions. This ensures check_rebuild
+        measures true cumulative drift, not wrap-artifact coordinate jumps.
+        """
+        pos_x, pos_y, pos_z = positions_soa
+        N = self.num_particles
+        snap_x = self._pool_get("snap_x", N, env.NUMPY_FLOAT)
+        snap_y = self._pool_get("snap_y", N, env.NUMPY_FLOAT)
+        snap_z = self._pool_get("snap_z", N, env.NUMPY_FLOAT)
+        snap_x[:N] = pos_x[:N]
+        snap_y[:N] = pos_y[:N]
+        snap_z[:N] = pos_z[:N]
+        self.d_positions_at_rebuild_x = snap_x
+        self.d_positions_at_rebuild_y = snap_y
+        self.d_positions_at_rebuild_z = snap_z
+
     def _init_empty(self):
         self.num_blocks = 0
         self.num_block_pairs = 0

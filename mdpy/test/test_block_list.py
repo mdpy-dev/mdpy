@@ -592,6 +592,30 @@ class TestCheckRebuild:
         cp.cuda.Stream.null.synchronize()
         assert int(bl.d_rebuild_flag[0]) == 1, "flag must stay sticky"
 
+    def test_capture_snapshot_stores_provided_positions(self):
+        n, box = 50, 50.0
+        positions = _make_positions(n, box)
+        topology = _make_topology(n)
+        pbc_matrix = _make_pbc(box)
+        pbc_inv = np.linalg.inv(pbc_matrix)
+        bl = BlockList(cutoff=10.0, skin=2.0)
+        bl.rebuild(positions, topology, pbc_matrix, pbc_inv, force=True)
+
+        wrapped = positions.copy()
+        wrapped[0, 0] = 0.3
+        wrapped[1, 1] = 0.7
+        pos_x = cp.asarray(np.ascontiguousarray(wrapped[:, 0], dtype=np.float32))
+        pos_y = cp.asarray(np.ascontiguousarray(wrapped[:, 1], dtype=np.float32))
+        pos_z = cp.asarray(np.ascontiguousarray(wrapped[:, 2], dtype=np.float32))
+        bl.capture_snapshot((pos_x, pos_y, pos_z))
+
+        snap_x = cp.asnumpy(bl.d_positions_at_rebuild_x)
+        snap_y = cp.asnumpy(bl.d_positions_at_rebuild_y)
+        snap_z = cp.asnumpy(bl.d_positions_at_rebuild_z)
+        assert snap_x[0] == pytest.approx(0.3, abs=1e-5)
+        assert snap_y[1] == pytest.approx(0.7, abs=1e-5)
+        assert snap_z.shape == (n,)
+
 
 class TestPostArgsortFusion:
 
