@@ -976,6 +976,9 @@ class BlockList:
         self.num_particles = N
         tpb = 256
 
+        # 36-byte D→H transfer for cell-grid sizing; rebuild is not the
+        # hot path (AGENTS.md P1). cell_assign below reads d_pbc_matrix
+        # on-device, so this is the only host-side PBC read in rebuild.
         pbc_matrix_host = gpu_context.d_pbc_matrix.get().reshape(3, 3)
         self._compute_cell_grid(pbc_matrix_host, N)
 
