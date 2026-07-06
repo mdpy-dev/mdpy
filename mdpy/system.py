@@ -5,8 +5,29 @@ import numpy as np
 from mdpy import env
 from mdpy.core.block_list import BlockList
 from mdpy.core.topology import build_exclusion_map_gpu, permute_exclusion_pairs_gpu
-from mdpy.core._rebuild_kernels import compile_rebuild_kernels
 from mdpy.core.gpu_context import GPUContext
+
+_INVERT_PERMUTATION_KERNEL_SRC = r"""
+extern "C" __global__
+void invert_permutation_kernel(
+    int* out, const int* __restrict__ perm, int N
+) {
+    /* out[perm[i]] = i  =>  out is the inverse of perm */
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < N) out[perm[i]] = i;
+}
+"""
+
+_invert_permutation_kernel = None
+
+
+def _get_invert_permutation_kernel():
+    global _invert_permutation_kernel
+    if _invert_permutation_kernel is None:
+        _invert_permutation_kernel = cp.RawKernel(
+            _INVERT_PERMUTATION_KERNEL_SRC, "invert_permutation_kernel"
+        )
+    return _invert_permutation_kernel
 
 
 class System:
@@ -289,17 +310,17 @@ class System:
         d_remap = bl.d_pdb_to_sorted
 
         if self._d_cached_unique_i is not None:
-            d_composed_perm = bl._pool_get("composed_perm", N, env.NUMPY_INT)
-            rk = compile_rebuild_kernels()
+            d_inverse_perm = bl._pool_get("inverse_perm", N, env.NUMPY_INT)
+            kernel = _get_invert_permutation_kernel()
             grid = ((N + 255) // 256,)
-            rk["compose_perm"](grid, (256,), (d_composed_perm, perm_gpu, np.int32(N)))
+            kernel(grid, (256,), (d_inverse_perm, perm_gpu, np.int32(N)))
             pool = self._excl_pool_B if self._excl_flip else self._excl_pool_A
             self._excl_flip = not self._excl_flip
             result = permute_exclusion_pairs_gpu(
                 self._d_cached_unique_i,
                 self._d_cached_unique_j,
                 self._d_cached_unique_scale,
-                d_composed_perm,
+                d_inverse_perm,
                 N,
                 pool,
             )

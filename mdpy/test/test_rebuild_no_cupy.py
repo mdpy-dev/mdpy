@@ -98,35 +98,16 @@ def test_permute_state_arrays_no_alloc_on_second_rebuild():
     assert ptrs_B_before == ptrs_B_after, "pool_B was reallocated"
 
 
-def test_fill_index_kernel():
+def test_invert_permutation_kernel():
     import cupy as cp
-    from mdpy.core._rebuild_kernels import compile_rebuild_kernels
-    k = compile_rebuild_kernels()
-    out = cp.empty(100, dtype=cp.int32)
-    k["fill_index"]((1,), (100,), (out, np.int32(100)))
-    cp.cuda.Device().synchronize()
-    assert (out.get() == np.arange(100)).all()
-
-def test_compose_perm_kernel():
-    import cupy as cp
-    from mdpy.core._rebuild_kernels import compile_rebuild_kernels
-    k = compile_rebuild_kernels()
+    from mdpy.system import _get_invert_permutation_kernel
+    kernel = _get_invert_permutation_kernel()
     perm = cp.array([3, 1, 0, 2], dtype=cp.int32)
     out = cp.empty(4, dtype=cp.int32)
-    k["compose_perm"]((1,), (4,), (out, perm, np.int32(4)))
+    kernel((1,), (4,), (out, perm, np.int32(4)))
     cp.cuda.Device().synchronize()
     # out[perm[i]] = i => out[3]=0, out[1]=1, out[0]=2, out[2]=3
     assert (out.get() == [2, 1, 3, 0]).all()
-
-def test_copy_int32_kernel():
-    import cupy as cp
-    from mdpy.core._rebuild_kernels import compile_rebuild_kernels
-    k = compile_rebuild_kernels()
-    src = cp.array([10, 20, 30, 40], dtype=cp.int32)
-    dst = cp.empty(4, dtype=cp.int32)
-    k["copy_int32"]((1,), (4,), (src, dst, np.int32(4)))
-    cp.cuda.Device().synchronize()
-    assert (dst.get() == src.get()).all()
 
 
 def test_no_cp_arange_in_permute_path():
