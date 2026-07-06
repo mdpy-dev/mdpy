@@ -1252,3 +1252,60 @@ class TestSnapshotPostWrapIntegration:
         assert max_gpu < box, (
             f"GPU positions out of box (max={max_gpu})"
         )
+
+    def test_conditional_rebuild_skips_when_displacement_small(self):
+        """update_neighbor_list should NOT rebuild when no particle moved.
+
+        After the fix: rebuild is triggered by the displacement flag, not
+        by an unconditional timer. If positions don't change, the flag stays
+        0 and rebuild is skipped indefinitely.
+        """
+        from mdpy.system import System
+
+        n = 4
+        builder = Builder()
+        builder.set_particles(
+            masses=np.ones(n, dtype=np.float32),
+            charges=np.zeros(n, dtype=np.float32),
+            particle_types=np.zeros(n, dtype=np.int32),
+        )
+        builder.build_exclusion_map()
+        topology, _ = builder.build()
+
+        box = 50.0
+        pbc_matrix = np.eye(3, dtype=np.float32) * box
+        system = System(topology)
+        system.upload_pbc(pbc_matrix)
+        system._cutoff = 10.0
+        system._skin = 2.0
+
+        positions = np.array([
+            [1.0, 1.0, 1.0],
+            [2.0, 1.0, 1.0],
+            [3.0, 1.0, 1.0],
+            [4.0, 1.0, 1.0],
+        ], dtype=np.float32)
+        velocities = np.zeros((n, 3), dtype=np.float32)
+        system.upload_positions(positions)
+        system.upload_velocities(velocities)
+
+        system.update_neighbor_list(force_rebuild=True)
+
+        # Monkey-patch to count _do_rebuild calls
+        original_do_rebuild = system._do_rebuild
+        rebuild_calls = [0]
+        def counting_do_rebuild(*args, **kwargs):
+            rebuild_calls[0] += 1
+            return original_do_rebuild(*args, **kwargs)
+        system._do_rebuild = counting_do_rebuild
+
+        # Call update_neighbor_list many times without moving positions.
+        # sync_interval=3 so the flag-read path triggers frequently.
+        for _ in range(30):
+            system.update_neighbor_list(sync_interval=3)
+
+        # Old code rebuilds ~10 times (every sync_interval steps, unconditionally).
+        # New code should rebuild 0 times (no displacement, flag stays 0).
+        assert rebuild_calls[0] == 0, (
+            f"Expected 0 rebuilds (no displacement), got {rebuild_calls[0]}"
+        )

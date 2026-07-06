@@ -180,25 +180,22 @@ class System:
             self._step_counter = 0
             return
 
-        needs_sync = self._block_list.check_rebuild_async(positions_soa)
-        if needs_sync:
-            cp.cuda.Stream.null.synchronize()
-            self._do_rebuild(positions_soa, force=True)
-            self._step_counter = 0
-            return
+        # Launch async displacement check (no sync, no readback).
+        # check_rebuild_async accumulates the sticky flag: any step where a
+        # particle exceeds skin/2 displacement sets d_rebuild_flag=1
+        # permanently until we read and reset it.
+        self._block_list.check_rebuild_async(positions_soa)
         self._step_counter += 1
         if self._step_counter < sync_interval:
             return
-        # No sync, no flag readback. Always launch a full rebuild (force=True).
-        #
-        # The GPU-side flag check + conditional_fill infrastructure IS in place
-        # (cell_assign/counting_scatter skip when flag=0, block_atoms/d_counters
-        # are preserved). But _permute_all_arrays applies d_raw_order
-        # unconditionally — when flag=0 and counting_scatter skips, d_raw_order
-        # is stale, and re-applying it double-permutes the already-sorted state
-        # arrays, scrambling positions. Until permute is also made flag-aware
-        # (or moved into the GPU rebuild chain), we use force=True.
-        self._do_rebuild(positions_soa, force=True)
+        # Every sync_interval steps: sync once, read the accumulated flag.
+        # If any particle exceeded skin/2 since the last reset, rebuild.
+        # Otherwise skip — positions haven't moved enough to invalidate
+        # the neighbor list.
+        flag = self._block_list.read_flag_sync()
+        if flag == 1:
+            self._do_rebuild(positions_soa, force=True)
+        self._block_list.reset_flag()
         self._step_counter = 0
 
     def _do_rebuild(self, positions_soa, *, force=False):
