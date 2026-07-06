@@ -8,7 +8,7 @@ from the GPU.
 import numpy as np
 import pytest
 from mdpy import env
-from mdpy.core.topology import Builder
+from mdpy.core.topology import Builder, permute_exclusion_pairs_gpu
 from mdpy.core.block_list import BlockList, BLOCK_SIZE
 from mdpy.core.gpu_context import GPUContext
 
@@ -569,3 +569,154 @@ class TestWrapCorrectFlagGuard:
         assert np.allclose(prev_np, -1.0), (
             f"flag=1 should shift prev 3.0 -> -1.0, got {prev_np[0]}"
         )
+
+
+class TestComposePermFlagGuard:
+    """compose_perm kernel must skip entirely when d_rebuild_flag=0.
+
+    Without the guard, calling the kernel on a no-rebuild step would
+    overwrite d_composed_perm with out[perm[i]] = i, producing a stale
+    composed permutation that double-permutes the exclusion pairs.
+    """
+
+    def test_flag_zero_skips_compose_perm(self):
+        """When flag=0 the kernel must not write to out. Verified by
+        pre-filling out with a sentinel: if the kernel ran it would
+        overwrite the sentinel with out[perm[i]] = i."""
+        import cupy as cp
+        from mdpy.core._rebuild_kernels import compile_rebuild_kernels
+
+        N = 1000
+        perm = cp.arange(N, 0, -1, dtype=cp.int32)
+        sentinel = -777
+        out = cp.full(N, sentinel, dtype=cp.int32)
+        flag = cp.array([0], dtype=cp.int32)
+
+        rk = compile_rebuild_kernels()
+        grid = ((N + 255) // 256,)
+        rk["compose_perm"](grid, (256,), (out, perm, np.int32(N), flag))
+        cp.cuda.Device().synchronize()
+
+        out_np = cp.asnumpy(out)
+        assert np.all(out_np == sentinel), (
+            "flag=0 compose_perm wrote to out — guard failed"
+        )
+
+    def test_flag_one_actually_writes(self):
+        """Sanity check proving the flag=0 test above is non-vacuous:
+        with flag=1 the kernel runs and out[perm[i]] = i."""
+        import cupy as cp
+        from mdpy.core._rebuild_kernels import compile_rebuild_kernels
+
+        N = 4
+        perm = cp.array([3, 1, 0, 2], dtype=cp.int32)
+        out = cp.full(N, -777, dtype=cp.int32)
+        flag = cp.array([1], dtype=cp.int32)
+
+        rk = compile_rebuild_kernels()
+        rk["compose_perm"]((1,), (N,), (out, perm, np.int32(N), flag))
+        cp.cuda.Device().synchronize()
+
+        # out[perm[i]] = i => out[3]=0, out[1]=1, out[0]=2, out[2]=3
+        np.testing.assert_array_equal(cp.asnumpy(out), [2, 1, 3, 0])
+
+
+class TestExclusionPairsFlagGuard:
+    """permute_exclusion_pairs_gpu's three internal kernels (permute_pairs,
+    count_row, scatter_pairs) must each skip when d_rebuild_flag=0.
+
+    Without the guards, a no-rebuild step would double-permute the cached
+    exclusion pair indices and rewrite the CSR layout from stale data.
+    """
+
+    def test_flag_zero_skips_all_three_kernels(self):
+        """When flag=0, permute_pairs and scatter_pairs must not write to
+        their output buffers, and count_row must not atomicAdd to d_count.
+
+        Verified by pre-filling the pool's kernel-output buffers with
+        sentinels: if any kernel ran it would overwrite the sentinel.
+
+        Note: d_count is zeroed by _excl_get(fill=0) and d_offset is then
+        written by cp.cumsum — both cupy ops that run regardless of flag.
+        With flag=0, count_row skips so d_count stays 0 and d_offset is
+        cumsum-of-zeros. With flag=1, count_row would make d_count nonzero.
+        """
+        import cupy as cp
+
+        num_particles = 5
+        num_pairs = 3
+        cached_i = cp.array([0, 1, 2], dtype=cp.int32)
+        cached_j = cp.array([1, 2, 3], dtype=cp.int32)
+        cached_scale = cp.array([0.0, 0.0, 0.0], dtype=cp.float32)
+        composed_perm = cp.array([2, 0, 1, 3, 4], dtype=cp.int32)
+
+        sentinel_i = -888
+        sentinel_f = -777.0
+
+        # Pre-fill the pool's kernel-output buffers with sentinels.
+        # _excl_get returns these as-is (no fill) when they already exist.
+        pool = {
+            ("new_i", np.int32): cp.full(num_pairs, sentinel_i, dtype=cp.int32),
+            ("new_j", np.int32): cp.full(num_pairs, sentinel_i, dtype=cp.int32),
+            ("new_scale", np.float32): cp.full(num_pairs, sentinel_f, dtype=cp.float32),
+            ("neighbors", np.int32): cp.full(num_pairs, sentinel_i, dtype=cp.int32),
+            ("scale_out", np.float32): cp.full(num_pairs, sentinel_f, dtype=cp.float32),
+        }
+
+        flag = cp.array([0], dtype=cp.int32)
+        d_offset, d_neighbors, d_scale_out, d_new_i, d_new_j, d_new_scale = \
+            permute_exclusion_pairs_gpu(
+                cached_i, cached_j, cached_scale,
+                composed_perm, num_particles, pool, flag,
+            )
+
+        # permute_pairs skipped: new_i/j/scale keep sentinels
+        assert np.all(cp.asnumpy(d_new_i) == sentinel_i), (
+            "flag=0 permute_pairs wrote to d_new_i — guard failed")
+        assert np.all(cp.asnumpy(d_new_j) == sentinel_i), (
+            "flag=0 permute_pairs wrote to d_new_j — guard failed")
+        assert np.all(cp.asnumpy(d_new_scale) == sentinel_f), (
+            "flag=0 permute_pairs wrote to d_new_scale — guard failed")
+        # scatter_pairs skipped: neighbors/scale_out keep sentinels
+        assert np.all(cp.asnumpy(d_neighbors) == sentinel_i), (
+            "flag=0 scatter_pairs wrote to d_neighbors — guard failed")
+        assert np.all(cp.asnumpy(d_scale_out) == sentinel_f), (
+            "flag=0 scatter_pairs wrote to d_scale_out — guard failed")
+        # count_row skipped: d_count stayed 0 (zeroed by _excl_get),
+        # so d_offset = cumsum(zeros) = all zeros. If count_row had run,
+        # d_count would be nonzero and d_offset would reflect row counts.
+        offset_np = cp.asnumpy(d_offset)
+        assert np.all(offset_np == 0), (
+            "flag=0 count_row wrote to d_count — guard failed "
+            f"(d_offset={offset_np.tolist()})"
+        )
+
+    def test_flag_one_produces_correct_output(self):
+        """Sanity check proving the flag=0 test is non-vacuous: with
+        flag=1 all three kernels run and produce the correctly-permuted,
+        CSR-sorted exclusion layout."""
+        import cupy as cp
+
+        num_particles = 5
+        cached_i = cp.array([0, 1, 2], dtype=cp.int32)
+        cached_j = cp.array([1, 2, 3], dtype=cp.int32)
+        cached_scale = cp.array([0.0, 0.0, 0.0], dtype=cp.float32)
+        composed_perm = cp.array([2, 0, 1, 3, 4], dtype=cp.int32)
+
+        pool = {}
+        flag = cp.array([1], dtype=cp.int32)
+        d_offset, d_neighbors, d_scale_out, d_new_i, d_new_j, d_new_scale = \
+            permute_exclusion_pairs_gpu(
+                cached_i, cached_j, cached_scale,
+                composed_perm, num_particles, pool, flag,
+            )
+
+        # permute_pairs: new_i[k] = perm[cached_i[k]]
+        np.testing.assert_array_equal(cp.asnumpy(d_new_i), [2, 0, 1])
+        np.testing.assert_array_equal(cp.asnumpy(d_new_j), [0, 1, 3])
+        # count_row: rows 0,1,2 each have 1 pair
+        # offset = cumsum([0,1,1,1,0,0]) = [0,1,2,3,3,3]
+        np.testing.assert_array_equal(
+            cp.asnumpy(d_offset), [0, 1, 2, 3, 3, 3])
+        # scatter_pairs: neighbors sorted by row (row0->j=1, row1->j=3, row2->j=0)
+        np.testing.assert_array_equal(cp.asnumpy(d_neighbors), [1, 3, 0])
