@@ -1139,8 +1139,6 @@ class BlockList:
 
         self._is_initialized = True
 
-        self.d_rebuild_flag[0] = 0
-
         raw_order = self.d_raw_order
         if prev_sorted_to_pdb is not None:
             self.d_sorted_to_pdb = prev_sorted_to_pdb[raw_order]

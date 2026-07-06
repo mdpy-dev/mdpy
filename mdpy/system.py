@@ -217,6 +217,7 @@ class System:
         for term in self.force_terms:
             if hasattr(term, "bind_sorted"):
                 term.bind_sorted(self.topology, self._block_list, self.gpu)
+        self._block_list.d_rebuild_flag[0] = 0
 
     def dump_energy(self):
         if self.gpu.d_energy_accumulator is None:
