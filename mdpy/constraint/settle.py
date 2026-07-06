@@ -2,6 +2,20 @@ import cupy as cp
 import numpy as np
 from .constraint_base import ConstraintBase
 
+# SETTLE constraint algorithm for rigid water (Miyamoto & Kollman, J Comp Chem 1992).
+#
+# Notation convention used throughout this file:
+#   Vertex labels:  A = oxygen, B = hydrogen-1, C = hydrogen-2
+#   Suffix on coordinate vars:
+#     1 = unconstrained new position (after integrator step)
+#     2 = position expressed in the molecular frame
+#     3 = final rotated solution position
+#   Prefix n = "new" (e.g. nox = new-oxygen-x)
+#
+# Geometric constants (Miyamoto-Kollman eq.):
+#   ra, rb, rc = canonical triangle side lengths in the molecular frame
+#   wh = hydrogen mass fraction = m_H / (m_O + 2*m_H)
+
 _SETTLE_KERNEL = r"""
 extern "C" __global__
 void settle_kernel(
@@ -241,12 +255,12 @@ class SettleConstraint(ConstraintBase):
         mH = float(masses[water_triplets[0][1]]) if water_triplets else 1.008
 
         wohh = mO + 2.0 * mH
-        self.wh = mH / wohh
-        rc = dHH / 2.0
+        self.wh = mH / wohh           # SETTLE geometric constant: hydrogen mass fraction
+        rc = dHH / 2.0                # SETTLE geometric constant (rc): half the H-H distance
         height = np.sqrt(dOH * dOH - rc * rc)
-        self.ra = 2.0 * mH * height / wohh
-        self.rb = height - self.ra
-        self.rc = rc
+        self.ra = 2.0 * mH * height / wohh  # SETTLE geometric constant (ra): O-to-center arm
+        self.rb = height - self.ra           # SETTLE geometric constant (rb): H-to-center arm
+        self.rc = rc                          # SETTLE geometric constant (rc): half the H-H distance
         self.inv_dOH = 1.0 / dOH
         self.inv_dHH = 1.0 / dHH
 

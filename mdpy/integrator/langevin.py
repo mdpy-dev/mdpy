@@ -93,18 +93,24 @@ void langevin_baoab_kernel(
     float vy = dy / time_step;
     float vz = dz / time_step;
 
+    // B: half-kick (force half-step). This is the leading B of BAOAB; the
+    // trailing B of the previous step is folded in here because forces are
+    // recomputed between steps.
     vx += 0.5f * time_step * f_x[index] * inv_mass;
     vy += 0.5f * time_step * f_y[index] * inv_mass;
     vz += 0.5f * time_step * f_z[index] * inv_mass;
 
+    // A: half-drift (position half-step)
     float px = pos_x[index] + 0.5f * time_step * vx;
     float py = pos_y[index] + 0.5f * time_step * vy;
     float pz = pos_z[index] + 0.5f * time_step * vz;
 
+    // O: Ornstein-Uhlenbeck (stochastic velocity update)
     vx = alpha * vx + sigma * g1;
     vy = alpha * vy + sigma * g3;
     vz = alpha * vz + sigma * g5;
 
+    // A: half-drift (position half-step)
     px += 0.5f * time_step * vx;
     py += 0.5f * time_step * vy;
     pz += 0.5f * time_step * vz;
@@ -125,13 +131,31 @@ _kernels = {
 
 
 class LangevinBAOABIntegrator:
+    """Langevin dynamics integrator using the BAOAB splitting.
+
+    BAOAB = B-A-O-A-B, a symmetric split-step scheme (Leimkuhler & Matthews 2013):
+        B: half-kick (deterministic force, dt/2)
+        A: half-drift (position update, dt/2)
+        O: stochastic Ornstein-Uhlenbeck velocity update (full dt)
+        A: half-drift (position update, dt/2)
+        B: half-kick (deterministic force, dt/2)
+
+    State is stored in position-Verlet (leapfrog) form using (pos, prev_pos); the
+    velocity is reconstructed as v = (pos - prev_pos)/dt at the start of each step.
+    Because forces are recomputed between steps, the trailing B of step N merges
+    with the leading B of step N+1, so each kernel call performs B-A-O-A.
+
+    The O-step uses the damping factor `alpha = exp(-friction * time_step)` and
+    Gaussian noise scaled by
+    `sigma = sqrt(boltzmann * temperature * (1 - alpha^2) / mass)`.
+    """
 
     def __init__(self, time_step, temperature, friction):
         self.time_step = float(time_step)
         self.half_time_step = self.time_step * 0.5
         self.temperature = float(temperature)
         self.friction = float(friction)
-        self.alpha = np.float32(np.exp(-friction * time_step))
+        self.alpha = np.float32(np.exp(-friction * time_step))  # Langevin damping factor (velocity retention per step)
         self._initialized = False
         self._step_counter = 0
 

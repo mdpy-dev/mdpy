@@ -2,6 +2,26 @@ import cupy as cp
 import numpy as np
 from .constraint_base import ConstraintBase
 
+# LINCS constraint algorithm (Hess et al., J Chem Theory Comput 2008).
+#
+# Key concepts and variable naming:
+#   coupling_matrix       = the constraint coupling matrix A (off-diagonal
+#                           coupling between constraints that share an atom)
+#   coupling_denominator  = 1/(1/m_i + 1/m_j) per constraint (the "blc" in LINCS
+#                           literature), normalizes each Lagrange multiplier
+#   mass_factors          = per-coupled-constraint mass weighting factors
+#   coupled_counts/indices = graph of constraints sharing an atom (parallel solve)
+#   solution              = the linear-system solution vector (NOT solvent!)
+#
+# The solver kernel runs these phases:
+#   1. Build reference constraint directions from old positions
+#   2. Build coupling matrix  A_ij = mass_factor * (rc_i . rc_j)
+#   3. Build RHS = coupling_denominator * (rc . delta_new - target_distance)
+#   4. Initial solve via Neumann series:  solution = (I + A + ... + A^L) * rhs
+#   5. First coordinate update from the Lagrange multipliers
+#   6. Centripetal-projection refinement iterations (geometric correction,
+#      each with its own embedded Neumann-series solve)
+
 _LINCS_KERNEL = r"""
 extern "C" __global__
 void lincs_kernel(
