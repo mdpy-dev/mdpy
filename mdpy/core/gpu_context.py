@@ -561,3 +561,27 @@ class GPUContext:
             ],
             dtype=np.float32,
         )
+
+    @property
+    def box_x(self):
+        return self._box_x
+
+    @property
+    def box_y(self):
+        return self._box_y
+
+    @property
+    def box_z(self):
+        return self._box_z
+
+    @property
+    def inv_box_x(self):
+        return self._inv_box_x
+
+    @property
+    def inv_box_y(self):
+        return self._inv_box_y
+
+    @property
+    def inv_box_z(self):
+        return self._inv_box_z
