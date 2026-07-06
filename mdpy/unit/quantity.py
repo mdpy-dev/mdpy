@@ -36,7 +36,7 @@ class Quantity:
                 if self._value.shape == ():
                     self._value = np.array([self._value.item()]).astype(env.NUMPY_FLOAT)
 
-            if unit.is_dimension_less():
+            if unit.is_dimensionless():
                 self._value *= unit.relative_value
                 self._unit = deepcopy(no_unit)
             else:
@@ -53,9 +53,9 @@ class Quantity:
             '%s %s' %(self._value*self._unit.relative_value, self._unit.base_dimension)
         )
 
-    def is_dimension_less(self):
+    def is_dimensionless(self):
         '''
-        is_dimension_less judges wether ``self`` is dimensionless
+        is_dimensionless judges wether ``self`` is dimensionless
 
         Returns
         -------
@@ -63,7 +63,7 @@ class Quantity:
             - True, the quantity is dimensionless
             - False, the quantity isn't dimensionless
         '''
-        if self._unit.is_dimension_less():
+        if self._unit.is_dimensionless():
             return True
         else:
             return False
@@ -121,7 +121,7 @@ class Quantity:
                     %(self._unit.base_dimension, other.unit.base_dimension)
                 )
         # Value judgement, without relative value like 10*angstrom == 10
-        elif self.is_dimension_less():
+        elif self.is_dimensionless():
             return np.isclose(self.value, other)
         else:
             return NotImplementedError(

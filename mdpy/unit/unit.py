@@ -26,9 +26,9 @@ class Unit:
         self._base_dimension = base_dimension
         self._relative_value = env.UNIT_FLOAT(relative_value) # The relative value to the normal unit like angstrom in Length 
 
-    def is_dimension_less(self):
+    def is_dimensionless(self):
         '''
-        is_dimension_less judges wether ``self`` is dimensionless
+        is_dimensionless judges wether ``self`` is dimensionless
 
         Returns
         -------
@@ -36,7 +36,7 @@ class Unit:
             - True, the unit is dimensionless
             - False, the unit isn't dimensionless
         '''        
-        if self._base_dimension.is_dimension_less():
+        if self._base_dimension.is_dimensionless():
             return True
         else:
             return False

@@ -3,6 +3,7 @@ __maintainer__ = "Zhenyu Wei"
 __copyright__ = "(C)Copyright 2021-present, mdpy organization"
 __license__ = "BSD"
 
+import warnings
 
 UNIT_PRECISION = 1e-6
 QUANTITY_PRECISION = 1e-6
@@ -12,17 +13,17 @@ from .unit import Unit
 
 # BaseDimension
 from .unit_definition import length, mass, time, temperature, charge, mol_dimension
-from .unit_definition import force, energy, power, velocity, accelration
+from .unit_definition import force, energy, power, velocity, acceleration
 
 # Unit
-from .unit_definition import meter, decimeter, centermeter, millimeter, micrometer, nanometer, angstrom
-from .unit_definition import kilogram, gram, amu, dalton
+from .unit_definition import meter, decimeter, centimeter, millimeter, micrometer, nanometer, angstrom
+from .unit_definition import kilogram, gram, dalton
 from .unit_definition import day, hour, minute
 from .unit_definition import second, millisecond, microsecond, nanosecond, picosecond, femtosecond
 from .unit_definition import kelvin
 from .unit_definition import coulomb, e, ampere, volt, ohm, farad, siemens, hertz
 from .unit_definition import mol, kilomol
-from .unit_definition import joule, kilojoule, joule_permol, kilojoule_permol, calorie, kilocalorie, calorie_premol, kilocalorie_permol, ev, hartree
+from .unit_definition import joule, kilojoule, joule_permol, kilojoule_permol, calorie, kilocalorie, calorie_permol, kilocalorie_permol, electronvolt, hartree
 from .unit_definition import newton, kilonewton
 from .unit_definition import kilojoule_permol_over_angstrom, kilojoule_permol_over_nanometer, kilocalorie_permol_over_angstrom, kilocalorie_permol_over_nanometer
 from .unit_definition import watt, kilowatt
@@ -37,7 +38,7 @@ default_mol_unit = mol
 
 default_frequency_unit = 1 / default_time_unit
 default_velocity_unit = default_length_unit / default_time_unit
-default_accelrated_velocity_unit = default_velocity_unit / default_time_unit
+default_acceleration_unit = default_velocity_unit / default_time_unit
 default_energy_unit = default_mass_unit * default_length_unit**2 / default_time_unit**2
 default_power_unit = default_energy_unit / default_time_unit
 default_force_unit = default_energy_unit / default_length_unit
@@ -62,19 +63,19 @@ __all__ = [
 
     'default_length_unit', 'default_mass_unit', 'default_time_unit', 
     'default_temperature_unit', 'default_charge_unit', 'default_mol_unit',
-    'default_frequency_unit', 'default_velocity_unit', 'default_accelrated_velocity_unit',
+    'default_frequency_unit', 'default_velocity_unit', 'default_acceleration_unit',
     'default_energy_unit', 'default_power_unit', 'default_force_unit', 
     'default_current_unit', 'default_voltage_unit', 'default_resistance_unit',
     'default_capacitance_unit', 'default_conductance_unit', 'default_electric_intensity_unit',
 
-    'meter', 'decimeter', 'centermeter', 'millimeter', 'micrometer', 'nanometer', 'angstrom',
-    'kilogram', 'gram', 'amu', 'dalton',
+    'meter', 'decimeter', 'centimeter', 'millimeter', 'micrometer', 'nanometer', 'angstrom',
+    'kilogram', 'gram', 'dalton',
     'day', 'hour', 'minute',
     'second', 'millisecond', 'microsecond', 'nanosecond', 'picosecond', 'femtosecond',
     'kelvin',
     'coulomb', 'e', 'ampere', 'volt', 'ohm', 'farad', 'siemens', 'hertz',
     'mol', 'kilomol',
-    'joule', 'kilojoule',  'joule_permol', 'kilojoule_permol', 'calorie', 'kilocalorie',  'calorie_premol', 'kilocalorie_permol', 'ev', 'hartree',
+    'joule', 'kilojoule',  'joule_permol', 'kilojoule_permol', 'calorie', 'kilocalorie',  'calorie_permol', 'kilocalorie_permol', 'electronvolt', 'hartree',
     'newton', 'kilonewton',
     'kilojoule_permol_over_angstrom', 'kilojoule_permol_over_nanometer', 
     'kilocalorie_permol_over_angstrom', 'kilocalorie_permol_over_nanometer',
@@ -82,3 +83,17 @@ __all__ = [
     
     'NA', 'KB', 'EPSILON0'
 ]
+
+
+def __getattr__(name):
+    if name == 'amu':
+        warnings.warn(
+            "'amu' is deprecated and will be removed in a future release; "
+            "use 'dalton' (the IUPAC-preferred name) instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        from .unit_definition import amu
+        globals()[name] = amu
+        return amu
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

@@ -24,7 +24,7 @@ force = mass * length / time**2
 energy = force * length
 power = energy / time
 velocity = length / time
-accelration = length / time**2
+acceleration = length / time**2
 
 ######################
 ## Constant Unit    ##
@@ -38,7 +38,7 @@ no_unit = Unit(constant, 1)
 
 meter = Unit(length, 1)
 decimeter = Unit(length, 1e-1)
-centermeter = Unit(length, 1e-2)
+centimeter = Unit(length, 1e-2)
 millimeter = Unit(length, 1e-3)
 micrometer = Unit(length, 1e-6)
 nanometer = Unit(length, 1e-9)
@@ -113,10 +113,10 @@ kilojoule_permol = Unit(energy, 1e3/6.0221e23)
 
 calorie = Unit(energy, 4.184)
 kilocalorie = Unit(energy, 4.184e3)
-calorie_premol = Unit(energy, 4.184/6.0221e23)
+calorie_permol = Unit(energy, 4.184/6.0221e23)
 kilocalorie_permol = Unit(energy, 4.184e3/6.0221e23)
 
-ev = Unit(energy, 1.60217662e-19)
+electronvolt = Unit(energy, 1.60217662e-19)
 hartree = Unit(energy, 4.3597447222071e-18)
 
 ######################
@@ -124,7 +124,7 @@ hartree = Unit(energy, 4.3597447222071e-18)
 ######################
 
 newton = Unit(force, 1)
-kilonewton = Unit(force, 100)
+kilonewton = Unit(force, 1e3)
 kilojoule_permol_over_angstrom = kilojoule_permol / angstrom
 kilojoule_permol_over_nanometer = kilojoule_permol / nanometer
 kilocalorie_permol_over_angstrom = kilocalorie_permol / angstrom

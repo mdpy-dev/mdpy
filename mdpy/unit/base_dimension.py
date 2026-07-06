@@ -50,14 +50,14 @@ class BaseDimension:
             'm': self._length_dimension, 
             's': self._time_dimension, 
             'kg': self._mass_dimension,
-            'k': self._temperature_dimension, 
-            'c': self._charge_dimension, 
+            'K': self._temperature_dimension, 
+            'C': self._charge_dimension, 
             'mol': self._mol_dimension
         }
         # The name of base dimension will be replaced with the name of its corresponding SI Unit
         # Like m for length and kg for mass
         self._dimension_name = [
-            'm', 's', 'kg', 'k', 'c', 'mol'
+            'm', 's', 'kg', 'K', 'C', 'mol'
         ]
         self._generate_dimension_name()
 
@@ -198,9 +198,9 @@ class BaseDimension:
             self._mol_dimension / 2
         )
 
-    def is_dimension_less(self):
+    def is_dimensionless(self):
         '''
-        is_dimension_less judges wether ``self`` is a dimensionless
+        is_dimensionless judges wether ``self`` is a dimensionless
 
         Returns
         -------
