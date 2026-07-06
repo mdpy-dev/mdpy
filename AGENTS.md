@@ -312,7 +312,7 @@ for i in range(n_steps):
 
 Key contracts:
 - `System(topology)` — no pbc/cutoff in constructor. PBC via `upload_pbc()`; cutoff comes from the first force term's `_cutoff`.
-- Positions **and** velocities must be uploaded before any `compute_forces()` / `update_neighbor_list()` / `minimize()` (guarded by `_ensure_uploaded()`).
+- Positions **and** velocities must be uploaded before any `compute_forces()` / `update_neighbor_list()` (guarded by `_ensure_uploaded()`).
 - `dump_state()` / `dump_forces()` / `dump_energy()` are the **only** GPU→CPU readback paths. Call them at explicit checkpoints, never inside the step loop (see GPU-Only §4).
 - The per-step order is fixed: neighbor list → forces → integrate → constraints. `apply_constraints` runs after the integrator moves positions.
 
@@ -580,7 +580,7 @@ Scalar reads for kernel launch sizing and control flow. These are acceptable per
 | `block_list.py:973` | `int(d_num_blocks[0])`, `int(d_total_padded[0])` | Block count / padded size for array sizing |
 | `block_list.py:1089` | `int(self._d_counters[0])` | Block-pair count for array sizing |
 | `block_list.py:1284-1285` | `int(self._d_classify_excl_counter[0])`, `int(self._d_classify_main_counter[0])` | Exclusion/main block-pair counts |
-| `block_list.py:1334` | `int(self.d_rebuild_flag[0])` | Rebuild decision (sync-interval checkpoint) |
+| `system.py:193` | `int(self._block_list.d_rebuild_flag[0])` | `_do_rebuild` scalar gate — one sync per sync_interval steps (Option A). Gates all Python-level side effects before any kernel runs. |
 
 ### P2 — Dead Code to Remove
 
