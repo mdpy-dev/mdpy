@@ -833,6 +833,15 @@ class BlockList:
 
         self._pool = {}
 
+        # Exclusion pair-list cache (PDB order on first build; re-permuted each
+        # rebuild to current sorted order). Owned exclusively by BlockList.
+        self._d_unique_i = None
+        self._d_unique_j = None
+        self._d_unique_scale = None
+        self._excl_pool_A = {}
+        self._excl_pool_B = {}
+        self._excl_flip = False
+
     def _pool_get(self, name, size, dtype, fill=None):
         """Return a reusable buffer of the given size. Allocates on first call
         or when size grows; otherwise returns the cached array. If fill is not
@@ -1190,34 +1199,59 @@ class BlockList:
         self._build_masks_gpu(topology)
         self._extract_exclusion_block_pairs()
 
-    def set_gpu_exclusion(self, d_offset, d_neighbors, d_scale):
-        self._d_excl_offset = d_offset
-        self._d_excl_neighbors = d_neighbors
-        self._d_excl_scale = d_scale
+    def _build_exclusion_state(self, topology):
+        """Build or re-permute the exclusion pair list into current sorted order.
+
+        First call: builds unique pairs from topology's PDB-order bond graph and
+        caches them. EVERY call (including the first) then permutes the cached
+        pairs by d_pdb_to_sorted to produce CSR arrays in the current sorted
+        order. On the first rebuild d_pdb_to_sorted = pdb->sorted_1; on rebuild
+        k>1 it = sorted_{k-1}->sorted_k. Either way the permutation correctly
+        re-indexes the cached pairs into the current sorted order.
+
+        Topology is never mutated -- read only.
+        """
+        from mdpy.core.topology import (
+            build_exclusion_map_gpu, permute_exclusion_pairs_gpu,
+        )
+
+        N = topology.num_particles
+
+        if self._d_unique_i is None:
+            _, d_pair_j, d_pair_scale, d_pair_i = build_exclusion_map_gpu(
+                topology, scale_14=1.0
+            )
+            self._d_unique_i = d_pair_i
+            self._d_unique_j = d_pair_j
+            self._d_unique_scale = d_pair_scale
+
+        pool = self._excl_pool_B if self._excl_flip else self._excl_pool_A
+        self._excl_flip = not self._excl_flip
+        result = permute_exclusion_pairs_gpu(
+            self._d_unique_i,
+            self._d_unique_j,
+            self._d_unique_scale,
+            self.d_pdb_to_sorted,
+            N,
+            pool,
+        )
+        self._d_excl_offset = result[0]
+        self._d_excl_neighbors = result[1]
+        self._d_excl_scale = result[2]
+        self._d_unique_i = result[3]
+        self._d_unique_j = result[4]
+        self._d_unique_scale = result[5]
+        self._total_exclusion_pairs = int(result[1].shape[0])
         self._d_reverse_offset = None
         self._d_reverse_neighbors = None
         self._d_reverse_scale = None
-        self._total_exclusion_pairs = int(d_neighbors.shape[0])
-
-    def _upload_exclusion(self, topology):
-        if self._d_excl_offset is not None:
-            return
-        self._d_excl_offset = cp.asarray(
-            np.ascontiguousarray(topology.exclusion_offset, dtype=env.NUMPY_INT)
-        )
-        self._d_excl_neighbors = cp.asarray(
-            np.ascontiguousarray(topology.exclusion_neighbors, dtype=env.NUMPY_INT)
-        )
-        self._d_excl_scale = cp.asarray(
-            np.ascontiguousarray(topology.exclusion_scale, dtype=env.NUMPY_FLOAT)
-        )
 
     def _build_masks_gpu(self, topology):
         if self.num_block_pairs == 0:
             self.d_exclusion_masks = cp.empty(0, dtype=np.uint32)
             return
 
-        self._upload_exclusion(topology)
+        self._build_exclusion_state(topology)
         N = self.num_particles
         tpb = 256
 

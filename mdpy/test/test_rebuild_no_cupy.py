@@ -98,18 +98,6 @@ def test_permute_state_arrays_no_alloc_on_second_rebuild():
     assert ptrs_B_before == ptrs_B_after, "pool_B was reallocated"
 
 
-def test_invert_permutation_kernel():
-    import cupy as cp
-    from mdpy.system import _get_invert_permutation_kernel
-    kernel = _get_invert_permutation_kernel()
-    perm = cp.array([3, 1, 0, 2], dtype=cp.int32)
-    out = cp.empty(4, dtype=cp.int32)
-    kernel((1,), (4,), (out, perm, np.int32(4)))
-    cp.cuda.Device().synchronize()
-    # out[perm[i]] = i => out[3]=0, out[1]=1, out[0]=2, out[2]=3
-    assert (out.get() == [2, 1, 3, 0]).all()
-
-
 def test_no_cp_arange_in_permute_path():
     """The permute path must not use cp.arange."""
     import inspect
@@ -125,15 +113,15 @@ def test_excl_buffers_no_aliasing_across_rebuilds():
     previous call's output. Aliasing would corrupt the permute_pairs kernel,
     which reads d_cached_* and writes d_new_* simultaneously."""
     s = _build_ion()
-    # Prime: first rebuild goes through the else-branch (build_exclusion_map_gpu,
-    # no pool). Only subsequent rebuilds use permute_exclusion_pairs_gpu.
+    # Every rebuild (including the first) permutes via the double-buffered
+    # pool owned by BlockList._build_exclusion_state.
+    s.update_neighbor_list(force_rebuild=True)  # prime (builds + permutes)
+    bl = s.block_list
     s.update_neighbor_list(force_rebuild=True)
-    # Now each rebuild calls permute_exclusion_pairs_gpu with double-buffering.
-    s.update_neighbor_list(force_rebuild=True)  # pool A
-    ptr_A = s._d_cached_unique_i.data.ptr
-    s.update_neighbor_list(force_rebuild=True)  # pool B
-    ptr_B = s._d_cached_unique_i.data.ptr
+    ptr_A = bl._d_unique_i.data.ptr
+    s.update_neighbor_list(force_rebuild=True)
+    ptr_B = bl._d_unique_i.data.ptr
     assert ptr_A != ptr_B, "Double-buffering failed: same buffer reused (aliasing risk)"
-    s.update_neighbor_list(force_rebuild=True)  # pool A again
-    ptr_A2 = s._d_cached_unique_i.data.ptr
+    s.update_neighbor_list(force_rebuild=True)
+    ptr_A2 = bl._d_unique_i.data.ptr
     assert ptr_A2 == ptr_A, "Double-buffering flip pattern wrong (should cycle A->B->A)"

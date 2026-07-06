@@ -2,32 +2,8 @@ from __future__ import annotations
 
 import cupy as cp
 import numpy as np
-from mdpy import env
 from mdpy.core.block_list import BlockList
-from mdpy.core.topology import build_exclusion_map_gpu, permute_exclusion_pairs_gpu
 from mdpy.core.gpu_context import GPUContext
-
-_INVERT_PERMUTATION_KERNEL_SRC = r"""
-extern "C" __global__
-void invert_permutation_kernel(
-    int* out, const int* __restrict__ perm, int N
-) {
-    /* out[perm[i]] = i  =>  out is the inverse of perm */
-    int i = blockIdx.x * blockDim.x + threadIdx.x;
-    if (i < N) out[perm[i]] = i;
-}
-"""
-
-_invert_permutation_kernel = None
-
-
-def _get_invert_permutation_kernel():
-    global _invert_permutation_kernel
-    if _invert_permutation_kernel is None:
-        _invert_permutation_kernel = cp.RawKernel(
-            _INVERT_PERMUTATION_KERNEL_SRC, "invert_permutation_kernel"
-        )
-    return _invert_permutation_kernel
 
 
 class System:
@@ -51,12 +27,6 @@ class System:
         self.constraints = []
 
         self._step_counter = 0
-        self._d_cached_unique_i = None
-        self._d_cached_unique_j = None
-        self._d_cached_unique_scale = None
-        self._excl_pool_A = {}
-        self._excl_pool_B = {}
-        self._excl_flip = False
 
     def _ensure_pme_stream(self):
         if self._pme_stream is None:
@@ -276,11 +246,9 @@ class System:
         ], axis=1)
 
     def _permute_all_arrays(self):
-        N = self.topology.num_particles
         gpu = self.gpu
-        bl = self._block_list
 
-        perm_gpu = bl.d_raw_order
+        perm_gpu = self._block_list.d_raw_order
 
         for name, new_arr in gpu.permute_state_arrays(perm_gpu, [
             ("d_positions_x", gpu.d_positions_x),
@@ -300,48 +268,7 @@ class System:
         ]):
             setattr(gpu, name, new_arr)
 
-        d_remap = bl.d_pdb_to_sorted
-
-        if self._d_cached_unique_i is not None:
-            d_inverse_perm = bl._pool_get("inverse_perm", N, env.NUMPY_INT)
-            kernel = _get_invert_permutation_kernel()
-            grid = ((N + 255) // 256,)
-            kernel(grid, (256,), (d_inverse_perm, perm_gpu, np.int32(N)))
-            pool = self._excl_pool_B if self._excl_flip else self._excl_pool_A
-            self._excl_flip = not self._excl_flip
-            result = permute_exclusion_pairs_gpu(
-                self._d_cached_unique_i,
-                self._d_cached_unique_j,
-                self._d_cached_unique_scale,
-                d_inverse_perm,
-                N,
-                pool,
-            )
-            d_excl_offset = result[0]
-            d_excl_neighbors = result[1]
-            d_excl_scale = result[2]
-            self._d_cached_unique_i = result[3]
-            self._d_cached_unique_j = result[4]
-            self._d_cached_unique_scale = result[5]
-        else:
-            remap_np = cp.asnumpy(d_remap)
-            for field in (
-                "bond_indices",
-                "angle_indices",
-                "dihedral_indices",
-                "improper_indices",
-            ):
-                indices = getattr(self.topology, field, None)
-                if indices is not None and len(indices) > 0:
-                    setattr(self.topology, field, remap_np[indices])
-            d_excl_offset, d_excl_neighbors, d_excl_scale, d_unique_i = (
-                build_exclusion_map_gpu(self.topology, scale_14=1.0)
-            )
-            self._d_cached_unique_i = d_unique_i
-            self._d_cached_unique_j = d_excl_neighbors
-            self._d_cached_unique_scale = d_excl_scale
-
-        bl.set_gpu_exclusion(d_excl_offset, d_excl_neighbors, d_excl_scale)
+        d_remap = self._block_list.d_pdb_to_sorted
 
         for term in self.force_terms:
             if hasattr(term, "remap_indices_gpu"):
