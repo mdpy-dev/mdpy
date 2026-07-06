@@ -191,8 +191,10 @@ void permute_pairs_kernel(
     const int num_pairs,
     int* __restrict__ new_i,
     int* __restrict__ new_j,
-    float* __restrict__ new_scale
+    float* __restrict__ new_scale,
+    const int* __restrict__ d_rebuild_flag
 ) {
+    if (d_rebuild_flag[0] == 0) return;
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
     if (tid >= num_pairs) return;
     new_i[tid] = permutation[old_i[tid]];
@@ -206,8 +208,10 @@ extern "C" __global__
 void count_row_kernel(
     const int* __restrict__ pair_i,
     int num_pairs,
-    int* __restrict__ count
+    int* __restrict__ count,
+    const int* __restrict__ d_rebuild_flag
 ) {
+    if (d_rebuild_flag[0] == 0) return;
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
     if (tid >= num_pairs) return;
     atomicAdd(&count[pair_i[tid] + 1], 1);
@@ -224,8 +228,10 @@ void scatter_pairs_kernel(
     int num_pairs,
     int* __restrict__ neighbors_out,
     float* __restrict__ scale_out,
-    int* __restrict__ temp_offset
+    int* __restrict__ temp_offset,
+    const int* __restrict__ d_rebuild_flag
 ) {
+    if (d_rebuild_flag[0] == 0) return;
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
     if (tid >= num_pairs) return;
     int i = pair_i[tid];
@@ -417,7 +423,8 @@ def _excl_get(name, size, dtype, pool, fill=None):
 
 
 def permute_exclusion_pairs_gpu(d_cached_i, d_cached_j, d_cached_scale,
-                                 d_composed_perm, num_particles, pool):
+                                 d_composed_perm, num_particles, pool,
+                                 d_rebuild_flag):
     num_pairs = len(d_cached_i)
     if num_pairs == 0:
         d_offset = _excl_get("offset", num_particles + 1, np.int32, pool, fill=0)
@@ -436,11 +443,13 @@ def permute_exclusion_pairs_gpu(d_cached_i, d_cached_j, d_cached_scale,
     kernels['permute_pairs'](grid, (tpb,),
         (d_cached_i, d_cached_j, d_cached_scale,
          d_composed_perm, np.int32(num_pairs),
-         d_new_i, d_new_j, d_new_scale))
+         d_new_i, d_new_j, d_new_scale,
+         d_rebuild_flag))
 
     d_count = _excl_get("count", num_particles + 1, np.int32, pool, fill=0)
     kernels['count_row'](grid, (tpb,),
-        (d_new_i, np.int32(num_pairs), d_count))
+        (d_new_i, np.int32(num_pairs), d_count,
+         d_rebuild_flag))
 
     d_offset = _excl_get("offset", num_particles + 1, np.int32, pool)
     cp.cumsum(d_count, dtype=cp.int32, out=d_offset)
@@ -453,7 +462,8 @@ def permute_exclusion_pairs_gpu(d_cached_i, d_cached_j, d_cached_scale,
     kernels['scatter_pairs'](grid, (tpb,),
         (d_new_i, d_new_j, d_new_scale, d_offset,
          np.int32(num_pairs),
-         d_neighbors, d_scale_out, d_temp))
+         d_neighbors, d_scale_out, d_temp,
+         d_rebuild_flag))
 
     return d_offset, d_neighbors, d_scale_out, d_new_i, d_new_j, d_new_scale
 

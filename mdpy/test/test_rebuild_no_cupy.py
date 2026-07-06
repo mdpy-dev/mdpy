@@ -113,7 +113,8 @@ def test_compose_perm_kernel():
     k = compile_rebuild_kernels()
     perm = cp.array([3, 1, 0, 2], dtype=cp.int32)
     out = cp.empty(4, dtype=cp.int32)
-    k["compose_perm"]((1,), (4,), (out, perm, np.int32(4)))
+    flag = cp.array([1], dtype=cp.int32)
+    k["compose_perm"]((1,), (4,), (out, perm, np.int32(4), flag))
     cp.cuda.Device().synchronize()
     # out[perm[i]] = i => out[3]=0, out[1]=1, out[0]=2, out[2]=3
     assert (out.get() == [2, 1, 3, 0]).all()

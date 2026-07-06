@@ -214,7 +214,8 @@ def test_permute_fast_path_matches_full_rebuild():
 
     result = permute_exclusion_pairs_gpu(
         gpu_unique_i, gpu_neighbors, gpu_scale,
-        d_composed_perm, topology.num_particles, {})
+        d_composed_perm, topology.num_particles, {},
+        cp.array([1], dtype=cp.int32))
     d_offset, d_neighbors, d_scale = result[0], result[1], result[2]
 
     remap = cp.asnumpy(d_composed_perm)
@@ -256,6 +257,7 @@ def test_gather_three_fusion_matches_cupy():
     result = permute_exclusion_pairs_gpu(
         gpu_unique_i, gpu_neighbors, gpu_scale,
         d_composed, topology.num_particles, {},
+        cp.array([1], dtype=cp.int32),
     )
     d_offset, d_neighbors, d_scale = result[0], result[1], result[2]
 
