@@ -201,7 +201,7 @@ class System:
             force=force,
         )
         self._permute_all_arrays()
-        self.gpu.wrap_positions_with_prev_correction(self._block_list.d_rebuild_flag)
+        self.gpu.wrap_positions_with_prev_correction()
         self._block_list.capture_snapshot((
             self.gpu.d_positions_x,
             self.gpu.d_positions_y,
@@ -295,7 +295,7 @@ class System:
             ("d_prev_positions_z", gpu.d_prev_positions_z),
             ("d_masses", gpu.d_masses),
             ("d_charges", gpu.d_charges),
-        ], self._block_list.d_rebuild_flag):
+        ]):
             setattr(gpu, name, new_arr)
 
         d_remap = bl.d_pdb_to_sorted
@@ -304,7 +304,7 @@ class System:
             d_composed_perm = bl._pool_get("composed_perm", N, env.NUMPY_INT)
             rk = compile_rebuild_kernels()
             grid = ((N + 255) // 256,)
-            rk["compose_perm"](grid, (256,), (d_composed_perm, perm_gpu, np.int32(N), self._block_list.d_rebuild_flag))
+            rk["compose_perm"](grid, (256,), (d_composed_perm, perm_gpu, np.int32(N)))
             pool = self._excl_pool_B if self._excl_flip else self._excl_pool_A
             self._excl_flip = not self._excl_flip
             result = permute_exclusion_pairs_gpu(
@@ -314,7 +314,6 @@ class System:
                 d_composed_perm,
                 N,
                 pool,
-                self._block_list.d_rebuild_flag,
             )
             d_excl_offset = result[0]
             d_excl_neighbors = result[1]
@@ -344,7 +343,7 @@ class System:
 
         for term in self.force_terms:
             if hasattr(term, "remap_indices_gpu"):
-                term.remap_indices_gpu(d_remap, self._block_list.d_rebuild_flag)
+                term.remap_indices_gpu(d_remap)
 
         for constraint in self.constraints:
-            constraint.remap_indices_gpu(d_remap, self._block_list.d_rebuild_flag)
+            constraint.remap_indices_gpu(d_remap)
