@@ -14,8 +14,10 @@ void gather_sorted_kernel(
     const int* __restrict__ block_atoms,
     int total_slots,
     int num_particles,
-    float* __restrict__ dst
+    float* __restrict__ dst,
+    const int* __restrict__ d_rebuild_flag
 ) {
+    if (d_rebuild_flag[0] == 0) return;
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= total_slots) return;
     int atom_id = block_atoms[idx];
@@ -412,6 +414,7 @@ class NonbondedForce(ForceTerm):
                     np.int32(total_slots),
                     np.int32(block_list.num_particles),
                     sorted_arr,
+                    block_list.d_rebuild_flag,
                 ),
             )
             self._d_sorted_per_particle[base_name] = sorted_arr

@@ -722,6 +722,70 @@ class TestExclusionPairsFlagGuard:
         np.testing.assert_array_equal(cp.asnumpy(d_neighbors), [1, 3, 0])
 
 
+class TestGatherSortedFlagGuard:
+    """gather_sorted_kernel (used by NonbondedForce._gather_per_particle)
+    must skip entirely when d_rebuild_flag=0.
+
+    This kernel is only called from bind_sorted() which only runs during
+    rebuilds, so guarding it is safe. (pack_sorted_posq is intentionally
+    NOT guarded -- it is shared with the per-step _refresh_posq refresh.)
+    """
+
+    def test_flag_zero_skips_gather(self):
+        """When flag=0 the kernel must not write to dst. Verified by
+        pre-filling dst with a sentinel: if the kernel ran it would
+        overwrite the sentinel with src[block_atoms[idx]]."""
+        import cupy as cp
+        from mdpy.force.nonbonded_force import _GATHER_SORTED_KERNEL_SRC
+
+        num_particles = 8
+        total_slots = 32
+        src = cp.arange(num_particles, dtype=cp.float32)
+        block_atoms = cp.zeros(total_slots, dtype=cp.int32)
+        sentinel = -777.0
+        dst = cp.full(total_slots, sentinel, dtype=cp.float32)
+        flag = cp.array([0], dtype=cp.int32)
+
+        kernel = cp.RawKernel(_GATHER_SORTED_KERNEL_SRC, "gather_sorted_kernel")
+        tpb = 256
+        grid = ((total_slots + tpb - 1) // tpb,)
+        kernel(grid, (tpb,), (src, block_atoms, np.int32(total_slots),
+                              np.int32(num_particles), dst, flag))
+        cp.cuda.Device().synchronize()
+
+        dst_np = cp.asnumpy(dst)
+        assert np.all(dst_np == sentinel), (
+            "flag=0 gather_sorted wrote to dst -- guard failed"
+        )
+
+    def test_flag_one_actually_gathers(self):
+        """Sanity check proving the flag=0 test above is non-vacuous:
+        with flag=1 the kernel runs and dst[idx] = src[block_atoms[idx]]."""
+        import cupy as cp
+        from mdpy.force.nonbonded_force import _GATHER_SORTED_KERNEL_SRC
+
+        num_particles = 8
+        total_slots = 32
+        src = cp.arange(num_particles, dtype=cp.float32)
+        block_atoms_np = np.full(total_slots, -1, dtype=np.int32)
+        block_atoms_np[:num_particles] = np.arange(num_particles)[::-1]
+        block_atoms = cp.asarray(block_atoms_np)
+        dst = cp.full(total_slots, -777.0, dtype=cp.float32)
+        flag = cp.array([1], dtype=cp.int32)
+
+        kernel = cp.RawKernel(_GATHER_SORTED_KERNEL_SRC, "gather_sorted_kernel")
+        tpb = 256
+        grid = ((total_slots + tpb - 1) // tpb,)
+        kernel(grid, (tpb,), (src, block_atoms, np.int32(total_slots),
+                              np.int32(num_particles), dst, flag))
+        cp.cuda.Device().synchronize()
+
+        dst_np = cp.asnumpy(dst)
+        expected = np.zeros(total_slots, dtype=np.float32)
+        expected[:num_particles] = np.arange(num_particles)[::-1]
+        np.testing.assert_array_equal(dst_np, expected)
+
+
 class TestRemapIndicesFlagGuard:
     """remap_indices_kernel (file-local copies in force/_utils.py,
     constraint/settle.py, constraint/lincs.py) must skip entirely when
