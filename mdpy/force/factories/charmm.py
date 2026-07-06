@@ -13,7 +13,6 @@ from mdpy.force.expressions.harmonic_improper import harmonic_improper
 from mdpy.force.expressions.nb14 import nb14_lj_coulomb
 from mdpy.force.expressions.lennard_jones import lennard_jones
 from mdpy.force.pme_reciprocal_force import PMEReciprocalForce
-from mdpy.force.expressions.coulomb import coulomb
 
 
 def _create_bond_force(topology, parameter_table):
@@ -108,21 +107,6 @@ def _create_nb14_force(topology, parameter_table):
             sigma=sigma, epsilon=epsilon,
         )
     return force
-
-
-def _create_nonbonded_force(topology, parameter_table, cutoff):
-    lj = NonbondedForce(lennard_jones, cutoff)
-    lj_pair = parameter_table.type_pair_parameters['lj_pair']
-    sigma_matrix = lj_pair[0::2].astype(env.NUMPY_FLOAT)
-    epsilon_matrix = lj_pair[1::2].astype(env.NUMPY_FLOAT)
-    lj.set_pair_parameter('sigma', sigma_matrix)
-    lj.set_pair_parameter('epsilon', epsilon_matrix)
-
-    coulomb_force = NonbondedForce(coulomb, cutoff)
-
-    group = lj + coulomb_force
-    group.name = 'nonbonded'
-    return group
 
 
 def _create_pme_exclusion_force(topology, alpha):
