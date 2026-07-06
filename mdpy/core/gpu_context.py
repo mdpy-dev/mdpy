@@ -142,8 +142,10 @@ void wrap_correct_kernel(
     float* __restrict__ prev_pos_z,
     const float* __restrict__ pbc_matrix,
     const float* __restrict__ pbc_inv,
-    int number_particles
+    int number_particles,
+    const int* __restrict__ d_rebuild_flag
 ) {
+    if (d_rebuild_flag[0] == 0) return;
     int index = blockIdx.x * blockDim.x + threadIdx.x;
     if (index >= number_particles) return;
     float px = pos_x[index];
@@ -252,7 +254,7 @@ class GPUContext:
             _WRAP_CORRECT_KERNEL, "wrap_correct_kernel"
         )
 
-    def wrap_positions_with_prev_correction(self):
+    def wrap_positions_with_prev_correction(self, d_rebuild_flag):
         self._ensure_wrap_correct_kernel()
         N = self.number_particles
         tpb = 256
@@ -270,6 +272,7 @@ class GPUContext:
                 self.d_pbc_matrix,
                 self.d_pbc_inv,
                 np.int32(N),
+                d_rebuild_flag,
             ),
         )
 

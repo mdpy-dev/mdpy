@@ -207,7 +207,7 @@ class System:
             force=force,
         )
         self._permute_all_arrays()
-        self.gpu.wrap_positions_with_prev_correction()
+        self.gpu.wrap_positions_with_prev_correction(self._block_list.d_rebuild_flag)
         self._block_list.capture_snapshot((
             self.gpu.d_positions_x,
             self.gpu.d_positions_y,
