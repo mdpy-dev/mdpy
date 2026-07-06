@@ -235,7 +235,7 @@ class BondedForce(ForceTerm):
             body=body, extra_params=extra_params,
         )
 
-    def remap_indices_gpu(self, d_remap, d_rebuild_flag):
+    def remap_indices_gpu(self, d_remap):
         if self._count == 0:
             return
         if self._dirty:
@@ -247,7 +247,7 @@ class BondedForce(ForceTerm):
         n = indices.size
         tpb = 256
         grid = ((n + tpb - 1) // tpb,)
-        kernel(grid, (tpb,), (d_remap, indices, np.int32(n), d_rebuild_flag))
+        kernel(grid, (tpb,), (d_remap, indices, np.int32(n)))
 
     def bind_sorted(self, topology, block_list, gpu_context):
         sort_order = block_list.d_raw_order
@@ -262,7 +262,7 @@ class BondedForce(ForceTerm):
                 pool_dst[prop_name] = dst
             dst = dst[:N]
             gpu_context.permute_to_sorted_inplace(
-                sort_order, d_arr, dst, block_list.d_rebuild_flag
+                sort_order, d_arr, dst
             )
             self._per_particle_gpu[prop_name] = dst
 

@@ -74,11 +74,11 @@ class ForceGroup(ForceTerm):
             for f in self._forces:
                 f.compute(gpu_context, block_list, compute_energy)
 
-    def remap_indices_gpu(self, d_remap, d_rebuild_flag):
+    def remap_indices_gpu(self, d_remap):
         if self._merged_nb is not None:
             return
         for f in self._forces:
-            f.remap_indices_gpu(d_remap, d_rebuild_flag)
+            f.remap_indices_gpu(d_remap)
 
     @property
     def _sub_forces(self):

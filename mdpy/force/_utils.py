@@ -5,10 +5,8 @@ extern "C" __global__
 void remap_indices_kernel(
     const int* __restrict__ d_remap,
     int* __restrict__ d_indices,
-    int num_indices,
-    const int* __restrict__ d_rebuild_flag
+    int num_indices
 ) {
-    if (d_rebuild_flag[0] == 0) return;
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= num_indices) return;
     d_indices[i] = d_remap[d_indices[i]];
