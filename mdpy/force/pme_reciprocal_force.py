@@ -680,9 +680,6 @@ class PMEReciprocalForce(ForceTerm):
         N = self._N
         order = self.order
         gx, gy, gz = self.grid_x, self.grid_y, self.grid_z
-        box_x = gpu_context._box_x
-        box_y = gpu_context._box_y
-        box_z = gpu_context._box_z
 
         tpb = 256
         grid_1d = ((N + tpb - 1) // tpb,)
@@ -712,9 +709,9 @@ class PMEReciprocalForce(ForceTerm):
                 block_list.d_cell_block_count,
                 block_list.d_block_atoms,
                 np.int32(N),
-                np.float32(gpu_context._inv_box_x),
-                np.float32(gpu_context._inv_box_y),
-                np.float32(gpu_context._inv_box_z),
+                np.float32(gpu_context.inv_box_x),
+                np.float32(gpu_context.inv_box_y),
+                np.float32(gpu_context.inv_box_z),
                 np.int32(gx),
                 np.int32(gy),
                 np.int32(gz),
@@ -749,9 +746,9 @@ class PMEReciprocalForce(ForceTerm):
                 gpu_context.d_positions_z,
                 self._d_charges,
                 np.int32(N),
-                np.float32(gpu_context._inv_box_x),
-                np.float32(gpu_context._inv_box_y),
-                np.float32(gpu_context._inv_box_z),
+                np.float32(gpu_context.inv_box_x),
+                np.float32(gpu_context.inv_box_y),
+                np.float32(gpu_context.inv_box_z),
                 np.int32(gx),
                 np.int32(gy),
                 np.int32(gz),
