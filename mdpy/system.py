@@ -211,6 +211,11 @@ class System:
         )
         self._permute_all_arrays()
         self.gpu.wrap_positions_with_prev_correction()
+        self._block_list.capture_snapshot((
+            self.gpu.d_positions_x,
+            self.gpu.d_positions_y,
+            self.gpu.d_positions_z,
+        ))
         self._block_list.build_block_pairs(self.topology, self._pbc_matrix)
         for term in self.force_terms:
             if hasattr(term, "bind_sorted"):

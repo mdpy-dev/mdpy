@@ -1163,3 +1163,63 @@ class TestShiftGroupedPacking:
                     f"({sx},{sy},{sz}) not within build_radius of block {bx}. "
                     f"Incompatible shifts may have been packed together."
                 )
+
+
+class TestSnapshotPostWrapIntegration:
+    """Integration test: System._do_rebuild captures snapshot AFTER wrap."""
+
+    def test_snapshot_holds_wrapped_positions(self):
+        """After _do_rebuild, snapshot must hold wrapped (in-box) positions.
+
+        Upload a particle outside the box, rebuild, and verify the snapshot
+        holds the wrapped value — not the raw uploaded value.
+        """
+        from mdpy.system import System
+
+        n = 4
+        builder = Builder()
+        builder.set_particles(
+            masses=np.ones(n, dtype=np.float32),
+            charges=np.zeros(n, dtype=np.float32),
+            particle_types=np.zeros(n, dtype=np.int32),
+        )
+        builder.build_exclusion_map()
+        topology, _ = builder.build()
+
+        box = 50.0
+        pbc_matrix = np.eye(3, dtype=np.float32) * box
+
+        system = System(topology)
+        system.upload_pbc(pbc_matrix)
+        system._cutoff = 10.0
+        system._skin = 2.0
+
+        positions = np.array([
+            [box + 0.3, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+            [2.0, 0.0, 0.0],
+            [3.0, 0.0, 0.0],
+        ], dtype=np.float32)
+        velocities = np.zeros((n, 3), dtype=np.float32)
+        system.upload_positions(positions)
+        system.upload_velocities(velocities)
+
+        system.update_neighbor_list(force_rebuild=True)
+
+        snap_x = cp.asnumpy(system._block_list.d_positions_at_rebuild_x)
+        gpu_x = cp.asnumpy(system.gpu.d_positions_x)
+
+        # Snapshot must be populated (not empty/stale)
+        assert system._block_list.d_positions_at_rebuild_x.size == n
+        # Snapshot must match wrapped GPU positions (both in sorted order)
+        assert np.allclose(snap_x, gpu_x, atol=1e-5)
+
+        max_snap = float(np.max(np.abs(snap_x)))
+        max_gpu = float(np.max(np.abs(gpu_x)))
+        assert max_snap < box, (
+            f"Snapshot holds out-of-box position (max={max_snap}), "
+            f"expected < {box}. Snapshot was captured BEFORE wrap."
+        )
+        assert max_gpu < box, (
+            f"GPU positions out of box (max={max_gpu})"
+        )
