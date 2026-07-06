@@ -712,6 +712,27 @@ void conditional_fill_int_kernel(
 }
 """
 
+_CAPTURE_SNAPSHOT_KERNEL = r"""
+extern "C" __global__
+void capture_snapshot_kernel(
+    const int* __restrict__ d_rebuild_flag,
+    const float* __restrict__ src_x,
+    const float* __restrict__ src_y,
+    const float* __restrict__ src_z,
+    float* __restrict__ dst_x,
+    float* __restrict__ dst_y,
+    float* __restrict__ dst_z,
+    int num_particles
+) {
+    if (d_rebuild_flag[0] == 0) return;
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= num_particles) return;
+    dst_x[idx] = src_x[idx];
+    dst_y[idx] = src_y[idx];
+    dst_z[idx] = src_z[idx];
+}
+"""
+
 
 def _compile_gpu_kernels():
     return {
@@ -728,6 +749,7 @@ def _compile_gpu_kernels():
         "cell_prefix_sum": cp.RawKernel(_CELL_PREFIX_SUM_KERNEL, "cell_prefix_sum_kernel"),
         "composite_prefix_sum": cp.RawKernel(_COMPOSITE_PREFIX_SUM_KERNEL, "composite_prefix_sum_kernel"),
         "conditional_fill": cp.RawKernel(_CONDITIONAL_FILL_INT, "conditional_fill_int_kernel"),
+        "capture_snapshot": cp.RawKernel(_CAPTURE_SNAPSHOT_KERNEL, "capture_snapshot_kernel"),
     }
 
 
@@ -1422,15 +1444,22 @@ class BlockList:
         Must be called AFTER pbc wrapping so the snapshot is in the same
         PBC image as subsequent positions. This ensures check_rebuild
         measures true cumulative drift, not wrap-artifact coordinate jumps.
+
+        Guarded by d_rebuild_flag: when flag=0, the kernel skips and the
+        previous baseline is preserved (no amnesia).
         """
         pos_x, pos_y, pos_z = positions_soa
         N = self.num_particles
         snap_x = self._pool_get("snap_x", N, env.NUMPY_FLOAT)
         snap_y = self._pool_get("snap_y", N, env.NUMPY_FLOAT)
         snap_z = self._pool_get("snap_z", N, env.NUMPY_FLOAT)
-        snap_x[:N] = pos_x[:N]
-        snap_y[:N] = pos_y[:N]
-        snap_z[:N] = pos_z[:N]
+        tpb = 256
+        grid = ((N + tpb - 1) // tpb,)
+        self._kernels["capture_snapshot"](
+            grid, (tpb,),
+            (self.d_rebuild_flag, pos_x, pos_y, pos_z,
+             snap_x, snap_y, snap_z, np.int32(N)),
+        )
         self.d_positions_at_rebuild_x = snap_x
         self.d_positions_at_rebuild_y = snap_y
         self.d_positions_at_rebuild_z = snap_z

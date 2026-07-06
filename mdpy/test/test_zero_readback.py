@@ -242,3 +242,41 @@ class TestPairFinderFlagGuard:
             err_msg="block pair buffer changed during flag=0 build_block_pairs")
         np.testing.assert_array_equal(new_masks, old_masks,
             err_msg="exclusion masks changed during flag=0 build_block_pairs")
+
+
+class TestCaptureSnapshotFlagGuard:
+    def test_flag_zero_preserves_baseline(self):
+        """When flag=0, capture_snapshot kernel skips so the displacement
+        baseline is not overwritten (no amnesia). Verified by passing
+        different positions the second time: the baseline must NOT update."""
+        import cupy as cp
+
+        n = 500
+        topology = _make_topology(n)
+        positions = _make_positions(n)
+        pbc = np.eye(3, dtype=np.float32) * 50.0
+        pbc_inv = np.linalg.inv(pbc)
+
+        bl = BlockList(cutoff=10.0, skin=2.0)
+        bl.rebuild(positions, topology, pbc, pbc_inv, force=True)
+
+        # flag=1 after force=True rebuild: first capture writes the baseline.
+        pos_x = cp.asarray(np.ascontiguousarray(positions[:, 0], dtype=np.float32))
+        pos_y = cp.asarray(np.ascontiguousarray(positions[:, 1], dtype=np.float32))
+        pos_z = cp.asarray(np.ascontiguousarray(positions[:, 2], dtype=np.float32))
+        bl.capture_snapshot((pos_x, pos_y, pos_z))
+
+        old_snap = cp.asnumpy(bl.d_positions_at_rebuild_x).copy()
+
+        # Build different positions that WOULD overwrite the baseline if the
+        # kernel ran. Use a large offset so a copy would be unambiguous.
+        shifted_x = pos_x + 100.0
+        shifted_y = pos_y + 100.0
+        shifted_z = pos_z + 100.0
+
+        bl.d_rebuild_flag[0] = 0
+        bl.capture_snapshot((shifted_x, shifted_y, shifted_z))
+
+        new_snap = cp.asnumpy(bl.d_positions_at_rebuild_x)
+        np.testing.assert_array_equal(new_snap, old_snap,
+            err_msg="flag=0 capture_snapshot overwrote the baseline (amnesia)")
