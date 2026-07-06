@@ -350,7 +350,7 @@ class System:
 
         for term in self.force_terms:
             if hasattr(term, "remap_indices_gpu"):
-                term.remap_indices_gpu(d_remap)
+                term.remap_indices_gpu(d_remap, self._block_list.d_rebuild_flag)
 
         for constraint in self.constraints:
-            constraint.remap_indices_gpu(d_remap)
+            constraint.remap_indices_gpu(d_remap, self._block_list.d_rebuild_flag)

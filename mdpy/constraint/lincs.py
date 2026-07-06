@@ -192,8 +192,10 @@ extern "C" __global__
 void remap_indices_kernel(
     const int* __restrict__ d_remap,
     int* __restrict__ d_indices,
-    int num_indices
+    int num_indices,
+    const int* __restrict__ d_rebuild_flag
 ) {
+    if (d_rebuild_flag[0] == 0) return;
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= num_indices) return;
     int val = d_indices[i];
@@ -384,11 +386,11 @@ class LincsConstraint(ConstraintBase):
             np.int32(self.num_iterations),
         ), shared_mem=shared_mem)
 
-    def remap_indices_gpu(self, d_remap):
+    def remap_indices_gpu(self, d_remap, d_rebuild_flag):
         if self.num_constraints == 0:
             return
         kernel = self._get_remap_kernel()
         tpb = 256
         n = self.d_con_idx.size
         grid = ((n + tpb - 1) // tpb,)
-        kernel(grid, (tpb,), (d_remap, self.d_con_idx, np.int32(n)))
+        kernel(grid, (tpb,), (d_remap, self.d_con_idx, np.int32(n), d_rebuild_flag))

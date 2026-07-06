@@ -301,7 +301,7 @@ def test_remap_indices_gpu_correctness():
         if sf._count > 0:
             ref_indices[id(sf)] = cp.asnumpy(sf._d_indices[:sf._count]).copy()
 
-    bonded_force.remap_indices_gpu(d_remap)
+    bonded_force.remap_indices_gpu(d_remap, cp.ones(1, dtype=np.int32))
 
     for sf in sub_forces:
         if sf._count > 0:
