@@ -1,7 +1,6 @@
 """Custom RawKernels that replace cupy library operations in the rebuild path.
 All compiled once at import; no JIT in the hot path."""
 from __future__ import annotations
-import numpy as np
 import cupy as cp
 
 _FILL_INDEX_KERNEL = r"""
