@@ -337,7 +337,7 @@ class GPUContext:
 
     def permute_to_sorted(
         self, permutation, arrays_float, arrays_int=None, arrays_2comp=None,
-        d_rebuild_flag=None,
+        *, d_rebuild_flag,
     ):
         N = permutation.size
         if N == 0:
@@ -370,7 +370,7 @@ class GPUContext:
                 arrays_2comp[name] = dst
 
     def permute_to_sorted_inplace(
-        self, permutation, src, dst, d_rebuild_flag=None
+        self, permutation, src, dst, d_rebuild_flag
     ):
         """Permute float32 src into pre-allocated dst: dst[i] = src[permutation[i]].
         No allocation. Caller ensures dst is float32 with size >= src.size."""

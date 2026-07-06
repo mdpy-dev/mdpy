@@ -379,6 +379,111 @@ class TestPermuteStateArraysFlagGuard:
             )
 
 
+class TestPermuteArrayFlagGuard:
+    """permute_array_kernel / permute_int_array_kernel (used by
+    permute_to_sorted and permute_to_sorted_inplace) must skip entirely
+    when d_rebuild_flag=0.
+
+    Without the guard, calling these on a no-rebuild step would gather
+    src[perm] over dst even when no new permutation was produced,
+    double-permuting any already-sorted data the caller is holding.
+    """
+
+    def test_flag_zero_skips_float_inplace(self):
+        """When flag=0 the kernel must not write to dst. Verified by
+        pre-filling dst with a sentinel: if the kernel ran it would
+        overwrite the sentinel with src[perm]."""
+        import cupy as cp
+
+        n = 1000
+        topology = _make_topology(n)
+        positions = _make_positions(n)
+        pbc = np.eye(3, dtype=np.float32) * 50.0
+        pbc_inv = np.linalg.inv(pbc)
+
+        gpu = GPUContext()
+        gpu.initialize(topology, pbc)
+
+        bl = BlockList(cutoff=10.0, skin=2.0)
+        bl.rebuild(positions, topology, pbc, pbc_inv, force=True)
+
+        perm = bl.d_raw_order
+        src = cp.asarray(np.arange(n, dtype=np.float32))
+        sentinel = -777.0
+        dst = cp.full(n, sentinel, dtype=cp.float32)
+
+        bl.d_rebuild_flag[0] = 0
+        gpu.permute_to_sorted_inplace(perm, src, dst, bl.d_rebuild_flag)
+
+        dst_np = cp.asnumpy(dst)
+        assert np.all(dst_np == sentinel), (
+            "flag=0 permute kernel wrote to dst — guard failed "
+            "(double-permute corruption)"
+        )
+
+    def test_flag_one_actually_perms_float(self):
+        """Sanity check proving the flag=0 test above is non-vacuous:
+        with flag=1 the kernel runs and dst[i] == src[perm[i]]."""
+        import cupy as cp
+
+        n = 1000
+        topology = _make_topology(n)
+        positions = _make_positions(n)
+        pbc = np.eye(3, dtype=np.float32) * 50.0
+        pbc_inv = np.linalg.inv(pbc)
+
+        gpu = GPUContext()
+        gpu.initialize(topology, pbc)
+
+        bl = BlockList(cutoff=10.0, skin=2.0)
+        bl.rebuild(positions, topology, pbc, pbc_inv, force=True)
+        assert int(bl.d_rebuild_flag[0].get()) == 1
+
+        perm_np = cp.asnumpy(bl.d_raw_order)
+        src = cp.asarray(np.arange(n, dtype=np.float32))
+        dst = cp.zeros(n, dtype=cp.float32)
+
+        gpu.permute_to_sorted_inplace(bl.d_raw_order, src, dst, bl.d_rebuild_flag)
+
+        expected = cp.asnumpy(src)[perm_np]
+        np.testing.assert_array_equal(cp.asnumpy(dst), expected)
+
+    def test_flag_zero_skips_int_permute(self):
+        """int variant: permute_to_sorted allocates dst internally so a
+        sentinel pre-fill is not possible; instead verify the returned
+        array does NOT equal the correctly-permuted reference. With
+        flag=0 the kernel skips and cp.empty_like returns uninitialized
+        memory, which will not match src[perm] for an arange source."""
+        import cupy as cp
+
+        n = 1000
+        topology = _make_topology(n)
+        positions = _make_positions(n)
+        pbc = np.eye(3, dtype=np.float32) * 50.0
+        pbc_inv = np.linalg.inv(pbc)
+
+        gpu = GPUContext()
+        gpu.initialize(topology, pbc)
+
+        bl = BlockList(cutoff=10.0, skin=2.0)
+        bl.rebuild(positions, topology, pbc, pbc_inv, force=True)
+
+        perm_np = cp.asnumpy(bl.d_raw_order)
+        src_np = np.arange(n, dtype=np.int32)
+        expected = src_np[perm_np]
+
+        bl.d_rebuild_flag[0] = 0
+        arrays = {"x": cp.asarray(src_np)}
+        gpu.permute_to_sorted(
+            bl.d_raw_order, {}, arrays_int=arrays,
+            d_rebuild_flag=bl.d_rebuild_flag,
+        )
+        result = cp.asnumpy(arrays["x"])
+        assert not np.array_equal(result, expected), (
+            "flag=0 int permute kernel wrote permuted data — guard failed"
+        )
+
+
 class TestWrapCorrectFlagGuard:
     """wrap_correct_kernel must skip entirely when d_rebuild_flag=0.
 
