@@ -119,7 +119,7 @@ Simulation data is a GPU-side black box during the run loop. The only way to obs
 The following functions — and every function they call directly or indirectly — must NOT transfer **bulk data** (arrays, reductions) from GPU to CPU:
 
 - Explicit pipeline loop: `update_neighbor_list()`, `compute_forces()`, `integrator.step(system)`, `apply_constraints(dt)`
-- `System.minimize()` inner loop
+- `minimizer.step(system)` inner loop
 
 **Forbidden operations** inside the hot path:
 
