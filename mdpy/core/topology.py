@@ -17,9 +17,7 @@ class Topology:
         'exclusion_offset', 'exclusion_neighbors', 'exclusion_scale',
         'masses', 'charges', 'particle_types', 'molecule_ids',
         'particle_names', 'type_names', 'chain_ids', 'molecule_types',
-        '_legacy_particles', '_legacy_bonds', '_legacy_angles',
-        '_legacy_dihedrals', '_legacy_impropers', '_is_joined',
-        '_legacy_bonded_particles', '_legacy_scaling_particles',
+        '_is_joined',
     ]
 
     def __init__(self, builder: Builder | None = None):
@@ -100,16 +98,7 @@ class Topology:
         self.exclusion_offset = np.zeros(1, dtype=env.NUMPY_INT)
         self.exclusion_neighbors = np.empty(0, dtype=env.NUMPY_INT)
         self.exclusion_scale = np.empty(0, dtype=env.NUMPY_FLOAT)
-        self._legacy_particles = []
-        self._legacy_bonds = []
-        self._legacy_angles = []
-        self._legacy_dihedrals = []
-        self._legacy_impropers = []
         self._is_joined = False
-
-    @property
-    def is_joined(self):
-        return getattr(self, '_is_joined', True)
 
     def join(self):
         self._is_joined = True
@@ -534,39 +523,6 @@ class Builder:
         for row in range(indices.shape[0]):
             self._bonds.append(
                 [indices[row, 0], indices[row, 1],
-                 parameters[row, 0], parameters[row, 1]]
-            )
-        return self
-
-    def add_angle_indices(
-        self, indices: np.ndarray, parameters: np.ndarray,
-    ) -> Builder:
-        for row in range(indices.shape[0]):
-            self._angles.append(
-                [indices[row, 0], indices[row, 1], indices[row, 2],
-                 parameters[row, 0], parameters[row, 1],
-                 parameters[row, 2], parameters[row, 3]]
-            )
-        return self
-
-    def add_dihedral_indices(
-        self, indices: np.ndarray, parameters: np.ndarray,
-    ) -> Builder:
-        for row in range(indices.shape[0]):
-            self._dihedrals.append(
-                [indices[row, 0], indices[row, 1],
-                 indices[row, 2], indices[row, 3],
-                 parameters[row, 0], parameters[row, 1], parameters[row, 2]]
-            )
-        return self
-
-    def add_improper_indices(
-        self, indices: np.ndarray, parameters: np.ndarray,
-    ) -> Builder:
-        for row in range(indices.shape[0]):
-            self._impropers.append(
-                [indices[row, 0], indices[row, 1],
-                 indices[row, 2], indices[row, 3],
                  parameters[row, 0], parameters[row, 1]]
             )
         return self
