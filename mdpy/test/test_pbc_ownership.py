@@ -84,3 +84,35 @@ def test_block_list_uses_current_pbc_after_box_change():
     assert nc_x_after > nc_x_before, (
         f"BlockList did not pick up the new PBC: nc_x {nc_x_before} -> {nc_x_after}"
     )
+
+
+def test_system_update_neighbor_list_raises_if_upload_pbc_not_called():
+    """Regression: System must raise if upload_pbc() was never called.
+
+    Before the PBC ownership refactor, the gate checked a host-side cache
+    that was only set inside upload_pbc. After the refactor, GPUContext
+    initializes d_pbc_matrix to a non-None identity placeholder, so the
+    gate must use an explicit flag.
+    """
+    from mdpy.system import System
+
+    topo = _make_topology(8)
+
+    system = System(topo)
+    # Note: do NOT call system.upload_pbc(...)
+
+    # Upload positions+velocities so the _ensure_uploaded gate passes.
+    rng = np.random.default_rng(0)
+    system.upload_positions(rng.uniform(0, 5, (8, 3)).astype(np.float32))
+    system.upload_velocities(np.zeros((8, 3), dtype=np.float32))
+
+    # Need a force term with a cutoff so block_list can be constructed.
+    # Build a minimal stand-in force term that has a _cutoff attribute.
+    class _FakeForce:
+        _cutoff = 4.0
+        name = "fake"
+
+    system.add_force_term(_FakeForce())
+
+    with pytest.raises(RuntimeError, match="PBC not set"):
+        system.update_neighbor_list()

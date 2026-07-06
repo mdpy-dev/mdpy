@@ -21,6 +21,7 @@ class System:
         self._skin = 1.0
         self._rebuild_check_interval = 10
         self._block_list = None
+        self._pbc_set = False
 
         self.force_terms = []
         self._primary_force_terms = []
@@ -50,6 +51,7 @@ class System:
 
     def upload_pbc(self, pbc_matrix):
         self.gpu.upload_pbc(pbc_matrix)
+        self._pbc_set = True
 
     @property
     def block_list(self):
@@ -141,7 +143,7 @@ class System:
 
     def update_neighbor_list(self, sync_interval=10, force_rebuild=False):
         self._ensure_uploaded()
-        if self.gpu.d_pbc_matrix is None:
+        if not self._pbc_set:
             raise RuntimeError("PBC not set. Call upload_pbc() first.")
 
         if self._block_list is None:
