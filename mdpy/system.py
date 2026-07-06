@@ -301,7 +301,7 @@ class System:
             ("d_prev_positions_z", gpu.d_prev_positions_z),
             ("d_masses", gpu.d_masses),
             ("d_charges", gpu.d_charges),
-        ]):
+        ], self._block_list.d_rebuild_flag):
             setattr(gpu, name, new_arr)
 
         d_remap = bl.d_pdb_to_sorted

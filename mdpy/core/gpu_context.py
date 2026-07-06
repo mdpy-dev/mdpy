@@ -66,8 +66,10 @@ void permute_state_arrays_kernel(
     float* __restrict__ dst6, float* __restrict__ dst7,
     float* __restrict__ dst8, float* __restrict__ dst9,
     float* __restrict__ dst10, float* __restrict__ dst11,
-    float* __restrict__ dst12, float* __restrict__ dst13
+    float* __restrict__ dst12, float* __restrict__ dst13,
+    const int* __restrict__ d_rebuild_flag
 ) {
+    if (d_rebuild_flag[0] == 0) return;
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= num_particles) return;
     int src_idx = permutation[idx];
@@ -367,7 +369,7 @@ class GPUContext:
             grid, (tpb,), (src, permutation, np.int32(N), dst)
         )
 
-    def permute_state_arrays(self, permutation, name_array_pairs):
+    def permute_state_arrays(self, permutation, name_array_pairs, d_rebuild_flag):
         assert (
             len(name_array_pairs) == 14
         ), f"permute_state_arrays requires 14 arrays, got {len(name_array_pairs)}"
@@ -386,38 +388,7 @@ class GPUContext:
         self._permutation_kernels["permute_state_arrays"](
             grid,
             (tpb,),
-            (
-                src_list[0],
-                src_list[1],
-                src_list[2],
-                src_list[3],
-                src_list[4],
-                src_list[5],
-                src_list[6],
-                src_list[7],
-                src_list[8],
-                src_list[9],
-                src_list[10],
-                src_list[11],
-                src_list[12],
-                src_list[13],
-                permutation,
-                np.int32(N),
-                dst_list[0],
-                dst_list[1],
-                dst_list[2],
-                dst_list[3],
-                dst_list[4],
-                dst_list[5],
-                dst_list[6],
-                dst_list[7],
-                dst_list[8],
-                dst_list[9],
-                dst_list[10],
-                dst_list[11],
-                dst_list[12],
-                dst_list[13],
-            ),
+            tuple(src_list + [permutation, np.int32(N)] + dst_list + [d_rebuild_flag]),
         )
         return list(zip(name_list, dst_list))
 

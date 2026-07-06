@@ -10,6 +10,7 @@ import pytest
 from mdpy import env
 from mdpy.core.topology import Builder
 from mdpy.core.block_list import BlockList, BLOCK_SIZE
+from mdpy.core.gpu_context import GPUContext
 
 
 def _make_topology(n):
@@ -280,3 +281,99 @@ class TestCaptureSnapshotFlagGuard:
         new_snap = cp.asnumpy(bl.d_positions_at_rebuild_x)
         np.testing.assert_array_equal(new_snap, old_snap,
             err_msg="flag=0 capture_snapshot overwrote the baseline (amnesia)")
+
+
+class TestPermuteStateArraysFlagGuard:
+    """permute_state_arrays must skip entirely when d_rebuild_flag=0.
+
+    Without the guard, applying the old permutation to already-permuted
+    arrays (which is what happens if _permute_all_arrays runs on a no-op
+    rebuild) double-permutes all 14 state arrays, corrupting positions,
+    velocities, forces, prev_positions, masses, and charges.
+    """
+
+    def test_flag_zero_skips_permutation(self):
+        """When flag=0 the kernel must not write to dst. Verified by
+        pre-filling the next pool buffer with a sentinel: if the kernel
+        ran it would overwrite the sentinel with permuted data."""
+        import cupy as cp
+
+        n = 1000
+        topology = _make_topology(n)
+        positions = _make_positions(n)
+        pbc = np.eye(3, dtype=np.float32) * 50.0
+        pbc_inv = np.linalg.inv(pbc)
+
+        gpu = GPUContext()
+        gpu.initialize(topology, pbc)
+        gpu.upload_positions(positions)
+
+        bl = BlockList(cutoff=10.0, skin=2.0)
+        bl.rebuild(positions, topology, pbc, pbc_inv, force=True)
+        # flag is 1 after force=True rebuild
+        assert int(bl.d_rebuild_flag[0].get()) == 1
+
+        perm = bl.d_raw_order
+        perm_np = cp.asnumpy(perm)
+        assert not np.array_equal(perm_np, np.arange(n, dtype=np.int32)), (
+            "permutation is identity — test cannot detect a double-permute"
+        )
+
+        pairs = [
+            ("d_positions_x", gpu.d_positions_x),
+            ("d_positions_y", gpu.d_positions_y),
+            ("d_positions_z", gpu.d_positions_z),
+            ("d_velocities_x", gpu.d_velocities_x),
+            ("d_velocities_y", gpu.d_velocities_y),
+            ("d_velocities_z", gpu.d_velocities_z),
+            ("d_forces_x", gpu.d_forces_x),
+            ("d_forces_y", gpu.d_forces_y),
+            ("d_forces_z", gpu.d_forces_z),
+            ("d_prev_positions_x", gpu.d_prev_positions_x),
+            ("d_prev_positions_y", gpu.d_prev_positions_y),
+            ("d_prev_positions_z", gpu.d_prev_positions_z),
+            ("d_masses", gpu.d_masses),
+            ("d_charges", gpu.d_charges),
+        ]
+
+        # flag=1: real permute. Apply results so src becomes permuted
+        # (simulating what _permute_all_arrays does via setattr).
+        result1 = gpu.permute_state_arrays(perm, pairs, bl.d_rebuild_flag)
+        for name, new_arr in result1:
+            setattr(gpu, name, new_arr)
+
+        # The first call used pool_A and flipped _perm_flip to True, so the
+        # next call will write into pool_B. Pre-fill pool_B with a sentinel
+        # so we can detect whether the kernel wrote to it.
+        sentinel = -777.0
+        for buf in gpu._perm_pool_B:
+            buf[:n] = sentinel
+
+        # flag=0: kernel must skip. src is now the permuted arrays, so if the
+        # guard were missing the kernel would write permuted[perm] over the
+        # sentinel.
+        bl.d_rebuild_flag[0] = 0
+        pairs_permuted = [
+            ("d_positions_x", gpu.d_positions_x),
+            ("d_positions_y", gpu.d_positions_y),
+            ("d_positions_z", gpu.d_positions_z),
+            ("d_velocities_x", gpu.d_velocities_x),
+            ("d_velocities_y", gpu.d_velocities_y),
+            ("d_velocities_z", gpu.d_velocities_z),
+            ("d_forces_x", gpu.d_forces_x),
+            ("d_forces_y", gpu.d_forces_y),
+            ("d_forces_z", gpu.d_forces_z),
+            ("d_prev_positions_x", gpu.d_prev_positions_x),
+            ("d_prev_positions_y", gpu.d_prev_positions_y),
+            ("d_prev_positions_z", gpu.d_prev_positions_z),
+            ("d_masses", gpu.d_masses),
+            ("d_charges", gpu.d_charges),
+        ]
+        result2 = gpu.permute_state_arrays(perm, pairs_permuted, bl.d_rebuild_flag)
+
+        for name, arr in result2:
+            arr_np = cp.asnumpy(arr)
+            assert np.all(arr_np == sentinel), (
+                f"{name} was written by flag=0 kernel — guard failed "
+                f"(double-permute corruption)"
+            )
