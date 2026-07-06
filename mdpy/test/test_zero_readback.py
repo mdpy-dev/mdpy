@@ -205,3 +205,40 @@ class TestPrefixSumFlagGuard:
         assert new_count == old_count, (
             f"d_num_blocks changed: {old_count} -> {new_count}"
         )
+
+
+class TestPairFinderFlagGuard:
+    def test_flag_zero_preserves_block_pairs(self):
+        """When flag=0, find_interacting and build_masks must skip so block
+        pair data, the pair counter, and exclusion masks all retain their
+        previous valid values."""
+        import cupy as cp
+
+        n = 1000
+        topology = _make_topology(n)
+        positions = _make_positions(n)
+        pbc = np.eye(3, dtype=np.float32) * 50.0
+        pbc_inv = np.linalg.inv(pbc)
+
+        bl = BlockList(cutoff=10.0, skin=2.0)
+        bl.rebuild(positions, topology, pbc, pbc_inv, force=True)
+        bl.build_block_pairs(topology, pbc)
+
+        old_pairs = cp.asnumpy(bl._d_block_pair_buf).copy()
+        old_counters = int(bl._d_counters[0].get())
+        old_masks = cp.asnumpy(bl.d_exclusion_masks).copy()
+        assert old_counters > 0, "expected nonzero pair count after full rebuild"
+
+        bl.d_rebuild_flag[0] = 0
+        bl.build_block_pairs(topology, pbc)
+
+        new_pairs = cp.asnumpy(bl._d_block_pair_buf)
+        new_counters = int(bl._d_counters[0].get())
+        new_masks = cp.asnumpy(bl.d_exclusion_masks)
+
+        assert new_counters == old_counters, (
+            f"d_counters changed: {old_counters} -> {new_counters}")
+        np.testing.assert_array_equal(new_pairs, old_pairs,
+            err_msg="block pair buffer changed during flag=0 build_block_pairs")
+        np.testing.assert_array_equal(new_masks, old_masks,
+            err_msg="exclusion masks changed during flag=0 build_block_pairs")

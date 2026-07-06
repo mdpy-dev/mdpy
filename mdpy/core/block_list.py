@@ -187,8 +187,10 @@ void find_interacting_blocks_kernel(
     float* __restrict__ shift_y_out,
     float* __restrict__ shift_z_out,
     int* __restrict__ interaction_count,
-    int max_block_pairs
+    int max_block_pairs,
+    const int* __restrict__ d_rebuild_flag
 ) {
+    if (d_rebuild_flag[0] == 0) return;
     __shared__ int s_num_blocks;
     if (threadIdx.x == 0) s_num_blocks = d_num_blocks[0];
     __syncthreads();
@@ -496,8 +498,10 @@ void build_masks_kernel(
     const int* __restrict__ reverse_neighbors,
     const int* __restrict__ d_block_pair_count,
     int num_particles,
-    unsigned int* __restrict__ exclusion_masks_out
+    unsigned int* __restrict__ exclusion_masks_out,
+    const int* __restrict__ d_rebuild_flag
 ) {
+    if (d_rebuild_flag[0] == 0) return;
     __shared__ int s_num_pairs;
     if (threadIdx.x == 0) s_num_pairs = d_block_pair_count[0];
     __syncthreads();
@@ -1174,7 +1178,10 @@ class BlockList:
             self._d_block_pair_shift_y_buf = cp.empty(max_block_pairs, dtype=env.NUMPY_FLOAT)
             self._d_block_pair_shift_z_buf = cp.empty(max_block_pairs, dtype=env.NUMPY_FLOAT)
             self._max_block_pairs = max_block_pairs
-        self._d_counters[0] = 0
+        self._kernels["conditional_fill"](
+            (1,), (1,),
+            (self.d_rebuild_flag, self._d_counters, np.int32(1), np.int32(0)),
+        )
 
         tpb = 256
         grid_blocks = max((self.max_blocks * cell_subsets + 7) // 8, 1)
@@ -1196,6 +1203,7 @@ class BlockList:
                 self._d_block_pair_buf, self._d_interacting_buf,
                 self._d_block_pair_shift_x_buf, self._d_block_pair_shift_y_buf, self._d_block_pair_shift_z_buf,
                 self._d_counters, np.int32(max_block_pairs),
+                self.d_rebuild_flag,
             ),
         )
 
@@ -1305,6 +1313,7 @@ class BlockList:
                 self._d_counters,
                 np.int32(N),
                 self.d_exclusion_masks,
+                self.d_rebuild_flag,
             ),
         )
 
