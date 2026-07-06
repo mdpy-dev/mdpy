@@ -261,7 +261,9 @@ class BondedForce(ForceTerm):
                 dst = cp.empty(N, dtype=np.float32)
                 pool_dst[prop_name] = dst
             dst = dst[:N]
-            gpu_context.permute_to_sorted_inplace(sort_order, d_arr, dst)
+            gpu_context.permute_to_sorted_inplace(
+                sort_order, d_arr, dst, block_list.d_rebuild_flag
+            )
             self._per_particle_gpu[prop_name] = dst
 
     def _ensure_compiled(self):

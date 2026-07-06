@@ -10,8 +10,10 @@ void permute_array_kernel(
     const float* __restrict__ src,
     const int* __restrict__ permutation,
     int num_particles,
-    float* __restrict__ dst
+    float* __restrict__ dst,
+    const int* __restrict__ d_rebuild_flag
 ) {
+    if (d_rebuild_flag[0] == 0) return;
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= num_particles) return;
     dst[idx] = src[permutation[idx]];
@@ -24,8 +26,10 @@ void permute_int_array_kernel(
     const int* __restrict__ src,
     const int* __restrict__ permutation,
     int num_particles,
-    int* __restrict__ dst
+    int* __restrict__ dst,
+    const int* __restrict__ d_rebuild_flag
 ) {
+    if (d_rebuild_flag[0] == 0) return;
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= num_particles) return;
     dst[idx] = src[permutation[idx]];
@@ -38,8 +42,10 @@ void permute_array_2comp_kernel(
     const float* __restrict__ src,
     const int* __restrict__ permutation,
     int num_particles,
-    float* __restrict__ dst
+    float* __restrict__ dst,
+    const int* __restrict__ d_rebuild_flag
 ) {
+    if (d_rebuild_flag[0] == 0) return;
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= num_particles) return;
     int src_idx = permutation[idx];
@@ -330,7 +336,8 @@ class GPUContext:
         self._perm_flip = False
 
     def permute_to_sorted(
-        self, permutation, arrays_float, arrays_int=None, arrays_2comp=None
+        self, permutation, arrays_float, arrays_int=None, arrays_2comp=None,
+        d_rebuild_flag=None,
     ):
         N = permutation.size
         if N == 0:
@@ -341,25 +348,30 @@ class GPUContext:
         for name, src in arrays_float.items():
             dst = cp.empty_like(src)
             self._permutation_kernels["permute"](
-                grid, (tpb,), (src, permutation, np.int32(N), dst)
+                grid, (tpb,),
+                (src, permutation, np.int32(N), dst, d_rebuild_flag)
             )
             arrays_float[name] = dst
         if arrays_int:
             for name, src in arrays_int.items():
                 dst = cp.empty_like(src)
                 self._permutation_kernels["permute_int"](
-                    grid, (tpb,), (src, permutation, np.int32(N), dst)
+                    grid, (tpb,),
+                    (src, permutation, np.int32(N), dst, d_rebuild_flag)
                 )
                 arrays_int[name] = dst
         if arrays_2comp:
             for name, src in arrays_2comp.items():
                 dst = cp.empty_like(src)
                 self._permutation_kernels["permute_2comp"](
-                    grid, (tpb,), (src, permutation, np.int32(N), dst)
+                    grid, (tpb,),
+                    (src, permutation, np.int32(N), dst, d_rebuild_flag)
                 )
                 arrays_2comp[name] = dst
 
-    def permute_to_sorted_inplace(self, permutation, src, dst):
+    def permute_to_sorted_inplace(
+        self, permutation, src, dst, d_rebuild_flag=None
+    ):
         """Permute float32 src into pre-allocated dst: dst[i] = src[permutation[i]].
         No allocation. Caller ensures dst is float32 with size >= src.size."""
         N = permutation.size
@@ -369,7 +381,8 @@ class GPUContext:
         tpb = 256
         grid = ((N + tpb - 1) // tpb,)
         self._permutation_kernels["permute"](
-            grid, (tpb,), (src, permutation, np.int32(N), dst)
+            grid, (tpb,),
+            (src, permutation, np.int32(N), dst, d_rebuild_flag)
         )
 
     def permute_state_arrays(self, permutation, name_array_pairs, d_rebuild_flag):

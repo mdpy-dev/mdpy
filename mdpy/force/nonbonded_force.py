@@ -427,7 +427,10 @@ class NonbondedForce(ForceTerm):
             k: v for k, v in self._d_per_particle.items() if k not in borrowed
         }
         if arrays_float:
-            gpu_context.permute_to_sorted(permutation, arrays_float)
+            gpu_context.permute_to_sorted(
+                permutation, arrays_float,
+                d_rebuild_flag=block_list.d_rebuild_flag,
+            )
             for base_name, arr in arrays_float.items():
                 self._d_per_particle[base_name] = arr
 
@@ -437,6 +440,7 @@ class NonbondedForce(ForceTerm):
                 block_list.d_sorted_to_pdb,
                 {},
                 arrays_int=arrays_int,
+                d_rebuild_flag=block_list.d_rebuild_flag,
             )
             self._d_types = arrays_int["_types"]
         else:

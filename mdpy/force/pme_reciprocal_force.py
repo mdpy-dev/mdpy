@@ -671,7 +671,9 @@ class PMEReciprocalForce(ForceTerm):
         tpb = 256
         grid = ((N + tpb - 1) // tpb,)
         gpu_context._permutation_kernels["permute"](
-            grid, (tpb,), (self._d_charges, permutation, np.int32(N), sorted_charges)
+            grid, (tpb,),
+            (self._d_charges, permutation, np.int32(N), sorted_charges,
+             block_list.d_rebuild_flag)
         )
         self._d_charges = sorted_charges
 
