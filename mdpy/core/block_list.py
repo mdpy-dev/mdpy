@@ -859,7 +859,6 @@ class BlockList:
 
     def set_cutoff(self, cutoff):
         self.cutoff = float(cutoff)
-        self._cutoff = self.cutoff
         self.build_radius = self.cutoff + self.skin
 
     @property

@@ -70,6 +70,13 @@ class TestSetCutoff:
         bl.set_cutoff(12.0)
         assert bl.build_radius == 12.0 + 2.0
 
+    def test_repeated_set_cutoff(self):
+        bl = BlockList(cutoff=10.0, skin=2.0)
+        bl.set_cutoff(12.0)
+        bl.set_cutoff(8.0)
+        assert bl.cutoff == 8.0
+        assert bl.build_radius == 8.0 + 2.0
+
 
 class TestCellAssignment:
 
