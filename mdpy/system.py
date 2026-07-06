@@ -278,35 +278,6 @@ class System:
             gpu.d_forces_z.get(),
         ], axis=1)
 
-    def minimize(self, minimizer, number_steps=100):
-        self._ensure_uploaded()
-
-        positions_soa = (
-            self.gpu.d_positions_x,
-            self.gpu.d_positions_y,
-            self.gpu.d_positions_z,
-        )
-        if self._block_list is None:
-            if self._pbc_matrix is None:
-                raise RuntimeError("PBC not set. Call upload_pbc() first.")
-            if self._cutoff is None:
-                raise RuntimeError(
-                    "No cutoff available. Add a force term with cutoff first."
-                )
-            self._block_list = BlockList(
-                self._cutoff, skin=self._skin,
-                rebuild_check_interval=self._rebuild_check_interval,
-            )
-            self._do_rebuild(positions_soa, force=True)
-        elif self._block_list.check_rebuild(positions_soa):
-            self._do_rebuild(positions_soa, force=True)
-        for term in self.force_terms:
-            if hasattr(term, "bind_sorted"):
-                term.bind_sorted(self.topology, self._block_list, self.gpu)
-        self.compute_forces()
-        for _ in range(number_steps):
-            minimizer.step(self)
-
     def _permute_all_arrays(self):
         N = self.topology.num_particles
         gpu = self.gpu
