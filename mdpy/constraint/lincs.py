@@ -15,8 +15,8 @@ void lincs_kernel(
     const float* __restrict__ pbc_inv,
     const int* __restrict__ constraint_indices,
     const float* __restrict__ target_lengths,
-    const float* __restrict__ inv_mass_i,
-    const float* __restrict__ inv_mass_j,
+    const float* __restrict__ inverse_mass_i_arr,
+    const float* __restrict__ inverse_mass_j_arr,
     const float* __restrict__ coupling_denominator_arr,
     const int* __restrict__ coupled_counts,
     const int* __restrict__ coupled_indices,
@@ -48,8 +48,8 @@ void lincs_kernel(
     if (!is_dummy) {
         target_distance = target_lengths[tid];
         coupling_denominator = coupling_denominator_arr[tid];
-        inverse_mass_i = inv_mass_i[tid];
-        inverse_mass_j = inv_mass_j[tid];
+        inverse_mass_i = inverse_mass_i_arr[tid];
+        inverse_mass_j = inverse_mass_j_arr[tid];
     }
 
     // Phase 1: reference direction from old positions
@@ -218,17 +218,17 @@ def _build_coupling_data(constraint_pairs, masses, target_lengths, block_size=25
                 e(np.float32), e(np.int32), e(np.int32), e(np.float32),
                 e(np.float32), 0, 0)
 
-    atom_to_con = {}
+    atom_to_constraint = {}
     for c, (i, j) in enumerate(constraint_pairs):
-        atom_to_con.setdefault(i, []).append(c)
-        atom_to_con.setdefault(j, []).append(c)
+        atom_to_constraint.setdefault(i, []).append(c)
+        atom_to_constraint.setdefault(j, []).append(c)
 
-    con_coupled = [set() for _ in range(num_constraints)]
-    for atom, clist in atom_to_con.items():
+    coupled_constraints = [set() for _ in range(num_constraints)]
+    for atom, clist in atom_to_constraint.items():
         for a in range(len(clist)):
             for b in range(a + 1, len(clist)):
-                con_coupled[clist[a]].add(clist[b])
-                con_coupled[clist[b]].add(clist[a])
+                coupled_constraints[clist[a]].add(clist[b])
+                coupled_constraints[clist[b]].add(clist[a])
 
     visited = [False] * num_constraints
     groups = []
@@ -243,7 +243,7 @@ def _build_coupling_data(constraint_pairs, masses, target_lengths, block_size=25
                 continue
             visited[c] = True
             group.append(c)
-            for nb in con_coupled[c]:
+            for nb in coupled_constraints[c]:
                 if not visited[nb]:
                     stack.append(nb)
         groups.append(group)
@@ -281,7 +281,7 @@ def _build_coupling_data(constraint_pairs, masses, target_lengths, block_size=25
 
     max_coupled = 1
     for orig in range(num_constraints):
-        max_coupled = max(max_coupled, len(con_coupled[orig]))
+        max_coupled = max(max_coupled, len(coupled_constraints[orig]))
 
     coupled_counts = np.zeros(num_constraint_threads, dtype=np.int32)
     coupled_indices = np.zeros(max_coupled * num_constraint_threads, dtype=np.int32)
@@ -292,7 +292,7 @@ def _build_coupling_data(constraint_pairs, masses, target_lengths, block_size=25
         slot_index = split_map[orig]
         i, j = constraint_pairs[orig]
         coupling_denominator_i = coupling_denominator_arr[slot_index]
-        coupled = sorted(con_coupled[orig])
+        coupled = sorted(coupled_constraints[orig])
         coupled_counts[slot_index] = len(coupled)
         for n, c_orig in enumerate(coupled):
             coupled_slot_index = split_map[c_orig]
@@ -350,8 +350,8 @@ class LincsConstraint(ConstraintBase):
 
         self.d_constraint_indices = cp.asarray(constraint_indices)
         self.d_target_lengths = cp.asarray(target_lengths_array)
-        self.d_inv_mass_i = cp.asarray(inverse_mass_i_array)
-        self.d_inv_mass_j = cp.asarray(inverse_mass_j_array)
+        self.d_inverse_mass_i = cp.asarray(inverse_mass_i_array)
+        self.d_inverse_mass_j = cp.asarray(inverse_mass_j_array)
         self.d_coupling_denominator = cp.asarray(coupling_denominator_arr)
         self.d_coupled_counts = cp.asarray(coupled_counts)
         self.d_coupled_indices = cp.asarray(coupled_indices)
@@ -378,8 +378,8 @@ class LincsConstraint(ConstraintBase):
             gpu_context.d_pbc_inv,
             self.d_constraint_indices,
             self.d_target_lengths,
-            self.d_inv_mass_i,
-            self.d_inv_mass_j,
+            self.d_inverse_mass_i,
+            self.d_inverse_mass_j,
             self.d_coupling_denominator,
             self.d_coupled_counts,
             self.d_coupled_indices,
