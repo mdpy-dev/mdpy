@@ -189,7 +189,7 @@ What GPUContext does NOT do:
 
 Each `ForceTerm` owns its own parameter arrays and working buffers. When BlockList rebuilds:
 
-- **BondedForce**: remaps its own atom index arrays via `remap_indices_gpu(d_remap)`, reads sorted positions directly from GPUContext (indices are already remapped to sorted order)
+- **BondedForce**: remaps its own atom index arrays via `remap_indices_gpu(d_remap, d_rebuild_flag)`, reads sorted positions directly from GPUContext (indices are already remapped to sorted order)
 - **NonbondedForce**: permutes its own per-particle arrays using GPUContext's `permute_to_sorted()`, then packs its own sorted posq buffer via `pack_sorted_posq_kernel` using BlockList's `d_block_atoms`
 
 This means:

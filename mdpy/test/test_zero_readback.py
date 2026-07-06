@@ -720,3 +720,74 @@ class TestExclusionPairsFlagGuard:
             cp.asnumpy(d_offset), [0, 1, 2, 3, 3, 3])
         # scatter_pairs: neighbors sorted by row (row0->j=1, row1->j=3, row2->j=0)
         np.testing.assert_array_equal(cp.asnumpy(d_neighbors), [1, 3, 0])
+
+
+class TestRemapIndicesFlagGuard:
+    """remap_indices_kernel (file-local copies in force/_utils.py,
+    constraint/settle.py, constraint/lincs.py) must skip entirely when
+    d_rebuild_flag=0.
+
+    Without the guard, calling remap_indices_gpu on a no-rebuild step
+    would re-apply the old permutation to already-remapped index arrays,
+    double-permuting the bonded/constraint atom indices.
+    """
+
+    @pytest.mark.parametrize("module_name", [
+        "mdpy.force._utils",
+        "mdpy.constraint.settle",
+        "mdpy.constraint.lincs",
+    ])
+    def test_flag_zero_skips_remap(self, module_name):
+        """When flag=0 the kernel must not write to d_indices. Verified
+        by pre-filling d_indices with [0,1,...,N-1] and a reverse remap:
+        an unguarded kernel would overwrite with [N-1,...,1,0]."""
+        import cupy as cp
+        import importlib
+
+        mod = importlib.import_module(module_name)
+        kernel = cp.RawKernel(mod._REMAP_INDICES_KERNEL, "remap_indices_kernel")
+
+        N = 8
+        src_np = np.arange(N, dtype=np.int32)
+        d_remap = cp.asarray(src_np[::-1].copy())
+        d_indices = cp.asarray(src_np.copy())
+        flag = cp.array([0], dtype=cp.int32)
+
+        tpb = 256
+        grid = ((N + tpb - 1) // tpb,)
+        kernel(grid, (tpb,), (d_remap, d_indices, np.int32(N), flag))
+        cp.cuda.Device().synchronize()
+
+        np.testing.assert_array_equal(cp.asnumpy(d_indices), src_np, (
+            f"flag=0 {module_name} remap_indices_kernel wrote to d_indices "
+            f"— guard failed (double-permute corruption)"
+        ))
+
+    @pytest.mark.parametrize("module_name", [
+        "mdpy.force._utils",
+        "mdpy.constraint.settle",
+        "mdpy.constraint.lincs",
+    ])
+    def test_flag_one_actually_remaps(self, module_name):
+        """Sanity check proving the flag=0 test above is non-vacuous:
+        with flag=1 the kernel runs and d_indices[i] = d_remap[d_indices[i]]."""
+        import cupy as cp
+        import importlib
+
+        mod = importlib.import_module(module_name)
+        kernel = cp.RawKernel(mod._REMAP_INDICES_KERNEL, "remap_indices_kernel")
+
+        N = 8
+        src_np = np.arange(N, dtype=np.int32)
+        d_remap = cp.asarray(src_np[::-1].copy())
+        d_indices = cp.asarray(src_np.copy())
+        flag = cp.array([1], dtype=cp.int32)
+
+        tpb = 256
+        grid = ((N + tpb - 1) // tpb,)
+        kernel(grid, (tpb,), (d_remap, d_indices, np.int32(N), flag))
+        cp.cuda.Device().synchronize()
+
+        np.testing.assert_array_equal(cp.asnumpy(d_indices), src_np[::-1], (
+            f"flag=1 {module_name} remap_indices_kernel did not apply the remap"
+        ))
