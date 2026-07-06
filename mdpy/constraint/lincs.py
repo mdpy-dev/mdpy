@@ -13,22 +13,22 @@ void lincs_kernel(
     float* __restrict__ pos_z,
     const float* __restrict__ pbc_matrix,
     const float* __restrict__ pbc_inv,
-    const int* __restrict__ con_idx,
-    const float* __restrict__ target_len,
+    const int* __restrict__ constraint_indices,
+    const float* __restrict__ target_lengths,
     const float* __restrict__ inv_mass_i,
     const float* __restrict__ inv_mass_j,
-    const float* __restrict__ blc_arr,
+    const float* __restrict__ coupling_denominator_arr,
     const int* __restrict__ coupled_counts,
     const int* __restrict__ coupled_indices,
     const float* __restrict__ mass_factors,
-    float* __restrict__ matrix_a,
+    float* __restrict__ coupling_matrix,
     int num_constraints,
     int max_coupled,
     int num_constraint_threads,
     int expansion_order,
     int num_iterations
 ) {
-    extern __shared__ float sm[];
+    extern __shared__ float shared_memory[];
 
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
     int lid = threadIdx.x;
@@ -36,24 +36,26 @@ void lincs_kernel(
 
     if (tid >= num_constraint_threads) return;
 
-    int ai_s = con_idx[tid * 2 + 0];
-    int aj_s = con_idx[tid * 2 + 1];
-    bool is_dummy = (ai_s < 0);
+    int atom_i_sorted = constraint_indices[tid * 2 + 0];
+    int atom_j_sorted = constraint_indices[tid * 2 + 1];
+    bool is_dummy = (atom_i_sorted < 0);
 
-    float d0 = 0.0f, blc = 0.0f, imi = 0.0f, imj = 0.0f;
-    float rcx = 0.0f, rcy = 0.0f, rcz = 0.0f;
+    // coupling_denominator = 1/(1/m_i + 1/m_j): the shared inverse-mass scale
+    // that normalizes each constraint's Lagrange multiplier.
+    float target_distance = 0.0f, coupling_denominator = 0.0f, inverse_mass_i = 0.0f, inverse_mass_j = 0.0f;
+    float reference_direction_x = 0.0f, reference_direction_y = 0.0f, reference_direction_z = 0.0f;
 
     if (!is_dummy) {
-        d0 = target_len[tid];
-        blc = blc_arr[tid];
-        imi = inv_mass_i[tid];
-        imj = inv_mass_j[tid];
+        target_distance = target_lengths[tid];
+        coupling_denominator = coupling_denominator_arr[tid];
+        inverse_mass_i = inv_mass_i[tid];
+        inverse_mass_j = inv_mass_j[tid];
     }
 
     // Phase 1: reference direction from old positions
     if (!is_dummy) {
-        float ox = old_x[ai_s], oy = old_y[ai_s], oz = old_z[ai_s];
-        float jx = old_x[aj_s], jy = old_y[aj_s], jz = old_z[aj_s];
+        float ox = old_x[atom_i_sorted], oy = old_y[atom_i_sorted], oz = old_z[atom_i_sorted];
+        float jx = old_x[atom_j_sorted], jy = old_y[atom_j_sorted], jz = old_z[atom_j_sorted];
         float dx = jx - ox, dy = jy - oy, dz = jz - oz;
         float fx = dx*pbc_inv[0] + dy*pbc_inv[3] + dz*pbc_inv[6];
         float fy = dx*pbc_inv[1] + dy*pbc_inv[4] + dz*pbc_inv[7];
@@ -62,30 +64,31 @@ void lincs_kernel(
         dx = fx*pbc_matrix[0] + fy*pbc_matrix[3] + fz*pbc_matrix[6];
         dy = fx*pbc_matrix[1] + fy*pbc_matrix[4] + fz*pbc_matrix[7];
         dz = fx*pbc_matrix[2] + fy*pbc_matrix[5] + fz*pbc_matrix[8];
-        float inv_d = rsqrtf(dx*dx + dy*dy + dz*dz + 1e-30f);
-        rcx = dx * inv_d; rcy = dy * inv_d; rcz = dz * inv_d;
-        sm[lid*3+0] = rcx; sm[lid*3+1] = rcy; sm[lid*3+2] = rcz;
+        float inverse_current_distance = rsqrtf(dx*dx + dy*dy + dz*dz + 1e-30f);
+        reference_direction_x = dx * inverse_current_distance; reference_direction_y = dy * inverse_current_distance; reference_direction_z = dz * inverse_current_distance;
+        shared_memory[lid*3+0] = reference_direction_x; shared_memory[lid*3+1] = reference_direction_y; shared_memory[lid*3+2] = reference_direction_z;
     }
     __syncthreads();
 
-    // Phase 2: build coupling matrix A_ij = mf * (rc_i . rc_j)
+    // Phase 2: build coupling matrix A_ij = mass_factor * (rc_i . rc_j)
     if (!is_dummy) {
         int nc = coupled_counts[tid];
         for (int n = 0; n < nc; n++) {
             int c_idx = coupled_indices[n * num_constraint_threads + tid];
             int c_lid = c_idx - block_offset;
-            float mf = mass_factors[n * num_constraint_threads + tid];
-            float r1x = sm[c_lid*3+0], r1y = sm[c_lid*3+1], r1z = sm[c_lid*3+2];
-            matrix_a[n * num_constraint_threads + tid] = mf * (rcx*r1x + rcy*r1y + rcz*r1z);
+            float mass_factor = mass_factors[n * num_constraint_threads + tid];
+            float r1x = shared_memory[c_lid*3+0], r1y = shared_memory[c_lid*3+1], r1z = shared_memory[c_lid*3+2];
+            coupling_matrix[n * num_constraint_threads + tid] = mass_factor * (reference_direction_x*r1x + reference_direction_y*r1y + reference_direction_z*r1z);
         }
     }
     __syncthreads();
 
-    // Phase 3: initial RHS = blc * (rc . delta_new - d0)
-    float sol = 0.0f;
+    // Phase 3: initial RHS = coupling_denominator * (rc . delta_new - target_distance)
+    // `solution` is the LINCS linear-system solution vector (NOT solvent).
+    float solution = 0.0f;
     if (!is_dummy) {
-        float nix = pos_x[ai_s], niy = pos_y[ai_s], niz = pos_z[ai_s];
-        float njx = pos_x[aj_s], njy = pos_y[aj_s], njz = pos_z[aj_s];
+        float nix = pos_x[atom_i_sorted], niy = pos_y[atom_i_sorted], niz = pos_z[atom_i_sorted];
+        float njx = pos_x[atom_j_sorted], njy = pos_y[atom_j_sorted], njz = pos_z[atom_j_sorted];
         float dx = njx - nix, dy = njy - niy, dz = njz - niz;
         float fx = dx*pbc_inv[0] + dy*pbc_inv[3] + dz*pbc_inv[6];
         float fy = dx*pbc_inv[1] + dy*pbc_inv[4] + dz*pbc_inv[7];
@@ -94,40 +97,41 @@ void lincs_kernel(
         dx = fx*pbc_matrix[0] + fy*pbc_matrix[3] + fz*pbc_matrix[6];
         dy = fx*pbc_matrix[1] + fy*pbc_matrix[4] + fz*pbc_matrix[7];
         dz = fx*pbc_matrix[2] + fy*pbc_matrix[5] + fz*pbc_matrix[8];
-        sol = blc * (rcx*dx + rcy*dy + rcz*dz - d0);
+        solution = coupling_denominator * (reference_direction_x*dx + reference_direction_y*dy + reference_direction_z*dz - target_distance);
     }
 
-    // Phase 4: Neumann series  sol = (I + A + A^2 + ... + A^L) * rhs
-    float* sm_rhs = sm;
-    sm_rhs[lid + blockDim.x * 0] = sol;
+    // Phase 4: Neumann series  solution = (I + A + A^2 + ... + A^L) * rhs
+    float* shared_rhs = shared_memory;
+    shared_rhs[lid + blockDim.x * 0] = solution;
     __syncthreads();
     for (int rec = 0; rec < expansion_order; rec++) {
-        float mvb = 0.0f;
+        // matrix_vector_product = (A * shared_rhs)[tid] for this expansion step
+        float matrix_vector_product = 0.0f;
         if (!is_dummy) {
             int nc = coupled_counts[tid];
             for (int n = 0; n < nc; n++) {
                 int c_idx = coupled_indices[n * num_constraint_threads + tid];
                 int c_lid = c_idx - block_offset;
-                float a_val = matrix_a[n * num_constraint_threads + tid];
-                mvb += a_val * sm_rhs[c_lid + blockDim.x * (rec % 2)];
+                float a_val = coupling_matrix[n * num_constraint_threads + tid];
+                matrix_vector_product += a_val * shared_rhs[c_lid + blockDim.x * (rec % 2)];
             }
         }
-        sm_rhs[lid + blockDim.x * ((rec+1) % 2)] = mvb;
+        shared_rhs[lid + blockDim.x * ((rec+1) % 2)] = matrix_vector_product;
         __syncthreads();
-        sol += mvb;
+        solution += matrix_vector_product;
     }
 
     // Phase 5: first coordinate update
     if (!is_dummy) {
-        float lagrange = sol;
-        float ci = lagrange * imi;
-        float cj = -lagrange * imj;
-        atomicAdd(&pos_x[ai_s], rcx*ci);
-        atomicAdd(&pos_y[ai_s], rcy*ci);
-        atomicAdd(&pos_z[ai_s], rcz*ci);
-        atomicAdd(&pos_x[aj_s], rcx*cj);
-        atomicAdd(&pos_y[aj_s], rcy*cj);
-        atomicAdd(&pos_z[aj_s], rcz*cj);
+        float lagrange = solution;
+        float ci = lagrange * inverse_mass_i;
+        float cj = -lagrange * inverse_mass_j;
+        atomicAdd(&pos_x[atom_i_sorted], reference_direction_x*ci);
+        atomicAdd(&pos_y[atom_i_sorted], reference_direction_y*ci);
+        atomicAdd(&pos_z[atom_i_sorted], reference_direction_z*ci);
+        atomicAdd(&pos_x[atom_j_sorted], reference_direction_x*cj);
+        atomicAdd(&pos_y[atom_j_sorted], reference_direction_y*cj);
+        atomicAdd(&pos_z[atom_j_sorted], reference_direction_z*cj);
     }
     __syncthreads();
 
@@ -135,8 +139,8 @@ void lincs_kernel(
     for (int iter = 0; iter < num_iterations; iter++) {
         float proj = 0.0f;
         if (!is_dummy) {
-            float nix = pos_x[ai_s], niy = pos_y[ai_s], niz = pos_z[ai_s];
-            float njx = pos_x[aj_s], njy = pos_y[aj_s], njz = pos_z[aj_s];
+            float nix = pos_x[atom_i_sorted], niy = pos_y[atom_i_sorted], niz = pos_z[atom_i_sorted];
+            float njx = pos_x[atom_j_sorted], njy = pos_y[atom_j_sorted], njz = pos_z[atom_j_sorted];
             float dx = njx - nix, dy = njy - niy, dz = njz - niz;
             float fx = dx*pbc_inv[0] + dy*pbc_inv[3] + dz*pbc_inv[6];
             float fy = dx*pbc_inv[1] + dy*pbc_inv[4] + dz*pbc_inv[7];
@@ -145,42 +149,44 @@ void lincs_kernel(
             dx = fx*pbc_matrix[0] + fy*pbc_matrix[3] + fz*pbc_matrix[6];
             dy = fx*pbc_matrix[1] + fy*pbc_matrix[4] + fz*pbc_matrix[7];
             dz = fx*pbc_matrix[2] + fy*pbc_matrix[5] + fz*pbc_matrix[8];
-            float d_sq = dx*dx + dy*dy + dz*dz;
-            float dlen2 = 2.0f*d0*d0 - d_sq;
-            if (dlen2 > 0.0f) {
-                proj = blc * (d0 - sqrtf(dlen2));
+            float current_distance_squared = dx*dx + dy*dy + dz*dz;
+            // projection_distance_squared = 2*target_distance^2 - |r|^2; the
+            // argument whose sqrt appears in the centripetal projection.
+            float projection_distance_squared = 2.0f*target_distance*target_distance - current_distance_squared;
+            if (projection_distance_squared > 0.0f) {
+                proj = coupling_denominator * (target_distance - sqrtf(projection_distance_squared));
             } else {
-                proj = blc * d0;
+                proj = coupling_denominator * target_distance;
             }
         }
-        float sol_iter = proj;
-        sm_rhs[lid + blockDim.x * 0] = proj;
+        float iteration_solution = proj;
+        shared_rhs[lid + blockDim.x * 0] = proj;
         __syncthreads();
         for (int rec = 0; rec < expansion_order; rec++) {
-            float mvb = 0.0f;
+            float matrix_vector_product = 0.0f;
             if (!is_dummy) {
                 int nc = coupled_counts[tid];
                 for (int n = 0; n < nc; n++) {
                     int c_idx = coupled_indices[n * num_constraint_threads + tid];
                     int c_lid = c_idx - block_offset;
-                    float a_val = matrix_a[n * num_constraint_threads + tid];
-                    mvb += a_val * sm_rhs[c_lid + blockDim.x * (rec % 2)];
+                    float a_val = coupling_matrix[n * num_constraint_threads + tid];
+                    matrix_vector_product += a_val * shared_rhs[c_lid + blockDim.x * (rec % 2)];
                 }
             }
-            sm_rhs[lid + blockDim.x * ((rec+1) % 2)] = mvb;
+            shared_rhs[lid + blockDim.x * ((rec+1) % 2)] = matrix_vector_product;
             __syncthreads();
-            sol_iter += mvb;
+            iteration_solution += matrix_vector_product;
         }
         if (!is_dummy) {
-            float dl = sol_iter;
-            float ci = dl * imi;
-            float cj = -dl * imj;
-            atomicAdd(&pos_x[ai_s], rcx*ci);
-            atomicAdd(&pos_y[ai_s], rcy*ci);
-            atomicAdd(&pos_z[ai_s], rcz*ci);
-            atomicAdd(&pos_x[aj_s], rcx*cj);
-            atomicAdd(&pos_y[aj_s], rcy*cj);
-            atomicAdd(&pos_z[aj_s], rcz*cj);
+            float dl = iteration_solution;
+            float ci = dl * inverse_mass_i;
+            float cj = -dl * inverse_mass_j;
+            atomicAdd(&pos_x[atom_i_sorted], reference_direction_x*ci);
+            atomicAdd(&pos_y[atom_i_sorted], reference_direction_y*ci);
+            atomicAdd(&pos_z[atom_i_sorted], reference_direction_z*ci);
+            atomicAdd(&pos_x[atom_j_sorted], reference_direction_x*cj);
+            atomicAdd(&pos_y[atom_j_sorted], reference_direction_y*cj);
+            atomicAdd(&pos_z[atom_j_sorted], reference_direction_z*cj);
         }
         __syncthreads();
     }
@@ -253,43 +259,45 @@ def _build_coupling_data(constraint_pairs, masses, target_lengths, block_size=25
             split_map[orig] = next_slot
             next_slot += 1
 
-    num_ct = ((next_slot + block_size - 1) // block_size) * block_size
+    num_constraint_threads = ((next_slot + block_size - 1) // block_size) * block_size
 
-    con_idx = np.full((num_ct, 2), -1, dtype=np.int32)
-    inv_mi = np.zeros(num_ct, dtype=np.float32)
-    inv_mj = np.zeros(num_ct, dtype=np.float32)
-    blc_arr = np.zeros(num_ct, dtype=np.float32)
-    tl_arr = np.zeros(num_ct, dtype=np.float32)
+    constraint_indices = np.full((num_constraint_threads, 2), -1, dtype=np.int32)
+    inverse_mass_i_array = np.zeros(num_constraint_threads, dtype=np.float32)
+    inverse_mass_j_array = np.zeros(num_constraint_threads, dtype=np.float32)
+    coupling_denominator_arr = np.zeros(num_constraint_threads, dtype=np.float32)
+    target_lengths_array = np.zeros(num_constraint_threads, dtype=np.float32)
 
     for orig in range(num_constraints):
-        np_ = split_map[orig]
+        slot_index = split_map[orig]
         i, j = constraint_pairs[orig]
-        con_idx[np_, 0] = i
-        con_idx[np_, 1] = j
-        inv_mi[np_] = 1.0 / float(masses[i])
-        inv_mj[np_] = 1.0 / float(masses[j])
-        blc_arr[np_] = 1.0 / (inv_mi[np_] + inv_mj[np_])
-        tl_arr[np_] = target_lengths[orig]
+        constraint_indices[slot_index, 0] = i
+        constraint_indices[slot_index, 1] = j
+        inverse_mass_i_array[slot_index] = 1.0 / float(masses[i])
+        inverse_mass_j_array[slot_index] = 1.0 / float(masses[j])
+        # coupling_denominator = 1/(1/m_i + 1/m_j): the shared inverse-mass scale
+        # that normalizes each constraint's Lagrange multiplier.
+        coupling_denominator_arr[slot_index] = 1.0 / (inverse_mass_i_array[slot_index] + inverse_mass_j_array[slot_index])
+        target_lengths_array[slot_index] = target_lengths[orig]
 
-    max_c = 1
+    max_coupled = 1
     for orig in range(num_constraints):
-        max_c = max(max_c, len(con_coupled[orig]))
+        max_coupled = max(max_coupled, len(con_coupled[orig]))
 
-    cc_counts = np.zeros(num_ct, dtype=np.int32)
-    cc_indices = np.zeros(max_c * num_ct, dtype=np.int32)
-    mf_arr = np.zeros(max_c * num_ct, dtype=np.float32)
-    mat_a = np.zeros(max_c * num_ct, dtype=np.float32)
+    coupled_counts = np.zeros(num_constraint_threads, dtype=np.int32)
+    coupled_indices = np.zeros(max_coupled * num_constraint_threads, dtype=np.int32)
+    mass_factors_array = np.zeros(max_coupled * num_constraint_threads, dtype=np.float32)
+    coupling_matrix = np.zeros(max_coupled * num_constraint_threads, dtype=np.float32)
 
     for orig in range(num_constraints):
-        np_ = split_map[orig]
+        slot_index = split_map[orig]
         i, j = constraint_pairs[orig]
-        blc_i = blc_arr[np_]
+        coupling_denominator_i = coupling_denominator_arr[slot_index]
         coupled = sorted(con_coupled[orig])
-        cc_counts[np_] = len(coupled)
+        coupled_counts[slot_index] = len(coupled)
         for n, c_orig in enumerate(coupled):
-            c_np = split_map[c_orig]
+            coupled_slot_index = split_map[c_orig]
             ci, cj = constraint_pairs[c_orig]
-            blc_c = blc_arr[c_np]
+            coupling_denominator_c = coupling_denominator_arr[coupled_slot_index]
             shared = None
             sign = 1.0
             if i == ci:
@@ -305,14 +313,14 @@ def _build_coupling_data(constraint_pairs, masses, target_lengths, block_size=25
                 shared = j
                 sign = 1.0
             if shared is not None:
-                inv_ms = 1.0 / float(masses[shared])
-                mf = sign * inv_ms * blc_i * blc_c
-                cc_indices[n * num_ct + np_] = c_np
-                mf_arr[n * num_ct + np_] = mf
+                inverse_mass_shared = 1.0 / float(masses[shared])
+                mass_factor = sign * inverse_mass_shared * coupling_denominator_i * coupling_denominator_c
+                coupled_indices[n * num_constraint_threads + slot_index] = coupled_slot_index
+                mass_factors_array[n * num_constraint_threads + slot_index] = mass_factor
 
-    return (con_idx.ravel(), tl_arr, inv_mi, inv_mj, blc_arr,
-            cc_counts, cc_indices, mf_arr, mat_a,
-            num_ct, max_c)
+    return (constraint_indices.ravel(), target_lengths_array, inverse_mass_i_array, inverse_mass_j_array, coupling_denominator_arr,
+            coupled_counts, coupled_indices, mass_factors_array, coupling_matrix,
+            num_constraint_threads, max_coupled)
 
 
 class LincsConstraint(ConstraintBase):
@@ -332,25 +340,25 @@ class LincsConstraint(ConstraintBase):
         self.expansion_order = expansion_order
         self.num_iterations = num_iterations
 
-        (con_idx, tl_arr, inv_mi, inv_mj, blc_arr,
-         cc_counts, cc_indices, mf_arr, mat_a,
-         num_ct, max_c) = _build_coupling_data(
+        (constraint_indices, target_lengths_array, inverse_mass_i_array, inverse_mass_j_array, coupling_denominator_arr,
+         coupled_counts, coupled_indices, mass_factors_array, coupling_matrix,
+         num_constraint_threads, max_coupled) = _build_coupling_data(
             list(constraint_pairs), masses, list(target_lengths))
 
-        self.num_constraint_threads = num_ct
-        self.max_coupled = max_c
+        self.num_constraint_threads = num_constraint_threads
+        self.max_coupled = max_coupled
 
-        self.d_con_idx = cp.asarray(con_idx)
-        self.d_target_len = cp.asarray(tl_arr)
-        self.d_inv_mass_i = cp.asarray(inv_mi)
-        self.d_inv_mass_j = cp.asarray(inv_mj)
-        self.d_blc = cp.asarray(blc_arr)
-        self.d_coupled_counts = cp.asarray(cc_counts)
-        self.d_coupled_indices = cp.asarray(cc_indices)
-        self.d_mass_factors = cp.asarray(mf_arr)
-        self.d_matrix_a = cp.asarray(mat_a)
+        self.d_constraint_indices = cp.asarray(constraint_indices)
+        self.d_target_lengths = cp.asarray(target_lengths_array)
+        self.d_inv_mass_i = cp.asarray(inverse_mass_i_array)
+        self.d_inv_mass_j = cp.asarray(inverse_mass_j_array)
+        self.d_coupling_denominator = cp.asarray(coupling_denominator_arr)
+        self.d_coupled_counts = cp.asarray(coupled_counts)
+        self.d_coupled_indices = cp.asarray(coupled_indices)
+        self.d_mass_factors = cp.asarray(mass_factors_array)
+        self.d_coupling_matrix = cp.asarray(coupling_matrix)
 
-        self._n_idx = con_idx.size
+        self._num_constraint_indices = constraint_indices.size
         self._kernel = cp.RawKernel(_LINCS_KERNEL, "lincs_kernel")
 
     def apply(self, gpu_context, time_step, **kwargs):
@@ -368,15 +376,15 @@ class LincsConstraint(ConstraintBase):
             gpu_context.d_positions_z,
             gpu_context.d_pbc_matrix,
             gpu_context.d_pbc_inv,
-            self.d_con_idx,
-            self.d_target_len,
+            self.d_constraint_indices,
+            self.d_target_lengths,
             self.d_inv_mass_i,
             self.d_inv_mass_j,
-            self.d_blc,
+            self.d_coupling_denominator,
             self.d_coupled_counts,
             self.d_coupled_indices,
             self.d_mass_factors,
-            self.d_matrix_a,
+            self.d_coupling_matrix,
             np.int32(self.num_constraints),
             np.int32(self.max_coupled),
             np.int32(self.num_constraint_threads),
@@ -389,6 +397,6 @@ class LincsConstraint(ConstraintBase):
             return
         kernel = self._get_remap_kernel()
         tpb = 256
-        n = self.d_con_idx.size
+        n = self.d_constraint_indices.size
         grid = ((n + tpb - 1) // tpb,)
-        kernel(grid, (tpb,), (d_remap, self.d_con_idx, np.int32(n)))
+        kernel(grid, (tpb,), (d_remap, self.d_constraint_indices, np.int32(n)))
