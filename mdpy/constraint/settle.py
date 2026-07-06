@@ -208,10 +208,8 @@ extern "C" __global__
 void remap_indices_kernel(
     const int* __restrict__ d_remap,
     int* __restrict__ d_indices,
-    int num_indices,
-    const int* __restrict__ d_rebuild_flag
+    int num_indices
 ) {
-    if (d_rebuild_flag[0] == 0) return;
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= num_indices) return;
     d_indices[i] = d_remap[d_indices[i]];
@@ -278,10 +276,10 @@ class SettleConstraint(ConstraintBase):
             np.float32(dt),
         ))
 
-    def remap_indices_gpu(self, d_remap, d_rebuild_flag):
+    def remap_indices_gpu(self, d_remap):
         if self.num_waters == 0:
             return
         kernel = self._get_remap_kernel()
         tpb = 256
         grid = ((self._n_idx + tpb - 1) // tpb,)
-        kernel(grid, (tpb,), (d_remap, self.d_water_idx, np.int32(self._n_idx), d_rebuild_flag))
+        kernel(grid, (tpb,), (d_remap, self.d_water_idx, np.int32(self._n_idx)))
