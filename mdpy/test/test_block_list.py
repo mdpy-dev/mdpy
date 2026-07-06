@@ -875,8 +875,9 @@ class TestParallelPrefixSumKernels:
         K = len(counts)
         d_counts = cp.asarray(counts)
         d_offset = cp.empty(K + 1, dtype=cp.int32)
+        d_flag = cp.array([1], dtype=cp.int32)
         kernel = cp.RawKernel(_COMPOSITE_PREFIX_SUM_KERNEL, "composite_prefix_sum_kernel")
-        kernel((1,), (SCAN_BLOCK,), (d_counts, np.int32(K), d_offset))
+        kernel((1,), (SCAN_BLOCK,), (d_counts, np.int32(K), d_offset, d_flag))
         return cp.asnumpy(d_offset)
 
     def test_composite_matches_numpy_large(self):
@@ -917,6 +918,7 @@ class TestParallelPrefixSumKernels:
         d_block_to_cell = cp.empty(max(1, total_blocks_ref), dtype=cp.int32)
         d_num_blocks = cp.zeros(1, dtype=cp.int32)
         d_total_padded = cp.zeros(1, dtype=cp.int32)
+        d_flag = cp.array([1], dtype=cp.int32)
         kernel = cp.RawKernel(_CELL_PREFIX_SUM_KERNEL, "cell_prefix_sum_kernel")
         kernel(
             (1,), (SCAN_BLOCK,),
@@ -924,6 +926,7 @@ class TestParallelPrefixSumKernels:
                 d_counts, np.int32(nc_total),
                 d_cell_offset, d_cell_block_offset, d_cell_block_count,
                 d_cell_offset_padded, d_block_to_cell, d_num_blocks, d_total_padded,
+                d_flag,
             ),
         )
         return {

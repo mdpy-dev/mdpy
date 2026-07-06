@@ -80,8 +80,9 @@ void cell_assign_kernel(
     const int* __restrict__ d_rebuild_flag
 ) {
     // GPU-side conditional: if flag=0, skip entirely so cell_counts stays
-    // zero-filled and cell_prefix_sum writes d_num_blocks[0] = 0, causing the
-    // whole rebuild chain to self-skip with no CPU readback.
+    // zero-filled. cell_prefix_sum (and composite_prefix_sum) are likewise
+    // flag-guarded, so d_num_blocks retains its previous valid value and the
+    // rebuild chain self-skips with no CPU readback.
     if (d_rebuild_flag[0] == 0) return;
 
     int i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -579,8 +580,10 @@ void cell_prefix_sum_kernel(
     int* __restrict__ cell_offset_padded,
     int* __restrict__ block_to_cell,
     int* __restrict__ num_blocks_out,
-    int* __restrict__ total_padded_out
+    int* __restrict__ total_padded_out,
+    const int* __restrict__ d_rebuild_flag
 ) {
+    if (d_rebuild_flag[0] == 0) return;
     const int tid = threadIdx.x;
     const int B = SCAN_BLOCK;
     __shared__ int s_part[SCAN_BLOCK];
@@ -640,8 +643,10 @@ extern "C" __global__
 void composite_prefix_sum_kernel(
     const int* __restrict__ composite_counts,
     int K,
-    int* __restrict__ composite_offset
+    int* __restrict__ composite_offset,
+    const int* __restrict__ d_rebuild_flag
 ) {
+    if (d_rebuild_flag[0] == 0) return;
     __shared__ int s_part[SCAN_BLOCK];
     __shared__ int s_total;
     scan_block_excl(composite_counts, composite_offset, K, s_part, &s_total);
@@ -1042,6 +1047,7 @@ class BlockList:
                 d_cell_counts, np.int32(self.nc_total),
                 cell_offset, cell_block_offset, cell_block_count,
                 cell_offset_padded, block_to_cell, d_num_blocks, d_total_padded,
+                self.d_rebuild_flag,
             ),
         )
         self.num_blocks = self.max_blocks
@@ -1057,7 +1063,8 @@ class BlockList:
         composite_offset = self._pool_get("composite_offset", composite_buckets + 1, env.NUMPY_INT)
         self._kernels["composite_prefix_sum"](
             (1,), (SCAN_BLOCK,),
-            (d_composite_counts, np.int32(composite_buckets), composite_offset),
+            (d_composite_counts, np.int32(composite_buckets), composite_offset,
+             self.d_rebuild_flag),
         )
 
         # K3: counting-sort scatter. Each atom claims a unique slot in its

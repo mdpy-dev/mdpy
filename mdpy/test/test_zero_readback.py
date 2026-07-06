@@ -109,8 +109,10 @@ class TestMaxBlocksUpperBound:
 
 class TestCellAssignFlagCheck:
     def test_flag_zero_skips_cell_assign(self):
-        """When force=False and d_rebuild_flag=0, cell_assign + counting_scatter
-        skip entirely, so d_num_blocks stays 0 (zero-propagation)."""
+        """When force=False and d_rebuild_flag=0, cell_assign skips entirely so
+        cell_counts stays zero. The prefix-sum kernels are also flag-guarded,
+        so d_num_blocks is preserved (see TestPrefixSumFlagGuard) rather than
+        being overwritten to 0."""
         import cupy as cp
 
         n = 1000
@@ -124,14 +126,18 @@ class TestCellAssignFlagCheck:
         # force=True: normal rebuild produces blocks
         bl.rebuild(positions, topology, pbc, pbc_inv, force=True)
         d_num_blocks = bl._pool.get(("num_blocks", env.NUMPY_INT))
-        assert int(d_num_blocks[0].get()) > 0
+        prev_count = int(d_num_blocks[0].get())
+        assert prev_count > 0
 
-        # force=False with flag=0: zero-propagation → num_blocks=0
+        # force=False with flag=0: cell_assign skips (cell_counts stays zero)
+        # and the prefix-sum kernels are guarded so num_blocks is preserved.
         bl.d_rebuild_flag[0] = 0
         bl.rebuild(positions, topology, pbc, pbc_inv, force=False)
-        actual = int(d_num_blocks[0].get())
-        assert actual == 0, (
-            f"flag=0 should zero-propagate to num_blocks=0, got {actual}"
+
+        cell_counts = cp.asnumpy(bl._d_cell_counts)
+        assert not cell_counts.any(), "cell_assign should have been skipped"
+        assert int(d_num_blocks[0].get()) == prev_count, (
+            f"flag=0 should preserve num_blocks={prev_count}"
         )
 
     def test_flag_zero_preserves_force_data(self):
@@ -175,3 +181,27 @@ class TestCellAssignFlagCheck:
             err_msg="block_atoms changed during flag=0 rebuild")
         assert curr_pairs == prev_pairs, (
             f"d_counters changed: {prev_pairs} → {curr_pairs}")
+
+
+class TestPrefixSumFlagGuard:
+    def test_flag_zero_preserves_num_blocks(self):
+        """When flag=0, cell_prefix_sum must skip so d_num_blocks retains
+        its previous valid value instead of being written to 0."""
+        n = 1000
+        topology = _make_topology(n)
+        positions = _make_positions(n)
+        pbc = np.eye(3, dtype=np.float32) * 50.0
+        pbc_inv = np.linalg.inv(pbc)
+
+        bl = BlockList(cutoff=10.0, skin=2.0)
+        bl.rebuild(positions, topology, pbc, pbc_inv, force=True)
+        d_num_blocks = bl._pool.get(("num_blocks", env.NUMPY_INT))
+        old_count = int(d_num_blocks[0].get())
+        assert old_count > 0
+
+        bl.d_rebuild_flag[0] = 0
+        bl.rebuild(positions, topology, pbc, pbc_inv, force=False)
+        new_count = int(d_num_blocks[0].get())
+        assert new_count == old_count, (
+            f"d_num_blocks changed: {old_count} -> {new_count}"
+        )
