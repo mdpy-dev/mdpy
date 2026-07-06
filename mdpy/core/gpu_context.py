@@ -10,10 +10,8 @@ void permute_array_kernel(
     const float* __restrict__ src,
     const int* __restrict__ permutation,
     int num_particles,
-    float* __restrict__ dst,
-    const int* __restrict__ d_rebuild_flag
+    float* __restrict__ dst
 ) {
-    if (d_rebuild_flag[0] == 0) return;
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= num_particles) return;
     dst[idx] = src[permutation[idx]];
@@ -26,10 +24,8 @@ void permute_int_array_kernel(
     const int* __restrict__ src,
     const int* __restrict__ permutation,
     int num_particles,
-    int* __restrict__ dst,
-    const int* __restrict__ d_rebuild_flag
+    int* __restrict__ dst
 ) {
-    if (d_rebuild_flag[0] == 0) return;
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= num_particles) return;
     dst[idx] = src[permutation[idx]];
@@ -42,10 +38,8 @@ void permute_array_2comp_kernel(
     const float* __restrict__ src,
     const int* __restrict__ permutation,
     int num_particles,
-    float* __restrict__ dst,
-    const int* __restrict__ d_rebuild_flag
+    float* __restrict__ dst
 ) {
-    if (d_rebuild_flag[0] == 0) return;
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= num_particles) return;
     int src_idx = permutation[idx];
@@ -72,10 +66,8 @@ void permute_state_arrays_kernel(
     float* __restrict__ dst6, float* __restrict__ dst7,
     float* __restrict__ dst8, float* __restrict__ dst9,
     float* __restrict__ dst10, float* __restrict__ dst11,
-    float* __restrict__ dst12, float* __restrict__ dst13,
-    const int* __restrict__ d_rebuild_flag
+    float* __restrict__ dst12, float* __restrict__ dst13
 ) {
-    if (d_rebuild_flag[0] == 0) return;
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= num_particles) return;
     int src_idx = permutation[idx];
@@ -148,10 +140,8 @@ void wrap_correct_kernel(
     float* __restrict__ prev_pos_z,
     const float* __restrict__ pbc_matrix,
     const float* __restrict__ pbc_inv,
-    int number_particles,
-    const int* __restrict__ d_rebuild_flag
+    int number_particles
 ) {
-    if (d_rebuild_flag[0] == 0) return;
     int index = blockIdx.x * blockDim.x + threadIdx.x;
     if (index >= number_particles) return;
     float px = pos_x[index];
@@ -260,7 +250,7 @@ class GPUContext:
             _WRAP_CORRECT_KERNEL, "wrap_correct_kernel"
         )
 
-    def wrap_positions_with_prev_correction(self, d_rebuild_flag):
+    def wrap_positions_with_prev_correction(self):
         self._ensure_wrap_correct_kernel()
         N = self.number_particles
         tpb = 256
@@ -278,7 +268,6 @@ class GPUContext:
                 self.d_pbc_matrix,
                 self.d_pbc_inv,
                 np.int32(N),
-                d_rebuild_flag,
             ),
         )
 
@@ -337,7 +326,6 @@ class GPUContext:
 
     def permute_to_sorted(
         self, permutation, arrays_float, arrays_int=None, arrays_2comp=None,
-        *, d_rebuild_flag,
     ):
         N = permutation.size
         if N == 0:
@@ -349,7 +337,7 @@ class GPUContext:
             dst = cp.empty_like(src)
             self._permutation_kernels["permute"](
                 grid, (tpb,),
-                (src, permutation, np.int32(N), dst, d_rebuild_flag)
+                (src, permutation, np.int32(N), dst)
             )
             arrays_float[name] = dst
         if arrays_int:
@@ -357,7 +345,7 @@ class GPUContext:
                 dst = cp.empty_like(src)
                 self._permutation_kernels["permute_int"](
                     grid, (tpb,),
-                    (src, permutation, np.int32(N), dst, d_rebuild_flag)
+                    (src, permutation, np.int32(N), dst)
                 )
                 arrays_int[name] = dst
         if arrays_2comp:
@@ -365,12 +353,12 @@ class GPUContext:
                 dst = cp.empty_like(src)
                 self._permutation_kernels["permute_2comp"](
                     grid, (tpb,),
-                    (src, permutation, np.int32(N), dst, d_rebuild_flag)
+                    (src, permutation, np.int32(N), dst)
                 )
                 arrays_2comp[name] = dst
 
     def permute_to_sorted_inplace(
-        self, permutation, src, dst, d_rebuild_flag
+        self, permutation, src, dst
     ):
         """Permute float32 src into pre-allocated dst: dst[i] = src[permutation[i]].
         No allocation. Caller ensures dst is float32 with size >= src.size."""
@@ -382,10 +370,10 @@ class GPUContext:
         grid = ((N + tpb - 1) // tpb,)
         self._permutation_kernels["permute"](
             grid, (tpb,),
-            (src, permutation, np.int32(N), dst, d_rebuild_flag)
+            (src, permutation, np.int32(N), dst)
         )
 
-    def permute_state_arrays(self, permutation, name_array_pairs, d_rebuild_flag):
+    def permute_state_arrays(self, permutation, name_array_pairs):
         assert (
             len(name_array_pairs) == 14
         ), f"permute_state_arrays requires 14 arrays, got {len(name_array_pairs)}"
@@ -404,7 +392,7 @@ class GPUContext:
         self._permutation_kernels["permute_state_arrays"](
             grid,
             (tpb,),
-            tuple(src_list + [permutation, np.int32(N)] + dst_list + [d_rebuild_flag]),
+            tuple(src_list + [permutation, np.int32(N)] + dst_list),
         )
         return list(zip(name_list, dst_list))
 
