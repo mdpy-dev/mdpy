@@ -15,7 +15,7 @@ class Topology:
         'dihedral_indices', 'num_dihedrals',
         'improper_indices', 'num_impropers',
         'exclusion_offset', 'exclusion_neighbors', 'exclusion_scale',
-        'masses', 'charges', 'particle_types', 'molecule_ids',
+        'masses', 'charges', 'particle_type_indices', 'molecule_ids',
         'particle_names', 'type_names', 'chain_ids', 'molecule_types',
         '_is_joined',
     ]
@@ -27,7 +27,7 @@ class Topology:
         self.num_particles = builder._num_particles
         self.masses = builder._masses.copy()
         self.charges = builder._charges.copy()
-        self.particle_types = builder._particle_types.copy()
+        self.particle_type_indices = builder._particle_type_indices.copy()
         self.molecule_ids = builder._molecule_ids.copy()
         self.particle_names = list(builder._particle_names)
         self.type_names = list(builder._type_names)
@@ -81,7 +81,7 @@ class Topology:
         self.num_particles = 0
         self.masses = np.empty(0, dtype=env.NUMPY_FLOAT)
         self.charges = np.empty(0, dtype=env.NUMPY_FLOAT)
-        self.particle_types = np.empty(0, dtype=env.NUMPY_INT)
+        self.particle_type_indices = np.empty(0, dtype=env.NUMPY_INT)
         self.molecule_ids = np.empty(0, dtype=env.NUMPY_INT)
         self.particle_names = []
         self.type_names = []
@@ -453,7 +453,7 @@ class Builder:
         self._num_particles = 0
         self._masses = None
         self._charges = None
-        self._particle_types = None
+        self._particle_type_indices = None
         self._molecule_ids = None
         self._particle_names: list[str] = []
         self._type_names: list[str] = []
@@ -471,7 +471,7 @@ class Builder:
         self,
         masses: np.ndarray,
         charges: np.ndarray,
-        particle_types: np.ndarray,
+        particle_type_indices: np.ndarray,
         molecule_ids: np.ndarray | None = None,
         particle_names: list[str] | None = None,
         type_names: list[str] | None = None,
@@ -481,7 +481,7 @@ class Builder:
         self._num_particles = len(masses)
         self._masses = np.asarray(masses, dtype=env.NUMPY_FLOAT)
         self._charges = np.asarray(charges, dtype=env.NUMPY_FLOAT)
-        self._particle_types = np.asarray(particle_types, dtype=env.NUMPY_INT)
+        self._particle_type_indices = np.asarray(particle_type_indices, dtype=env.NUMPY_INT)
         if molecule_ids is not None:
             self._molecule_ids = np.asarray(molecule_ids, dtype=env.NUMPY_INT)
         else:

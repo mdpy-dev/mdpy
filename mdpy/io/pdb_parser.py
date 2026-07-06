@@ -37,7 +37,7 @@ class PDBParser:
         current_frame = []
 
         self._particle_ids = []
-        self._particle_types = []
+        self._particle_type_names = []
         self._particle_names = []
         self._molecule_ids = []
         self._molecule_types = []
@@ -58,7 +58,7 @@ class PDBParser:
                 if first_atom_section:
                     self._particle_ids.append(int(line[6:11]))
                     self._particle_names.append(line[12:16].strip())
-                    self._particle_types.append(_guess_element(line[12:16]))
+                    self._particle_type_names.append(_guess_element(line[12:16]))
                     self._molecule_ids.append(int(line[22:26]))
                     self._molecule_types.append(line[17:21].strip())
                     self._chain_ids.append(line[21])
@@ -124,7 +124,7 @@ class PDBParser:
         matrix_id = self.get_matrix_id(particle_id)
         return {
             'particle_id': self._particle_ids[matrix_id],
-            'particle_type': self._particle_types[matrix_id],
+            'particle_type_names': self._particle_type_names[matrix_id],
             'particle_name': self._particle_names[matrix_id],
             'molecule_id': self._molecule_ids[matrix_id],
             'molecule_type': self._molecule_types[matrix_id],
@@ -177,8 +177,9 @@ class PDBParser:
         return self._particle_ids
 
     @property
-    def particle_types(self):
-        return self._particle_types
+    def particle_type_names(self):
+        """Per-particle element symbols guessed from atom names. NOT force-field types — PDB format has no type info."""
+        return self._particle_type_names
 
     @property
     def particle_names(self):

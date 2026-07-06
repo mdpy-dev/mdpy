@@ -84,7 +84,7 @@ def test_exclusion_map_constant_sort_key():
     builder.set_particles(
         masses=topology.masses,
         charges=topology.charges,
-        particle_types=topology.particle_types,
+        particle_type_indices=topology.particle_type_indices,
     )
     for i in range(topology.num_bonds):
         builder.add_bond(

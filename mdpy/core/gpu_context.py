@@ -431,7 +431,7 @@ class GPUContext:
         self.d_prev_positions_z = cp.zeros(number, dtype=float_dtype)
 
         self.d_masses = cp.asarray(topology.masses.astype(float_dtype))
-        self.d_types = cp.asarray(topology.particle_types.astype(int_dtype))
+        self.d_types = cp.asarray(topology.particle_type_indices.astype(int_dtype))
         self.d_charges = cp.asarray(topology.charges.astype(float_dtype))
         self.d_energy = cp.zeros(1, dtype=float_dtype)
         self.d_energy_accumulator = None

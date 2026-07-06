@@ -52,7 +52,7 @@ def _build_four_particle():
     builder.set_particles(
         masses=np.array([12.0, 12.0, 12.0, 12.0], dtype=env.NUMPY_FLOAT),
         charges=np.zeros(4, dtype=env.NUMPY_FLOAT),
-        particle_types=np.zeros(4, dtype=env.NUMPY_INT),
+        particle_type_indices=np.zeros(4, dtype=env.NUMPY_INT),
     )
     builder.add_bond(0, 1, 100.0, 1.5)
     builder.add_bond(1, 2, 100.0, 1.5)
@@ -68,7 +68,7 @@ def _build_simple_bond():
     builder.set_particles(
         masses=np.array([12.0, 12.0], dtype=env.NUMPY_FLOAT),
         charges=np.zeros(2, dtype=env.NUMPY_FLOAT),
-        particle_types=np.zeros(2, dtype=env.NUMPY_INT),
+        particle_type_indices=np.zeros(2, dtype=env.NUMPY_INT),
     )
     builder.add_bond(0, 1, 200.0, 1.5)
     return builder.build()
@@ -632,7 +632,7 @@ class TestRebuildSortCorrectness:
         builder.set_particles(
             masses=np.full(n, 12.0, dtype=env.NUMPY_FLOAT),
             charges=np.zeros(n, dtype=env.NUMPY_FLOAT),
-            particle_types=np.zeros(n, dtype=env.NUMPY_INT),
+            particle_type_indices=np.zeros(n, dtype=env.NUMPY_INT),
         )
         for i in range(n - 1):
             builder.add_bond(i, i + 1, k=300.0, r0=1.5)
@@ -689,7 +689,7 @@ class TestRebuildSortCorrectness:
         builder.set_particles(
             masses=np.full(n, 12.0, dtype=env.NUMPY_FLOAT),
             charges=np.zeros(n, dtype=env.NUMPY_FLOAT),
-            particle_types=np.zeros(n, dtype=env.NUMPY_INT),
+            particle_type_indices=np.zeros(n, dtype=env.NUMPY_INT),
         )
         for i in range(n - 1):
             builder.add_bond(i, i + 1, k=300.0, r0=1.5)
@@ -892,7 +892,7 @@ class TestAsyncRebuild:
         builder.set_particles(
             masses=np.full(n, 12.0, dtype=env.NUMPY_FLOAT),
             charges=np.zeros(n, dtype=env.NUMPY_FLOAT),
-            particle_types=np.zeros(n, dtype=env.NUMPY_INT),
+            particle_type_indices=np.zeros(n, dtype=env.NUMPY_INT),
         )
         for i in range(n - 1):
             builder.add_bond(i, i + 1, k=300.0, r0=1.5)

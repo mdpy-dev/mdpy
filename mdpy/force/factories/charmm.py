@@ -91,14 +91,14 @@ def _create_nb14_force(topology, parameter_table):
         force.set_parameter('charge', charges)
     lj_pair_14 = parameter_table.type_pair_parameters['lj_pair_14']
     n_types = int(np.sqrt(len(lj_pair_14) // 2))
-    particle_types = topology.particle_types
+    particle_type_indices = topology.particle_type_indices
 
     offset = n12 + n13
     for k in range(offset, offset + n14):
         i_atom = int(pair_i[k])
         j_atom = int(pair_j[k])
-        type_i = int(particle_types[i_atom])
-        type_j = int(particle_types[j_atom])
+        type_i = int(particle_type_indices[i_atom])
+        type_j = int(particle_type_indices[j_atom])
         pair_idx = type_i * n_types + type_j
         sigma = float(lj_pair_14[pair_idx * 2])
         epsilon = float(lj_pair_14[pair_idx * 2 + 1])

@@ -30,7 +30,7 @@ def _make_topology(n):
     builder.set_particles(
         masses=np.ones(n, dtype=np.float32),
         charges=np.zeros(n, dtype=np.float32),
-        particle_types=np.zeros(n, dtype=np.int32),
+        particle_type_indices=np.zeros(n, dtype=np.int32),
     )
     builder.build_exclusion_map()
     topology, _ = builder.build()

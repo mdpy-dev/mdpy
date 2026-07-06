@@ -116,7 +116,7 @@ class TestCellBasedChargeSpreading:
         pbc = np.eye(3, dtype=np.float64) * max(box_x, box_y, box_z)
         pbc_inv = np.linalg.inv(pbc)
         positions = np.stack([pos_x, pos_y, pos_z], axis=1).astype(np.float64)
-        topo = type('T', (), {'num_particles': N, 'particle_types': np.zeros(N, dtype=np.int32)})()
+        topo = type('T', (), {'num_particles': N, 'particle_type_indices': np.zeros(N, dtype=np.int32)})()
         bl.rebuild(positions, topo, _PBCContext(pbc, pbc_inv), force=True)
 
         bl.compute_pme_subgrid_dims(grid_x, grid_y, grid_z, order)
@@ -225,7 +225,7 @@ class TestForceGathering:
         pbc = np.eye(3, dtype=np.float64) * max(box_x, box_y, box_z)
         pbc_inv = np.linalg.inv(pbc)
         positions = np.stack([pos_x, pos_y, pos_z], axis=1).astype(np.float64)
-        topo = type('T', (), {'num_particles': N, 'particle_types': np.zeros(N, dtype=np.int32)})()
+        topo = type('T', (), {'num_particles': N, 'particle_type_indices': np.zeros(N, dtype=np.int32)})()
         bl = BlockList(cutoff=12.0, skin=1.0)
         bl.rebuild(positions, topo, _PBCContext(pbc, pbc_inv), force=True)
         bl.compute_pme_subgrid_dims(grid_x, grid_y, grid_z, order)
@@ -328,7 +328,7 @@ class TestPMEReciprocalForce:
 
         topo = Topology()
         topo.num_particles = N
-        topo.particle_types = np.zeros(N, dtype=np.int32)
+        topo.particle_type_indices = np.zeros(N, dtype=np.int32)
         topo.masses = np.ones(N, dtype=np.float32)
         topo.exclusion_offset = np.zeros(N + 1, dtype=np.int32)
         topo.exclusion_neighbors = np.empty(0, dtype=np.int32)
@@ -380,7 +380,7 @@ class TestPMEReciprocalForce:
 
         topo = Topology()
         topo.num_particles = N
-        topo.particle_types = np.zeros(N, dtype=np.int32)
+        topo.particle_type_indices = np.zeros(N, dtype=np.int32)
         topo.masses = np.ones(N, dtype=np.float32)
         topo.exclusion_offset = np.zeros(N + 1, dtype=np.int32)
         topo.exclusion_neighbors = np.empty(0, dtype=np.int32)
@@ -459,7 +459,7 @@ class TestGridSizing:
         N = 1
         topo = Topology()
         topo.num_particles = N
-        topo.particle_types = np.zeros(N, dtype=np.int32)
+        topo.particle_type_indices = np.zeros(N, dtype=np.int32)
         topo.exclusion_offset = np.zeros(N + 1, dtype=np.int32)
         topo.exclusion_neighbors = np.empty(0, dtype=np.int32)
         topo.exclusion_scale = np.empty(0, dtype=np.float32)
@@ -484,7 +484,7 @@ class TestGridSizing:
         N = 1
         topo = Topology()
         topo.num_particles = N
-        topo.particle_types = np.zeros(N, dtype=np.int32)
+        topo.particle_type_indices = np.zeros(N, dtype=np.int32)
         topo.exclusion_offset = np.zeros(N + 1, dtype=np.int32)
         topo.exclusion_neighbors = np.empty(0, dtype=np.int32)
         topo.exclusion_scale = np.empty(0, dtype=np.float32)
@@ -507,7 +507,7 @@ class TestGridSizing:
         N = 1
         topo = Topology()
         topo.num_particles = N
-        topo.particle_types = np.zeros(N, dtype=np.int32)
+        topo.particle_type_indices = np.zeros(N, dtype=np.int32)
         topo.exclusion_offset = np.zeros(N + 1, dtype=np.int32)
         topo.exclusion_neighbors = np.empty(0, dtype=np.int32)
         topo.exclusion_scale = np.empty(0, dtype=np.float32)
@@ -531,7 +531,7 @@ class TestGridSizing:
         N = 1
         topo = Topology()
         topo.num_particles = N
-        topo.particle_types = np.zeros(N, dtype=np.int32)
+        topo.particle_type_indices = np.zeros(N, dtype=np.int32)
         topo.exclusion_offset = np.zeros(N + 1, dtype=np.int32)
         topo.exclusion_neighbors = np.empty(0, dtype=np.int32)
         topo.exclusion_scale = np.empty(0, dtype=np.float32)
@@ -555,7 +555,7 @@ class TestGridSizing:
         N = 1
         topo = Topology()
         topo.num_particles = N
-        topo.particle_types = np.zeros(N, dtype=np.int32)
+        topo.particle_type_indices = np.zeros(N, dtype=np.int32)
         topo.exclusion_offset = np.zeros(N + 1, dtype=np.int32)
         topo.exclusion_neighbors = np.empty(0, dtype=np.int32)
         topo.exclusion_scale = np.empty(0, dtype=np.float32)
@@ -698,7 +698,7 @@ class TestBilateralPaddingUnwrapped:
         order = 4
 
         positions = np.array([[25.0, 25.0, 25.0]], dtype=np.float64)
-        topo = type('T', (), {'num_particles': N, 'particle_types': np.zeros(N, dtype=np.int32)})()
+        topo = type('T', (), {'num_particles': N, 'particle_type_indices': np.zeros(N, dtype=np.int32)})()
         pbc = np.eye(3, dtype=np.float64) * box
         pbc_inv = np.linalg.inv(pbc)
 
@@ -763,7 +763,7 @@ class TestBilateralPaddingUnwrapped:
                             float(charge[i]) * float(theta_x[kx]) * float(theta_y[ky]) * float(theta_z[kz])
 
         positions = np.stack([pos_x, pos_y, pos_z], axis=1).astype(np.float64)
-        topo = type('T', (), {'num_particles': N, 'particle_types': np.zeros(N, dtype=np.int32)})()
+        topo = type('T', (), {'num_particles': N, 'particle_type_indices': np.zeros(N, dtype=np.int32)})()
         pbc = np.eye(3, dtype=np.float64) * box
         pbc_inv = np.linalg.inv(pbc)
         bl = BlockList(cutoff=cutoff, skin=skin)

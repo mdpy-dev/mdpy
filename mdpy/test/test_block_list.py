@@ -13,7 +13,7 @@ def _make_topology(n):
     builder.set_particles(
         masses=np.ones(n, dtype=np.float32),
         charges=np.zeros(n, dtype=np.float32),
-        particle_types=np.zeros(n, dtype=np.int32),
+        particle_type_indices=np.zeros(n, dtype=np.int32),
     )
     builder.build_exclusion_map()
     topology, _ = builder.build()
@@ -448,7 +448,7 @@ class TestExclusionMasks:
         builder.set_particles(
             masses=np.ones(n, dtype=np.float32),
             charges=np.zeros(n, dtype=np.float32),
-            particle_types=np.zeros(n, dtype=np.int32),
+            particle_type_indices=np.zeros(n, dtype=np.int32),
         )
         for i in range(n - 1):
             builder.add_bond(i, i + 1, k=300.0, r0=1.5)
@@ -489,7 +489,7 @@ class TestExclusionMasks:
         builder.set_particles(
             masses=np.ones(n, dtype=np.float32),
             charges=np.zeros(n, dtype=np.float32),
-            particle_types=np.zeros(n, dtype=np.int32),
+            particle_type_indices=np.zeros(n, dtype=np.int32),
         )
         for i in range(n - 1):
             builder.add_bond(i, i + 1, k=300.0, r0=1.5)
@@ -540,7 +540,7 @@ class TestBlockPairClassification:
         builder.set_particles(
             masses=np.ones(n, dtype=np.float32),
             charges=np.zeros(n, dtype=np.float32),
-            particle_types=np.zeros(n, dtype=np.int32),
+            particle_type_indices=np.zeros(n, dtype=np.int32),
         )
         for i in range(n - 1):
             builder.add_bond(i, i + 1, k=300.0, r0=1.5)
@@ -1243,7 +1243,7 @@ class TestSnapshotPostWrapIntegration:
         builder.set_particles(
             masses=np.ones(n, dtype=np.float32),
             charges=np.zeros(n, dtype=np.float32),
-            particle_types=np.zeros(n, dtype=np.int32),
+            particle_type_indices=np.zeros(n, dtype=np.int32),
         )
         builder.build_exclusion_map()
         topology, _ = builder.build()
@@ -1300,7 +1300,7 @@ class TestSnapshotPostWrapIntegration:
         builder.set_particles(
             masses=np.ones(n, dtype=np.float32),
             charges=np.zeros(n, dtype=np.float32),
-            particle_types=np.zeros(n, dtype=np.int32),
+            particle_type_indices=np.zeros(n, dtype=np.int32),
         )
         builder.build_exclusion_map()
         topology, _ = builder.build()
@@ -1360,7 +1360,7 @@ class TestSnapshotPostWrapIntegration:
         builder.set_particles(
             masses=np.ones(n, dtype=np.float32),
             charges=np.zeros(n, dtype=np.float32),
-            particle_types=np.zeros(n, dtype=np.int32),
+            particle_type_indices=np.zeros(n, dtype=np.int32),
         )
         builder.build_exclusion_map()
         topology, _ = builder.build()

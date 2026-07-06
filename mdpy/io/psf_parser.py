@@ -127,7 +127,7 @@ class PSFParser:
         builder.set_particles(
             masses=self._masses,
             charges=self._charges,
-            particle_types=self._particle_type_indices,
+            particle_type_indices=self._particle_type_indices,
             molecule_ids=np.array(self._molecule_ids, dtype=env.NUMPY_INT),
             particle_names=self._particle_names,
             type_names=self._type_names,
@@ -174,7 +174,7 @@ class PSFParser:
         return self._particle_ids
 
     @property
-    def particle_types(self):
+    def particle_type_names(self):
         return self._type_names
 
     @property
@@ -192,10 +192,6 @@ class PSFParser:
     @property
     def chain_ids(self):
         return self._chain_ids
-
-    @property
-    def type_names(self):
-        return self._type_names
 
     @property
     def unique_type_names(self):

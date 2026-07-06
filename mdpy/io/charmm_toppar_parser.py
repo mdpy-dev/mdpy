@@ -416,7 +416,7 @@ def create_parameter_table(topology, toppar_parser):
     Parameters
     ----------
     topology : Topology
-        Must have particle_types, type_names, charges, and bonded
+        Must have particle_type_indices, type_names, charges, and bonded
         indices (bond_indices, angle_indices, etc.).
     toppar_parser : CharmmTopparParser
         Parsed CHARMM parameter data.

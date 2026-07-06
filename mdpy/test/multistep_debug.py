@@ -81,7 +81,7 @@ def main():
         'lj_pair_14', bf_lj_pair,
     ).astype(np.float64).copy()
     bf_n_types = int(np.sqrt(len(bf_lj_pair) // 2))
-    bf_particle_types = topology.particle_types.copy()
+    bf_particle_type_indices = topology.particle_type_indices.copy()
 
     bf_topology = SimpleNamespace(
         num_particles=N,
@@ -175,7 +175,7 @@ def main():
         nonbonded_forces, nonbonded_energy = compute_nonbonded_forces(
             positions, pairs_i, pairs_j, flags,
             bf_charges, bf_charges_14, bf_lj_pair, bf_lj_pair_14,
-            bf_particle_types, BOX_SIZE, bf_n_types,
+            bf_particle_type_indices, BOX_SIZE, bf_n_types,
         )
 
         bf_forces = bonded_forces + nonbonded_forces
