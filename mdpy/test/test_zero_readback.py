@@ -6,9 +6,23 @@ from the GPU.
 """
 
 import numpy as np
+import cupy as cp
 import pytest
 from mdpy.core.topology import Builder
 from mdpy.core.block_list import BlockList, BLOCK_SIZE
+
+
+class _PBCContext:
+    """Minimal stand-in exposing d_pbc_matrix/d_pbc_inv for BlockList.rebuild,
+    which now reads PBC from a GPUContext."""
+
+    def __init__(self, pbc_matrix, pbc_inv):
+        self.d_pbc_matrix = cp.asarray(
+            np.ascontiguousarray(pbc_matrix, dtype=np.float32).ravel()
+        )
+        self.d_pbc_inv = cp.asarray(
+            np.ascontiguousarray(pbc_inv, dtype=np.float32).ravel()
+        )
 
 
 def _make_topology(n):
@@ -67,7 +81,7 @@ class TestMaxBlocksUpperBound:
         pbc_matrix = np.eye(3, dtype=np.float32) * box
         pbc_inv = np.linalg.inv(pbc_matrix)
         bl = BlockList(cutoff=10.0, skin=2.0)
-        bl.rebuild(positions, topology, pbc_matrix, pbc_inv, force=True)
+        bl.rebuild(positions, topology, _PBCContext(pbc_matrix, pbc_inv), force=True)
         assert bl.num_blocks <= bl.max_blocks, (
             f"num_blocks={bl.num_blocks} exceeds max_blocks={bl.max_blocks}"
         )
@@ -84,7 +98,7 @@ class TestMaxBlocksUpperBound:
         pbc_matrix = np.eye(3, dtype=np.float32) * box
         pbc_inv = np.linalg.inv(pbc_matrix)
         bl = BlockList(cutoff=10.0, skin=2.0)
-        bl.rebuild(positions, topology, pbc_matrix, pbc_inv, force=True)
+        bl.rebuild(positions, topology, _PBCContext(pbc_matrix, pbc_inv), force=True)
         ba = cp.asnumpy(bl.d_block_atoms)
         assert ba.size == bl.max_total_padded
         real = ba[ba >= 0]
@@ -97,7 +111,7 @@ class TestMaxBlocksUpperBound:
         pbc_matrix = np.eye(3, dtype=np.float32) * 50.0
         pbc_inv = np.linalg.inv(pbc_matrix)
         bl = BlockList(cutoff=10.0, skin=2.0)
-        bl.rebuild(positions, topology, pbc_matrix, pbc_inv, force=True)
+        bl.rebuild(positions, topology, _PBCContext(pbc_matrix, pbc_inv), force=True)
         for attr in ("d_block_center_x", "d_block_center_y", "d_block_center_z",
                       "d_block_size_x", "d_block_size_y", "d_block_size_z"):
             arr = getattr(bl, attr)

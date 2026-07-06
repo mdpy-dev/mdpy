@@ -196,8 +196,7 @@ class System:
         self._block_list.rebuild(
             positions_soa,
             self.topology,
-            self._pbc_matrix,
-            self._pbc_inv,
+            self.gpu,
             force=force,
         )
         self._permute_all_arrays()
@@ -207,7 +206,7 @@ class System:
             self.gpu.d_positions_y,
             self.gpu.d_positions_z,
         ))
-        self._block_list.build_block_pairs(self.topology, self._pbc_matrix)
+        self._block_list.build_block_pairs(self.topology, self.gpu)
         for term in self.force_terms:
             if hasattr(term, "bind_sorted"):
                 term.bind_sorted(self.topology, self._block_list, self.gpu)

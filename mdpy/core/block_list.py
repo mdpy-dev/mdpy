@@ -782,8 +782,6 @@ class BlockList:
         self._d_block_pair_shift_z_buf = cp.empty(0, dtype=env.NUMPY_FLOAT)
         self._d_counters = cp.zeros(1, dtype=env.NUMPY_INT)
 
-        self._d_pbc_matrix = None
-        self._d_pbc_inv = None
         self._kernels = None
 
         self._d_excl_offset = None
@@ -910,15 +908,6 @@ class BlockList:
             return
         self._kernels = _compile_gpu_kernels()
 
-    def _upload_pbc(self, pbc_matrix, pbc_inv):
-        if self._d_pbc_matrix is None:
-            self._d_pbc_matrix = cp.asarray(
-                np.ascontiguousarray(pbc_matrix, dtype=env.NUMPY_FLOAT).ravel()
-            )
-            self._d_pbc_inv = cp.asarray(
-                np.ascontiguousarray(pbc_inv, dtype=env.NUMPY_FLOAT).ravel()
-            )
-
     def _read_device_int(self, d_int32):
         cp.cuda.runtime.memcpyAsync(
             self._pinned_int_buf.ptr,
@@ -962,7 +951,7 @@ class BlockList:
         self._hilbert_levels = L
         self._hilbert_bits = 3 * L
 
-    def rebuild(self, positions, topology, pbc_matrix, pbc_inv, *, force=False):
+    def rebuild(self, positions, topology, gpu_context, *, force=False):
         """Sort particles into cell-aligned blocks. Returns (pdb_to_sorted, None).
 
         When force=False (default), d_rebuild_flag is left untouched — the
@@ -987,8 +976,8 @@ class BlockList:
         self.num_particles = N
         tpb = 256
 
-        self._compute_cell_grid(pbc_matrix, N)
-        self._upload_pbc(pbc_matrix, pbc_inv)
+        pbc_matrix_host = gpu_context.d_pbc_matrix.get().reshape(3, 3)
+        self._compute_cell_grid(pbc_matrix_host, N)
 
         if force:
             self.d_rebuild_flag[0] = 1
@@ -1020,7 +1009,7 @@ class BlockList:
             (nm,), (tpb,),
             (
                 pos_x, pos_y, pos_z,
-                self._d_pbc_matrix, self._d_pbc_inv,
+                gpu_context.d_pbc_matrix, gpu_context.d_pbc_inv,
                 np.int32(N),
                 np.int32(self.nc_x), np.int32(self.nc_y), np.int32(self.nc_z),
                 np.int32(hilbert_levels),
@@ -1150,7 +1139,7 @@ class BlockList:
 
         return self.d_pdb_to_sorted, None
 
-    def build_block_pairs(self, topology, pbc_matrix):
+    def build_block_pairs(self, topology, gpu_context):
         """Find interacting block pairs using cell-based neighbor search."""
         if self.num_particles == 0 or not hasattr(self, '_sorted_positions'):
             return
@@ -1190,7 +1179,7 @@ class BlockList:
                 d_num_blocks, np.int32(self.num_particles),
                 np.int32(cell_subsets),
                 np.float32(build_radius_sq),
-                self._d_pbc_matrix,
+                gpu_context.d_pbc_matrix,
                 self._d_block_pair_buf, self._d_interacting_buf,
                 self._d_block_pair_shift_x_buf, self._d_block_pair_shift_y_buf, self._d_block_pair_shift_z_buf,
                 self._d_counters, np.int32(max_block_pairs),

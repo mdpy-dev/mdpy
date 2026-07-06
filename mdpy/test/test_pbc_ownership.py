@@ -60,8 +60,7 @@ def test_block_list_uses_current_pbc_after_box_change():
     bl.rebuild(
         (ctx.d_positions_x, ctx.d_positions_y, ctx.d_positions_z),
         topo,
-        np.eye(3, dtype=np.float32) * 10.0,
-        np.eye(3, dtype=np.float32) * 0.1,
+        ctx,
         force=True,
     )
     nc_x_before = bl.nc_x
@@ -69,13 +68,12 @@ def test_block_list_uses_current_pbc_after_box_change():
     # Now upload a new box that is 2x larger in each dimension.
     ctx.upload_pbc((np.eye(3, dtype=np.float32) * 20.0).flatten())
 
-    # Re-rebuild with the new pbc_matrix passed explicitly. After Task 5,
-    # the signature will change but the physical behavior must hold.
+    # Re-rebuild reading PBC from GPUContext. The signature change must not
+    # break the physical behavior: BlockList reads the current box.
     bl.rebuild(
         (ctx.d_positions_x, ctx.d_positions_y, ctx.d_positions_z),
         topo,
-        np.eye(3, dtype=np.float32) * 20.0,
-        np.eye(3, dtype=np.float32) * 0.05,
+        ctx,
         force=True,
     )
     nc_x_after = bl.nc_x
