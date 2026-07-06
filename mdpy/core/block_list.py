@@ -957,9 +957,14 @@ class BlockList:
         """Sort particles into cell-aligned blocks. Returns (pdb_to_sorted, None).
 
         When force=False (default), d_rebuild_flag is left untouched — the
-        sync_interval path relies on check_rebuild_async to have set it, enabling
-        zero-propagation skip when atoms have not moved. When force=True, flag
-        is set to 1 so cell_assign runs unconditionally (first build, minimize).
+        conditional rebuild path in update_neighbor_list reads the flag set
+        by check_rebuild_async. When force=True, flag is set to 1 so
+        cell_assign runs unconditionally (first build, minimize, forced
+        rebuild).
+
+        Note: this method no longer captures the rebuild-baseline snapshot.
+        Call capture_snapshot() after PBC wrapping to set the displacement
+        check baseline. System._do_rebuild does this automatically.
         """
         N = topology.num_particles
         if N == 0:
