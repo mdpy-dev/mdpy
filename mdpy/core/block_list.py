@@ -70,7 +70,7 @@ void cell_assign_kernel(
     const float* __restrict__ pos_z,
     const float* __restrict__ pbc_matrix,
     const float* __restrict__ pbc_inv,
-    int number_particles,
+    int num_particles,
     int nc_x, int nc_y, int nc_z,
     int hilbert_L,
     int* __restrict__ cell_counts,
@@ -79,7 +79,7 @@ void cell_assign_kernel(
     int* __restrict__ cell_indices
 ) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
-    if (i >= number_particles) return;
+    if (i >= num_particles) return;
 
     float px = pos_x[i], py = pos_y[i], pz = pos_z[i];
     float fx = px*pbc_inv[0] + py*pbc_inv[3] + pz*pbc_inv[6];
@@ -655,7 +655,7 @@ void counting_scatter_kernel(
     const float* __restrict__ src_x,
     const float* __restrict__ src_y,
     const float* __restrict__ src_z,
-    int number_particles,
+    int num_particles,
     float* __restrict__ dst_x, float* __restrict__ dst_y, float* __restrict__ dst_z,
     int* __restrict__ block_atoms,
     int* __restrict__ raw_order,
@@ -664,7 +664,7 @@ void counting_scatter_kernel(
     int* __restrict__ cell_indices_sorted
 ) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
-    if (i >= number_particles) return;
+    if (i >= num_particles) return;
     int cell = cell_indices[i];
     int ckey = (int)sort_keys[i];
     int local = atomicAdd(&composite_cursor[ckey], 1);

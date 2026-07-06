@@ -369,7 +369,7 @@ class NonbondedForce(ForceTerm):
             _PACK_SORTED_POSQ_KERNEL, "pack_sorted_posq_kernel"
         )
 
-        N = gpu_context.number_particles
+        N = gpu_context.num_particles
         self._d_posq = cp.zeros(N * 4, dtype=np.float32)
 
         self._d_types = gpu_context.d_types
@@ -446,7 +446,7 @@ class NonbondedForce(ForceTerm):
 
         self._gather_per_particle(block_list)
 
-        N = gpu_context.number_particles
+        N = gpu_context.num_particles
         total_slots = block_list.num_blocks * 32
         tpb = 256
         grid = ((total_slots + tpb - 1) // tpb,)
@@ -469,7 +469,7 @@ class NonbondedForce(ForceTerm):
         )
 
     def _refresh_posq(self, gpu_context, block_list):
-        N = gpu_context.number_particles
+        N = gpu_context.num_particles
         total_slots = block_list.num_blocks * 32
         tpb = 256
         grid = ((total_slots + tpb - 1) // tpb,)
@@ -513,7 +513,7 @@ class NonbondedForce(ForceTerm):
                 block_list.d_excl_exclusion_masks,
                 np.float32(self._cutoff_sq),
                 block_list._d_counters,
-                np.int32(gpu_context.number_particles),
+                np.int32(gpu_context.num_particles),
             ]
         )
         for base in self._prop_bases:

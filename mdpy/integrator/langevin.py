@@ -24,10 +24,10 @@ void langevin_init_kernel(
     float* __restrict__ prev_pos_x,
     float* __restrict__ prev_pos_y,
     float* __restrict__ prev_pos_z,
-    float dt, float dt_sq, int number_particles
+    float dt, float dt_sq, int num_particles
 ) {
     int index = blockIdx.x * blockDim.x + threadIdx.x;
-    if (index >= number_particles) return;
+    if (index >= num_particles) return;
     float mass = masses[index];
     if (mass <= 0.0f) return;
     float inv_mass = 1.0f / mass;
@@ -52,10 +52,10 @@ void langevin_baoab_kernel(
     const float* __restrict__ f_z,
     const float* __restrict__ masses,
     float dt, float dt_half, float alpha, float temperature, float boltzmann,
-    unsigned long long seed, int number_particles
+    unsigned long long seed, int num_particles
 ) {
     int index = blockIdx.x * blockDim.x + threadIdx.x;
-    if (index >= number_particles) return;
+    if (index >= num_particles) return;
     float mass = masses[index];
     if (mass <= 0.0f) return;
 
@@ -137,7 +137,7 @@ class LangevinBAOABIntegrator:
 
     def step(self, system):
         gpu = system.gpu
-        number = gpu.number_particles
+        number = gpu.num_particles
         block = 256
         grid = (number + block - 1) // block
 

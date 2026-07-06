@@ -331,7 +331,7 @@ No hard rule about which to use. Choose based on the kernel's needs: `cupy.RawKe
 
 No abbreviations. Readability first:
 
-- `position`, `force`, `velocity`, `number_particles`, `cutoff_radius`, `temperature`
+- `position`, `force`, `velocity`, `num_particles`, `cutoff_radius`, `temperature`
 - Exception: widely recognized physics abbreviations are fine (`pbc`, `lj`, `pme`, `rmsd`, `rdf`)
 
 ## Testing

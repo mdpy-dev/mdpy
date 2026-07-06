@@ -112,10 +112,10 @@ void pbc_wrap_inplace_kernel(
     float* __restrict__ pos_z,
     const float* __restrict__ pbc_matrix,
     const float* __restrict__ pbc_inv,
-    int number_particles
+    int num_particles
 ) {
     int index = blockIdx.x * blockDim.x + threadIdx.x;
-    if (index >= number_particles) return;
+    if (index >= num_particles) return;
     float px = pos_x[index];
     float py = pos_y[index];
     float pz = pos_z[index];
@@ -140,10 +140,10 @@ void wrap_correct_kernel(
     float* __restrict__ prev_pos_z,
     const float* __restrict__ pbc_matrix,
     const float* __restrict__ pbc_inv,
-    int number_particles
+    int num_particles
 ) {
     int index = blockIdx.x * blockDim.x + threadIdx.x;
-    if (index >= number_particles) return;
+    if (index >= num_particles) return;
     float px = pos_x[index];
     float py = pos_y[index];
     float pz = pos_z[index];
@@ -171,10 +171,10 @@ void zero_forces_kernel(
     float* __restrict__ fx,
     float* __restrict__ fy,
     float* __restrict__ fz,
-    int number_particles
+    int num_particles
 ) {
     int index = blockIdx.x * blockDim.x + threadIdx.x;
-    if (index >= number_particles) return;
+    if (index >= num_particles) return;
     fx[index] = 0.0f;
     fy[index] = 0.0f;
     fz[index] = 0.0f;
@@ -185,7 +185,7 @@ void zero_forces_kernel(
 class GPUContext:
 
     def __init__(self):
-        self.number_particles = 0
+        self.num_particles = 0
 
         # d_positions_x/y/z: particle positions. May drift to [-skin, L+skin)
         # between rebuilds. Wrapped back to [0, L) during rebuild.
@@ -250,7 +250,7 @@ class GPUContext:
 
     def wrap_positions_with_prev_correction(self):
         self._ensure_wrap_correct_kernel()
-        N = self.number_particles
+        N = self.num_particles
         tpb = 256
         grid = ((N + tpb - 1) // tpb,)
         self._wrap_correct_kernel(
@@ -271,7 +271,7 @@ class GPUContext:
 
     def _wrap_positions_inplace(self):
         self._ensure_wrap_kernel()
-        N = self.number_particles
+        N = self.num_particles
         tpb = 256
         grid = ((N + tpb - 1) // tpb,)
         self._wrap_kernel(
@@ -408,8 +408,8 @@ class GPUContext:
         return pdb_array
 
     def initialize(self, topology, pbc_matrix):
-        self.number_particles = topology.num_particles
-        number = self.number_particles
+        self.num_particles = topology.num_particles
+        number = self.num_particles
 
         float_dtype = np.float32
         int_dtype = np.int32
@@ -516,7 +516,7 @@ class GPUContext:
 
     def zero_forces(self):
         self._ensure_zero_forces_kernel()
-        N = self.number_particles
+        N = self.num_particles
         tpb = 256
         grid = ((N + tpb - 1) // tpb,)
         self._zero_forces_kernel(

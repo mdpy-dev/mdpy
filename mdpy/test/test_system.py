@@ -91,7 +91,7 @@ class TestGPUContext:
         ctx = GPUContext()
         ctx.initialize(topology, pbc_matrix.flatten())
 
-        assert ctx.number_particles == 4
+        assert ctx.num_particles == 4
         assert ctx.d_positions_x.shape == (4,)
         assert ctx.d_positions_y.shape == (4,)
         assert ctx.d_positions_z.shape == (4,)
