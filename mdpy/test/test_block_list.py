@@ -1309,3 +1309,64 @@ class TestSnapshotPostWrapIntegration:
         assert rebuild_calls[0] == 0, (
             f"Expected 0 rebuilds (no displacement), got {rebuild_calls[0]}"
         )
+
+    def test_conditional_rebuild_fires_on_displacement(self):
+        """update_neighbor_list MUST rebuild when a particle exceeds skin/2.
+
+        Complement to test_conditional_rebuild_skips_when_displacement_small:
+        verifies the positive case — displacement > skin/2 triggers rebuild
+        at the next sync_interval boundary.
+        """
+        from mdpy.core.topology import Builder
+        from mdpy.system import System
+
+        n = 4
+        builder = Builder()
+        builder.set_particles(
+            masses=np.ones(n, dtype=np.float32),
+            charges=np.zeros(n, dtype=np.float32),
+            particle_types=np.zeros(n, dtype=np.int32),
+        )
+        builder.build_exclusion_map()
+        topology, _ = builder.build()
+
+        box = 50.0
+        pbc_matrix = np.eye(3, dtype=np.float32) * box
+        system = System(topology)
+        system.upload_pbc(pbc_matrix)
+        system._cutoff = 10.0
+        system._skin = 2.0
+
+        positions = np.array([
+            [1.0, 1.0, 1.0],
+            [2.0, 1.0, 1.0],
+            [3.0, 1.0, 1.0],
+            [4.0, 1.0, 1.0],
+        ], dtype=np.float32)
+        velocities = np.zeros((n, 3), dtype=np.float32)
+        system.upload_positions(positions)
+        system.upload_velocities(velocities)
+
+        system.update_neighbor_list(force_rebuild=True)
+
+        # Monkey-patch to count _do_rebuild calls
+        original_do_rebuild = system._do_rebuild
+        rebuild_calls = [0]
+        def counting_do_rebuild(*args, **kwargs):
+            rebuild_calls[0] += 1
+            return original_do_rebuild(*args, **kwargs)
+        system._do_rebuild = counting_do_rebuild
+
+        # Move particle 0 by 1.5 Angstrom — exceeds skin/2 = 1.0
+        moved = positions.copy()
+        moved[0, 0] += 1.5
+        system.upload_positions(moved)
+
+        sync_interval = 3
+        for _ in range(sync_interval):
+            system.update_neighbor_list(sync_interval=sync_interval)
+
+        assert rebuild_calls[0] == 1, (
+            f"Expected 1 rebuild (particle moved {1.5} > skin/2={system._skin/2}), "
+            f"got {rebuild_calls[0]}"
+        )
