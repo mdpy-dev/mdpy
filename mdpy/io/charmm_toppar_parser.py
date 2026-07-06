@@ -118,7 +118,12 @@ class CharmmTopparParser:
                 if head.startswith(block_label):
                     info_dict[block_label] = info
         for key, val in info_dict.items():
-            remove_list = [i for i in val if i.lstrip().startswith("!") or i == ""]
+            remove_list = [
+                i for i in val
+                if i.lstrip().startswith("!")
+                or i.lstrip().startswith("*")
+                or i == ""
+            ]
             [val.remove(i) for i in remove_list]
             info_dict[key] = [i.strip().split("!")[0].split() for i in val][1:]
         return info_dict
@@ -437,15 +442,25 @@ def create_parameter_table(topology, toppar_parser):
     nonbonded = parameters.get("nonbonded", {})
     for type_name, type_index in type_name_to_index.items():
         entry = nonbonded.get(type_name)
-        if entry is not None:
-            epsilon_array[type_index] = entry[0]
-            sigma_array[type_index] = entry[1]
-            if len(entry) == 4:
-                epsilon_14_array[type_index] = entry[2]
-                sigma_14_array[type_index] = entry[3]
-            else:
-                epsilon_14_array[type_index] = entry[0]
-                sigma_14_array[type_index] = entry[1]
+        if entry is None:
+            import warnings
+            warnings.warn(
+                "Atom type '%s' has no NONBOND parameters in the loaded "
+                "PRM files. LJ epsilon/sigma default to 0 — atoms of this "
+                "type will have NO van der Waals repulsion. Check PSF/PRM "
+                "force-field version compatibility." % type_name,
+                RuntimeWarning,
+                stacklevel=2,
+            )
+            continue
+        epsilon_array[type_index] = entry[0]
+        sigma_array[type_index] = entry[1]
+        if len(entry) == 4:
+            epsilon_14_array[type_index] = entry[2]
+            sigma_14_array[type_index] = entry[3]
+        else:
+            epsilon_14_array[type_index] = entry[0]
+            sigma_14_array[type_index] = entry[1]
 
     table = ParameterTable()
     table.add_type_parameter("sigma", sigma_array)
