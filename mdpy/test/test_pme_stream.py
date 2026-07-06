@@ -45,7 +45,6 @@ def _build_system(pme_stream):
     pdb = PDBParser(PDB)
     toppar = CharmmTopparParser(PRM, STR)
     topology = psf.topology
-    topology.join()
     pt = create_parameter_table(topology, toppar)
     pbc = _pbc_matrix()
 

@@ -17,7 +17,6 @@ class Topology:
         'exclusion_offset', 'exclusion_neighbors', 'exclusion_scale',
         'masses', 'charges', 'particle_type_indices', 'molecule_ids',
         'particle_names', 'type_names', 'chain_ids', 'molecule_types',
-        '_is_joined',
     ]
 
     def __init__(self, builder: Builder | None = None):
@@ -98,10 +97,6 @@ class Topology:
         self.exclusion_offset = np.zeros(1, dtype=env.NUMPY_INT)
         self.exclusion_neighbors = np.empty(0, dtype=env.NUMPY_INT)
         self.exclusion_scale = np.empty(0, dtype=env.NUMPY_FLOAT)
-        self._is_joined = False
-
-    def join(self):
-        self._is_joined = True
 
     def __repr__(self) -> str:
         return (
