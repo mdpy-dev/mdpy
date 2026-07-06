@@ -290,7 +290,7 @@ def test_remap_indices_gpu_correctness():
     d_remap = cp.empty(topology.num_particles, dtype=cp.int32)
     d_remap[d_perm] = cp.arange(topology.num_particles, dtype=cp.int32)
 
-    sub_forces = bonded_force._sub_forces if hasattr(bonded_force, '_sub_forces') else [bonded_force]
+    sub_forces = bonded_force.sub_forces if hasattr(bonded_force, 'sub_forces') else [bonded_force]
     for sf in sub_forces:
         if sf._count > 0 and sf._dirty:
             sf.sync()

@@ -18,7 +18,7 @@ class ForceGroup(ForceTerm):
                 )
         self._forces = list(forces)
         self._force_type = force_type
-        self._merged_nb = None
+        self._merged_nonbonded = None
         self._do_compile()
 
     def _do_compile(self):
@@ -36,15 +36,15 @@ class ForceGroup(ForceTerm):
         cutoffs = [f._cutoff for f in self._forces if f._cutoff is not None]
         cutoff = cutoffs[0] if cutoffs else 12.0
 
-        self._merged_nb = NonbondedForce(merged_expr, cutoff)
+        self._merged_nonbonded = NonbondedForce(merged_expr, cutoff)
 
         for f in self._forces:
             for name, mat in f._pair_param_data.items():
-                if name not in self._merged_nb._pair_param_data:
-                    self._merged_nb.set_pair_parameter(name, mat)
+                if name not in self._merged_nonbonded._pair_param_data:
+                    self._merged_nonbonded.set_pair_parameter(name, mat)
             for name, val in f._scalar_data.items():
-                if name not in self._merged_nb._scalar_data:
-                    self._merged_nb.set_scalar(name, val)
+                if name not in self._merged_nonbonded._scalar_data:
+                    self._merged_nonbonded.set_scalar(name, val)
 
     def __add__(self, other):
         if isinstance(other, ForceGroup):
@@ -68,25 +68,25 @@ class ForceGroup(ForceTerm):
         return NotImplemented
 
     def compute(self, gpu_context, block_list=None, compute_energy=True):
-        if self._merged_nb is not None:
-            self._merged_nb.compute(gpu_context, block_list, compute_energy)
+        if self._merged_nonbonded is not None:
+            self._merged_nonbonded.compute(gpu_context, block_list, compute_energy)
         else:
             for f in self._forces:
                 f.compute(gpu_context, block_list, compute_energy)
 
     def remap_indices_gpu(self, d_remap):
-        if self._merged_nb is not None:
+        if self._merged_nonbonded is not None:
             return
         for f in self._forces:
             f.remap_indices_gpu(d_remap)
 
     @property
-    def _sub_forces(self):
+    def sub_forces(self):
         return self._forces
 
     def bind_sorted(self, topology, block_list, gpu_context):
-        if self._merged_nb is not None:
-            self._merged_nb.bind_sorted(topology, block_list, gpu_context)
+        if self._merged_nonbonded is not None:
+            self._merged_nonbonded.bind_sorted(topology, block_list, gpu_context)
         else:
             for f in self._forces:
                 if hasattr(f, 'bind_sorted'):

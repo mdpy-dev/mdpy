@@ -54,7 +54,7 @@ class TestFactoryCreation:
         forces = create_charmm_forces(topology, table, np.eye(3)*108.0)
         from mdpy.force.force_group import ForceGroup
         assert isinstance(forces['bonded'], ForceGroup)
-        sub_names = [f.name for f in forces['bonded']._sub_forces]
+        sub_names = [f.name for f in forces['bonded'].sub_forces]
         assert 'pme_exclusion' in sub_names, f"pme_exclusion not in {sub_names}"
 
 
