@@ -58,6 +58,19 @@ def _rebuild_and_build_block_pairs(n, box=50.0, cutoff=10.0, skin=2.0, seed=42, 
     return bl, positions, pbc_matrix, pbc_inv, topology
 
 
+class TestSetCutoff:
+
+    def test_updates_public_cutoff(self):
+        bl = BlockList(cutoff=10.0, skin=2.0)
+        bl.set_cutoff(12.0)
+        assert bl.cutoff == 12.0
+
+    def test_updates_build_radius(self):
+        bl = BlockList(cutoff=10.0, skin=2.0)
+        bl.set_cutoff(12.0)
+        assert bl.build_radius == 12.0 + 2.0
+
+
 class TestCellAssignment:
 
     def test_cell_grid_dimensions(self):

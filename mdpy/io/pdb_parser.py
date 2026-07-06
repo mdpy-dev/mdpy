@@ -208,7 +208,7 @@ class PDBParser:
     def positions(self) -> np.ndarray:
         if not self._is_parse_all:
             raise ParserPoorlyDefinedError(
-                'positions property is not supported as `is_parse_all==False`, calling `get_position` method'
+                'positions property is not supported as `is_parse_all==False`, calling `get_positions` method'
             )
         return self._positions.copy()
 

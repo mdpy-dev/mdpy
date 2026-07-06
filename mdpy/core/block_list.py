@@ -858,7 +858,9 @@ class BlockList:
         return arr
 
     def set_cutoff(self, cutoff):
-        self._cutoff = float(cutoff)
+        self.cutoff = float(cutoff)
+        self._cutoff = self.cutoff
+        self.build_radius = self.cutoff + self.skin
 
     @property
     def block_atoms(self):
