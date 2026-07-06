@@ -1058,8 +1058,8 @@ class BlockList:
         # K3: counting-sort scatter. Each atom claims a unique slot in its
         # composite (cell x Hilbert) bucket via atomicAdd on a per-bucket
         # cursor, then writes every output: sorted positions, block_atoms,
-        # order maps, cell_indices_sorted, and the rebuild-time position
-        # snapshot. Scattering on composite buckets preserves the intra-cell
+        # order maps, and cell_indices_sorted. Scattering on composite buckets
+        # preserves the intra-cell
         # Hilbert ordering, keeping blocks Hilbert-compact -> tight AABBs.
         # block_atoms must be pre-filled with -1 (padding) before launch.
         # Use conditional_fill: when flag=0, skip the fill so the previous
