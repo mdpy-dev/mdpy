@@ -41,7 +41,7 @@ class TestKernelAssembly:
     def test_lj_kernel_no_scaling_masks(self):
         energy_cuda, total_expr = _prepare_energy_expression(lj_ad.energy_cuda)
         src = _assemble_exclusion_kernel(
-            lj_ad.expr_info, energy_cuda, lj_ad.grad_cuda, lj_ad.dEdr_cuda, total_expr
+            lj_ad.expr_info, energy_cuda, lj_ad.grad_cuda, lj_ad.radial_force_cuda, total_expr
         )
         assert 'scaling_masks' not in src
         assert 'is_14' not in src
@@ -50,7 +50,7 @@ class TestKernelAssembly:
     def test_lj_kernel_no_14_params(self):
         energy_cuda, total_expr = _prepare_energy_expression(lj_ad.energy_cuda)
         src = _assemble_exclusion_kernel(
-            lj_ad.expr_info, energy_cuda, lj_ad.grad_cuda, lj_ad.dEdr_cuda, total_expr
+            lj_ad.expr_info, energy_cuda, lj_ad.grad_cuda, lj_ad.radial_force_cuda, total_expr
         )
         assert '_14' not in src
 
@@ -58,7 +58,7 @@ class TestKernelAssembly:
         energy_cuda, total_expr = _prepare_energy_expression(combined_lj_coulomb.energy_cuda)
         src = _assemble_exclusion_kernel(
             combined_lj_coulomb.expr_info, energy_cuda,
-            combined_lj_coulomb.grad_cuda, combined_lj_coulomb.dEdr_cuda, total_expr
+            combined_lj_coulomb.grad_cuda, combined_lj_coulomb.radial_force_cuda, total_expr
         )
         assert 'scaling_masks' not in src
         assert 'is_14' not in src
@@ -67,7 +67,7 @@ class TestKernelAssembly:
         energy_cuda, total_expr = _prepare_energy_expression(combined_lj_coulomb.energy_cuda)
         src = _assemble_exclusion_kernel(
             combined_lj_coulomb.expr_info, energy_cuda,
-            combined_lj_coulomb.grad_cuda, combined_lj_coulomb.dEdr_cuda, total_expr
+            combined_lj_coulomb.grad_cuda, combined_lj_coulomb.radial_force_cuda, total_expr
         )
         assert 'sorted_charge' not in src
         assert 'd_charge' not in src
@@ -77,7 +77,7 @@ class TestKernelAssembly:
     def test_kernel_has_pair_param_matrices(self):
         energy_cuda, total_expr = _prepare_energy_expression(lj_ad.energy_cuda)
         src = _assemble_exclusion_kernel(
-            lj_ad.expr_info, energy_cuda, lj_ad.grad_cuda, lj_ad.dEdr_cuda, total_expr
+            lj_ad.expr_info, energy_cuda, lj_ad.grad_cuda, lj_ad.radial_force_cuda, total_expr
         )
         assert 'd_sigma_matrix' in src
         assert 'd_epsilon_matrix' in src
@@ -86,7 +86,7 @@ class TestKernelAssembly:
         energy_cuda, total_expr = _prepare_energy_expression(combined_lj_coulomb.energy_cuda)
         src = _assemble_exclusion_kernel(
             combined_lj_coulomb.expr_info, energy_cuda,
-            combined_lj_coulomb.grad_cuda, combined_lj_coulomb.dEdr_cuda, total_expr
+            combined_lj_coulomb.grad_cuda, combined_lj_coulomb.radial_force_cuda, total_expr
         )
         assert 'exclusion_masks' in src
         assert 'scaling_masks' not in src
@@ -95,7 +95,7 @@ class TestKernelAssembly:
         energy_cuda, total_expr = _prepare_energy_expression(combined_lj_coulomb.energy_cuda)
         src = _assemble_exclusion_kernel(
             combined_lj_coulomb.expr_info, energy_cuda,
-            combined_lj_coulomb.grad_cuda, combined_lj_coulomb.dEdr_cuda, total_expr
+            combined_lj_coulomb.grad_cuda, combined_lj_coulomb.radial_force_cuda, total_expr
         )
         assert 'total_warps' in src
         assert '__shfl_sync' in src
@@ -105,7 +105,7 @@ class TestKernelAssembly:
         energy_cuda, total_expr = _prepare_energy_expression(combined_lj_coulomb.energy_cuda)
         src = _assemble_exclusion_kernel(
             combined_lj_coulomb.expr_info, energy_cuda,
-            combined_lj_coulomb.grad_cuda, combined_lj_coulomb.dEdr_cuda, total_expr
+            combined_lj_coulomb.grad_cuda, combined_lj_coulomb.radial_force_cuda, total_expr
         )
         assert src.count('{') == src.count('}')
 
@@ -113,7 +113,7 @@ class TestKernelAssembly:
         energy_cuda, total_expr = _prepare_energy_expression(combined_lj_coulomb.energy_cuda)
         src = _assemble_exclusion_kernel(
             combined_lj_coulomb.expr_info, energy_cuda,
-            combined_lj_coulomb.grad_cuda, combined_lj_coulomb.dEdr_cuda,
+            combined_lj_coulomb.grad_cuda, combined_lj_coulomb.radial_force_cuda,
             total_expr, compute_energy=False
         )
         assert 'energy_buffer' not in src
@@ -161,7 +161,7 @@ class TestKernelCompilation:
     def test_lj_kernel_compiles(self):
         energy_cuda, total_expr = _prepare_energy_expression(lj_ad.energy_cuda)
         src = _assemble_exclusion_kernel(
-            lj_ad.expr_info, energy_cuda, lj_ad.grad_cuda, lj_ad.dEdr_cuda, total_expr
+            lj_ad.expr_info, energy_cuda, lj_ad.grad_cuda, lj_ad.radial_force_cuda, total_expr
         )
         kernel = cp.RawKernel(src, 'exclusion_block_pair_kernel')
         assert kernel is not None
@@ -169,7 +169,7 @@ class TestKernelCompilation:
     def test_coulomb_kernel_compiles(self):
         energy_cuda, total_expr = _prepare_energy_expression(coulomb_ad.energy_cuda)
         src = _assemble_exclusion_kernel(
-            coulomb_ad.expr_info, energy_cuda, coulomb_ad.grad_cuda, coulomb_ad.dEdr_cuda, total_expr
+            coulomb_ad.expr_info, energy_cuda, coulomb_ad.grad_cuda, coulomb_ad.radial_force_cuda, total_expr
         )
         kernel = cp.RawKernel(src, 'exclusion_block_pair_kernel')
         assert kernel is not None
@@ -178,7 +178,7 @@ class TestKernelCompilation:
         energy_cuda, total_expr = _prepare_energy_expression(combined_lj_coulomb.energy_cuda)
         src = _assemble_exclusion_kernel(
             combined_lj_coulomb.expr_info, energy_cuda,
-            combined_lj_coulomb.grad_cuda, combined_lj_coulomb.dEdr_cuda, total_expr
+            combined_lj_coulomb.grad_cuda, combined_lj_coulomb.radial_force_cuda, total_expr
         )
         kernel = cp.RawKernel(src, 'exclusion_block_pair_kernel')
         assert kernel is not None
@@ -187,7 +187,7 @@ class TestKernelCompilation:
         energy_cuda, total_expr = _prepare_energy_expression(combined_lj_coulomb.energy_cuda)
         src = _assemble_exclusion_kernel(
             combined_lj_coulomb.expr_info, energy_cuda,
-            combined_lj_coulomb.grad_cuda, combined_lj_coulomb.dEdr_cuda, total_expr
+            combined_lj_coulomb.grad_cuda, combined_lj_coulomb.radial_force_cuda, total_expr
         )
         kernel = cp.RawKernel(src, 'exclusion_block_pair_kernel_v2')
         assert kernel is not None
@@ -196,7 +196,7 @@ class TestKernelCompilation:
         energy_cuda, total_expr = _prepare_energy_expression(screened_coulomb_ad.energy_cuda)
         src = _assemble_exclusion_kernel(
             screened_coulomb_ad.expr_info, energy_cuda,
-            screened_coulomb_ad.grad_cuda, screened_coulomb_ad.dEdr_cuda, total_expr
+            screened_coulomb_ad.grad_cuda, screened_coulomb_ad.radial_force_cuda, total_expr
         )
         kernel = cp.RawKernel(src, 'exclusion_block_pair_kernel')
         assert kernel is not None

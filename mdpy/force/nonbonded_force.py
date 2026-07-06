@@ -97,7 +97,7 @@ void pack_sorted_position_charge_kernel(
 
 
 def _assemble_exclusion_kernel(
-    expr_info, energy_cuda, grad_cuda, dEdr_cuda, total_energy_expr, compute_energy=True
+    expr_info, energy_cuda, grad_cuda, radial_force_cuda, total_energy_expr, compute_energy=True
 ):
     i_props, j_props = _split_per_particle(expr_info.per_particle)
     bases = _unique_prop_bases(expr_info.per_particle)
@@ -247,7 +247,7 @@ void exclusion_block_pair_kernel(
 {load_pair}
 {energy_cuda}
 {grad_cuda if grad_cuda else ''}
-                float force_magnitude = ({dEdr_cuda});
+                float force_magnitude = ({radial_force_cuda});
                 float energy_val = {total_energy_expr};
                 float inv_dist_force = force_magnitude * inv_dist;
                 float fx = dx * inv_dist_force;
@@ -289,14 +289,13 @@ class NonbondedForce(ForceTerm):
     def __init__(self, expression, cutoff=12.0):
         self._expression = expression
         self._expr_info = expression.expr_info
-        self._dEdr_cuda = expression.dEdr_cuda
+        self._radial_force_cuda = expression.radial_force_cuda
         self._grad_cuda = getattr(expression, "grad_cuda", None)
         self._energy_cuda_raw = expression.energy_cuda
 
         self._i_props, self._j_props = _split_per_particle(self._expr_info.per_particle)
         self._prop_bases = _unique_prop_bases(self._expr_info.per_particle)
 
-        self._per_particle_data = {}
         self._pair_param_data = {}
         self._scalar_data = {}
 
@@ -350,7 +349,7 @@ class NonbondedForce(ForceTerm):
             self._expr_info,
             self._energy_cuda,
             self._grad_cuda,
-            self._dEdr_cuda,
+            self._radial_force_cuda,
             self._total_energy_expr,
             compute_energy=True,
         )
@@ -358,7 +357,7 @@ class NonbondedForce(ForceTerm):
             self._expr_info,
             self._energy_cuda,
             self._grad_cuda,
-            self._dEdr_cuda,
+            self._radial_force_cuda,
             self._total_energy_expr,
             compute_energy=False,
         )

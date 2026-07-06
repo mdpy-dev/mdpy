@@ -229,7 +229,7 @@ class System:
         for term_index, term in enumerate(self.force_terms):
             self.gpu.zero_energy()
             term.compute(self.gpu, self._block_list, compute_energy=True)
-            self.gpu.accumulate_energy(term_index)
+            self.gpu.set_energy_slot(term_index)
         raw = cp.asnumpy(self.gpu.d_energy_accumulator)
         result = {}
         for term_index, term in enumerate(self.force_terms):

@@ -347,7 +347,7 @@ class TestPMEReciprocalForce:
         gpu.d_positions_z[:] = cp.asarray(pos[:, 2])
 
         pme = PMEReciprocalForce(cutoff)
-        pme.bind(topo, pt, pbc_matrix=pbc)
+        pme.initialize_grid(topo, pt, pbc_matrix=pbc)
 
         bl = self._build_block_list(pos, pbc, topo, cutoff)
 
@@ -399,7 +399,7 @@ class TestPMEReciprocalForce:
         gpu.d_positions_z[:] = cp.asarray(pos[:, 2])
 
         pme = PMEReciprocalForce(cutoff)
-        pme.bind(topo, pt, pbc_matrix=pbc)
+        pme.initialize_grid(topo, pt, pbc_matrix=pbc)
 
         bl = self._build_block_list(pos, pbc, topo, cutoff)
 
@@ -468,7 +468,7 @@ class TestGridSizing:
         pbc = np.eye(3, dtype=np.float32) * box
         from mdpy.force.pme_reciprocal_force import PMEReciprocalForce
         pme = PMEReciprocalForce(cutoff)
-        pme.bind(topo, pt, pbc_matrix=pbc)
+        pme.initialize_grid(topo, pt, pbc_matrix=pbc)
         assert pme.grid_x == 90
         assert pme.grid_y == 90
         assert pme.grid_z == 90
@@ -492,7 +492,7 @@ class TestGridSizing:
         pt.particle_parameters['charge'] = np.zeros(N, dtype=np.float32)
         pbc = np.eye(3, dtype=np.float32) * box
         pme = PMEReciprocalForce(cutoff)
-        pme.bind(topo, pt, pbc_matrix=pbc)
+        pme.initialize_grid(topo, pt, pbc_matrix=pbc)
         assert pme.grid_x == 84
         assert pme.grid_y == 84
         assert pme.grid_z == 84
@@ -515,7 +515,7 @@ class TestGridSizing:
         pt.particle_parameters['charge'] = np.zeros(N, dtype=np.float32)
         pbc = np.diag(np.array([box_x, box_y, box_z], dtype=np.float32))
         pme = PMEReciprocalForce(cutoff)
-        pme.bind(topo, pt, pbc_matrix=pbc)
+        pme.initialize_grid(topo, pt, pbc_matrix=pbc)
         assert pme.grid_x != pme.grid_y or pme.grid_y != pme.grid_z
         assert pme.grid_x >= box_x / 1.2 * 0.95
         assert pme.grid_y >= box_y / 1.2 * 0.95
@@ -539,9 +539,9 @@ class TestGridSizing:
         pt.particle_parameters['charge'] = np.zeros(N, dtype=np.float32)
         pbc = np.eye(3, dtype=np.float32) * box
         pme_default = PMEReciprocalForce(cutoff)
-        pme_default.bind(topo, pt, pbc_matrix=pbc)
+        pme_default.initialize_grid(topo, pt, pbc_matrix=pbc)
         pme_fine = PMEReciprocalForce(cutoff, fourier_spacing=0.8)
-        pme_fine.bind(topo, pt, pbc_matrix=pbc)
+        pme_fine.initialize_grid(topo, pt, pbc_matrix=pbc)
         assert pme_fine.grid_x > pme_default.grid_x
 
     def test_from_box_custom_rtol(self):
@@ -563,9 +563,9 @@ class TestGridSizing:
         pt.particle_parameters['charge'] = np.zeros(N, dtype=np.float32)
         pbc = np.eye(3, dtype=np.float32) * box
         pme_loose = PMEReciprocalForce(cutoff, ewald_rtol=1e-3)
-        pme_loose.bind(topo, pt, pbc_matrix=pbc)
+        pme_loose.initialize_grid(topo, pt, pbc_matrix=pbc)
         pme_tight = PMEReciprocalForce(cutoff, ewald_rtol=1e-8)
-        pme_tight.bind(topo, pt, pbc_matrix=pbc)
+        pme_tight.initialize_grid(topo, pt, pbc_matrix=pbc)
         assert pme_loose.alpha < pme_tight.alpha
         assert erfc(pme_loose.alpha * 12) <= 1e-3 * (1 + 1e-10)
         assert erfc(pme_tight.alpha * 12) <= 1e-8 * (1 + 1e-10)
@@ -616,7 +616,7 @@ class TestPMEIntegration6PO6:
         system.add_force_term(nb)
 
         pme = PMEReciprocalForce(self.cutoff)
-        pme.bind(self.topology, self.parameter_table, pbc_matrix=pbc_matrix)
+        pme.initialize_grid(self.topology, self.parameter_table, pbc_matrix=pbc_matrix)
         system.add_force_term(pme)
 
         pbc_inv = np.linalg.inv(pbc_matrix.astype(np.float64))

@@ -50,7 +50,7 @@ class TestNonbondedTranspiler:
             sr6 = sr * sr * sr * sr * sr * sr
             return 4.0 * epsilon * (sr6 * sr6 - sr6)
 
-        assert lennard_jones.dEdr_cuda is not None
+        assert lennard_jones.radial_force_cuda is not None
         assert lennard_jones.grad_cuda is not None
         assert ('inv_dist' in lennard_jones.grad_cuda)
 
@@ -60,7 +60,7 @@ class TestNonbondedTranspiler:
             r = distance(pos1, pos2)
             return 0.13893556595455 * charge1 * charge2 / r
 
-        assert coulomb.dEdr_cuda is not None
+        assert coulomb.radial_force_cuda is not None
         assert coulomb.grad_cuda is not None
         assert ('inv_dist' in coulomb.grad_cuda)
 
@@ -78,7 +78,7 @@ class TestNonbondedTranspiler:
         assert 'charge1' in coul.energy_cuda
         assert 'charge2' in coul.energy_cuda
         # The auto-diff gradient is still produced correctly
-        assert coul.dEdr_cuda is not None
+        assert coul.radial_force_cuda is not None
         assert coul.grad_cuda is not None
 
     def test_module_level_int_constant_inlined(self):
@@ -104,7 +104,7 @@ class TestNonbondedTranspiler:
             return 0.13893556595455 * charge1 * charge2 / r
 
         combined = lj + coul
-        assert combined.dEdr_cuda is not None
+        assert combined.radial_force_cuda is not None
         assert combined.grad_cuda is not None
         assert combined.expr_info.params == ['sigma', 'epsilon']
         assert 'charge' in str(combined.expr_info.per_particle.values()) or len(combined.expr_info.per_particle) > 0
@@ -121,8 +121,8 @@ class TestForwardModeAD:
 
         assert lj.grad_cuda is not None
         assert '_d_' in lj.grad_cuda
-        assert len(lj.dEdr_cuda) < 20
-        assert lj.dEdr_cuda.startswith('_d_')
+        assert len(lj.radial_force_cuda) < 20
+        assert lj.radial_force_cuda.startswith('_d_')
 
     def test_lj_grad_cuda_has_no_repeated_subexpressions(self):
         """Forward-mode should not inline expressions — each var computed once."""
@@ -137,8 +137,8 @@ class TestForwardModeAD:
         for line in grad_lines:
             assert len(line) < 120, f"Gradient line too long: {line}"
 
-    def test_lj_dEdr_is_gradient_variable(self):
-        """dEdr_cuda should be a named variable like _d__t8."""
+    def test_lj_radial_force_is_gradient_variable(self):
+        """radial_force_cuda should be a named variable like _d__t8."""
         @nonbonded_expression
         def lj(pos1, pos2, sigma=param, epsilon=param):
             r = distance(pos1, pos2)
@@ -146,7 +146,7 @@ class TestForwardModeAD:
             sr6 = sr * sr * sr * sr * sr * sr
             return 4.0 * epsilon * (sr6 * sr6 - sr6)
 
-        assert lj.dEdr_cuda in lj._local_vars
+        assert lj.radial_force_cuda in lj._local_vars
 
     def test_combined_expression_merges_grad_cuda(self):
         @nonbonded_expression
@@ -165,4 +165,4 @@ class TestForwardModeAD:
         assert combined.grad_cuda is not None
         grad_lines = combined.grad_cuda.strip().split('\n')
         assert len(grad_lines) >= 4
-        assert '+' in combined.dEdr_cuda
+        assert '+' in combined.radial_force_cuda

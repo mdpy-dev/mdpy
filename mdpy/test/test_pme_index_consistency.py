@@ -42,7 +42,7 @@ def _build_system():
     system.add_force_term(nb)
 
     pme = PMEReciprocalForce(CUTOFF)
-    pme.bind(topology, parameter_table, pbc_matrix=pbc_matrix)
+    pme.initialize_grid(topology, parameter_table, pbc_matrix=pbc_matrix)
     system.add_force_term(pme)
 
     positions = pdb.positions.astype(np.float32)

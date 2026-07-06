@@ -162,7 +162,7 @@ class _NonbondedExpression:
         self._func = func
         self._expr_info = _classify_for_nonbonded(func)
         self.energy_cuda = ''
-        self.dEdr_cuda = None
+        self.radial_force_cuda = None
         self.grad_cuda = None
         self._local_vars = set()
         self._compile()
@@ -218,10 +218,10 @@ class _NonbondedExpression:
             for line in grad_lines:
                 var_name = line.split()[1].split('=')[0].strip()
                 self._local_vars.add(var_name)
-            self.dEdr_cuda = derivs.get(energy_var, '0.0f')
+            self.radial_force_cuda = derivs.get(energy_var, '0.0f')
         else:
             self.grad_cuda = None
-            self.dEdr_cuda = '0.0f'
+            self.radial_force_cuda = '0.0f'
 
     def __add__(self, other):
         if not isinstance(other, _NonbondedExpression):
@@ -283,13 +283,13 @@ class _NonbondedExpression:
         else:
             merged.grad_cuda = None
 
-        if self.dEdr_cuda is not None and other.dEdr_cuda is not None:
-            dEdr_2 = _rename_vars(other.dEdr_cuda)
-            merged.dEdr_cuda = f'({self.dEdr_cuda} + {dEdr_2})'
-        elif self.dEdr_cuda is not None:
-            merged.dEdr_cuda = self.dEdr_cuda
+        if self.radial_force_cuda is not None and other.radial_force_cuda is not None:
+            radial_force_2 = _rename_vars(other.radial_force_cuda)
+            merged.radial_force_cuda = f'({self.radial_force_cuda} + {radial_force_2})'
+        elif self.radial_force_cuda is not None:
+            merged.radial_force_cuda = self.radial_force_cuda
         else:
-            merged.dEdr_cuda = other.dEdr_cuda
+            merged.radial_force_cuda = other.radial_force_cuda
 
         merged._local_vars = self._local_vars | other_locals
         return merged

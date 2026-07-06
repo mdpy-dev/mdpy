@@ -10,7 +10,7 @@ _COULOMB_CUDA = f"{COULOMB_CONST}f"
 
 # NOTE: This expression uses a "decorate then override" pattern.
 # The @nonbonded_expression decorator auto-compiles the energy via AD,
-# but the module then overwrites energy_cuda, dEdr_cuda, and sets
+# but the module then overwrites energy_cuda, radial_force_cuda, and sets
 # grad_cuda=None with hand-tuned CUDA code using a rational minimax
 # polynomial approximation for erfc(). This is faster and more
 # numerically stable than the AD-generated version. The auto-compiled
@@ -47,7 +47,7 @@ screened_coulomb.energy_cuda = """\
     "__MDPY_COULOMB__", _COULOMB_CUDA
 )
 
-screened_coulomb.dEdr_cuda = "_coulomb_force"
+screened_coulomb.radial_force_cuda = "_coulomb_force"
 
 screened_coulomb._local_vars = {
     "qq",

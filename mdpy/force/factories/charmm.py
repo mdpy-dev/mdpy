@@ -178,7 +178,7 @@ def create_charmm_forces(topology, parameter_table, pbc_matrix, cutoff=12.0,
         bonded = bonded + nb14
 
     pme = PMEReciprocalForce(cutoff, fourier_spacing=fourier_spacing, ewald_rtol=ewald_rtol)
-    pme.bind(topology, parameter_table, pbc_matrix=pbc_matrix)
+    pme.initialize_grid(topology, parameter_table, pbc_matrix=pbc_matrix)
     pme_excl = _create_pme_exclusion_force(topology, pme.alpha)
     if pme_excl is not None:
         bonded = bonded + pme_excl

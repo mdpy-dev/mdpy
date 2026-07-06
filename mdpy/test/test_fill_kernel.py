@@ -1,6 +1,6 @@
 import numpy as np
 import cupy as cp
-from mdpy.core.radix_sort import fill_constant
+from mdpy.core.fill_kernel import fill_constant
 
 
 class TestFillConstant:

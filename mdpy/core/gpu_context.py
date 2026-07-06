@@ -536,7 +536,7 @@ class GPUContext:
     def allocate_energy_accumulator(self, num_terms):
         self.d_energy_accumulator = cp.zeros(num_terms, dtype=np.float32)
 
-    def accumulate_energy(self, term_index):
+    def set_energy_slot(self, term_index):
         self.d_energy_accumulator[term_index] = self.d_energy[0]
 
     def set_box_dims(self, box_x, box_y, box_z):

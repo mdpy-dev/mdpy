@@ -234,7 +234,7 @@ The body is plain Python arithmetic over these helpers and params. `+ - * / ** %
 1. Python AST is walked (`bonded_transpiler.py` / `nonbonded_transpiler.py`), emitting a tape of `TapeEntry(var, op, operands)` plus CUDA forward-evaluation lines.
 2. `ForwardADEngine` (`ad_engine.py`) propagates derivatives forward through the tape. Power chains (e.g. `x → x² → x³ → x⁶ → x¹²`) use the power rule `d(xⁿ)/dr = n·xⁿ⁻¹·dx` with lazy emission — unreferenced intermediates are dropped to cut register pressure.
 3. For bonded, each geometry helper has a hand-written forward+force CUDA template (`HELPER_REGISTRY`); the AD output becomes the scalar gradient `dE/d(geometry)`, and the template applies the chain rule to spread forces across atoms.
-4. For nonbonded, the result is `energy_cuda` (forward) + `dEdr_cuda` (gradient w.r.t. `r`), assembled into self/cross block-pair and exclusion kernels.
+4. For nonbonded, the result is `energy_cuda` (forward) + `radial_force_cuda` (gradient w.r.t. `r`), assembled into self/cross block-pair and exclusion kernels.
 
 Module-level named constants (e.g. `COULOMB_CONST`) are resolved from the decorated function's `__globals__` and inlined as CUDA float literals.
 
@@ -253,7 +253,7 @@ def my_expr(pos1, pos2, ...):
     ...           # auto-compiled; output discarded
 
 my_expr.energy_cuda = '...hand-written CUDA...'
-my_expr.dEdr_cuda = '_my_force_var'
+my_expr.radial_force_cuda = '_my_force_var'
 my_expr.grad_cuda = None      # no separate gradient block
 my_expr._local_vars = {...}   # all float vars you declared, for renaming during fusion
 ```
@@ -546,7 +546,7 @@ On block list rebuild:
 | `mdpy/force/primitives.py` | `param`/`scalar` markers + `distance`/`angle`/`dihedral` geometry helpers |
 | `mdpy/force/ad_engine.py` | `ForwardADEngine` — forward-mode AD over a tape for CUDA gradient generation |
 | `mdpy/force/bonded_transpiler.py` | `@bonded_expression(body=N)` → CUDA fragment; `HELPER_REGISTRY` forward+force templates |
-| `mdpy/force/nonbonded_transpiler.py` | `@nonbonded_expression` → `energy_cuda`/`dEdr_cuda`; `__add__` fuses expressions |
+| `mdpy/force/nonbonded_transpiler.py` | `@nonbonded_expression` → `energy_cuda`/`radial_force_cuda`; `__add__` fuses expressions |
 | `mdpy/force/pme_reciprocal_force.py` | PME reciprocal space — the only non-expression `ForceTerm` subclass |
 | `mdpy/force/factories/charmm.py` | PSF+topology+ParameterTable → wired force terms (`create_charmm_forces`) |
 | `mdpy/force/expressions/lennard_jones.py` | LJ expression (decorate-then-override with closed-form gradient) |

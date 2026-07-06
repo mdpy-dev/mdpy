@@ -490,7 +490,7 @@ class PMEReciprocalForce(ForceTerm):
     def order(self):
         return self._order
 
-    def bind(self, topology, parameter_table, pbc_matrix=None):
+    def initialize_grid(self, topology, parameter_table, pbc_matrix=None):
         N = topology.num_particles
         self._N = N
 

@@ -7,7 +7,7 @@ import numpy as np
 import cupy as cp
 from mdpy import env
 from mdpy.core.hilbert import HILBERT_ENCODE_KERNEL
-from mdpy.core.radix_sort import fill_constant
+from mdpy.core.fill_kernel import fill_constant
 
 BLOCK_SIZE = 32
 NUM_ATOMS_SENTINEL = 0x7FFFFFFF
