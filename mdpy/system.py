@@ -6,7 +6,6 @@ from mdpy import env
 from mdpy.core.block_list import BlockList
 from mdpy.core.topology import build_exclusion_map_gpu, permute_exclusion_pairs_gpu
 from mdpy.core._rebuild_kernels import compile_rebuild_kernels
-from mdpy.core.pbc import compute_pbc_inv
 from mdpy.core.gpu_context import GPUContext
 
 
@@ -18,8 +17,6 @@ class System:
         self.gpu = GPUContext()
         self.gpu.initialize(topology, np.eye(3, dtype=np.float32))
 
-        self._pbc_matrix = None
-        self._pbc_inv = None
         self._cutoff = None
         self._skin = 1.0
         self._rebuild_check_interval = 10
@@ -52,9 +49,7 @@ class System:
             self._ev_pme_done = cp.cuda.Event(disable_timing=True)
 
     def upload_pbc(self, pbc_matrix):
-        self._pbc_matrix = np.ascontiguousarray(pbc_matrix, dtype=env.NUMPY_FLOAT)
-        self._pbc_inv = compute_pbc_inv(self._pbc_matrix)
-        self.gpu.upload_pbc(self._pbc_matrix)
+        self.gpu.upload_pbc(pbc_matrix)
 
     @property
     def block_list(self):
@@ -67,14 +62,6 @@ class System:
     @property
     def cutoff(self):
         return self._cutoff
-
-    @property
-    def pbc_matrix(self):
-        return self._pbc_matrix
-
-    @property
-    def pbc_inv(self):
-        return self._pbc_inv
 
     def add_force_term(self, term, stream=None):
         if stream not in (None, 'pme'):
@@ -154,7 +141,7 @@ class System:
 
     def update_neighbor_list(self, sync_interval=10, force_rebuild=False):
         self._ensure_uploaded()
-        if self._pbc_matrix is None:
+        if self.gpu.d_pbc_matrix is None:
             raise RuntimeError("PBC not set. Call upload_pbc() first.")
 
         if self._block_list is None:
