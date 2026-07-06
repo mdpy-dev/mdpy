@@ -180,25 +180,19 @@ class System:
             self._step_counter = 0
             return
 
-        # Launch async displacement check (no sync, no readback).
-        # check_rebuild_async accumulates the sticky flag: any step where a
-        # particle exceeds skin/2 displacement sets d_rebuild_flag=1
-        # permanently until we read and reset it.
         self._block_list.check_rebuild_async(positions_soa)
         self._step_counter += 1
         if self._step_counter < sync_interval:
             return
-        # Every sync_interval steps: sync once, read the accumulated flag.
-        # If any particle exceeded skin/2 since the last reset, rebuild.
-        # Otherwise skip — positions haven't moved enough to invalidate
-        # the neighbor list.
-        flag = self._block_list.read_flag_sync()
-        if flag == 1:
-            self._do_rebuild(positions_soa, force=True)
-        self._block_list.reset_flag()
+
+        self._do_rebuild(positions_soa, force=False)
         self._step_counter = 0
 
     def _do_rebuild(self, positions_soa, *, force=False):
+        if not force:
+            flag_val = int(self._block_list.d_rebuild_flag[0])
+            if flag_val == 0:
+                return
         self._block_list.rebuild(
             positions_soa,
             self.topology,

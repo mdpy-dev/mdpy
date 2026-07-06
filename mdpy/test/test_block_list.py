@@ -1294,13 +1294,15 @@ class TestSnapshotPostWrapIntegration:
 
         system.update_neighbor_list(force_rebuild=True)
 
-        # Monkey-patch to count _do_rebuild calls
-        original_do_rebuild = system._do_rebuild
+        # Count block_list.rebuild calls (actual rebuild work). The rebuild
+        # gate lives inside _do_rebuild, so _do_rebuild is entered every
+        # sync_interval but returns early when the displacement flag is 0.
+        original_rebuild = system._block_list.rebuild
         rebuild_calls = [0]
-        def counting_do_rebuild(*args, **kwargs):
+        def counting_rebuild(*args, **kwargs):
             rebuild_calls[0] += 1
-            return original_do_rebuild(*args, **kwargs)
-        system._do_rebuild = counting_do_rebuild
+            return original_rebuild(*args, **kwargs)
+        system._block_list.rebuild = counting_rebuild
 
         # Call update_neighbor_list many times without moving positions.
         # sync_interval=3 so the flag-read path triggers frequently.
@@ -1352,13 +1354,15 @@ class TestSnapshotPostWrapIntegration:
 
         system.update_neighbor_list(force_rebuild=True)
 
-        # Monkey-patch to count _do_rebuild calls
-        original_do_rebuild = system._do_rebuild
+        # Count block_list.rebuild calls (actual rebuild work). The rebuild
+        # gate lives inside _do_rebuild, so _do_rebuild is entered every
+        # sync_interval but returns early when the displacement flag is 0.
+        original_rebuild = system._block_list.rebuild
         rebuild_calls = [0]
-        def counting_do_rebuild(*args, **kwargs):
+        def counting_rebuild(*args, **kwargs):
             rebuild_calls[0] += 1
-            return original_do_rebuild(*args, **kwargs)
-        system._do_rebuild = counting_do_rebuild
+            return original_rebuild(*args, **kwargs)
+        system._block_list.rebuild = counting_rebuild
 
         # Move particle 0 by 1.5 Angstrom — exceeds skin/2 = 1.0
         moved = positions.copy()
