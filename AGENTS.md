@@ -118,7 +118,7 @@ Simulation data is a GPU-side black box during the run loop. The only way to obs
 
 The following functions — and every function they call directly or indirectly — must NOT transfer **bulk data** (arrays, reductions) from GPU to CPU:
 
-- Explicit pipeline loop: `update_neighbor_list()`, `compute_forces()`, `integrator.step(system)`, `apply_constraints(dt)`
+- Explicit pipeline loop: `update_neighbor_list()`, `compute_forces()`, `integrator.step(system)`, `apply_constraints(time_step)`
 - `minimizer.step(system)` inner loop
 
 **Forbidden operations** inside the hot path:
@@ -149,7 +149,7 @@ for i in range(10000):
     system.update_neighbor_list(sync_interval=10)
     system.compute_forces()
     integrator.step(system)
-    system.apply_constraints(dt_fs)
+    system.apply_constraints(time_step_fs)
     if i % 1000 == 0:
         pos, vel = system.dump_state()
         energies = system.dump_energy()
@@ -298,13 +298,13 @@ for c in constraints:
 system.upload_positions(positions)     # (N,3) numpy array, Å
 system.upload_velocities(velocities)   # (N,3) numpy array
 
-integrator = LangevinBAOABIntegrator(dt_fs, temperature, friction)
+integrator = LangevinBAOABIntegrator(time_step_fs, temperature, friction)
 
 for i in range(n_steps):
     system.update_neighbor_list(sync_interval=10)
     system.compute_forces()
     integrator.step(system)
-    system.apply_constraints(dt_fs)
+    system.apply_constraints(time_step_fs)
     if i % checkpoint == 0:
         pos, vel = system.dump_state()
         energies = system.dump_energy()
