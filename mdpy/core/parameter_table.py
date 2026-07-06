@@ -64,31 +64,6 @@ class ParameterTable:
         """
         self.type_pair_parameters[name] = np.asarray(values, dtype=env.NUMPY_FLOAT)
 
-    def get_type_pair_parameter(self, name):
-        """Retrieve a type-pair parameter array by name."""
-        return self.type_pair_parameters[name]
-
     def get_term_parameter(self, name):
         """Retrieve a term parameter array by term type name."""
         return self.term_parameters[name]
-
-    def expand_to_particle(self, name, particle_types):
-        """Return a per-particle array for *name*.
-
-        If *name* already exists in ``particle_parameters``, return it
-        directly (e.g. charges are natively per-particle). Otherwise
-        expand from ``type_parameters`` using the ``particle_types``
-        integer index array.
-
-        This is the bridge that lets ``NonbondedForce`` obtain per-particle
-        sigma / epsilon arrays from the type-level LJ table.
-        """
-        if name in self.particle_parameters:
-            return self.particle_parameters[name]
-        if name not in self.type_parameters:
-            raise KeyError(
-                f'Parameter "{name}" not found in type_parameters '
-                f'or particle_parameters'
-            )
-        type_values = self.type_parameters[name]
-        return type_values[particle_types]
