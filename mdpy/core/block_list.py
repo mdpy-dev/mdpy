@@ -76,15 +76,8 @@ void cell_assign_kernel(
     int* __restrict__ cell_counts,
     int* __restrict__ composite_counts,
     unsigned long long* __restrict__ sort_keys,
-    int* __restrict__ cell_indices,
-    const int* __restrict__ d_rebuild_flag
+    int* __restrict__ cell_indices
 ) {
-    // GPU-side conditional: if flag=0, skip entirely so cell_counts stays
-    // zero-filled. cell_prefix_sum (and composite_prefix_sum) are likewise
-    // flag-guarded, so d_num_blocks retains its previous valid value and the
-    // rebuild chain self-skips with no CPU readback.
-    if (d_rebuild_flag[0] == 0) return;
-
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= number_particles) return;
 
@@ -187,10 +180,8 @@ void find_interacting_blocks_kernel(
     float* __restrict__ shift_y_out,
     float* __restrict__ shift_z_out,
     int* __restrict__ interaction_count,
-    int max_block_pairs,
-    const int* __restrict__ d_rebuild_flag
+    int max_block_pairs
 ) {
-    if (d_rebuild_flag[0] == 0) return;
     __shared__ int s_num_blocks;
     if (threadIdx.x == 0) s_num_blocks = d_num_blocks[0];
     __syncthreads();
@@ -498,10 +489,8 @@ void build_masks_kernel(
     const int* __restrict__ reverse_neighbors,
     const int* __restrict__ d_block_pair_count,
     int num_particles,
-    unsigned int* __restrict__ exclusion_masks_out,
-    const int* __restrict__ d_rebuild_flag
+    unsigned int* __restrict__ exclusion_masks_out
 ) {
-    if (d_rebuild_flag[0] == 0) return;
     __shared__ int s_num_pairs;
     if (threadIdx.x == 0) s_num_pairs = d_block_pair_count[0];
     __syncthreads();
@@ -584,10 +573,8 @@ void cell_prefix_sum_kernel(
     int* __restrict__ cell_offset_padded,
     int* __restrict__ block_to_cell,
     int* __restrict__ num_blocks_out,
-    int* __restrict__ total_padded_out,
-    const int* __restrict__ d_rebuild_flag
+    int* __restrict__ total_padded_out
 ) {
-    if (d_rebuild_flag[0] == 0) return;
     const int tid = threadIdx.x;
     const int B = SCAN_BLOCK;
     __shared__ int s_part[SCAN_BLOCK];
@@ -647,10 +634,8 @@ extern "C" __global__
 void composite_prefix_sum_kernel(
     const int* __restrict__ composite_counts,
     int K,
-    int* __restrict__ composite_offset,
-    const int* __restrict__ d_rebuild_flag
+    int* __restrict__ composite_offset
 ) {
-    if (d_rebuild_flag[0] == 0) return;
     __shared__ int s_part[SCAN_BLOCK];
     __shared__ int s_total;
     scan_block_excl(composite_counts, composite_offset, K, s_part, &s_total);
@@ -676,11 +661,8 @@ void counting_scatter_kernel(
     int* __restrict__ raw_order,
     int* __restrict__ pdb_to_sorted,
     int* __restrict__ sorted_to_pdb,
-    int* __restrict__ cell_indices_sorted,
-    const int* __restrict__ d_rebuild_flag
+    int* __restrict__ cell_indices_sorted
 ) {
-    if (d_rebuild_flag[0] == 0) return;
-
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= number_particles) return;
     int cell = cell_indices[i];
@@ -701,12 +683,10 @@ void counting_scatter_kernel(
 _CONDITIONAL_FILL_INT = r"""
 extern "C" __global__
 void conditional_fill_int_kernel(
-    const int* __restrict__ d_rebuild_flag,
     int* __restrict__ buf,
     int n,
     int fill_value
 ) {
-    if (d_rebuild_flag[0] == 0) return;
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i < n) buf[i] = fill_value;
 }
@@ -715,7 +695,6 @@ void conditional_fill_int_kernel(
 _CAPTURE_SNAPSHOT_KERNEL = r"""
 extern "C" __global__
 void capture_snapshot_kernel(
-    const int* __restrict__ d_rebuild_flag,
     const float* __restrict__ src_x,
     const float* __restrict__ src_y,
     const float* __restrict__ src_z,
@@ -724,7 +703,6 @@ void capture_snapshot_kernel(
     float* __restrict__ dst_z,
     int num_particles
 ) {
-    if (d_rebuild_flag[0] == 0) return;
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= num_particles) return;
     dst_x[idx] = src_x[idx];
@@ -1047,7 +1025,6 @@ class BlockList:
                 np.int32(self.nc_x), np.int32(self.nc_y), np.int32(self.nc_z),
                 np.int32(hilbert_levels),
                 d_cell_counts, d_composite_counts, sort_keys, cell_indices,
-                self.d_rebuild_flag,
             ),
         )
         self._d_cell_counts = d_cell_counts
@@ -1073,7 +1050,6 @@ class BlockList:
                 d_cell_counts, np.int32(self.nc_total),
                 cell_offset, cell_block_offset, cell_block_count,
                 cell_offset_padded, block_to_cell, d_num_blocks, d_total_padded,
-                self.d_rebuild_flag,
             ),
         )
         self.num_blocks = self.max_blocks
@@ -1089,8 +1065,7 @@ class BlockList:
         composite_offset = self._pool_get("composite_offset", composite_buckets + 1, env.NUMPY_INT)
         self._kernels["composite_prefix_sum"](
             (1,), (SCAN_BLOCK,),
-            (d_composite_counts, np.int32(composite_buckets), composite_offset,
-             self.d_rebuild_flag),
+            (d_composite_counts, np.int32(composite_buckets), composite_offset),
         )
 
         # K3: counting-sort scatter. Each atom claims a unique slot in its
@@ -1100,13 +1075,11 @@ class BlockList:
         # preserves the intra-cell
         # Hilbert ordering, keeping blocks Hilbert-compact -> tight AABBs.
         # block_atoms must be pre-filled with -1 (padding) before launch.
-        # Use conditional_fill: when flag=0, skip the fill so the previous
-        # rebuild's valid block_atoms data is preserved for the force kernel.
         block_atoms = self._pool_get("block_atoms", self.max_total_padded, env.NUMPY_INT)
         n_ba = max((self.max_total_padded + tpb - 1) // tpb, 1)
         self._kernels["conditional_fill"](
             (n_ba,), (tpb,),
-            (self.d_rebuild_flag, block_atoms,
+            (block_atoms,
              np.int32(self.max_total_padded), np.int32(-1)),
         )
         composite_cursor = self._pool_get("composite_cursor", composite_buckets, env.NUMPY_INT, fill=0)
@@ -1130,7 +1103,6 @@ class BlockList:
                 sorted_pos_x, sorted_pos_y, sorted_pos_z,
                 block_atoms, raw_order, pdb_to_sorted, sorted_to_pdb,
                 cell_indices_sorted,
-                self.d_rebuild_flag,
             ),
         )
         self.d_block_atoms = block_atoms
@@ -1200,10 +1172,7 @@ class BlockList:
             self._d_block_pair_shift_y_buf = cp.empty(max_block_pairs, dtype=env.NUMPY_FLOAT)
             self._d_block_pair_shift_z_buf = cp.empty(max_block_pairs, dtype=env.NUMPY_FLOAT)
             self._max_block_pairs = max_block_pairs
-        self._kernels["conditional_fill"](
-            (1,), (1,),
-            (self.d_rebuild_flag, self._d_counters, np.int32(1), np.int32(0)),
-        )
+        self._d_counters[0] = 0
 
         tpb = 256
         grid_blocks = max((self.max_blocks * cell_subsets + 7) // 8, 1)
@@ -1225,7 +1194,6 @@ class BlockList:
                 self._d_block_pair_buf, self._d_interacting_buf,
                 self._d_block_pair_shift_x_buf, self._d_block_pair_shift_y_buf, self._d_block_pair_shift_z_buf,
                 self._d_counters, np.int32(max_block_pairs),
-                self.d_rebuild_flag,
             ),
         )
 
@@ -1335,7 +1303,6 @@ class BlockList:
                 self._d_counters,
                 np.int32(N),
                 self.d_exclusion_masks,
-                self.d_rebuild_flag,
             ),
         )
 
@@ -1444,9 +1411,6 @@ class BlockList:
         Must be called AFTER pbc wrapping so the snapshot is in the same
         PBC image as subsequent positions. This ensures check_rebuild
         measures true cumulative drift, not wrap-artifact coordinate jumps.
-
-        Guarded by d_rebuild_flag: when flag=0, the kernel skips and the
-        previous baseline is preserved (no amnesia).
         """
         pos_x, pos_y, pos_z = positions_soa
         N = self.num_particles
@@ -1457,7 +1421,7 @@ class BlockList:
         grid = ((N + tpb - 1) // tpb,)
         self._kernels["capture_snapshot"](
             grid, (tpb,),
-            (self.d_rebuild_flag, pos_x, pos_y, pos_z,
+            (pos_x, pos_y, pos_z,
              snap_x, snap_y, snap_z, np.int32(N)),
         )
         self.d_positions_at_rebuild_x = snap_x
