@@ -484,6 +484,10 @@ class PMEReciprocalForce(ForceTerm):
         self._N = 0
         self._fft_warmed = False
         self._subgrid_initialized = False
+        self._subgrid_dx = 0
+        self._subgrid_dy = 0
+        self._subgrid_dz = 0
+        self._subgrid_total = 0
 
     @property
     def order(self):
@@ -562,7 +566,12 @@ class PMEReciprocalForce(ForceTerm):
         self._d_charge_grid[:] = 0
 
         if not self._subgrid_initialized:
-            block_list.compute_pme_subgrid_dims(gx, gy, gz, order)
+            self._subgrid_dx = -(-gx // block_list.num_cells_x) + 2 * order
+            self._subgrid_dy = -(-gy // block_list.num_cells_y) + 2 * order
+            self._subgrid_dz = -(-gz // block_list.num_cells_z) + 2 * order
+            self._subgrid_total = (
+                self._subgrid_dx * self._subgrid_dy * self._subgrid_dz
+            )
             self._subgrid_initialized = True
 
         sorted_pos_x = gpu_context.d_positions_x
@@ -571,7 +580,7 @@ class PMEReciprocalForce(ForceTerm):
         sorted_charges = gpu_context.d_charges
 
         cell_spread_k = get_cell_spread_kernel()
-        shmem = block_list._subgrid_total * 4
+        shmem = self._subgrid_total * 4
         cell_spread_k(
             (block_list.num_cells_total,),
             (tpb,),
@@ -593,9 +602,9 @@ class PMEReciprocalForce(ForceTerm):
                 np.int32(block_list.num_cells_x),
                 np.int32(block_list.num_cells_y),
                 np.int32(block_list.num_cells_z),
-                np.int32(block_list._subgrid_dx),
-                np.int32(block_list._subgrid_dy),
-                np.int32(block_list._subgrid_dz),
+                np.int32(self._subgrid_dx),
+                np.int32(self._subgrid_dy),
+                np.int32(self._subgrid_dz),
                 np.int32(order),
                 self._d_charge_grid,
             ),

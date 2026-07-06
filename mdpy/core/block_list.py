@@ -817,11 +817,6 @@ class BlockList:
 
         self._exclusion_masks_np = None
 
-        self._subgrid_dx = 0
-        self._subgrid_dy = 0
-        self._subgrid_dz = 0
-        self._subgrid_total = 0
-
         self.d_rebuild_flag = cp.zeros(1, dtype=env.NUMPY_INT)
         self.d_positions_at_rebuild_x = cp.empty(0, dtype=env.NUMPY_FLOAT)
         self.d_positions_at_rebuild_y = cp.empty(0, dtype=env.NUMPY_FLOAT)
@@ -897,12 +892,6 @@ class BlockList:
         self._block_pairs_np = None
         self._interacting_atoms_np = None
         self._exclusion_masks_np = None
-
-    def compute_pme_subgrid_dims(self, grid_x, grid_y, grid_z, order):
-        self._subgrid_dx = -(-grid_x // self.num_cells_x) + 2 * order
-        self._subgrid_dy = -(-grid_y // self.num_cells_y) + 2 * order
-        self._subgrid_dz = -(-grid_z // self.num_cells_z) + 2 * order
-        self._subgrid_total = self._subgrid_dx * self._subgrid_dy * self._subgrid_dz
 
     def _ensure_kernels(self):
         if self._kernels is not None:
