@@ -91,7 +91,7 @@ def main():
     )
 
     print(f"System: {N} atoms, box={BOX_SIZE} A, cutoff={CUTOFF} A")
-    print(f"Steps:  {NUM_STEPS}, dt=0.5 fs")
+    print(f"Steps:  {NUM_STEPS}, time_step=0.5 fs")
     print()
 
     # Setup mdpy system

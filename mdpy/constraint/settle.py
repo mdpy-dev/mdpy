@@ -20,7 +20,7 @@ void settle_kernel(
     float rb,
     float rc,
     float inv_dHH,
-    float dt
+    float time_step
 ) {
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
     if (tid >= num_waters) return;
@@ -252,7 +252,7 @@ class SettleConstraint(ConstraintBase):
 
         self._kernel = cp.RawKernel(_SETTLE_KERNEL, "settle_kernel")
 
-    def apply(self, gpu_context, dt, **kwargs):
+    def apply(self, gpu_context, time_step, **kwargs):
         if self.num_waters == 0:
             return
         block = 256
@@ -273,7 +273,7 @@ class SettleConstraint(ConstraintBase):
             np.float32(self.rb),
             np.float32(self.rc),
             np.float32(self.inv_dHH),
-            np.float32(dt),
+            np.float32(time_step),
         ))
 
     def remap_indices_gpu(self, d_remap):

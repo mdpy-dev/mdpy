@@ -18,7 +18,7 @@ import mdpy.system as _sysmod
 DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
 BOX = np.array([75.450, 77.623, 69.668])
 CUTOFF = 12.0
-DT_FS = 2
+TIME_STEP_FS = 2
 STEPS = 400
 
 
@@ -40,7 +40,7 @@ def build():
     s.add_force_term(forces["pme"], stream="pme")
     s.upload_positions(pdb.positions)
     s.upload_velocities(generate_velocity_from_temperature(300.0, topology.masses, seed=42))
-    return s, LangevinBAOABIntegrator(DT_FS, 300.0, 1.0)
+    return s, LangevinBAOABIntegrator(TIME_STEP_FS, 300.0, 1.0)
 
 
 def run(s, integ, n, sync):
@@ -78,5 +78,5 @@ for sync in [1, 2, 5, 10, 20, 50, 100]:
     s.update_neighbor_list(force_rebuild=True)
     _counts[id(s)] = 0
     ms = timeit(s, integ, STEPS, sync)
-    ns = 86400.0 / (ms * 1e-3) * DT_FS * 1e-6
+    ns = 86400.0 / (ms * 1e-3) * TIME_STEP_FS * 1e-6
     print(f"{sync:>14d} {ms:>10.3f} {ns:>10.1f} {_counts[id(s)]:>10d}")

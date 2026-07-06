@@ -74,17 +74,17 @@ def test_constraint_loop():
 
     system.upload_positions(positions)
 
-    dt = 0.002
+    time_step = 0.002
     velocities = np.random.RandomState(42).randn(*positions.shape).astype(np.float32) * 0.001
     system.upload_velocities(velocities)
 
-    integrator = VerletIntegrator(dt)
+    integrator = VerletIntegrator(time_step)
 
     for step in range(5):
         system.update_neighbor_list(sync_interval=10)
         system.compute_forces()
         integrator.step(system)
-        system.apply_constraints(dt)
+        system.apply_constraints(time_step)
 
     pos, vel = system.dump_state()
     assert pos.shape == positions.shape

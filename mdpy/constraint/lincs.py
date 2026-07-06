@@ -353,7 +353,7 @@ class LincsConstraint(ConstraintBase):
         self._n_idx = con_idx.size
         self._kernel = cp.RawKernel(_LINCS_KERNEL, "lincs_kernel")
 
-    def apply(self, gpu_context, dt, **kwargs):
+    def apply(self, gpu_context, time_step, **kwargs):
         if self.num_constraints == 0:
             return
         block = 256

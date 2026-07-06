@@ -19,17 +19,17 @@ void verlet_init_kernel(
     float* __restrict__ prev_pos_x,
     float* __restrict__ prev_pos_y,
     float* __restrict__ prev_pos_z,
-    float dt, float dt_sq, int num_particles
+    float time_step, float time_step_squared, int num_particles
 ) {
     int index = blockIdx.x * blockDim.x + threadIdx.x;
     if (index >= num_particles) return;
     float mass = masses[index];
     if (mass <= 0.0f) return;
     float inv_mass = 1.0f / mass;
-    float half_inv = 0.5f * inv_mass * dt_sq;
-    prev_pos_x[index] = pos_x[index] - vel_x[index]*dt + f_x[index]*half_inv;
-    prev_pos_y[index] = pos_y[index] - vel_y[index]*dt + f_y[index]*half_inv;
-    prev_pos_z[index] = pos_z[index] - vel_z[index]*dt + f_z[index]*half_inv;
+    float half_inv = 0.5f * inv_mass * time_step_squared;
+    prev_pos_x[index] = pos_x[index] - vel_x[index]*time_step + f_x[index]*half_inv;
+    prev_pos_y[index] = pos_y[index] - vel_y[index]*time_step + f_y[index]*half_inv;
+    prev_pos_z[index] = pos_z[index] - vel_z[index]*time_step + f_z[index]*half_inv;
 }
 """
 
@@ -49,7 +49,7 @@ void verlet_kernel(
     float* __restrict__ vel_x,
     float* __restrict__ vel_y,
     float* __restrict__ vel_z,
-    float dt, float dt_sq, int num_particles
+    float time_step, float time_step_squared, int num_particles
 ) {
     int index = blockIdx.x * blockDim.x + threadIdx.x;
     if (index >= num_particles) return;
@@ -69,17 +69,17 @@ void verlet_kernel(
     float py = prev_pos_y[index];
     float pz = prev_pos_z[index];
 
-    float nx = 2.0f*cx - px + ax*dt_sq;
-    float ny = 2.0f*cy - py + ay*dt_sq;
-    float nz = 2.0f*cz - pz + az*dt_sq;
+    float nx = 2.0f*cx - px + ax*time_step_squared;
+    float ny = 2.0f*cy - py + ay*time_step_squared;
+    float nz = 2.0f*cz - pz + az*time_step_squared;
 
     float dx = nx - px;
     float dy = ny - py;
     float dz = nz - pz;
-    float inv_2dt = 0.5f / dt;
-    vel_x[index] = dx * inv_2dt;
-    vel_y[index] = dy * inv_2dt;
-    vel_z[index] = dz * inv_2dt;
+    float inv_two_time_step = 0.5f / time_step;
+    vel_x[index] = dx * inv_two_time_step;
+    vel_y[index] = dy * inv_two_time_step;
+    vel_z[index] = dz * inv_two_time_step;
 
     prev_pos_x[index] = cx;
     prev_pos_y[index] = cy;
@@ -99,8 +99,8 @@ _kernels = {
 class VerletIntegrator:
 
     def __init__(self, time_step):
-        self.dt = float(time_step)
-        self.dt_sq = self.dt * self.dt
+        self.time_step = float(time_step)
+        self.time_step_squared = self.time_step * self.time_step
         self._initialized = False
 
     def step(self, system):
@@ -116,8 +116,8 @@ class VerletIntegrator:
                 gpu.d_forces_x, gpu.d_forces_y, gpu.d_forces_z,
                 gpu.d_masses,
                 gpu.d_prev_positions_x, gpu.d_prev_positions_y, gpu.d_prev_positions_z,
-                np.float32(self.dt),
-                np.float32(self.dt_sq),
+                np.float32(self.time_step),
+                np.float32(self.time_step_squared),
                 np.int32(number),
             ))
             self._initialized = True
@@ -128,7 +128,7 @@ class VerletIntegrator:
             gpu.d_forces_x, gpu.d_forces_y, gpu.d_forces_z,
             gpu.d_masses,
             gpu.d_velocities_x, gpu.d_velocities_y, gpu.d_velocities_z,
-            np.float32(self.dt),
-            np.float32(self.dt_sq),
+            np.float32(self.time_step),
+            np.float32(self.time_step_squared),
             np.int32(number),
         ))

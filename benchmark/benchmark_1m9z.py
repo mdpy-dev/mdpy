@@ -27,7 +27,7 @@ from mdpy.utils import generate_velocity_from_temperature
 
 BOX_SIZE = 108.0
 CUTOFF = 12.0
-DT_FS = 2
+TIME_STEP_FS = 2
 NUM_BLOCKS = 10
 BLOCK_STEPS = 2500
 WARMUP_STEPS = 50
@@ -68,7 +68,7 @@ velocities = generate_velocity_from_temperature(300.0, topology.masses, seed=42)
 system.upload_positions(positions)
 system.upload_velocities(velocities)
 
-integrator = LangevinBAOABIntegrator(DT_FS, 300.0, 1.0)
+integrator = LangevinBAOABIntegrator(TIME_STEP_FS, 300.0, 1.0)
 
 
 def _run_steps(n):
@@ -76,14 +76,14 @@ def _run_steps(n):
         system.update_neighbor_list(sync_interval=20)
         system.compute_forces()
         integrator.step(system)
-        system.apply_constraints(DT_FS)
+        system.apply_constraints(TIME_STEP_FS)
 
 
 print("mdpy 1M9Z PME benchmark")
 print(f"  Atoms:         {topology.num_particles}")
 print(f"  Box:           {BOX_SIZE} A")
 print(f"  Cutoff:        {CUTOFF} A")
-print(f"  dt:            {DT_FS} fs")
+print(f"  time_step:    {TIME_STEP_FS} fs")
 print(f"  Integrator:    Langevin BAOAB")
 print(f"  ewald_rtol:    {EWALD_RTOL}")
 print(f"  fourier_spacing: {FOURIER_SPACING} A")
@@ -118,13 +118,13 @@ for i in range(NUM_BLOCKS):
     e_total = sum(energy_dict.values())
     KCAL_PER_INTERNAL = 1.0 / 4.1840286576e-4
     ms = elapsed / BLOCK_STEPS * 1000
-    ns = 86400.0 / (elapsed / BLOCK_STEPS) * DT_FS * 1e-6
+    ns = 86400.0 / (elapsed / BLOCK_STEPS) * TIME_STEP_FS * 1e-6
     block_times.append(ms)
     print(f"  {i+1:6d}  {ms:10.3f}  {ns:10.1f}  {e_total*KCAL_PER_INTERNAL:18.1f}")
 
 avg = np.mean(block_times)
 med = np.median(block_times)
-ns_avg = 86400.0 / (avg * 1e-3) * DT_FS * 1e-6
-ns_med = 86400.0 / (med * 1e-3) * DT_FS * 1e-6
+ns_avg = 86400.0 / (avg * 1e-3) * TIME_STEP_FS * 1e-6
+ns_med = 86400.0 / (med * 1e-3) * TIME_STEP_FS * 1e-6
 print(f"\n  avg  {avg:.3f} ms/step = {ns_avg:.1f} ns/day")
 print(f"  med  {med:.3f} ms/step = {ns_med:.1f} ns/day")

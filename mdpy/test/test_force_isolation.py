@@ -3,7 +3,7 @@
 Runs multi-step simulations with ONLY bonded forces, ONLY nonbonded forces,
 and both combined, to determine which force term causes trajectory instability.
 
-Uses 1M9Z (95,567 atoms) with dt=0.5 fs Verlet integration.
+Uses 1M9Z (95,567 atoms) with time_step=0.5 fs Verlet integration.
 
 Usage:
     CUDA_VISIBLE_DEVICES=0 conda run -n md_analysis pytest \\
