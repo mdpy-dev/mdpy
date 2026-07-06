@@ -428,98 +428,8 @@ void self_energy_kernel(
 }
 """
 
-_EXCLUSION_KERNEL_SOURCE = r"""
-extern "C" __global__
-void exclusion_kernel(
-    const float* __restrict__ positions_x,
-    const float* __restrict__ positions_y,
-    const float* __restrict__ positions_z,
-    const float* __restrict__ charges,
-    const int* __restrict__ pair_i,
-    const int* __restrict__ pair_j,
-    const float* __restrict__ pair_scale,
-    int num_pairs,
-    float alpha,
-    float box_x, float box_y, float box_z,
-    float* __restrict__ forces_x,
-    float* __restrict__ forces_y,
-    float* __restrict__ forces_z,
-    float* __restrict__ energy_buffer
-) {
-    int p = blockIdx.x * blockDim.x + threadIdx.x;
-    if (p >= num_pairs) return;
-
-    int i = pair_i[p];
-    int j = pair_j[p];
-    float scale = pair_scale[p];
-    float one_minus_scale = 1.0f - scale;
-
-    float dx = positions_x[i] - positions_x[j];
-    float dy = positions_y[i] - positions_y[j];
-    float dz = positions_z[i] - positions_z[j];
-
-    dx -= roundf(dx / box_x) * box_x;
-    dy -= roundf(dy / box_y) * box_y;
-    dz -= roundf(dz / box_z) * box_z;
-
-    float r_sq = dx*dx + dy*dy + dz*dz;
-    float r = sqrtf(r_sq);
-    float inv_r = 1.0f / r;
-
-    float qi = charges[i];
-    float qj = charges[j];
-    float qq = qi * qj;
-
-    float alpha_r = alpha * r;
-    float COULOMB_CONST = __MDPY_COULOMB__;
-
-    float erf_val = erff(alpha_r);
-
-    float z2 = alpha_r * alpha_r;
-    float z4 = z2 * z2;
-
-    float fd_a = 0.0011193462567257629232f * z4 + 0.11583842382862377919f;
-    float fd_b = 0.014866955030185295499f * z4 + 0.50736591960530292870f;
-    float fd_c = fd_a * z4 + 1.0f;
-    float fd_d = fd_b * z2 + fd_c;
-    float inv_fd = 1.0f / fd_d;
-
-    float fn_a = -1.7357322914161492954e-8f * z4 - 5.3401640219807709149e-5f;
-    float fn_b = 1.4703624142580877519e-6f * z4 + 1.0054721316683106153e-3f;
-    float fn_c = fn_a * z4 - 1.927831726488838059e-2f;
-    float fn_d = fn_b * z4 + 6.9670166153766424023e-2f;
-    float fn_e = fn_c * z4 - 0.75225204789749321333f;
-    float corr = (fn_d * z2 + fn_e) * inv_fd;
-
-    float alpha3 = alpha * alpha * alpha;
-
-    float corr_energy = -COULOMB_CONST * one_minus_scale * qq * erf_val * inv_r;
-
-    float corr_fmag = COULOMB_CONST * one_minus_scale * qq * alpha3 * r * corr;
-
-    float fx = corr_fmag * dx * inv_r;
-    float fy = corr_fmag * dy * inv_r;
-    float fz = corr_fmag * dz * inv_r;
-
-    atomicAdd(&forces_x[i], fx);
-    atomicAdd(&forces_y[i], fy);
-    atomicAdd(&forces_z[i], fz);
-    atomicAdd(&forces_x[j], -fx);
-    atomicAdd(&forces_y[j], -fy);
-    atomicAdd(&forces_z[j], -fz);
-
-    for (int offset = 16; offset > 0; offset >>= 1) {
-        corr_energy += __shfl_down_sync(0xffffffff, corr_energy, offset);
-    }
-    if ((threadIdx.x & 31) == 0) {
-        atomicAdd(energy_buffer, corr_energy);
-    }
-}
-""".replace('__MDPY_COULOMB__', _COULOMB_CUDA)
-
 _gather_kernel = None
 _self_energy_kernel = None
-_exclusion_kernel = None
 _cell_spread_kernel = None
 
 
@@ -537,13 +447,6 @@ def get_self_energy_kernel():
             _SELF_ENERGY_KERNEL_SOURCE, "self_energy_kernel"
         )
     return _self_energy_kernel
-
-
-def get_exclusion_kernel():
-    global _exclusion_kernel
-    if _exclusion_kernel is None:
-        _exclusion_kernel = cp.RawKernel(_EXCLUSION_KERNEL_SOURCE, "exclusion_kernel")
-    return _exclusion_kernel
 
 
 def get_cell_spread_kernel():
