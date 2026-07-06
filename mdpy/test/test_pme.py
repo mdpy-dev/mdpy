@@ -128,13 +128,13 @@ class TestCellBasedChargeSpreading:
         cell_spread_k = get_cell_spread_kernel()
         shmem = bl._subgrid_total * 4
         cell_spread_k(
-            (bl.nc_total,), (256,),
+            (bl.num_cells_total,), (256,),
             (sorted_pos_x, sorted_pos_y, sorted_pos_z, sorted_charges,
              bl.d_cell_block_offset, bl.d_cell_block_count, bl.d_block_atoms,
              np.int32(N),
              np.float32(1.0 / box_x), np.float32(1.0 / box_y), np.float32(1.0 / box_z),
              np.int32(grid_x), np.int32(grid_y), np.int32(grid_z),
-             np.int32(bl.nc_x), np.int32(bl.nc_y), np.int32(bl.nc_z),
+             np.int32(bl.num_cells_x), np.int32(bl.num_cells_y), np.int32(bl.num_cells_z),
              np.int32(bl._subgrid_dx), np.int32(bl._subgrid_dy), np.int32(bl._subgrid_dz),
              np.int32(order),
              d_grid_cell),
@@ -237,13 +237,13 @@ class TestForceGathering:
         cell_spread_k = get_cell_spread_kernel()
         shmem = bl._subgrid_total * 4
         cell_spread_k(
-            (bl.nc_total,), (256,),
+            (bl.num_cells_total,), (256,),
             (sorted_pos_x, sorted_pos_y, sorted_pos_z, sorted_charges_gpu,
              bl.d_cell_block_offset, bl.d_cell_block_count, bl.d_block_atoms,
              np.int32(N),
              np.float32(1.0 / box_x), np.float32(1.0 / box_y), np.float32(1.0 / box_z),
              np.int32(grid_x), np.int32(grid_y), np.int32(grid_z),
-             np.int32(bl.nc_x), np.int32(bl.nc_y), np.int32(bl.nc_z),
+             np.int32(bl.num_cells_x), np.int32(bl.num_cells_y), np.int32(bl.num_cells_z),
              np.int32(bl._subgrid_dx), np.int32(bl._subgrid_dy), np.int32(bl._subgrid_dz),
              np.int32(order),
              d_charge_grid),
@@ -730,16 +730,16 @@ class TestBilateralPaddingUnwrapped:
         bl.rebuild(positions, topo, _PBCContext(pbc, pbc_inv), force=True)
         bl.compute_pme_subgrid_dims(grid_x, grid_y, grid_z, order)
 
-        expected_dx = -(-grid_x // bl.nc_x) + 2 * order
-        expected_dy = -(-grid_y // bl.nc_y) + 2 * order
-        expected_dz = -(-grid_z // bl.nc_z) + 2 * order
+        expected_dx = -(-grid_x // bl.num_cells_x) + 2 * order
+        expected_dy = -(-grid_y // bl.num_cells_y) + 2 * order
+        expected_dz = -(-grid_z // bl.num_cells_z) + 2 * order
 
         assert bl._subgrid_dx == expected_dx, \
             f"subgrid_dx={bl._subgrid_dx}, expected={expected_dx}"
         assert bl._subgrid_dy == expected_dy
         assert bl._subgrid_dz == expected_dz
 
-        base_dx = -(-grid_x // bl.nc_x)
+        base_dx = -(-grid_x // bl.num_cells_x)
         assert bl._subgrid_dx == base_dx + 2 * order, \
             f"Bilateral padding should add 2*order: base={base_dx}, got={bl._subgrid_dx}"
         assert bl._subgrid_dx > base_dx, \
@@ -801,13 +801,13 @@ class TestBilateralPaddingUnwrapped:
         cell_spread_k = get_cell_spread_kernel()
         shmem = bl._subgrid_total * 4
         cell_spread_k(
-            (bl.nc_total,), (256,),
+            (bl.num_cells_total,), (256,),
             (sorted_pos_x, sorted_pos_y, sorted_pos_z, sorted_charges,
              bl.d_cell_block_offset, bl.d_cell_block_count, bl.d_block_atoms,
              np.int32(N),
              np.float32(1.0 / box), np.float32(1.0 / box), np.float32(1.0 / box),
              np.int32(grid_x), np.int32(grid_y), np.int32(grid_z),
-             np.int32(bl.nc_x), np.int32(bl.nc_y), np.int32(bl.nc_z),
+             np.int32(bl.num_cells_x), np.int32(bl.num_cells_y), np.int32(bl.num_cells_z),
              np.int32(bl._subgrid_dx), np.int32(bl._subgrid_dy), np.int32(bl._subgrid_dz),
              np.int32(order),
              d_grid_cell),

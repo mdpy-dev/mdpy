@@ -49,7 +49,7 @@ class TestMaxBlocksComputed:
         pbc = np.eye(3, dtype=np.float64) * 50.0
         N = 1000
         bl._compute_cell_grid(pbc, N)
-        expected = (N + BLOCK_SIZE - 1) // BLOCK_SIZE + bl.nc_total
+        expected = (N + BLOCK_SIZE - 1) // BLOCK_SIZE + bl.num_cells_total
         assert bl.max_blocks == expected
         assert bl.max_total_padded == bl.max_blocks * BLOCK_SIZE
 
@@ -58,7 +58,7 @@ class TestMaxBlocksComputed:
         bl = BlockList(cutoff=12.0, skin=2.0)
         pbc = np.eye(3, dtype=np.float64) * 50.0
         bl._compute_cell_grid(pbc, 1000)
-        assert bl.max_blocks > bl.nc_total
+        assert bl.max_blocks > bl.num_cells_total
 
     def test_max_blocks_init_zero(self):
         bl = BlockList(cutoff=12.0, skin=2.0)

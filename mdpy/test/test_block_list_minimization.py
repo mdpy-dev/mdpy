@@ -115,7 +115,7 @@ def test_cell_assign_fused_produces_counts():
     # cell_indices computed for every atom, all in valid range
     ci = bl._d_cell_indices.get() if hasattr(bl, '_d_cell_indices') else None
     if ci is not None:
-        assert (ci >= 0).all() and (ci < bl.nc_total).all()
+        assert (ci >= 0).all() and (ci < bl.num_cells_total).all()
 
 
 def test_counting_sort_groups_by_cell():
@@ -149,7 +149,7 @@ def test_cell_layout_emits_block_to_cell():
     bl.num_blocks = int(bl._d_num_blocks[0].get())
     btc = bl.d_block_to_cell.get()[:bl.num_blocks]
     assert btc.shape[0] == bl.num_blocks
-    assert (btc >= 0).all() and (btc < bl.nc_total).all()
+    assert (btc >= 0).all() and (btc < bl.num_cells_total).all()
     # block_to_cell must be non-decreasing (blocks ordered by cell)
     assert (np.diff(btc) >= 0).all()
     # cross-check: each block's cell matches the cell_block_offset ranges
@@ -192,5 +192,5 @@ def test_hilbert_B_derived_from_density():
     # ion: ~317 atoms/cell -> B_raw=round(log2(79))=6 -> L=(6+2)//3=2
     assert bl._hilbert_levels == 2
     assert bl._hilbert_bits == 6
-    K = bl.nc_total * (1 << (3 * bl._hilbert_levels))
+    K = bl.num_cells_total * (1 << (3 * bl._hilbert_levels))
     assert K <= 1_000_000

@@ -747,10 +747,10 @@ class BlockList:
         self.max_blocks = 0
         self.max_total_padded = 0
 
-        self.nc_x = 0
-        self.nc_y = 0
-        self.nc_z = 0
-        self.nc_total = 0
+        self.num_cells_x = 0
+        self.num_cells_y = 0
+        self.num_cells_z = 0
+        self.num_cells_total = 0
         self._hilbert_levels = 2
         self._hilbert_bits = 6
 
@@ -899,9 +899,9 @@ class BlockList:
         self._exclusion_masks_np = None
 
     def compute_pme_subgrid_dims(self, grid_x, grid_y, grid_z, order):
-        self._subgrid_dx = -(-grid_x // self.nc_x) + 2 * order
-        self._subgrid_dy = -(-grid_y // self.nc_y) + 2 * order
-        self._subgrid_dz = -(-grid_z // self.nc_z) + 2 * order
+        self._subgrid_dx = -(-grid_x // self.num_cells_x) + 2 * order
+        self._subgrid_dy = -(-grid_y // self.num_cells_y) + 2 * order
+        self._subgrid_dz = -(-grid_z // self.num_cells_z) + 2 * order
         self._subgrid_total = self._subgrid_dx * self._subgrid_dy * self._subgrid_dz
 
     def _ensure_kernels(self):
@@ -929,25 +929,25 @@ class BlockList:
         box_b = float(np.linalg.norm(b_vec))
         box_c = float(np.linalg.norm(c_vec))
         cell_size = self.build_radius
-        self.nc_x = max(1, int(box_a / cell_size))
-        self.nc_y = max(1, int(box_b / cell_size))
-        self.nc_z = max(1, int(box_c / cell_size))
-        self.nc_total = self.nc_x * self.nc_y * self.nc_z
+        self.num_cells_x = max(1, int(box_a / cell_size))
+        self.num_cells_y = max(1, int(box_b / cell_size))
+        self.num_cells_z = max(1, int(box_c / cell_size))
+        self.num_cells_total = self.num_cells_x * self.num_cells_y * self.num_cells_z
 
         # Upper bounds for pre-allocation: num_blocks = sum of ceil(count_c/32)
-        # over all cells.  Since ceil(x) < x+1, num_blocks < N/32 + nc_total,
-        # so ceil(N/32) + nc_total is a safe integer upper bound (strict >).
-        self.max_blocks = (num_particles + BLOCK_SIZE - 1) // BLOCK_SIZE + self.nc_total
+        # over all cells.  Since ceil(x) < x+1, num_blocks < N/32 + num_cells_total,
+        # so ceil(N/32) + num_cells_total is a safe integer upper bound (strict >).
+        self.max_blocks = (num_particles + BLOCK_SIZE - 1) // BLOCK_SIZE + self.num_cells_total
         self.max_total_padded = self.max_blocks * BLOCK_SIZE
 
         # Density-derived Hilbert level L. Targets ~4 atoms per sub-cell:
         # atoms_per_cell / (2^L)^3 ~= 4  ->  B_raw = round(log2(apc/4)), L =
-        # (B_raw+2)//3 clamped to [1, 4]. Also cap K = nc_total * 2^(3L) at
+        # (B_raw+2)//3 clamped to [1, 4]. Also cap K = num_cells_total * 2^(3L) at
         # 1e6 so the counting-sort bucket arrays stay small.
-        atoms_per_cell = num_particles / self.nc_total
+        atoms_per_cell = num_particles / self.num_cells_total
         b_raw = int(round(math.log2(max(1.0, atoms_per_cell / 4.0))))
         L = max(1, min(4, (b_raw + 2) // 3))
-        while L > 1 and self.nc_total * (1 << (3 * L)) > 1_000_000:
+        while L > 1 and self.num_cells_total * (1 << (3 * L)) > 1_000_000:
             L -= 1
         self._hilbert_levels = L
         self._hilbert_bits = 3 * L
@@ -1003,10 +1003,10 @@ class BlockList:
         # indexes a finer bucket grid so counting_scatter can preserve the
         # intra-cell Hilbert ordering instead of scattering in arrival order.
         hilbert_levels = self._hilbert_levels
-        composite_buckets = self.nc_total * (1 << (3 * hilbert_levels))
+        composite_buckets = self.num_cells_total * (1 << (3 * hilbert_levels))
         sort_keys = self._pool_get("sort_keys", N, np.uint64)
         cell_indices = self._pool_get("cell_indices", N, env.NUMPY_INT)
-        d_cell_counts = self._pool_get("cell_counts", self.nc_total, env.NUMPY_INT, fill=0)
+        d_cell_counts = self._pool_get("cell_counts", self.num_cells_total, env.NUMPY_INT, fill=0)
         d_composite_counts = self._pool_get("composite_counts", composite_buckets, env.NUMPY_INT, fill=0)
         nm = (N + tpb - 1) // tpb
         self._kernels["cell_assign"](
@@ -1015,7 +1015,7 @@ class BlockList:
                 pos_x, pos_y, pos_z,
                 gpu_context.d_pbc_matrix, gpu_context.d_pbc_inv,
                 np.int32(N),
-                np.int32(self.nc_x), np.int32(self.nc_y), np.int32(self.nc_z),
+                np.int32(self.num_cells_x), np.int32(self.num_cells_y), np.int32(self.num_cells_z),
                 np.int32(hilbert_levels),
                 d_cell_counts, d_composite_counts, sort_keys, cell_indices,
             ),
@@ -1028,10 +1028,10 @@ class BlockList:
         # counting_scatter needs cell_offset and cell_offset_padded. prefix_sum
         # consumes only d_cell_counts (not the sorted data), so it is safe to
         # run immediately after cell_assign.
-        cell_offset = self._pool_get("cell_offset", self.nc_total + 1, env.NUMPY_INT)
-        cell_block_offset = self._pool_get("cell_block_offset", self.nc_total + 1, env.NUMPY_INT)
-        cell_block_count = self._pool_get("cell_block_count", self.nc_total, env.NUMPY_INT)
-        cell_offset_padded = self._pool_get("cell_offset_padded", self.nc_total + 1, env.NUMPY_INT)
+        cell_offset = self._pool_get("cell_offset", self.num_cells_total + 1, env.NUMPY_INT)
+        cell_block_offset = self._pool_get("cell_block_offset", self.num_cells_total + 1, env.NUMPY_INT)
+        cell_block_count = self._pool_get("cell_block_count", self.num_cells_total, env.NUMPY_INT)
+        cell_offset_padded = self._pool_get("cell_offset_padded", self.num_cells_total + 1, env.NUMPY_INT)
         d_num_blocks = self._pool_get("num_blocks", 1, env.NUMPY_INT)
         d_total_padded = self._pool_get("total_padded", 1, env.NUMPY_INT)
         # num_blocks is unknown until the prefix sum writes it; num_blocks <= N
@@ -1040,7 +1040,7 @@ class BlockList:
         self._kernels["cell_prefix_sum"](
             (1,), (SCAN_BLOCK,),
             (
-                d_cell_counts, np.int32(self.nc_total),
+                d_cell_counts, np.int32(self.num_cells_total),
                 cell_offset, cell_block_offset, cell_block_count,
                 cell_offset_padded, block_to_cell, d_num_blocks, d_total_padded,
             ),
@@ -1179,7 +1179,7 @@ class BlockList:
                 self.d_block_size_x, self.d_block_size_y, self.d_block_size_z,
                 self.d_cell_block_offset, self.d_cell_block_count,
                 self.d_block_to_cell,
-                np.int32(self.nc_x), np.int32(self.nc_y), np.int32(self.nc_z),
+                np.int32(self.num_cells_x), np.int32(self.num_cells_y), np.int32(self.num_cells_z),
                 d_num_blocks, np.int32(self.num_particles),
                 np.int32(cell_subsets),
                 np.float32(build_radius_sq),

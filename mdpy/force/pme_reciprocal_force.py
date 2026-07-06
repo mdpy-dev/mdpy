@@ -573,7 +573,7 @@ class PMEReciprocalForce(ForceTerm):
         cell_spread_k = get_cell_spread_kernel()
         shmem = block_list._subgrid_total * 4
         cell_spread_k(
-            (block_list.nc_total,),
+            (block_list.num_cells_total,),
             (tpb,),
             (
                 sorted_pos_x,
@@ -590,9 +590,9 @@ class PMEReciprocalForce(ForceTerm):
                 np.int32(gx),
                 np.int32(gy),
                 np.int32(gz),
-                np.int32(block_list.nc_x),
-                np.int32(block_list.nc_y),
-                np.int32(block_list.nc_z),
+                np.int32(block_list.num_cells_x),
+                np.int32(block_list.num_cells_y),
+                np.int32(block_list.num_cells_z),
                 np.int32(block_list._subgrid_dx),
                 np.int32(block_list._subgrid_dy),
                 np.int32(block_list._subgrid_dz),

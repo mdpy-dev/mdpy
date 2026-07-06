@@ -63,7 +63,7 @@ def test_block_list_uses_current_pbc_after_box_change():
         ctx,
         force=True,
     )
-    nc_x_before = bl.nc_x
+    nc_x_before = bl.num_cells_x
 
     # Now upload a new box that is 2x larger in each dimension.
     ctx.upload_pbc((np.eye(3, dtype=np.float32) * 20.0).flatten())
@@ -76,7 +76,7 @@ def test_block_list_uses_current_pbc_after_box_change():
         ctx,
         force=True,
     )
-    nc_x_after = bl.nc_x
+    nc_x_after = bl.num_cells_x
 
     # Cell count scales with box length (cutoff fixed); doubling the box
     # should roughly double nc_x. If this assertion fails after Task 5,

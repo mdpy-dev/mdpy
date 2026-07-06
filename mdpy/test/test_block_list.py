@@ -85,10 +85,10 @@ class TestCellAssignment:
         cutoff, skin = 10.0, 2.0
         bl, *_ = _rebuild_and_build_block_pairs(n, box, cutoff, skin)
         expected_nc = int(box / (cutoff + skin))
-        assert bl.nc_x == expected_nc
-        assert bl.nc_y == expected_nc
-        assert bl.nc_z == expected_nc
-        assert bl.nc_total == expected_nc ** 3
+        assert bl.num_cells_x == expected_nc
+        assert bl.num_cells_y == expected_nc
+        assert bl.num_cells_z == expected_nc
+        assert bl.num_cells_total == expected_nc ** 3
 
     def test_block_coverage(self):
         n, box = 100, 50.0
@@ -814,7 +814,7 @@ class TestBlockToCellExpand:
         block_count = cp.asnumpy(bl.d_cell_block_count)
         block_offset = cp.asnumpy(bl.d_cell_block_offset)
 
-        for c in range(bl.nc_total):
+        for c in range(bl.num_cells_total):
             for b in range(block_count[c]):
                 bi = block_offset[c] + b
                 assert block_to_cell[bi] == c, (
