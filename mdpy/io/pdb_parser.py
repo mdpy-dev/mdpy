@@ -9,7 +9,7 @@ copyright : (C)Copyright 2021-present, mdpy organization
 
 import numpy as np
 from mdpy import env, SPATIAL_DIM
-from mdpy.error import FileFormatError, ArrayDimError, ParserPoorDefinedError
+from mdpy.error import FileFormatError, ArrayDimensionError, ParserPoorlyDefinedError
 
 
 def _guess_element(atom_name):
@@ -138,7 +138,7 @@ class PDBParser:
         if self._is_parse_all:
             if num_target_frames == 1:
                 if frames[0] >= self._num_frames:
-                    raise ArrayDimError(
+                    raise ArrayDimensionError(
                         '%d beyond the number of frames %d stored in pdb file'
                         %(frames[0], self._num_frames)
                     )
@@ -147,7 +147,7 @@ class PDBParser:
                 result = np.zeros([num_target_frames, self._num_particles, SPATIAL_DIM])
                 for index, frame in enumerate(frames):
                     if frame >= self._num_frames:
-                        raise ArrayDimError(
+                        raise ArrayDimensionError(
                             '%d beyond the number of frames %d stored in pdb file'
                             %(frame, self._num_frames)
                         )
@@ -156,7 +156,7 @@ class PDBParser:
         else:
             if num_target_frames == 1:
                 if frames[0] >= self._num_frames:
-                    raise ArrayDimError(
+                    raise ArrayDimensionError(
                         '%d beyond the number of frames %d stored in pdb file'
                         %(frames[0], self._num_frames)
                     )
@@ -165,7 +165,7 @@ class PDBParser:
                 result = np.zeros([num_target_frames, self._num_particles, SPATIAL_DIM])
                 for index, frame in enumerate(frames):
                     if frame >= self._num_frames:
-                        raise ArrayDimError(
+                        raise ArrayDimensionError(
                             '%d beyond the number of frames %d stored in pdb file'
                             %(frame, self._num_frames)
                         )
@@ -207,7 +207,7 @@ class PDBParser:
     @property
     def positions(self) -> np.ndarray:
         if not self._is_parse_all:
-            raise ParserPoorDefinedError(
+            raise ParserPoorlyDefinedError(
                 'positions property is not supported as `is_parse_all==False`, calling `get_position` method'
             )
         return self._positions.copy()

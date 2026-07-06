@@ -10,7 +10,7 @@ copyright : (C)Copyright 2021-present, mdpy organization
 import numpy as np
 from copy import deepcopy
 from . import BaseDimension, UNIT_PRECISION
-from ..error import UnitDimensionDismatchedError
+from ..error import UnitDimensionMismatchedError
 from .. import env
 
 class Unit:
@@ -78,7 +78,7 @@ class Unit:
             ):
                 return deepcopy(self)
             else:
-                raise UnitDimensionDismatchedError(
+                raise UnitDimensionMismatchedError(
                     '%s and %s can\'t be added together'
                     %(self._base_dimension, other.base_dimension)
                 )
@@ -97,7 +97,7 @@ class Unit:
             ):
                 return deepcopy(other)
             else:
-                raise UnitDimensionDismatchedError(
+                raise UnitDimensionMismatchedError(
                     '%s and %s can not be added'
                     %(other.base_dimension, self._base_dimension)
                 )
@@ -114,7 +114,7 @@ class Unit:
             ):
                 return deepcopy(self)
             else:
-                raise UnitDimensionDismatchedError(
+                raise UnitDimensionMismatchedError(
                     '%s and %s can not be subbed'
                     %(self._base_dimension, other.base_dimension)
                 )
@@ -133,7 +133,7 @@ class Unit:
             ):
                 return deepcopy(other)
             else:
-                raise UnitDimensionDismatchedError(
+                raise UnitDimensionMismatchedError(
                     '%s and %s can not be subbed'
                     %(other.base_dimension, self._base_dimension)
                 )

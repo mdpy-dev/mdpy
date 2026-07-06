@@ -41,7 +41,7 @@ class PSFParser:
                 n_title = int(parts[0])
                 return idx + 1 + n_title
             idx += 1
-        raise ParserPoorDefinedError('PSF file missing !NTITLE section')
+        raise ParserPoorlyDefinedError('PSF file missing !NTITLE section')
 
     def _parse_atoms(self, lines, idx):
         while idx < len(lines):
@@ -56,7 +56,7 @@ class PSFParser:
                 break
             idx += 1
         else:
-            raise ParserPoorDefinedError('PSF file missing !NATOM section')
+            raise ParserPoorlyDefinedError('PSF file missing !NATOM section')
 
         self._num_particles = n_atoms
         self._particle_ids = []
