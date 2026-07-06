@@ -35,14 +35,12 @@ class System:
     def __init__(self, topology):
         self.topology = topology
         self.num_particles = topology.num_particles
-        self.gpu = GPUContext()
-        self.gpu.initialize(topology, np.eye(3, dtype=np.float32))
+        self.gpu = GPUContext(topology)
 
         self._cutoff = None
         self._skin = 1.0
         self._rebuild_check_interval = 10
         self._block_list = None
-        self._pbc_set = False
 
         self.force_terms = []
         self._primary_force_terms = []
@@ -52,8 +50,6 @@ class System:
         self._ev_pme_done = None
         self.constraints = []
 
-        self._positions_uploaded = False
-        self._velocities_uploaded = False
         self._step_counter = 0
         self._d_cached_unique_i = None
         self._d_cached_unique_j = None
@@ -72,7 +68,6 @@ class System:
 
     def upload_pbc(self, pbc_matrix):
         self.gpu.upload_pbc(pbc_matrix)
-        self._pbc_set = True
 
     @property
     def block_list(self):
@@ -117,14 +112,12 @@ class System:
 
     def upload_positions(self, positions):
         self.gpu.upload_positions(positions)
-        self._positions_uploaded = True
 
     def upload_velocities(self, velocities):
         self.gpu.upload_velocities(velocities)
-        self._velocities_uploaded = True
 
     def _ensure_uploaded(self):
-        if not self._positions_uploaded or not self._velocities_uploaded:
+        if not self.gpu.has_positions or not self.gpu.has_velocities:
             raise RuntimeError(
                 "Positions and/or velocities not uploaded to GPU. "
                 "Call system.upload_positions() and system.upload_velocities() first."
@@ -164,7 +157,7 @@ class System:
 
     def update_neighbor_list(self, sync_interval=10, force_rebuild=False):
         self._ensure_uploaded()
-        if not self._pbc_set:
+        if not self.gpu.has_pbc:
             raise RuntimeError("PBC not set. Call upload_pbc() first.")
 
         if self._block_list is None:

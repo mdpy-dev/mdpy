@@ -184,35 +184,37 @@ void zero_forces_kernel(
 
 class GPUContext:
 
-    def __init__(self):
-        self.num_particles = 0
+    def __init__(self, topology):
+        self.num_particles = topology.num_particles
 
-        # d_positions_x/y/z: particle positions. May drift to [-skin, L+skin)
-        # between rebuilds. Wrapped back to [0, L) during rebuild.
-        self.d_positions_x = None
-        self.d_positions_y = None
-        self.d_positions_z = None
+        # Per-particle state arrays (zero-filled; populated by upload_* methods).
+        self.d_positions_x = cp.zeros(self.num_particles, dtype=np.float32)
+        self.d_positions_y = cp.zeros(self.num_particles, dtype=np.float32)
+        self.d_positions_z = cp.zeros(self.num_particles, dtype=np.float32)
 
-        self.d_velocities_x = None
-        self.d_velocities_y = None
-        self.d_velocities_z = None
+        self.d_velocities_x = cp.zeros(self.num_particles, dtype=np.float32)
+        self.d_velocities_y = cp.zeros(self.num_particles, dtype=np.float32)
+        self.d_velocities_z = cp.zeros(self.num_particles, dtype=np.float32)
 
-        self.d_forces_x = None
-        self.d_forces_y = None
-        self.d_forces_z = None
+        self.d_forces_x = cp.zeros(self.num_particles, dtype=np.float32)
+        self.d_forces_y = cp.zeros(self.num_particles, dtype=np.float32)
+        self.d_forces_z = cp.zeros(self.num_particles, dtype=np.float32)
 
-        self.d_prev_positions_x = None
-        self.d_prev_positions_y = None
-        self.d_prev_positions_z = None
+        self.d_prev_positions_x = cp.zeros(self.num_particles, dtype=np.float32)
+        self.d_prev_positions_y = cp.zeros(self.num_particles, dtype=np.float32)
+        self.d_prev_positions_z = cp.zeros(self.num_particles, dtype=np.float32)
 
-        self.d_masses = None
-        self.d_types = None
-        self.d_charges = None
-        self.d_energy = None
+        # Topology-derived per-particle properties (known at construction).
+        self.d_masses = cp.asarray(topology.masses.astype(np.float32))
+        self.d_types = cp.asarray(topology.particle_type_indices.astype(np.int32))
+        self.d_charges = cp.asarray(topology.charges.astype(np.float32))
 
+        self.d_energy = cp.zeros(1, dtype=np.float32)
+        self.d_energy_accumulator = None
+
+        # PBC: lazy-allocated on first upload_pbc. None until then.
         self.d_pbc_matrix = None
         self.d_pbc_inv = None
-
         self._box_x = 0.0
         self._box_y = 0.0
         self._box_z = 0.0
@@ -220,15 +222,18 @@ class GPUContext:
         self._inv_box_y = 0.0
         self._inv_box_z = 0.0
 
+        # Upload-state flags (queried via has_* properties).
+        self._has_pbc = False
+        self._has_positions = False
+        self._has_velocities = False
+
+        # Lazy kernel caches.
         self._permutation_kernels = None
         self._zero_forces_kernel = None
         self._wrap_kernel = None
         self._wrap_correct_kernel = None
 
-        # Double-buffered pool for permute_state_arrays. The fused permutation
-        # kernel reads src[perm[i]] and writes dst[i] in one launch — if src and
-        # dst aliased the same memory the gather would corrupt. Alternating
-        # between pool_A and pool_B each rebuild keeps src != dst.
+        # Double-buffered pool for permute_state_arrays (src != dst each rebuild).
         self._perm_pool_A = None
         self._perm_pool_B = None
         self._perm_pool_N = 0
@@ -407,80 +412,44 @@ class GPUContext:
         )
         return pdb_array
 
-    def initialize(self, topology, pbc_matrix):
-        self.num_particles = topology.num_particles
-        number = self.num_particles
-
-        float_dtype = np.float32
-        int_dtype = np.int32
-
-        self.d_positions_x = cp.zeros(number, dtype=float_dtype)
-        self.d_positions_y = cp.zeros(number, dtype=float_dtype)
-        self.d_positions_z = cp.zeros(number, dtype=float_dtype)
-
-        self.d_velocities_x = cp.zeros(number, dtype=float_dtype)
-        self.d_velocities_y = cp.zeros(number, dtype=float_dtype)
-        self.d_velocities_z = cp.zeros(number, dtype=float_dtype)
-
-        self.d_forces_x = cp.zeros(number, dtype=float_dtype)
-        self.d_forces_y = cp.zeros(number, dtype=float_dtype)
-        self.d_forces_z = cp.zeros(number, dtype=float_dtype)
-
-        self.d_prev_positions_x = cp.zeros(number, dtype=float_dtype)
-        self.d_prev_positions_y = cp.zeros(number, dtype=float_dtype)
-        self.d_prev_positions_z = cp.zeros(number, dtype=float_dtype)
-
-        self.d_masses = cp.asarray(topology.masses.astype(float_dtype))
-        self.d_types = cp.asarray(topology.particle_type_indices.astype(int_dtype))
-        self.d_charges = cp.asarray(topology.charges.astype(float_dtype))
-        self.d_energy = cp.zeros(1, dtype=float_dtype)
-        self.d_energy_accumulator = None
-
-        pbc_flat = np.ascontiguousarray(pbc_matrix, dtype=float_dtype).ravel()
-        self.d_pbc_matrix = cp.asarray(pbc_flat)
-        pbc_inv = np.linalg.inv(pbc_flat.reshape(3, 3))
-        self.d_pbc_inv = cp.asarray(
-            np.ascontiguousarray(pbc_inv, dtype=float_dtype).ravel()
-        )
-
-        pbc_2d = pbc_matrix.reshape(3, 3)
-        box_x = abs(float(pbc_2d[0, 0]))
-        box_y = abs(float(pbc_2d[1, 1]))
-        box_z = abs(float(pbc_2d[2, 2]))
-        self.set_box_dims(box_x, box_y, box_z)
-
     def upload_pbc(self, pbc_matrix):
-        """Overwrite device PBC buffers with new pbc_matrix.
-
-        Immediately updates d_pbc_matrix, d_pbc_inv, and box_dims.
-        Does NOT trigger neighbor list rebuild.
-        """
+        """Set the periodic box matrix. Allocates d_pbc_matrix/d_pbc_inv on
+        first call; subsequent calls overwrite in place. Does NOT trigger a
+        neighbor-list rebuild."""
         pbc_flat = np.ascontiguousarray(
             np.asarray(pbc_matrix, dtype=np.float32)
         ).ravel()
+        if self.d_pbc_matrix is None:
+            self.d_pbc_matrix = cp.empty(9, dtype=np.float32)
+            self.d_pbc_inv = cp.empty(9, dtype=np.float32)
         self.d_pbc_matrix[:] = cp.asarray(pbc_flat)
         pbc_inv = np.linalg.inv(pbc_flat.reshape(3, 3))
         self.d_pbc_inv[:] = cp.asarray(
             np.ascontiguousarray(pbc_inv, dtype=np.float32).ravel()
         )
         pbc_2d = np.asarray(pbc_matrix).reshape(3, 3)
-        box_x = abs(float(pbc_2d[0, 0]))
-        box_y = abs(float(pbc_2d[1, 1]))
-        box_z = abs(float(pbc_2d[2, 2]))
-        self.set_box_dims(box_x, box_y, box_z)
+        self.set_box_dims(
+            abs(float(pbc_2d[0, 0])),
+            abs(float(pbc_2d[1, 1])),
+            abs(float(pbc_2d[2, 2])),
+        )
+        self._has_pbc = True
 
     def upload_positions(self, positions):
         data = np.ascontiguousarray(np.asarray(positions, dtype=np.float32))
         self.d_positions_x[:] = cp.asarray(data[:, 0])
         self.d_positions_y[:] = cp.asarray(data[:, 1])
         self.d_positions_z[:] = cp.asarray(data[:, 2])
-        self._wrap_positions_inplace()
+        if self._has_pbc:
+            self._wrap_positions_inplace()
+        self._has_positions = True
 
     def upload_velocities(self, velocities):
         data = np.ascontiguousarray(np.asarray(velocities, dtype=np.float32))
         self.d_velocities_x[:] = cp.asarray(data[:, 0])
         self.d_velocities_y[:] = cp.asarray(data[:, 1])
         self.d_velocities_z[:] = cp.asarray(data[:, 2])
+        self._has_velocities = True
 
     def upload_prev_positions(self, positions):
         data = np.ascontiguousarray(np.asarray(positions, dtype=np.float32))
@@ -570,3 +539,15 @@ class GPUContext:
     @property
     def inv_box_z(self):
         return self._inv_box_z
+
+    @property
+    def has_pbc(self):
+        return self._has_pbc
+
+    @property
+    def has_positions(self):
+        return self._has_positions
+
+    @property
+    def has_velocities(self):
+        return self._has_velocities

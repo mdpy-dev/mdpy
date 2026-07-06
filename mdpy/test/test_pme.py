@@ -345,8 +345,8 @@ class TestPMEReciprocalForce:
         pt.particle_parameters['charge'] = np.random.randn(N).astype(np.float32)
         topo.charges = pt.particle_parameters['charge'].copy()
 
-        gpu = GPUContext()
-        gpu.initialize(topo, pbc.flatten())
+        gpu = GPUContext(topo)
+        gpu.upload_pbc(pbc.flatten())
 
         pos = np.random.uniform(2, box - 2, (N, 3)).astype(np.float32)
         gpu.d_positions_x[:] = cp.asarray(pos[:, 0])
@@ -398,8 +398,8 @@ class TestPMEReciprocalForce:
         pt.particle_parameters['charge'] = np.random.randn(N).astype(np.float32)
         topo.charges = pt.particle_parameters['charge'].copy()
 
-        gpu = GPUContext()
-        gpu.initialize(topo, pbc.flatten())
+        gpu = GPUContext(topo)
+        gpu.upload_pbc(pbc.flatten())
 
         pos = np.random.uniform(2, box - 2, (N, 3)).astype(np.float32)
         gpu.d_positions_x[:] = cp.asarray(pos[:, 0])

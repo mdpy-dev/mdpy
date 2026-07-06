@@ -33,14 +33,14 @@ def test_lincs_preserves_bond_lengths():
     np.random.seed(42)
     pairs, lengths, masses, positions, mol_ids, pbc = _make_ethane_system()
     lincs = LincsConstraint(pairs, lengths, masses, expansion_order=4, num_iterations=1)
-    gpu = GPUContext()
     topology = Builder().set_particles(
         masses,
         np.zeros(len(masses), dtype=np.float32),
         np.zeros(len(masses), dtype=np.int32),
         mol_ids,
     ).build()[0]
-    gpu.initialize(topology, pbc.flatten())
+    gpu = GPUContext(topology)
+    gpu.upload_pbc(pbc.flatten())
     gpu.upload_positions(positions)
     gpu.upload_prev_positions(positions.copy())
     perturbed = positions + np.random.randn(*positions.shape).astype(np.float32) * 0.005
@@ -59,14 +59,14 @@ def test_lincs_no_change_if_already_correct():
     np.random.seed(42)
     pairs, lengths, masses, positions, mol_ids, pbc = _make_ethane_system()
     lincs = LincsConstraint(pairs, lengths, masses, expansion_order=4, num_iterations=1)
-    gpu = GPUContext()
     topology = Builder().set_particles(
         masses,
         np.zeros(len(masses), dtype=np.float32),
         np.zeros(len(masses), dtype=np.int32),
         mol_ids,
     ).build()[0]
-    gpu.initialize(topology, pbc.flatten())
+    gpu = GPUContext(topology)
+    gpu.upload_pbc(pbc.flatten())
     gpu.upload_positions(positions)
     gpu.upload_prev_positions(positions.copy())
     identity_map = cp.arange(len(masses), dtype=np.int32)
@@ -187,14 +187,14 @@ def test_lincs_many_groups_multi_block():
         f"num_constraints={n_groups} due to per-group block alignment"
     )
 
-    gpu = GPUContext()
     topology = Builder().set_particles(
         masses,
         np.zeros(n_atoms, dtype=np.float32),
         np.zeros(n_atoms, dtype=np.int32),
         mol_ids,
     ).build()[0]
-    gpu.initialize(topology, pbc_matrix.flatten())
+    gpu = GPUContext(topology)
+    gpu.upload_pbc(pbc_matrix.flatten())
     gpu.upload_positions(positions)
     gpu.upload_prev_positions(positions.copy())
 
@@ -252,14 +252,14 @@ def test_lincs_shared_atom_atomicAdd():
     pbc_matrix = np.diag([20.0, 20.0, 20.0]).astype(np.float32)
 
     lincs = LincsConstraint(constraint_pairs, target_lengths, masses, expansion_order=4, num_iterations=1)
-    gpu = GPUContext()
     topology = Builder().set_particles(
         masses,
         np.zeros(5, dtype=np.float32),
         np.zeros(5, dtype=np.int32),
         mol_ids,
     ).build()[0]
-    gpu.initialize(topology, pbc_matrix.flatten())
+    gpu = GPUContext(topology)
+    gpu.upload_pbc(pbc_matrix.flatten())
     gpu.upload_positions(positions)
     gpu.upload_prev_positions(positions.copy())
     perturbed = positions + np.random.randn(*positions.shape).astype(np.float32) * 0.01
@@ -289,14 +289,14 @@ def test_lincs_ring_topology():
     pbc_matrix = np.diag([20.0, 20.0, 20.0]).astype(np.float32)
 
     lincs = LincsConstraint(constraint_pairs, target_lengths, masses, expansion_order=4, num_iterations=1)
-    gpu = GPUContext()
     topology = Builder().set_particles(
         masses,
         np.zeros(n_atoms, dtype=np.float32),
         np.zeros(n_atoms, dtype=np.int32),
         mol_ids,
     ).build()[0]
-    gpu.initialize(topology, pbc_matrix.flatten())
+    gpu = GPUContext(topology)
+    gpu.upload_pbc(pbc_matrix.flatten())
     gpu.upload_positions(positions)
     gpu.upload_prev_positions(positions.copy())
     perturbed = positions + np.random.randn(*positions.shape).astype(np.float32) * 0.01

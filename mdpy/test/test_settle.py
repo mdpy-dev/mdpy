@@ -42,14 +42,14 @@ def test_settle_preserves_bond_lengths():
     dOH, dHH = 1.0, 1.63298
     water_triplets, masses, mol_ids, positions, pbc_matrix = _make_water_system(50, 30.0, dOH, dHH)
     settle = SettleConstraint(water_triplets, masses, dOH, dHH)
-    gpu = GPUContext()
     topology = Builder().set_particles(
         masses,
         np.zeros(len(masses), dtype=np.float32),
         np.zeros(len(masses), dtype=np.int32),
         mol_ids,
     ).build()[0]
-    gpu.initialize(topology, pbc_matrix.flatten())
+    gpu = GPUContext(topology)
+    gpu.upload_pbc(pbc_matrix.flatten())
     gpu.upload_positions(positions)
     gpu.upload_prev_positions(positions.copy())
     perturbed = positions + np.random.randn(*positions.shape).astype(np.float32) * 0.01
@@ -72,14 +72,14 @@ def test_settle_no_change_if_already_correct():
     dOH, dHH = 1.0, 1.63298
     water_triplets, masses, mol_ids, positions, pbc_matrix = _make_water_system(10, 30.0, dOH, dHH)
     settle = SettleConstraint(water_triplets, masses, dOH, dHH)
-    gpu = GPUContext()
     topology = Builder().set_particles(
         masses,
         np.zeros(len(masses), dtype=np.float32),
         np.zeros(len(masses), dtype=np.int32),
         mol_ids,
     ).build()[0]
-    gpu.initialize(topology, pbc_matrix.flatten())
+    gpu = GPUContext(topology)
+    gpu.upload_pbc(pbc_matrix.flatten())
     gpu.upload_positions(positions)
     gpu.upload_prev_positions(positions.copy())
     settle.apply(gpu, 0.002)
@@ -102,8 +102,8 @@ def test_settle_pbc_boundary_crossing():
         np.zeros(3, dtype=np.int32),
         mol_ids,
     ).build()[0]
-    gpu = GPUContext()
-    gpu.initialize(topology, pbc_matrix.flatten())
+    gpu = GPUContext(topology)
+    gpu.upload_pbc(pbc_matrix.flatten())
     settle = SettleConstraint([(0, 1, 2)], masses, dOH, dHH)
     n_cases = 0
     for ow_pos in [[0.2, 5.0, 5.0], [9.8, 5.0, 5.0], [5.0, 0.1, 0.1], [9.9, 9.9, 9.9]]:
@@ -136,14 +136,14 @@ def test_settle_large_perturbation():
     dOH, dHH = 1.0, 1.63298
     water_triplets, masses, mol_ids, positions, pbc_matrix = _make_water_system(200, 50.0, dOH, dHH)
     settle = SettleConstraint(water_triplets, masses, dOH, dHH)
-    gpu = GPUContext()
     topology = Builder().set_particles(
         masses,
         np.zeros(len(masses), dtype=np.float32),
         np.zeros(len(masses), dtype=np.int32),
         mol_ids,
     ).build()[0]
-    gpu.initialize(topology, pbc_matrix.flatten())
+    gpu = GPUContext(topology)
+    gpu.upload_pbc(pbc_matrix.flatten())
     gpu.upload_positions(positions)
     gpu.upload_prev_positions(positions.copy())
     perturbed = positions + np.random.randn(*positions.shape).astype(np.float32) * 0.1
@@ -166,14 +166,14 @@ def test_settle_center_of_mass_conservation():
     dOH, dHH = 1.0, 1.63298
     water_triplets, masses, mol_ids, positions, pbc_matrix = _make_water_system(50, 30.0, dOH, dHH)
     settle = SettleConstraint(water_triplets, masses, dOH, dHH)
-    gpu = GPUContext()
     topology = Builder().set_particles(
         masses,
         np.zeros(len(masses), dtype=np.float32),
         np.zeros(len(masses), dtype=np.int32),
         mol_ids,
     ).build()[0]
-    gpu.initialize(topology, pbc_matrix.flatten())
+    gpu = GPUContext(topology)
+    gpu.upload_pbc(pbc_matrix.flatten())
     gpu.upload_positions(positions)
     gpu.upload_prev_positions(positions.copy())
     perturbed = positions + np.random.randn(*positions.shape).astype(np.float32) * 0.05
@@ -198,14 +198,14 @@ def test_settle_tip3p_real_parameters():
     dHH = 1.5139
     water_triplets, masses, mol_ids, positions, pbc_matrix = _make_water_system(100, 30.0, dOH, dHH)
     settle = SettleConstraint(water_triplets, masses, dOH, dHH)
-    gpu = GPUContext()
     topology = Builder().set_particles(
         masses,
         np.zeros(len(masses), dtype=np.float32),
         np.zeros(len(masses), dtype=np.int32),
         mol_ids,
     ).build()[0]
-    gpu.initialize(topology, pbc_matrix.flatten())
+    gpu = GPUContext(topology)
+    gpu.upload_pbc(pbc_matrix.flatten())
     gpu.upload_positions(positions)
     gpu.upload_prev_positions(positions.copy())
     perturbed = positions + np.random.randn(*positions.shape).astype(np.float32) * 0.01

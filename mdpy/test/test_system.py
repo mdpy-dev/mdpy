@@ -88,8 +88,8 @@ class TestGPUContext:
     def test_initialize_cpu(self):
         topology, _ = _build_four_particle()
         pbc_matrix = _make_large_pbc()
-        ctx = GPUContext()
-        ctx.initialize(topology, pbc_matrix.flatten())
+        ctx = GPUContext(topology)
+        ctx.upload_pbc(pbc_matrix.flatten())
 
         assert ctx.num_particles == 4
         assert ctx.d_positions_x.shape == (4,)
@@ -106,8 +106,8 @@ class TestGPUContext:
     def test_upload_download_round_trip(self):
         topology, _ = _build_four_particle()
         pbc_matrix = _make_large_pbc()
-        ctx = GPUContext()
-        ctx.initialize(topology, pbc_matrix.flatten())
+        ctx = GPUContext(topology)
+        ctx.upload_pbc(pbc_matrix.flatten())
 
         original_positions = _four_particle_positions()
         original_velocities = np.random.randn(4, 3).astype(env.NUMPY_FLOAT)
@@ -124,8 +124,8 @@ class TestGPUContext:
     def test_zero_forces_energy(self):
         topology, _ = _build_four_particle()
         pbc_matrix = _make_large_pbc()
-        ctx = GPUContext()
-        ctx.initialize(topology, pbc_matrix.flatten())
+        ctx = GPUContext(topology)
+        ctx.upload_pbc(pbc_matrix.flatten())
 
         ctx.d_forces_x[:] = 1.0
         ctx.d_forces_y[:] = 1.0

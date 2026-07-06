@@ -15,8 +15,8 @@ def _make_topology(n=4):
 
 def test_gpu_context_exposes_public_pbc_properties():
     topo = _make_topology(4)
-    ctx = GPUContext()
-    ctx.initialize(topo, np.diag(np.array([10.0, 20.0, 30.0], dtype=np.float32)).flatten())
+    ctx = GPUContext(topo)
+    ctx.upload_pbc(np.diag(np.array([10.0, 20.0, 30.0], dtype=np.float32)).flatten())
 
     assert ctx.box_x == pytest.approx(10.0)
     assert ctx.box_y == pytest.approx(20.0)
@@ -28,8 +28,8 @@ def test_gpu_context_exposes_public_pbc_properties():
 
 def test_gpu_context_pbc_properties_update_after_upload_pbc():
     topo = _make_topology(4)
-    ctx = GPUContext()
-    ctx.initialize(topo, np.diag(np.array([10.0, 20.0, 30.0], dtype=np.float32)).flatten())
+    ctx = GPUContext(topo)
+    ctx.upload_pbc(np.diag(np.array([10.0, 20.0, 30.0], dtype=np.float32)).flatten())
     ctx.upload_pbc(np.diag(np.array([40.0, 50.0, 60.0], dtype=np.float32)).flatten())
 
     assert ctx.box_x == pytest.approx(40.0)
@@ -51,8 +51,8 @@ def test_block_list_uses_current_pbc_after_box_change():
     rng = np.random.default_rng(42)
     positions = rng.uniform(0, 10, (64, 3)).astype(np.float32)
 
-    ctx = GPUContext()
-    ctx.initialize(topo, (np.eye(3, dtype=np.float32) * 10.0).flatten())
+    ctx = GPUContext(topo)
+    ctx.upload_pbc((np.eye(3, dtype=np.float32) * 10.0).flatten())
     ctx.upload_positions(positions)
     ctx.upload_velocities(np.zeros((64, 3), dtype=np.float32))
 
@@ -116,3 +116,18 @@ def test_system_update_neighbor_list_raises_if_upload_pbc_not_called():
 
     with pytest.raises(RuntimeError, match="PBC not set"):
         system.update_neighbor_list()
+
+
+def test_gpu_context_lazy_pbc():
+    """GPUContext constructed without PBC; has_pbc False until upload_pbc."""
+    topo = _make_topology(4)
+    ctx = GPUContext(topo)
+    assert ctx.has_pbc is False
+    assert ctx.d_pbc_matrix is None
+    assert ctx.d_pbc_inv is None
+    ctx.upload_pbc(np.diag([10.0, 10.0, 10.0]).astype(np.float32))
+    assert ctx.has_pbc is True
+    assert ctx.d_pbc_matrix is not None
+    buf_ptr = ctx.d_pbc_matrix.data.ptr
+    ctx.upload_pbc(np.diag([20.0, 20.0, 20.0]).astype(np.float32))
+    assert ctx.d_pbc_matrix.data.ptr == buf_ptr  # in-place overwrite
