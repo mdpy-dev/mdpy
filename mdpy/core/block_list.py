@@ -1416,6 +1416,14 @@ class BlockList:
         self.d_positions_at_rebuild_y = snap_y
         self.d_positions_at_rebuild_z = snap_z
 
+    def read_flag_sync(self):
+        """Read d_rebuild_flag with a GPU sync. Returns 0 or 1."""
+        return self._read_device_int(self.d_rebuild_flag)
+
+    def reset_flag(self):
+        """Reset d_rebuild_flag to 0. Call after reading and acting on it."""
+        self.d_rebuild_flag[0] = 0
+
     def _init_empty(self):
         self.num_blocks = 0
         self.num_block_pairs = 0

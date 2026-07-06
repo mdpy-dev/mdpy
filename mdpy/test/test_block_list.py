@@ -679,6 +679,35 @@ class TestCheckRebuild:
             "position (box+0.2) instead of post-wrap (0.2)"
         )
 
+    def test_read_flag_sync_returns_flag_value(self):
+        n, box = 50, 50.0
+        positions = _make_positions(n, box)
+        topology = _make_topology(n)
+        pbc_matrix = _make_pbc(box)
+        pbc_inv = np.linalg.inv(pbc_matrix)
+        bl = BlockList(cutoff=10.0, skin=2.0)
+        bl.rebuild(positions, topology, pbc_matrix, pbc_inv, force=True)
+
+        bl.d_rebuild_flag[0] = 0
+        assert bl.read_flag_sync() == 0
+
+        bl.d_rebuild_flag[0] = 1
+        assert bl.read_flag_sync() == 1
+
+    def test_reset_flag_clears_flag(self):
+        n, box = 50, 50.0
+        positions = _make_positions(n, box)
+        topology = _make_topology(n)
+        pbc_matrix = _make_pbc(box)
+        pbc_inv = np.linalg.inv(pbc_matrix)
+        bl = BlockList(cutoff=10.0, skin=2.0)
+        bl.rebuild(positions, topology, pbc_matrix, pbc_inv, force=True)
+
+        bl.d_rebuild_flag[0] = 1
+        bl.reset_flag()
+        cp.cuda.Stream.null.synchronize()
+        assert int(bl.d_rebuild_flag[0]) == 0
+
 
 class TestPostArgsortFusion:
 
