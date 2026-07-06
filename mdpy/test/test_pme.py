@@ -337,6 +337,7 @@ class TestPMEReciprocalForce:
         pt = ParameterTable()
         np.random.seed(42)
         pt.particle_parameters['charge'] = np.random.randn(N).astype(np.float32)
+        topo.charges = pt.particle_parameters['charge'].copy()
 
         gpu = GPUContext()
         gpu.initialize(topo, pbc.flatten())
@@ -389,6 +390,7 @@ class TestPMEReciprocalForce:
         np.random.seed(7)
         pt = ParameterTable()
         pt.particle_parameters['charge'] = np.random.randn(N).astype(np.float32)
+        topo.charges = pt.particle_parameters['charge'].copy()
 
         gpu = GPUContext()
         gpu.initialize(topo, pbc.flatten())
@@ -683,6 +685,28 @@ class TestPMEIntegration6PO6:
         self_energy = -COULOMB_CONST * alpha / SQRT_PI * np.sum(charges ** 2)
         print(f"Self-energy: {self_energy:.6f}")
         assert self_energy < 0, "Self-energy should be negative"
+
+    def test_pme_reads_gpu_context_charges(self):
+        system, pme = self._build_pme_system()
+        gpu = system.gpu
+        block_list = system.block_list
+
+        gpu.zero_forces()
+        gpu.zero_energy()
+        pme.compute(gpu, block_list=block_list, compute_energy=True)
+        baseline = float(gpu.d_energy[0])
+
+        gpu.d_charges[:] = gpu.d_charges * 2.0
+
+        gpu.zero_forces()
+        gpu.zero_energy()
+        pme.compute(gpu, block_list=block_list, compute_energy=True)
+        doubled = float(gpu.d_energy[0])
+
+        assert abs(doubled - baseline) > 1e-3, (
+            f"PME did not respond to gpu_context.d_charges mutation: "
+            f"baseline={baseline}, doubled={doubled}"
+        )
 
 
 class TestBilateralPaddingUnwrapped:

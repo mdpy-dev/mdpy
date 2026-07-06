@@ -59,7 +59,7 @@ def _build_system():
 def test_pme_charges_sorted_after_rebuild():
     system, pme = _build_system()
 
-    charges_before = cp.asnumpy(pme._d_charges).copy()
+    charges_before = cp.asnumpy(system.gpu.d_charges).copy()
 
     system.update_neighbor_list(sync_interval=10)
     system.compute_forces()
@@ -67,7 +67,7 @@ def test_pme_charges_sorted_after_rebuild():
     bl = system.block_list
     assert bl.d_raw_order.size > 0, "Rebuild did not produce sort order"
 
-    charges_after = cp.asnumpy(pme._d_charges)
+    charges_after = cp.asnumpy(system.gpu.d_charges)
 
     perm = cp.asnumpy(bl.d_raw_order)
     expected_sorted = charges_before[perm]

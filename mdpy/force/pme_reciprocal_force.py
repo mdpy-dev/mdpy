@@ -477,7 +477,6 @@ class PMEReciprocalForce(ForceTerm):
         self.grid_y = 0
         self.grid_z = 0
 
-        self._d_charges = None
         self._d_bk_factors = None
         self._d_charge_grid = None
         self._self_energy_factor = 0.0
@@ -495,7 +494,6 @@ class PMEReciprocalForce(ForceTerm):
         self._N = N
 
         charges = parameter_table.particle_parameters["charge"].astype(np.float32)
-        self._d_charges = cp.asarray(charges)
 
         if pbc_matrix is None:
             raise ValueError(
@@ -553,23 +551,6 @@ class PMEReciprocalForce(ForceTerm):
         cp.fft.irfftn(fft, s=(self.grid_x, self.grid_y, self.grid_z))
         self._fft_warmed = True
 
-    def bind_sorted(self, topology, block_list, gpu_context):
-        N = self._N
-        if N == 0:
-            return
-
-        permutation = block_list.d_raw_order
-
-        sorted_charges = cp.empty(N, dtype=np.float32)
-        gpu_context._ensure_permutation_kernels()
-        tpb = 256
-        grid = ((N + tpb - 1) // tpb,)
-        gpu_context._permutation_kernels["permute"](
-            grid, (tpb,),
-            (self._d_charges, permutation, np.int32(N), sorted_charges)
-        )
-        self._d_charges = sorted_charges
-
     def compute(self, gpu_context, block_list=None, compute_energy=True):
         N = self._N
         order = self.order
@@ -587,7 +568,7 @@ class PMEReciprocalForce(ForceTerm):
         sorted_pos_x = gpu_context.d_positions_x
         sorted_pos_y = gpu_context.d_positions_y
         sorted_pos_z = gpu_context.d_positions_z
-        sorted_charges = self._d_charges
+        sorted_charges = gpu_context.d_charges
 
         cell_spread_k = get_cell_spread_kernel()
         shmem = block_list._subgrid_total * 4
@@ -638,7 +619,7 @@ class PMEReciprocalForce(ForceTerm):
                 gpu_context.d_positions_x,
                 gpu_context.d_positions_y,
                 gpu_context.d_positions_z,
-                self._d_charges,
+                gpu_context.d_charges,
                 np.int32(N),
                 np.float32(gpu_context.inv_box_x),
                 np.float32(gpu_context.inv_box_y),
