@@ -377,3 +377,90 @@ class TestPermuteStateArraysFlagGuard:
                 f"{name} was written by flag=0 kernel — guard failed "
                 f"(double-permute corruption)"
             )
+
+
+class TestWrapCorrectFlagGuard:
+    """wrap_correct_kernel must skip entirely when d_rebuild_flag=0.
+
+    Without the guard, the kernel wraps positions back into the PBC box and
+    applies the same displacement to prev_positions. If the guard were
+    missing, calling wrap_positions_with_prev_correction on a no-rebuild
+    step would corrupt both position arrays.
+    """
+
+    def test_flag_zero_skips_wrap_correct(self):
+        """When flag=0 the kernel must not write to positions or
+        prev_positions. Verified by pre-filling both arrays with sentinels
+        outside the PBC box: if the kernel ran it would wrap them, so any
+        change proves the guard failed.
+
+        Box is 4.0 and the position sentinel is 5.0 (outside [0, 4)), so
+        an unguarded kernel would wrap 5.0 -> 1.0 and shift prev by -4.0.
+        """
+        import cupy as cp
+
+        n = 100
+        topology = _make_topology(n)
+        box = 4.0
+        pbc = np.eye(3, dtype=np.float32) * box
+
+        gpu = GPUContext()
+        gpu.initialize(topology, pbc)
+
+        pos_sentinel = 5.0
+        prev_sentinel = 3.0
+        gpu.d_positions_x[:] = pos_sentinel
+        gpu.d_positions_y[:] = pos_sentinel
+        gpu.d_positions_z[:] = pos_sentinel
+        gpu.d_prev_positions_x[:] = prev_sentinel
+        gpu.d_prev_positions_y[:] = prev_sentinel
+        gpu.d_prev_positions_z[:] = prev_sentinel
+
+        d_rebuild_flag = cp.array([0], dtype=cp.int32)
+        gpu.wrap_positions_with_prev_correction(d_rebuild_flag)
+
+        for arr in (gpu.d_positions_x, gpu.d_positions_y, gpu.d_positions_z):
+            assert np.all(cp.asnumpy(arr) == pos_sentinel), (
+                "positions changed during flag=0 wrap_correct — guard failed"
+            )
+        for arr in (
+            gpu.d_prev_positions_x,
+            gpu.d_prev_positions_y,
+            gpu.d_prev_positions_z,
+        ):
+            assert np.all(cp.asnumpy(arr) == prev_sentinel), (
+                "prev_positions changed during flag=0 wrap_correct — guard failed"
+            )
+
+    def test_flag_one_actually_wraps(self):
+        """Sanity check proving the flag=0 test above is non-vacuous: with
+        flag=1 the kernel runs and wraps the out-of-box sentinel (5.0 -> 1.0
+        in a 4.0 box, prev shifted by the same -4.0 displacement)."""
+        import cupy as cp
+
+        n = 100
+        topology = _make_topology(n)
+        box = 4.0
+        pbc = np.eye(3, dtype=np.float32) * box
+
+        gpu = GPUContext()
+        gpu.initialize(topology, pbc)
+
+        gpu.d_positions_x[:] = 5.0
+        gpu.d_positions_y[:] = 5.0
+        gpu.d_positions_z[:] = 5.0
+        gpu.d_prev_positions_x[:] = 3.0
+        gpu.d_prev_positions_y[:] = 3.0
+        gpu.d_prev_positions_z[:] = 3.0
+
+        d_rebuild_flag = cp.array([1], dtype=cp.int32)
+        gpu.wrap_positions_with_prev_correction(d_rebuild_flag)
+
+        pos_np = cp.asnumpy(gpu.d_positions_x)
+        assert np.allclose(pos_np, 1.0), (
+            f"flag=1 should wrap 5.0 -> 1.0, got {pos_np[0]}"
+        )
+        prev_np = cp.asnumpy(gpu.d_prev_positions_x)
+        assert np.allclose(prev_np, -1.0), (
+            f"flag=1 should shift prev 3.0 -> -1.0, got {prev_np[0]}"
+        )
