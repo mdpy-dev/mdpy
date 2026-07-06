@@ -579,10 +579,6 @@ class PMEReciprocalForce(ForceTerm):
         self._d_charge_grid = None
         self._self_energy_factor = 0.0
 
-        self._box_x = 0.0
-        self._box_y = 0.0
-        self._box_z = 0.0
-
         self._N = 0
         self._fft_warmed = False
         self._subgrid_initialized = False
@@ -598,19 +594,14 @@ class PMEReciprocalForce(ForceTerm):
         charges = parameter_table.particle_parameters["charge"].astype(np.float32)
         self._d_charges = cp.asarray(charges)
 
-        if pbc_matrix is not None:
-            pbc_2d = np.asarray(pbc_matrix, dtype=np.float64).reshape(3, 3)
-            box_x = abs(float(pbc_2d[0, 0]))
-            box_y = abs(float(pbc_2d[1, 1]))
-            box_z = abs(float(pbc_2d[2, 2]))
-        else:
-            box_x = self._box_x
-            box_y = self._box_y
-            box_z = self._box_z
-
-        self._box_x = box_x
-        self._box_y = box_y
-        self._box_z = box_z
+        if pbc_matrix is None:
+            raise ValueError(
+                "PMEReciprocalForce.bind requires pbc_matrix for FFT grid sizing."
+            )
+        pbc_2d = np.asarray(pbc_matrix, dtype=np.float64).reshape(3, 3)
+        box_x = abs(float(pbc_2d[0, 0]))
+        box_y = abs(float(pbc_2d[1, 1]))
+        box_z = abs(float(pbc_2d[2, 2]))
 
         self.alpha = _calc_ewald_coefficient(self.cutoff, self._ewald_rtol)
 
