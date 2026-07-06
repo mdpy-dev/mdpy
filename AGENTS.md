@@ -173,7 +173,7 @@ BlockList provides **mapping** — it answers "which atoms are near which atoms"
 
 What BlockList does NOT do:
 - Sort any state arrays (positions, velocities, forces) — that's GPUContext's job
-- Sort any force-term data (parameters, charges, posq) — that's each force term's job
+- Sort any force-term data (parameters, charges, position_charge) — that's each force term's job
 - Compute forces or energies
 
 ### GPUContext — state array owner and sorter
@@ -190,7 +190,7 @@ What GPUContext does NOT do:
 Each `ForceTerm` owns its own parameter arrays and working buffers. When BlockList rebuilds:
 
 - **BondedForce**: remaps its own atom index arrays via `remap_indices_gpu(d_remap, d_rebuild_flag)`, reads sorted positions directly from GPUContext (indices are already remapped to sorted order)
-- **NonbondedForce**: permutes its own per-particle arrays using GPUContext's `permute_to_sorted()`, then packs its own sorted posq buffer via `pack_sorted_posq_kernel` using BlockList's `d_block_atoms`
+- **NonbondedForce**: permutes its own per-particle arrays using GPUContext's `permute_to_sorted()`, then packs its own sorted position_charge buffer via `pack_sorted_position_charge_kernel` using BlockList's `d_block_atoms`
 
 This means:
 - A new force term that needs sorted data MUST implement its own sorting logic
@@ -541,7 +541,7 @@ On block list rebuild:
 | `mdpy/core/parameter_table.py` | ParameterTable with per-type and per-atom parameter dicts |
 | `mdpy/force/force_term.py` | `ForceTerm` base class — `compute(gpu_context, block_list)` |
 | `mdpy/force/bonded_force.py` | Single CuPy RawKernel (bond/angle/dihedral/improper); owns indices, remaps via `d_remap` |
-| `mdpy/force/nonbonded_force.py` | CuPy RawKernel (self/cross block pair) + expression transpiler; owns sorted posq, params |
+| `mdpy/force/nonbonded_force.py` | CuPy RawKernel (self/cross block pair) + expression transpiler; owns sorted position_charge, params |
 | `mdpy/force/force_group.py` | Homogeneous force composition; fuses nonbonded expressions into one kernel via `+` |
 | `mdpy/force/primitives.py` | `param`/`scalar` markers + `distance`/`angle`/`dihedral` geometry helpers |
 | `mdpy/force/ad_engine.py` | `ForwardADEngine` — forward-mode AD over a tape for CUDA gradient generation |

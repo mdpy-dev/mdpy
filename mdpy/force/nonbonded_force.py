@@ -58,9 +58,9 @@ def _unique_prop_bases(per_particle):
     return list(dict.fromkeys(per_particle.values()))
 
 
-_PACK_SORTED_POSQ_KERNEL = r"""
+_PACK_SORTED_POSITION_CHARGE_KERNEL = r"""
 extern "C" __global__
-void pack_sorted_posq_kernel(
+void pack_sorted_position_charge_kernel(
     const float* __restrict__ pos_x,
     const float* __restrict__ pos_y,
     const float* __restrict__ pos_z,
@@ -68,28 +68,28 @@ void pack_sorted_posq_kernel(
     const int* __restrict__ block_atoms,
     int num_particles,
     int total_slots,
-    float* __restrict__ posq,
-    float* __restrict__ sorted_posq
+    float* __restrict__ position_charge,
+    float* __restrict__ sorted_position_charge
 ) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx < num_particles) {
-        posq[idx * 4 + 0] = pos_x[idx];
-        posq[idx * 4 + 1] = pos_y[idx];
-        posq[idx * 4 + 2] = pos_z[idx];
-        posq[idx * 4 + 3] = charge[idx];
+        position_charge[idx * 4 + 0] = pos_x[idx];
+        position_charge[idx * 4 + 1] = pos_y[idx];
+        position_charge[idx * 4 + 2] = pos_z[idx];
+        position_charge[idx * 4 + 3] = charge[idx];
     }
     if (idx < total_slots) {
         int atom_id = block_atoms[idx];
         if (atom_id >= 0 && atom_id < num_particles) {
-            sorted_posq[idx * 4 + 0] = pos_x[atom_id];
-            sorted_posq[idx * 4 + 1] = pos_y[atom_id];
-            sorted_posq[idx * 4 + 2] = pos_z[atom_id];
-            sorted_posq[idx * 4 + 3] = charge[atom_id];
+            sorted_position_charge[idx * 4 + 0] = pos_x[atom_id];
+            sorted_position_charge[idx * 4 + 1] = pos_y[atom_id];
+            sorted_position_charge[idx * 4 + 2] = pos_z[atom_id];
+            sorted_position_charge[idx * 4 + 3] = charge[atom_id];
         } else {
-            sorted_posq[idx * 4 + 0] = 0.0f;
-            sorted_posq[idx * 4 + 1] = 0.0f;
-            sorted_posq[idx * 4 + 2] = 0.0f;
-            sorted_posq[idx * 4 + 3] = 0.0f;
+            sorted_position_charge[idx * 4 + 0] = 0.0f;
+            sorted_position_charge[idx * 4 + 1] = 0.0f;
+            sorted_position_charge[idx * 4 + 2] = 0.0f;
+            sorted_position_charge[idx * 4 + 3] = 0.0f;
         }
     }
 }
@@ -122,7 +122,7 @@ def _assemble_exclusion_kernel(
     load_i = ""
     for arg_name, base_name in i_props.items():
         if base_name == "charge":
-            load_i += f"\n        float {arg_name} = posq_i.w;"
+            load_i += f"\n        float {arg_name} = position_charge_i.w;"
         else:
             load_i += (
                 f"\n        float {arg_name} = sorted_{base_name}[block_x * 32 + tgx];"
@@ -135,7 +135,7 @@ def _assemble_exclusion_kernel(
     load_j_from_array = ""
     for arg_name, base_name in j_props.items():
         if base_name == "charge":
-            load_j_from_array += f"\n            {arg_name} = _pj.w;"
+            load_j_from_array += f"\n            {arg_name} = position_charge_j.w;"
         else:
             load_j_from_array += f"\n            {arg_name} = d_{base_name}[gj];"
 
@@ -165,8 +165,8 @@ def _assemble_exclusion_kernel(
 
     kernel = f"""extern "C" __global__
 void exclusion_block_pair_kernel(
-    const float4* __restrict__ sorted_posq,
-    const float4* __restrict__ posq,
+    const float4* __restrict__ sorted_position_charge,
+    const float4* __restrict__ position_charge,
     const float* __restrict__ shift_x,
     const float* __restrict__ shift_y,
     const float* __restrict__ shift_z,
@@ -203,10 +203,10 @@ void exclusion_block_pair_kernel(
     for (; pos < end; pos++) {{
         int block_x = block_pairs[pos];
         int gi = block_atoms[block_x * 32 + tgx];
-        float4 posq_i = sorted_posq[block_x * 32 + tgx];
-        float px_i = posq_i.x;
-        float py_i = posq_i.y;
-        float pz_i = posq_i.z;
+        float4 position_charge_i = sorted_position_charge[block_x * 32 + tgx];
+        float px_i = position_charge_i.x;
+        float py_i = position_charge_i.y;
+        float pz_i = position_charge_i.z;
         float sx = shift_x[pos];
         float sy = shift_y[pos];
         float sz = shift_z[pos];
@@ -219,10 +219,10 @@ void exclusion_block_pair_kernel(
         float shfl_px = 0.0f, shfl_py = 0.0f, shfl_pz = 0.0f;
 {load_j_init}
         if (gj >= 0 && gj < num_particles) {{
-            float4 _pj = posq[gj];
-            shfl_px = _pj.x;
-            shfl_py = _pj.y;
-            shfl_pz = _pj.z;
+            float4 position_charge_j = position_charge[gj];
+            shfl_px = position_charge_j.x;
+            shfl_py = position_charge_j.y;
+            shfl_pz = position_charge_j.z;
 {load_j_from_array}
         }}
         atom_indices_shared[threadIdx.x] = gj;
@@ -306,11 +306,11 @@ class NonbondedForce(ForceTerm):
 
         self._excl_kernel = None
         self._excl_kernel_fo = None
-        self._pack_posq_kernel = None
+        self._pack_position_charge_kernel = None
         self._gather_kernels = None
 
-        self._d_posq = None
-        self._d_sorted_posq = None
+        self._d_position_charge = None
+        self._d_sorted_position_charge = None
         self._d_types = None
         self._n_types = 0
 
@@ -365,12 +365,12 @@ class NonbondedForce(ForceTerm):
 
         self._excl_kernel = cp.RawKernel(excl_src, "exclusion_block_pair_kernel")
         self._excl_kernel_fo = cp.RawKernel(excl_src_fo, "exclusion_block_pair_kernel")
-        self._pack_posq_kernel = cp.RawKernel(
-            _PACK_SORTED_POSQ_KERNEL, "pack_sorted_posq_kernel"
+        self._pack_position_charge_kernel = cp.RawKernel(
+            _PACK_SORTED_POSITION_CHARGE_KERNEL, "pack_sorted_position_charge_kernel"
         )
 
         N = gpu_context.num_particles
-        self._d_posq = cp.zeros(N * 4, dtype=np.float32)
+        self._d_position_charge = cp.zeros(N * 4, dtype=np.float32)
 
         self._d_types = gpu_context.d_types
 
@@ -450,9 +450,9 @@ class NonbondedForce(ForceTerm):
         total_slots = block_list.num_blocks * 32
         tpb = 256
         grid = ((total_slots + tpb - 1) // tpb,)
-        self._d_sorted_posq = cp.zeros(total_slots * 4, dtype=np.float32)
+        self._d_sorted_position_charge = cp.zeros(total_slots * 4, dtype=np.float32)
         d_charges = gpu_context.d_charges
-        self._pack_posq_kernel(
+        self._pack_position_charge_kernel(
             grid,
             (tpb,),
             (
@@ -463,20 +463,20 @@ class NonbondedForce(ForceTerm):
                 block_list.d_block_atoms,
                 np.int32(N),
                 np.int32(total_slots),
-                self._d_posq,
-                self._d_sorted_posq,
+                self._d_position_charge,
+                self._d_sorted_position_charge,
             ),
         )
 
-    def _refresh_posq(self, gpu_context, block_list):
+    def _refresh_position_charge(self, gpu_context, block_list):
         N = gpu_context.num_particles
         total_slots = block_list.num_blocks * 32
         tpb = 256
         grid = ((total_slots + tpb - 1) // tpb,)
-        if self._d_sorted_posq.size != total_slots * 4:
-            self._d_sorted_posq = cp.zeros(total_slots * 4, dtype=np.float32)
+        if self._d_sorted_position_charge.size != total_slots * 4:
+            self._d_sorted_position_charge = cp.zeros(total_slots * 4, dtype=np.float32)
         d_charges = gpu_context.d_charges
-        self._pack_posq_kernel(
+        self._pack_position_charge_kernel(
             grid,
             (tpb,),
             (
@@ -487,15 +487,15 @@ class NonbondedForce(ForceTerm):
                 block_list.d_block_atoms,
                 np.int32(N),
                 np.int32(total_slots),
-                self._d_posq,
-                self._d_sorted_posq,
+                self._d_position_charge,
+                self._d_sorted_position_charge,
             ),
         )
 
     def _build_excl_args(self, gpu_context, block_list, compute_energy):
         args = [
-            self._d_sorted_posq,
-            self._d_posq,
+            self._d_sorted_position_charge,
+            self._d_position_charge,
             block_list.d_excl_shift_x,
             block_list.d_excl_shift_y,
             block_list.d_excl_shift_z,
@@ -541,7 +541,7 @@ class NonbondedForce(ForceTerm):
         if block_list is None:
             return
 
-        self._refresh_posq(gpu_context, block_list)
+        self._refresh_position_charge(gpu_context, block_list)
 
         num_sm = self._num_sm
         grid_size = 16 * num_sm
