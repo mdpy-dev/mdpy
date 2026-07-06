@@ -15,10 +15,8 @@ void fill_index_kernel(int* out, int N) {
 _COMPOSE_PERM_KERNEL = r"""
 extern "C" __global__
 void compose_perm_kernel(
-    int* out, const int* __restrict__ perm, int N,
-    const int* __restrict__ d_rebuild_flag
+    int* out, const int* __restrict__ perm, int N
 ) {
-    if (d_rebuild_flag[0] == 0) return;
     /* Replaces: out[perm] = arange(N)  =>  out[perm[i]] = i */
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i < N) out[perm[i]] = i;
