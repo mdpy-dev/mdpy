@@ -213,8 +213,6 @@ class GPUContext:
         self.d_pbc_matrix = None
         self.d_pbc_inv = None
 
-        self.d_box_dims = None
-
         self._box_x = 0.0
         self._box_y = 0.0
         self._box_z = 0.0
@@ -445,8 +443,6 @@ class GPUContext:
             np.ascontiguousarray(pbc_inv, dtype=float_dtype).ravel()
         )
 
-        self.d_box_dims = cp.zeros(6, dtype=float_dtype)
-
         pbc_2d = pbc_matrix.reshape(3, 3)
         box_x = abs(float(pbc_2d[0, 0]))
         box_y = abs(float(pbc_2d[1, 1]))
@@ -550,17 +546,6 @@ class GPUContext:
         self._inv_box_x = 1.0 / self._box_x
         self._inv_box_y = 1.0 / self._box_y
         self._inv_box_z = 1.0 / self._box_z
-        self.d_box_dims[:] = cp.array(
-            [
-                self._box_x,
-                self._box_y,
-                self._box_z,
-                self._inv_box_x,
-                self._inv_box_y,
-                self._inv_box_z,
-            ],
-            dtype=np.float32,
-        )
 
     @property
     def box_x(self):
