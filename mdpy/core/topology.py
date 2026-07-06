@@ -203,7 +203,7 @@ void permute_pairs_kernel(
 
 _COUNT_ROW_KERNEL = r"""
 extern "C" __global__
-void count_rows_kernel(
+void count_row_kernel(
     const int* __restrict__ pair_i,
     int num_pairs,
     int* __restrict__ count

@@ -214,8 +214,7 @@ def test_permute_fast_path_matches_full_rebuild():
 
     result = permute_exclusion_pairs_gpu(
         gpu_unique_i, gpu_neighbors, gpu_scale,
-        d_composed_perm, topology.num_particles, {},
-        cp.array([1], dtype=cp.int32))
+        d_composed_perm, topology.num_particles, {})
     d_offset, d_neighbors, d_scale = result[0], result[1], result[2]
 
     remap = cp.asnumpy(d_composed_perm)
@@ -257,7 +256,6 @@ def test_gather_three_fusion_matches_cupy():
     result = permute_exclusion_pairs_gpu(
         gpu_unique_i, gpu_neighbors, gpu_scale,
         d_composed, topology.num_particles, {},
-        cp.array([1], dtype=cp.int32),
     )
     d_offset, d_neighbors, d_scale = result[0], result[1], result[2]
 
@@ -301,7 +299,7 @@ def test_remap_indices_gpu_correctness():
         if sf._count > 0:
             ref_indices[id(sf)] = cp.asnumpy(sf._d_indices[:sf._count]).copy()
 
-    bonded_force.remap_indices_gpu(d_remap, cp.ones(1, dtype=np.int32))
+    bonded_force.remap_indices_gpu(d_remap)
 
     for sf in sub_forces:
         if sf._count > 0:
