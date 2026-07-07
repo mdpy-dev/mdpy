@@ -95,7 +95,8 @@ class System:
     def compute_forces(self):
         self._ensure_uploaded()
         self.gpu.zero_forces()
-        self._block_list.refresh_sorted_data(self.gpu)
+        if self._block_list is not None:
+            self._block_list.refresh_sorted_data(self.gpu)
 
         if not self._pme_force_terms:
             for term in self._primary_force_terms:
