@@ -13,6 +13,7 @@ O(N^2) nonbonded brute-force computation.
 import os
 import time
 import numpy as np
+import cupy as cp
 from types import SimpleNamespace
 
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
@@ -83,11 +84,12 @@ def main():
     bf_n_types = int(np.sqrt(len(bf_lj_pair) // 2))
     bf_particle_type_indices = topology.particle_type_indices.copy()
 
+    _offset, _neighbors, _scale = topology.exclusion_csr
     bf_topology = SimpleNamespace(
         num_particles=N,
-        exclusion_offset=topology.exclusion_offset.copy(),
-        exclusion_neighbors=topology.exclusion_neighbors.copy(),
-        exclusion_scale=topology.exclusion_scale.copy(),
+        exclusion_offset=cp.asnumpy(_offset),
+        exclusion_neighbors=cp.asnumpy(_neighbors),
+        exclusion_scale=cp.asnumpy(_scale),
     )
 
     print(f"System: {N} atoms, box={BOX_SIZE} A, cutoff={CUTOFF} A")

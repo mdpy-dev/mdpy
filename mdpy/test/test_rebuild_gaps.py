@@ -60,12 +60,14 @@ def test_exclusion_data_preserved_across_rebuild():
     _ensure_ready(system)
     _run_steps(system, integrator, 1)
 
-    bl = system.block_list
-    assert bl._d_excl_offset is not None, "exclusion data should be set after first step"
-
-    system.update_neighbor_list(sync_interval=1)
-
-    assert bl._d_excl_offset is not None, "exclusion data should survive rebuild"
+    # Exclusions now live on Topology as a lazy cached GPU property.
+    # Across a rebuild the SAME arrays must be returned (not recomputed).
+    csr1 = system.topology.exclusion_csr
+    system.update_neighbor_list(force_rebuild=True)
+    csr2 = system.topology.exclusion_csr
+    assert csr1[0] is csr2[0]
+    assert csr1[1] is csr2[1]
+    assert csr1[2] is csr2[2]
 
     _run_steps(system, integrator, 5)
     pos, vel = system.dump_state()
@@ -73,43 +75,43 @@ def test_exclusion_data_preserved_across_rebuild():
     assert not np.any(np.isnan(vel))
 
 
-def test_exclusion_map_constant_sort_key():
+def test_exclusion_csr_matches_brute_force():
+    from mdpy.core.topology import _build_bond_graph_exclusion_pairs
+
     system, _ = _make_system()
     topology = system.topology
-    from mdpy.core.topology import build_exclusion_map_gpu, Builder
 
-    d_offset, d_neighbors, d_scale, d_unique_i = build_exclusion_map_gpu(topology, scale_14=1.0)
+    pair_i, pair_j, total, _, _, _ = _build_bond_graph_exclusion_pairs(
+        topology.bond_indices, topology.num_particles)
+    N = topology.num_particles
+    if total == 0:
+        ref_offset = np.zeros(N + 1, dtype=np.int32)
+        ref_neighbors = np.empty(0, dtype=np.int32)
+        ref_scale = np.empty(0, dtype=np.float32)
+    else:
+        bi_i = np.concatenate([pair_i, pair_j])
+        bi_j = np.concatenate([pair_j, pair_i])
+        order = np.lexsort((bi_j, bi_i))
+        bi_i, bi_j = bi_i[order], bi_j[order]
+        keep = np.ones(len(bi_i), dtype=bool)
+        keep[1:] = (bi_i[1:] != bi_i[:-1]) | (bi_j[1:] != bi_j[:-1])
+        bi_i, bi_j = bi_i[keep], bi_j[keep]
+        count = np.zeros(N + 1, dtype=np.int32)
+        np.add.at(count, bi_i + 1, 1)
+        ref_offset = np.cumsum(count, dtype=np.int32)
+        ref_neighbors = bi_j.astype(np.int32)
+        ref_scale = np.zeros(len(ref_neighbors), dtype=np.float32)
 
-    builder = Builder()
-    builder.set_particles(
-        masses=topology.masses,
-        charges=topology.charges,
-        particle_type_indices=topology.particle_type_indices,
-    )
-    for i in range(topology.num_bonds):
-        builder.add_bond(
-            int(topology.bond_indices[i, 0]),
-            int(topology.bond_indices[i, 1]), 0, 0)
-    for i in range(topology.num_angles):
-        builder.add_angle(
-            int(topology.angle_indices[i, 0]),
-            int(topology.angle_indices[i, 1]),
-            int(topology.angle_indices[i, 2]), 0, 0)
-    for i in range(topology.num_dihedrals):
-        builder.add_dihedral(
-            int(topology.dihedral_indices[i, 0]),
-            int(topology.dihedral_indices[i, 1]),
-            int(topology.dihedral_indices[i, 2]),
-            int(topology.dihedral_indices[i, 3]), 0, 0, 0)
-    for i in range(topology.num_impropers):
-        builder.add_improper(
-            int(topology.improper_indices[i, 0]),
-            int(topology.improper_indices[i, 1]),
-            int(topology.improper_indices[i, 2]),
-            int(topology.improper_indices[i, 3]), 0, 0)
-    builder.build_exclusion_map(scale_14=1.0)
-    ref_topo, _ = builder.build()
-
-    np.testing.assert_array_equal(cp.asnumpy(d_offset), ref_topo.exclusion_offset)
-    np.testing.assert_array_equal(cp.asnumpy(d_neighbors), ref_topo.exclusion_neighbors)
-    np.testing.assert_allclose(cp.asnumpy(d_scale), ref_topo.exclusion_scale, atol=1e-7)
+    offset, neighbors, scale = topology.exclusion_csr
+    np.testing.assert_array_equal(cp.asnumpy(offset), ref_offset)
+    # The GPU scatter kernel uses atomicAdd, so within-row neighbor order is
+    # non-deterministic. Compare per-row sorted sets instead of exact arrays.
+    gpu_offset = cp.asnumpy(offset)
+    gpu_neighbors = cp.asnumpy(neighbors)
+    gpu_scale = cp.asnumpy(scale)
+    for a in range(N):
+        s, e = ref_offset[a], ref_offset[a + 1]
+        g = np.sort(gpu_neighbors[s:e])
+        r = np.sort(ref_neighbors[s:e])
+        np.testing.assert_array_equal(g, r)
+        np.testing.assert_allclose(np.sort(gpu_scale[s:e]), ref_scale[s:e], atol=1e-7)

@@ -37,7 +37,6 @@ def _make_topology(n):
         charges=np.zeros(n, dtype=np.float32),
         particle_type_indices=np.zeros(n, dtype=np.int32),
     )
-    builder.build_exclusion_map()
     topology, _ = builder.build()
     return topology
 

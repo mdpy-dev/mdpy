@@ -349,9 +349,6 @@ class TestPMEReciprocalForce:
         topo.num_particles = N
         topo.particle_type_indices = np.zeros(N, dtype=np.int32)
         topo.masses = np.ones(N, dtype=np.float32)
-        topo.exclusion_offset = np.zeros(N + 1, dtype=np.int32)
-        topo.exclusion_neighbors = np.empty(0, dtype=np.int32)
-        topo.exclusion_scale = np.empty(0, dtype=np.float32)
 
         pt = ParameterTable()
         np.random.seed(42)
@@ -402,9 +399,6 @@ class TestPMEReciprocalForce:
         topo.num_particles = N
         topo.particle_type_indices = np.zeros(N, dtype=np.int32)
         topo.masses = np.ones(N, dtype=np.float32)
-        topo.exclusion_offset = np.zeros(N + 1, dtype=np.int32)
-        topo.exclusion_neighbors = np.empty(0, dtype=np.int32)
-        topo.exclusion_scale = np.empty(0, dtype=np.float32)
 
         np.random.seed(7)
         pt = ParameterTable()
@@ -481,9 +475,6 @@ class TestGridSizing:
         topo = Topology()
         topo.num_particles = N
         topo.particle_type_indices = np.zeros(N, dtype=np.int32)
-        topo.exclusion_offset = np.zeros(N + 1, dtype=np.int32)
-        topo.exclusion_neighbors = np.empty(0, dtype=np.int32)
-        topo.exclusion_scale = np.empty(0, dtype=np.float32)
         pt = ParameterTable()
         pt.particle_parameters['charge'] = np.zeros(N, dtype=np.float32)
         pbc = np.eye(3, dtype=np.float32) * box
@@ -506,9 +497,6 @@ class TestGridSizing:
         topo = Topology()
         topo.num_particles = N
         topo.particle_type_indices = np.zeros(N, dtype=np.int32)
-        topo.exclusion_offset = np.zeros(N + 1, dtype=np.int32)
-        topo.exclusion_neighbors = np.empty(0, dtype=np.int32)
-        topo.exclusion_scale = np.empty(0, dtype=np.float32)
         pt = ParameterTable()
         pt.particle_parameters['charge'] = np.zeros(N, dtype=np.float32)
         pbc = np.eye(3, dtype=np.float32) * box
@@ -529,9 +517,6 @@ class TestGridSizing:
         topo = Topology()
         topo.num_particles = N
         topo.particle_type_indices = np.zeros(N, dtype=np.int32)
-        topo.exclusion_offset = np.zeros(N + 1, dtype=np.int32)
-        topo.exclusion_neighbors = np.empty(0, dtype=np.int32)
-        topo.exclusion_scale = np.empty(0, dtype=np.float32)
         pt = ParameterTable()
         pt.particle_parameters['charge'] = np.zeros(N, dtype=np.float32)
         pbc = np.diag(np.array([box_x, box_y, box_z], dtype=np.float32))
@@ -553,9 +538,6 @@ class TestGridSizing:
         topo = Topology()
         topo.num_particles = N
         topo.particle_type_indices = np.zeros(N, dtype=np.int32)
-        topo.exclusion_offset = np.zeros(N + 1, dtype=np.int32)
-        topo.exclusion_neighbors = np.empty(0, dtype=np.int32)
-        topo.exclusion_scale = np.empty(0, dtype=np.float32)
         pt = ParameterTable()
         pt.particle_parameters['charge'] = np.zeros(N, dtype=np.float32)
         pbc = np.eye(3, dtype=np.float32) * box
@@ -577,9 +559,6 @@ class TestGridSizing:
         topo = Topology()
         topo.num_particles = N
         topo.particle_type_indices = np.zeros(N, dtype=np.int32)
-        topo.exclusion_offset = np.zeros(N + 1, dtype=np.int32)
-        topo.exclusion_neighbors = np.empty(0, dtype=np.int32)
-        topo.exclusion_scale = np.empty(0, dtype=np.float32)
         pt = ParameterTable()
         pt.particle_parameters['charge'] = np.zeros(N, dtype=np.float32)
         pbc = np.eye(3, dtype=np.float32) * box

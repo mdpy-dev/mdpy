@@ -98,7 +98,7 @@ class Topology:
         self._exclusion_reverse_csr = None  # (rev_offset, rev_neighbors, rev_scale)
         self._excl_pool = {}
 
-    def _derive_exclusion_state(self, scale_14: float = 1.0):
+    def _derive_exclusion_state(self):
         """Build unique pairs + forward CSR + reverse CSR from the bond graph.
 
         All atom-indexed (PDB order), independent of any spatial block layout.

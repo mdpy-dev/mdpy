@@ -1,6 +1,6 @@
 """Shared grow-on-demand GPU buffer pool helper.
 
-Used by core/block_list.py (_pool_get) and core/topology.py (_excl_get) to
+Used by core/block_list.py (_pool_get) and core/topology.py (Topology._derive_exclusion_state) to
 avoid re-allocating work buffers of stable dtype across rebuilds. Buffers are
 keyed by (name, dtype); they grow when a larger size is requested and are
 sliced to the requested size on return.

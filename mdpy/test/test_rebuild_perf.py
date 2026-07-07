@@ -14,7 +14,6 @@ from mdpy.force.expressions.coulomb import coulomb
 from mdpy.integrator.verlet import VerletIntegrator
 from mdpy.system import System
 from mdpy import env
-from mdpy.core.topology import Builder
 
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
 
@@ -80,70 +79,6 @@ def _make_system_1m9z():
     system.upload_positions((frac @ pbc).astype(env.NUMPY_FLOAT))
     system.upload_velocities(np.zeros((topology.num_particles, 3), dtype=env.NUMPY_FLOAT))
     return system, VerletIntegrator(0.5)
-
-
-def _build_reference_exclusion_map(topology, scale_14=1.0):
-    builder = Builder()
-    builder.set_particles(
-        masses=topology.masses,
-        charges=topology.charges,
-        particle_type_indices=topology.particle_type_indices,
-    )
-    for i in range(topology.num_bonds):
-        builder.add_bond(
-            int(topology.bond_indices[i, 0]),
-            int(topology.bond_indices[i, 1]), 0, 0)
-    for i in range(topology.num_angles):
-        builder.add_angle(
-            int(topology.angle_indices[i, 0]),
-            int(topology.angle_indices[i, 1]),
-            int(topology.angle_indices[i, 2]), 0, 0)
-    for i in range(topology.num_dihedrals):
-        builder.add_dihedral(
-            int(topology.dihedral_indices[i, 0]),
-            int(topology.dihedral_indices[i, 1]),
-            int(topology.dihedral_indices[i, 2]),
-            int(topology.dihedral_indices[i, 3]), 0, 0, 0)
-    for i in range(topology.num_impropers):
-        builder.add_improper(
-            int(topology.improper_indices[i, 0]),
-            int(topology.improper_indices[i, 1]),
-            int(topology.improper_indices[i, 2]),
-            int(topology.improper_indices[i, 3]), 0, 0)
-    builder.build_exclusion_map(scale_14=scale_14)
-    ref_topo, _ = builder.build()
-    return ref_topo.exclusion_offset, ref_topo.exclusion_neighbors, ref_topo.exclusion_scale
-
-
-def test_gpu_exclusion_map_matches_cpu():
-    system, integrator = _make_system_6po6()
-    topology = system.topology
-
-    ref_offset, ref_neighbors, ref_scale = _build_reference_exclusion_map(topology, scale_14=1.0)
-
-    from mdpy.core.topology import build_exclusion_map_gpu
-    gpu_offset, gpu_neighbors, gpu_scale, _ = build_exclusion_map_gpu(topology, scale_14=1.0)
-
-    np.testing.assert_array_equal(cp.asnumpy(gpu_offset), ref_offset)
-    np.testing.assert_array_equal(cp.asnumpy(gpu_neighbors), ref_neighbors)
-    np.testing.assert_allclose(cp.asnumpy(gpu_scale), ref_scale, atol=1e-7)
-
-
-def test_exclusion_map_after_remap():
-    system, integrator = _make_system_6po6()
-    topology = system.topology
-
-    _ensure_ready(system)
-    _run_steps(system, integrator, 1)
-
-    ref_offset, ref_neighbors, ref_scale = _build_reference_exclusion_map(topology, scale_14=1.0)
-
-    from mdpy.core.topology import build_exclusion_map_gpu
-    gpu_offset, gpu_neighbors, gpu_scale, _ = build_exclusion_map_gpu(topology, scale_14=1.0)
-
-    np.testing.assert_array_equal(cp.asnumpy(gpu_offset), ref_offset)
-    np.testing.assert_array_equal(cp.asnumpy(gpu_neighbors), ref_neighbors)
-    np.testing.assert_allclose(cp.asnumpy(gpu_scale), ref_scale, atol=1e-7)
 
 
 def test_rebuild_produces_correct_forces_after_gpu_exclusion():

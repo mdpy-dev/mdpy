@@ -15,7 +15,6 @@ def _make_topology(n):
         charges=np.zeros(n, dtype=np.float32),
         particle_type_indices=np.zeros(n, dtype=np.int32),
     )
-    builder.build_exclusion_map()
     topology, _ = builder.build()
     return topology
 
@@ -471,7 +470,6 @@ class TestExclusionMasks:
         )
         for i in range(n - 1):
             builder.add_bond(i, i + 1, k=300.0, r0=1.5)
-        builder.build_exclusion_map()
         topology, _ = builder.build()
         positions = np.zeros((n, 3), dtype=np.float32)
         for i in range(n):
@@ -519,7 +517,6 @@ class TestExclusionMasks:
             builder.add_angle(i, i + 1, i + 2, force_constant=50.0, equilibrium_angle=1.9)
         for i in range(n - 3):
             builder.add_dihedral(i, i + 1, i + 2, i + 3, force_constant=0.5, periodicity=3, phase=0.0)
-        builder.build_exclusion_map()
         topology, _ = builder.build()
         positions = np.zeros((n, 3), dtype=np.float32)
         for i in range(n):
@@ -569,7 +566,6 @@ class TestBlockPairClassification:
         )
         for i in range(n - 1):
             builder.add_bond(i, i + 1, k=300.0, r0=1.5)
-        builder.build_exclusion_map()
         topology, _ = builder.build()
         positions = np.zeros((n, 3), dtype=np.float32)
         for i in range(n):
@@ -1257,7 +1253,6 @@ class TestSnapshotPostWrapIntegration:
             charges=np.zeros(n, dtype=np.float32),
             particle_type_indices=np.zeros(n, dtype=np.int32),
         )
-        builder.build_exclusion_map()
         topology, _ = builder.build()
 
         box = 50.0
@@ -1314,7 +1309,6 @@ class TestSnapshotPostWrapIntegration:
             charges=np.zeros(n, dtype=np.float32),
             particle_type_indices=np.zeros(n, dtype=np.int32),
         )
-        builder.build_exclusion_map()
         topology, _ = builder.build()
 
         box = 50.0
@@ -1374,7 +1368,6 @@ class TestSnapshotPostWrapIntegration:
             charges=np.zeros(n, dtype=np.float32),
             particle_type_indices=np.zeros(n, dtype=np.int32),
         )
-        builder.build_exclusion_map()
         topology, _ = builder.build()
 
         box = 50.0

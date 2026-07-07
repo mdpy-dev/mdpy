@@ -715,7 +715,6 @@ class TestRebuildSortCorrectness:
         )
         for i in range(n - 1):
             builder.add_bond(i, i + 1, k=300.0, r0=1.5)
-        builder.build_exclusion_map()
         topology, term_params = builder.build()
         parameter_table = _make_parameter_table(term_params)
 
@@ -772,7 +771,6 @@ class TestRebuildSortCorrectness:
         )
         for i in range(n - 1):
             builder.add_bond(i, i + 1, k=300.0, r0=1.5)
-        builder.build_exclusion_map()
         topology, term_params = builder.build()
         parameter_table = _make_parameter_table(term_params)
 
@@ -974,7 +972,6 @@ class TestAsyncRebuild:
         )
         for i in range(n - 1):
             builder.add_bond(i, i + 1, k=300.0, r0=1.5)
-        builder.build_exclusion_map()
         topology, term_params = builder.build()
         parameter_table = _make_parameter_table(term_params)
         pbc_matrix = np.eye(3, dtype=env.NUMPY_FLOAT) * 80.0

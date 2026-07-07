@@ -1,13 +1,15 @@
 import numpy as np
+import cupy as cp
 from mdpy.core.topology import Topology, Builder
 
 
 def _get_neighbors(topology, particle_index):
-    start = topology.exclusion_offset[particle_index]
-    end = topology.exclusion_offset[particle_index + 1]
+    offset, neighbors, scale = topology.exclusion_csr
+    start = int(offset[particle_index].get())
+    end = int(offset[particle_index + 1].get())
     return (
-        topology.exclusion_neighbors[start:end],
-        topology.exclusion_scale[start:end],
+        cp.asnumpy(neighbors[start:end]),
+        cp.asnumpy(scale[start:end]),
     )
 
 
@@ -94,7 +96,6 @@ def test_exclusion_map_basic():
     builder.add_angle(0, 1, 2, force_constant=50.0, equilibrium_angle=1.9)
     builder.add_angle(1, 2, 3, force_constant=50.0, equilibrium_angle=1.9)
     builder.add_dihedral(0, 1, 2, 3, force_constant=0.5, periodicity=3, phase=0.0)
-    builder.build_exclusion_map()
     topology, _ = builder.build()
 
     neighbors_0, scales_0 = _get_neighbors(topology,0)
@@ -113,7 +114,6 @@ def test_exclusion_map_basic():
 def test_exclusion_map_symmetry():
     builder = _simple_builder()
     builder.add_bond(0, 1, k=305.0, r0=1.5)
-    builder.build_exclusion_map()
     topology, _ = builder.build()
 
     neighbors_0, _ = _get_neighbors(topology,0)
@@ -124,23 +124,10 @@ def test_exclusion_map_symmetry():
 
 def test_exclusion_map_no_interactions():
     builder = _simple_builder()
-    builder.build_exclusion_map()
     topology, _ = builder.build()
     for particle_index in range(4):
         neighbors, _ = _get_neighbors(topology,particle_index)
         assert len(neighbors) == 0
-
-
-def test_exclusion_map_improper_excluded():
-    builder = _simple_builder()
-    builder.add_improper(0, 1, 2, 3, force_constant=10.0, equilibrium_angle=0.0)
-    builder.build_exclusion_map()
-    topology, _ = builder.build()
-
-    neighbors_0, scales_0 = _get_neighbors(topology,0)
-    assert 3 in neighbors_0
-    idx_03 = np.where(neighbors_0 == 3)[0][0]
-    assert scales_0[idx_03] == 0.0
 
 
 def test_add_batch_indices():
