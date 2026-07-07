@@ -681,7 +681,7 @@ void counting_scatter_kernel(
     int intra = slot - cell_offset[cell];
     int padded = cell_offset_padded[cell] + intra;
     dst_x[slot] = src_x[i]; dst_y[slot] = src_y[i]; dst_z[slot] = src_z[i];
-    block_atoms[padded] = slot;
+    block_atoms[padded] = i;
     raw_order[slot] = i;
     pdb_to_sorted[i] = slot;
     sorted_to_pdb[slot] = i;
@@ -1531,6 +1531,7 @@ class BlockList:
         self.d_pdb_to_sorted = cp.empty(0, dtype=env.NUMPY_INT)
         self.d_sorted_to_pdb = cp.empty(0, dtype=env.NUMPY_INT)
         self._sorted_positions = None
+        self._d_sorted_data = None
         self.d_exclusion_masks = cp.empty(0, dtype=np.uint32)
         self.num_exclusion_block_pairs = 0
         self.num_main_block_pairs = 0
