@@ -18,6 +18,8 @@ class Topology:
         'exclusion_offset', 'exclusion_neighbors', 'exclusion_scale',
         'masses', 'charges', 'particle_type_indices', 'molecule_ids',
         'particle_names', 'type_names', 'chain_ids', 'molecule_types',
+        '_exclusion_dirty', '_exclusion_pairs', '_exclusion_csr',
+        '_exclusion_reverse_csr', '_excl_pool',
     ]
 
     def __init__(self, builder: Builder | None = None):
@@ -76,6 +78,7 @@ class Topology:
             )
             self.exclusion_neighbors = np.empty(0, dtype=env.NUMPY_INT)
             self.exclusion_scale = np.empty(0, dtype=env.NUMPY_FLOAT)
+        self._init_exclusion_cache()
 
     def _init_legacy(self):
         self.num_particles = 0
@@ -98,6 +101,88 @@ class Topology:
         self.exclusion_offset = np.zeros(1, dtype=env.NUMPY_INT)
         self.exclusion_neighbors = np.empty(0, dtype=env.NUMPY_INT)
         self.exclusion_scale = np.empty(0, dtype=env.NUMPY_FLOAT)
+        self._init_exclusion_cache()
+
+    def _init_exclusion_cache(self):
+        """Lazy GPU exclusion state. Built on first read of any exclusion_*
+        property, or rebuilt after the bond graph is marked dirty."""
+        self._exclusion_dirty = True
+        self._exclusion_pairs = None       # (d_i, d_j, d_scale) unique pairs
+        self._exclusion_csr = None         # (offset, neighbors, scale)
+        self._exclusion_reverse_csr = None  # (rev_offset, rev_neighbors, rev_scale)
+        self._excl_pool = {}
+
+    def _derive_exclusion_state(self, scale_14: float = 1.0):
+        """Build unique pairs + forward CSR + reverse CSR from the bond graph.
+
+        All atom-indexed (PDB order), independent of any spatial block layout.
+        Result is cached on the instance; cleared by marking _exclusion_dirty.
+        """
+        N = self.num_particles
+        kernels = _get_gpu_kernels()
+
+        # unique bidirectional pairs (dedup). build_exclusion_map_gpu also
+        # computes a forward CSR we discard here (removed in a later task).
+        _, d_pair_j, d_pair_scale, d_pair_i = build_exclusion_map_gpu(
+            self, scale_14=scale_14
+        )
+        self._exclusion_pairs = (d_pair_i, d_pair_j, d_pair_scale)
+
+        # forward CSR from the unique pairs
+        d_offset, d_neighbors, d_scale = build_csr_from_pairs_gpu(
+            d_pair_i, d_pair_j, d_pair_scale, N, self._excl_pool
+        )
+        self._exclusion_csr = (d_offset, d_neighbors, d_scale)
+
+        # reverse CSR (transpose): for atom j, which i exclude it
+        total_pairs = int(d_neighbors.shape[0])
+        threads_per_block = 256
+        n1 = (N + threads_per_block - 1) // threads_per_block
+
+        d_rev_offset = cp.zeros(N + 1, dtype=env.NUMPY_INT)
+        kernels['rev_count'](
+            (n1,), (threads_per_block,),
+            (d_offset, d_neighbors, np.int32(N), d_rev_offset),
+        )
+        d_rev_offset = cp.cumsum(d_rev_offset, dtype=env.NUMPY_INT).astype(env.NUMPY_INT)
+
+        max_rev = total_pairs if total_pairs > 0 else int(d_rev_offset[-1])
+        d_rev_neighbors = cp.empty(max_rev, dtype=env.NUMPY_INT)
+        d_rev_scale = cp.empty(max_rev, dtype=env.NUMPY_FLOAT)
+        d_temp = d_rev_offset.copy()
+        kernels['rev_fill'](
+            (n1,), (threads_per_block,),
+            (d_offset, d_neighbors, d_scale, d_rev_offset, np.int32(N),
+             d_rev_neighbors, d_rev_scale, d_temp),
+        )
+        self._exclusion_reverse_csr = (d_rev_offset, d_rev_neighbors, d_rev_scale)
+        self._exclusion_dirty = False
+
+    @property
+    def exclusion_pairs(self):
+        """Unique bidirectional exclusion pairs (d_i, d_j, d_scale), GPU."""
+        if self._exclusion_dirty:
+            self._derive_exclusion_state()
+        return self._exclusion_pairs
+
+    @property
+    def exclusion_csr(self):
+        """Forward CSR (offset, neighbors, scale), atom-indexed, GPU."""
+        if self._exclusion_dirty:
+            self._derive_exclusion_state()
+        return self._exclusion_csr
+
+    @property
+    def exclusion_reverse_csr(self):
+        """Reverse (transposed) CSR (rev_offset, rev_neighbors, rev_scale), GPU."""
+        if self._exclusion_dirty:
+            self._derive_exclusion_state()
+        return self._exclusion_reverse_csr
+
+    def invalidate_exclusions(self):
+        """Mark the cached exclusion state stale. Call after mutating bonds.
+        Recomputation is deferred to the next exclusion_* property read."""
+        self._exclusion_dirty = True
 
     def __repr__(self) -> str:
         return (
@@ -200,6 +285,51 @@ void scatter_pairs_kernel(
 }
 """
 
+_BUILD_REVERSE_COUNT_KERNEL = r"""
+extern "C" __global__
+void build_reverse_count_kernel(
+    const int* __restrict__ exclusion_offset,
+    const int* __restrict__ exclusion_neighbors,
+    const int num_particles,
+    int* __restrict__ reverse_offset
+) {
+    int atom_a = blockIdx.x * blockDim.x + threadIdx.x;
+    if (atom_a >= num_particles) return;
+    int start = exclusion_offset[atom_a];
+    int end = exclusion_offset[atom_a + 1];
+    for (int k = start; k < end; k++) {
+        int neighbor = exclusion_neighbors[k];
+        atomicAdd(&reverse_offset[neighbor + 1], 1);
+    }
+}
+"""
+
+_FILL_REVERSE_KERNEL = r"""
+extern "C" __global__
+void fill_reverse_kernel(
+    const int* __restrict__ exclusion_offset,
+    const int* __restrict__ exclusion_neighbors,
+    const float* __restrict__ exclusion_scale,
+    const int* __restrict__ reverse_offset,
+    const int num_particles,
+    int* __restrict__ reverse_neighbors,
+    float* __restrict__ reverse_scale,
+    int* __restrict__ temp_offset
+) {
+    int atom_a = blockIdx.x * blockDim.x + threadIdx.x;
+    if (atom_a >= num_particles) return;
+    int start = exclusion_offset[atom_a];
+    int end = exclusion_offset[atom_a + 1];
+    for (int k = start; k < end; k++) {
+        int neighbor = exclusion_neighbors[k];
+        float scale = exclusion_scale[k];
+        int pos = atomicAdd(&temp_offset[neighbor], 1);
+        reverse_neighbors[pos] = atom_a;
+        reverse_scale[pos] = scale;
+    }
+}
+"""
+
 _gpu_kernels = None
 
 
@@ -212,6 +342,8 @@ def _get_gpu_kernels():
             'parallel_dedup': cp.RawKernel(_PARALLEL_DEDUP_KERNEL, 'parallel_dedup_kernel'),
             'count_row': cp.RawKernel(_COUNT_ROW_KERNEL, 'count_row_kernel'),
             'scatter_pairs': cp.RawKernel(_SCATTER_PAIRS_KERNEL, 'scatter_pairs_kernel'),
+            'rev_count': cp.RawKernel(_BUILD_REVERSE_COUNT_KERNEL, 'build_reverse_count_kernel'),
+            'rev_fill': cp.RawKernel(_FILL_REVERSE_KERNEL, 'fill_reverse_kernel'),
         }
     return _gpu_kernels
 
