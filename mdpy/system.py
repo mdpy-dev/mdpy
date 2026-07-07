@@ -96,13 +96,7 @@ class System:
         self._ensure_uploaded()
         self.gpu.zero_forces()
         if self._block_list is not None:
-            self.gpu._d_sorted_data = self._block_list.pack_posq(
-                self.gpu.d_positions_x,
-                self.gpu.d_positions_y,
-                self.gpu.d_positions_z,
-                self.gpu.d_charges,
-                dst=self.gpu._d_sorted_data,
-            )
+            self._block_list.refresh_sorted_posq(self.gpu)
 
         if not self._pme_force_terms:
             for term in self._primary_force_terms:
@@ -171,7 +165,7 @@ class System:
         self.gpu.wrap_positions_with_prev_correction()
         self._block_list.capture_snapshot(self.gpu)
         self._block_list.build_block_pairs(self.topology, self.gpu)
-        self.gpu._d_sorted_types = self._block_list.gather_sorted(self.gpu.d_types)
+        self._block_list.refresh_sorted_types(self.gpu)
         self._block_list.d_rebuild_flag[0] = 0
 
     def dump_energy(self):
@@ -179,13 +173,7 @@ class System:
             return {}
         self.gpu.zero_forces()
         if self._block_list is not None:
-            self.gpu._d_sorted_data = self._block_list.pack_posq(
-                self.gpu.d_positions_x,
-                self.gpu.d_positions_y,
-                self.gpu.d_positions_z,
-                self.gpu.d_charges,
-                dst=self.gpu._d_sorted_data,
-            )
+            self._block_list.refresh_sorted_posq(self.gpu)
         for term_index, term in enumerate(self.force_terms):
             self.gpu.zero_energy()
             term.compute(self.gpu, self._block_list, compute_energy=True)

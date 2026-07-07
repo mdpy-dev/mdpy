@@ -414,7 +414,7 @@ class NonbondedForce(ForceTerm):
 
         # Assemble kernel args inline (replaces deleted _build_excl_args)
         args = [
-            gpu_context.d_sorted_data,
+            block_list.d_sorted_posq,
             block_list.d_excl_shift_x,
             block_list.d_excl_shift_y,
             block_list.d_excl_shift_z,
@@ -445,7 +445,7 @@ class NonbondedForce(ForceTerm):
             args.append(self._d_per_particle[base])
         for name in self._expr_info.params:
             args.append(self._d_pair_params[name])
-        args.append(gpu_context.d_sorted_types)
+        args.append(block_list.d_sorted_types)
         args.append(np.int32(self._n_types))
         for name in self._expr_info.scalars:
             args.append(np.float32(self._scalar_data.get(name, 0.0)))
