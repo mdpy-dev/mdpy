@@ -7,46 +7,6 @@ import numpy as np
 
 from mdpy.force.force_term import ForceTerm
 
-_GATHER_SORTED_KERNEL_SRC = r"""
-extern "C" __global__
-void gather_sorted_kernel(
-    const float* __restrict__ src,
-    const int* __restrict__ block_atoms,
-    int total_slots,
-    int num_particles,
-    float* __restrict__ dst
-) {
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (idx >= total_slots) return;
-    int atom_id = block_atoms[idx];
-    float val = 0.0f;
-    if (atom_id >= 0 && atom_id < num_particles) {
-        val = src[atom_id];
-    }
-    dst[idx] = val;
-}
-"""
-
-_GATHER_SORTED_INT_KERNEL_SRC = r"""
-extern "C" __global__
-void gather_sorted_int_kernel(
-    const int* __restrict__ src,
-    const int* __restrict__ block_atoms,
-    int total_slots,
-    int num_particles,
-    int* __restrict__ dst
-) {
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (idx >= total_slots) return;
-    int atom_id = block_atoms[idx];
-    int val = 0;
-    if (atom_id >= 0 && atom_id < num_particles) {
-        val = src[atom_id];
-    }
-    dst[idx] = val;
-}
-"""
-
 
 def _prepare_energy_expression(energy_cuda):
     if not energy_cuda:
@@ -283,10 +243,7 @@ class NonbondedForce(ForceTerm):
 
         self._excl_kernel = None
         self._excl_kernel_fo = None
-        self._gather_kernels = None
 
-        self._d_types = None
-        self._d_sorted_types = None
         self._n_types = 0
 
         self._cutoff = cutoff
@@ -341,21 +298,7 @@ class NonbondedForce(ForceTerm):
         self._excl_kernel = cp.RawKernel(excl_src, "exclusion_block_pair_kernel")
         self._excl_kernel_fo = cp.RawKernel(excl_src_fo, "exclusion_block_pair_kernel")
 
-        self._d_types = gpu_context.d_types
-
         self._compiled = True
-
-    def _ensure_gather_kernels(self):
-        if self._gather_kernels is not None:
-            return
-        self._gather_kernels = {
-            "gather_sorted": cp.RawKernel(
-                _GATHER_SORTED_KERNEL_SRC, "gather_sorted_kernel"
-            ),
-            "gather_sorted_int": cp.RawKernel(
-                _GATHER_SORTED_INT_KERNEL_SRC, "gather_sorted_int_kernel"
-            ),
-        }
 
     def _resolve_per_particle(self, gpu_context):
         for base_name in self._prop_bases:
@@ -365,66 +308,28 @@ class NonbondedForce(ForceTerm):
     def _gather_per_particle(self, block_list):
         if block_list.num_blocks == 0:
             return
-        non_charge_bases = [b for b in self._prop_bases if b != "charge"]
-        if not non_charge_bases:
-            return
-        self._ensure_gather_kernels()
-        total_slots = block_list.num_blocks * 32
-        threads_per_block = 256
-        grid = ((total_slots + threads_per_block - 1) // threads_per_block,)
-        for base_name in non_charge_bases:
-            d_arr = self._d_per_particle[base_name]
-            sorted_arr = cp.empty(total_slots, dtype=np.float32)
-            self._gather_kernels["gather_sorted"](
-                grid,
-                (threads_per_block,),
-                (
-                    d_arr,
-                    block_list.d_block_atoms,
-                    np.int32(total_slots),
-                    np.int32(block_list.num_particles),
-                    sorted_arr,
-                ),
+        for base_name in self._prop_bases:
+            if base_name == "charge":
+                continue
+            self._d_sorted_per_particle[base_name] = block_list.gather_sorted(
+                self._d_per_particle[base_name]
             )
-            self._d_sorted_per_particle[base_name] = sorted_arr
-
-    def _gather_types(self, block_list):
-        """Gather PDB-order types into block-ordered buffer for coalesced kernel access."""
-        if block_list.num_blocks == 0:
-            return
-        self._ensure_gather_kernels()
-        total_slots = block_list.num_blocks * 32
-        if self._d_sorted_types is None or self._d_sorted_types.size != total_slots:
-            self._d_sorted_types = cp.empty(total_slots, dtype=np.int32)
-        threads_per_block = 256
-        grid = ((total_slots + threads_per_block - 1) // threads_per_block,)
-        self._gather_kernels["gather_sorted_int"](
-            grid,
-            (threads_per_block,),
-            (
-                self._d_types,
-                block_list.d_block_atoms,
-                np.int32(total_slots),
-                np.int32(block_list.num_particles),
-                self._d_sorted_types,
-            ),
-        )
 
     def post_rebuild_hook(self, block_list, gpu_context):
         """Re-gather block-ordered per-particle properties after rebuild.
 
         Per-particle property VALUES are static (epsilon, sigma don't change).
         Only the block LAYOUT changes on rebuild, so we re-gather.
+        Types are gathered by System (via GPUContext.d_sorted_types).
         """
         if not self._compiled:
             self._lazy_compile(gpu_context)
         self._resolve_per_particle(gpu_context)
-        self._gather_types(block_list)
         self._gather_per_particle(block_list)
 
     def _build_excl_args(self, gpu_context, block_list, compute_energy):
         args = [
-            block_list.d_sorted_data,
+            gpu_context.d_sorted_data,
             block_list.d_excl_shift_x,
             block_list.d_excl_shift_y,
             block_list.d_excl_shift_z,
@@ -455,7 +360,7 @@ class NonbondedForce(ForceTerm):
             args.append(self._d_per_particle[base])
         for name in self._expr_info.params:
             args.append(self._d_pair_params[name])
-        args.append(self._d_sorted_types)
+        args.append(gpu_context.d_sorted_types)
         args.append(np.int32(self._n_types))
         for name in self._expr_info.scalars:
             args.append(np.float32(self._scalar_data.get(name, 0.0)))
@@ -470,7 +375,7 @@ class NonbondedForce(ForceTerm):
         if block_list is None:
             return
 
-        # posq already refreshed by System.compute_forces via block_list.refresh_sorted_data
+        # posq and types already refreshed by System via BlockList.pack_posq/gather_sorted
         num_sm = self._num_sm
         grid_size = 16 * num_sm
 
