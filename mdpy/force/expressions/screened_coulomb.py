@@ -41,13 +41,13 @@ screened_coulomb.energy_cuda = """\
         float fn_f = ((fn_d * z2) + fn_e);
         float corr = (fn_f * inv_fd);
         float alpha3 = ((alpha * alpha) * alpha);
-        float _coulomb_force = (((-__MDPY_COULOMB__) * qq) * ((inv_dist * inv_dist) + ((alpha3 * r) * corr)));
+        float _coulomb_dEdr = (((-__MDPY_COULOMB__) * qq) * ((inv_dist * inv_dist) + ((alpha3 * r) * corr)));
         float erf_val = erff(alpha_r);
         float _result_energy = (((__MDPY_COULOMB__ * qq) * (1.0f - erf_val)) * inv_dist);""".replace(
     "__MDPY_COULOMB__", _COULOMB_CUDA
 )
 
-screened_coulomb.radial_force_cuda = "_coulomb_force"
+screened_coulomb.radial_force_cuda = "_coulomb_dEdr"
 
 screened_coulomb._local_vars = {
     "qq",
@@ -68,7 +68,7 @@ screened_coulomb._local_vars = {
     "fn_f",
     "corr",
     "alpha3",
-    "_coulomb_force",
+    "_coulomb_dEdr",
     "erf_val",
 }
 screened_coulomb.grad_cuda = None

@@ -24,9 +24,9 @@ lennard_jones.energy_cuda = '''\
         float sr6 = sr3 * sr3;
         float sr12 = sr6 * sr6;
         float _result_energy = (4.0f * epsilon * (sr12 - sr6));
-        float _lj_force = (-24.0f * epsilon * (sr12 + sr12 - sr6) * inv_dist);'''
+        float _lj_dEdr = (-24.0f * epsilon * (sr12 + sr12 - sr6) * inv_dist);'''
 
-lennard_jones.radial_force_cuda = '_lj_force'
+lennard_jones.radial_force_cuda = '_lj_dEdr'
 
-lennard_jones._local_vars = {'sr', 'sr3', 'sr6', 'sr12', '_result_energy', '_lj_force'}
+lennard_jones._local_vars = {'sr', 'sr3', 'sr6', 'sr12', '_result_energy', '_lj_dEdr'}
 lennard_jones.grad_cuda = None
