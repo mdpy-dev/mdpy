@@ -96,6 +96,7 @@ class System:
     def compute_forces(self):
         self._ensure_uploaded()
         self.gpu.zero_forces()
+        self._block_list.refresh_sorted_data(self.gpu)
 
         if not self._pme_force_terms:
             for term in self._primary_force_terms:
@@ -172,7 +173,6 @@ class System:
             self.gpu,
             force=force,
         )
-        self._permute_all_arrays()
         self.gpu.wrap_positions_with_prev_correction()
         self._block_list.capture_snapshot((
             self.gpu.d_positions_x,
@@ -181,8 +181,8 @@ class System:
         ))
         self._block_list.build_block_pairs(self.topology, self.gpu)
         for term in self.force_terms:
-            if hasattr(term, "bind_sorted"):
-                term.bind_sorted(self.topology, self._block_list, self.gpu)
+            if hasattr(term, "post_rebuild_hook"):
+                term.post_rebuild_hook(self._block_list, self.gpu)
         self._block_list.d_rebuild_flag[0] = 0
 
     def dump_energy(self):
@@ -245,34 +245,3 @@ class System:
             gpu.d_forces_z.get(),
         ], axis=1)
 
-    def _permute_all_arrays(self):
-        gpu = self.gpu
-
-        perm_gpu = self._block_list.d_raw_order
-
-        for name, new_arr in gpu.permute_state_arrays(perm_gpu, [
-            ("d_positions_x", gpu.d_positions_x),
-            ("d_positions_y", gpu.d_positions_y),
-            ("d_positions_z", gpu.d_positions_z),
-            ("d_velocities_x", gpu.d_velocities_x),
-            ("d_velocities_y", gpu.d_velocities_y),
-            ("d_velocities_z", gpu.d_velocities_z),
-            ("d_forces_x", gpu.d_forces_x),
-            ("d_forces_y", gpu.d_forces_y),
-            ("d_forces_z", gpu.d_forces_z),
-            ("d_prev_positions_x", gpu.d_prev_positions_x),
-            ("d_prev_positions_y", gpu.d_prev_positions_y),
-            ("d_prev_positions_z", gpu.d_prev_positions_z),
-            ("d_masses", gpu.d_masses),
-            ("d_charges", gpu.d_charges),
-        ]):
-            setattr(gpu, name, new_arr)
-
-        d_remap = self._block_list.d_pdb_to_sorted
-
-        for term in self.force_terms:
-            if hasattr(term, "remap_indices_gpu"):
-                term.remap_indices_gpu(d_remap)
-
-        for constraint in self.constraints:
-            constraint.remap_indices_gpu(d_remap)
