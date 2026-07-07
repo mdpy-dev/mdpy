@@ -142,7 +142,6 @@ class PSFParser:
             builder.add_dihedral(i, j, k, l, 0.0, 0.0, 0.0)
         for i, j, k, l in self._impropers:
             builder.add_improper(i, j, k, l, 0.0, 0.0)
-        builder.build_exclusion_map()
         topology, _ = builder.build()
         return topology
 

@@ -15,7 +15,6 @@ class Topology:
         'angle_indices', 'num_angles',
         'dihedral_indices', 'num_dihedrals',
         'improper_indices', 'num_impropers',
-        'exclusion_offset', 'exclusion_neighbors', 'exclusion_scale',
         'masses', 'charges', 'particle_type_indices', 'molecule_ids',
         'particle_names', 'type_names', 'chain_ids', 'molecule_types',
         '_exclusion_dirty', '_exclusion_pairs', '_exclusion_csr',
@@ -68,16 +67,6 @@ class Topology:
             self.improper_indices = np.empty((0, 4), dtype=env.NUMPY_INT)
         self.num_impropers = self.improper_indices.shape[0]
 
-        if builder._exclusion_offset is not None:
-            self.exclusion_offset = builder._exclusion_offset.copy()
-            self.exclusion_neighbors = builder._exclusion_neighbors.copy()
-            self.exclusion_scale = builder._exclusion_scale.copy()
-        else:
-            self.exclusion_offset = np.zeros(
-                self.num_particles + 1, dtype=env.NUMPY_INT
-            )
-            self.exclusion_neighbors = np.empty(0, dtype=env.NUMPY_INT)
-            self.exclusion_scale = np.empty(0, dtype=env.NUMPY_FLOAT)
         self._init_exclusion_cache()
 
     def _init_legacy(self):
@@ -98,9 +87,6 @@ class Topology:
         self.num_dihedrals = 0
         self.improper_indices = np.empty((0, 4), dtype=env.NUMPY_INT)
         self.num_impropers = 0
-        self.exclusion_offset = np.zeros(1, dtype=env.NUMPY_INT)
-        self.exclusion_neighbors = np.empty(0, dtype=env.NUMPY_INT)
-        self.exclusion_scale = np.empty(0, dtype=env.NUMPY_FLOAT)
         self._init_exclusion_cache()
 
     def _init_exclusion_cache(self):
@@ -116,46 +102,106 @@ class Topology:
         """Build unique pairs + forward CSR + reverse CSR from the bond graph.
 
         All atom-indexed (PDB order), independent of any spatial block layout.
-        Result is cached on the instance; cleared by marking _exclusion_dirty.
         """
         N = self.num_particles
         kernels = _get_gpu_kernels()
-
-        # unique bidirectional pairs (dedup). build_exclusion_map_gpu also
-        # computes a forward CSR we discard here (removed in a later task).
-        _, d_pair_j, d_pair_scale, d_pair_i = build_exclusion_map_gpu(
-            self, scale_14=scale_14
-        )
-        self._exclusion_pairs = (d_pair_i, d_pair_j, d_pair_scale)
-
-        # forward CSR from the unique pairs
-        d_offset, d_neighbors, d_scale = build_csr_from_pairs_gpu(
-            d_pair_i, d_pair_j, d_pair_scale, N, self._excl_pool
-        )
-        self._exclusion_csr = (d_offset, d_neighbors, d_scale)
-
-        # reverse CSR (transpose): for atom j, which i exclude it
-        total_pairs = int(d_neighbors.shape[0])
         threads_per_block = 256
+
+        # --- raw bond-graph exclusion pairs (CPU walk) ---
+        pair_i_np, pair_j_np, total_pairs, _, _, _ = \
+            _build_bond_graph_exclusion_pairs(self.bond_indices, N)
+
+        if total_pairs == 0:
+            zi = cp.empty(0, dtype=env.NUMPY_INT)
+            self._exclusion_pairs = (zi, zi, cp.empty(0, dtype=env.NUMPY_FLOAT))
+            empty_off = cp.zeros(N + 1, dtype=env.NUMPY_INT)
+            self._exclusion_csr = (empty_off, zi, cp.empty(0, dtype=env.NUMPY_FLOAT))
+            self._exclusion_reverse_csr = (empty_off.copy(), zi, cp.empty(0, dtype=env.NUMPY_FLOAT))
+            self._exclusion_dirty = False
+            return
+
+        # --- sort + dedup + bidirectional -> unique pairs ---
+        d_pair_i = cp.asarray(pair_i_np)
+        d_pair_j = cp.asarray(pair_j_np)
+        d_pair_scale = cp.zeros(total_pairs, dtype=env.NUMPY_FLOAT)
+
+        sort_key = (d_pair_i.astype(cp.int64) * np.int64(2000000000)
+                    + d_pair_j.astype(cp.int64) * np.int64(2))
+        order = cp.argsort(sort_key)
+        d_pair_i, d_pair_j, d_pair_scale = d_pair_i[order], d_pair_j[order], d_pair_scale[order]
+
+        d_flags = cp.zeros(total_pairs, dtype=env.NUMPY_INT)
+        grid_p = ((total_pairs + threads_per_block - 1) // threads_per_block,)
+        kernels['parallel_dedup'](grid_p, (threads_per_block,),
+            (d_pair_i, d_pair_j, d_pair_scale, np.int32(total_pairs), d_flags))
+        scatter_idx = cp.cumsum(d_flags) - 1
+        uniq_count = int(scatter_idx[total_pairs - 1]) + 1
+
+        d_u_i = cp.full(uniq_count, -1, dtype=env.NUMPY_INT)
+        d_u_j = cp.full(uniq_count, -1, dtype=env.NUMPY_INT)
+        d_u_scale = cp.zeros(uniq_count, dtype=env.NUMPY_FLOAT)
+        d_u_i[scatter_idx] = d_pair_i
+        d_u_j[scatter_idx] = d_pair_j
+        d_u_scale[scatter_idx] = d_pair_scale
+
+        # bidirectional
+        d_bi_i = cp.concatenate([d_u_i, d_u_j])
+        d_bi_j = cp.concatenate([d_u_j, d_u_i])
+        d_bi_scale = cp.concatenate([d_u_scale, d_u_scale])
+        bi_count = d_bi_i.shape[0]
+        bi_key = (d_bi_i.astype(cp.int64) * np.int64(2000000000)
+                  + d_bi_j.astype(cp.int64) * np.int64(2))
+        bi_order = cp.argsort(bi_key)
+        d_bi_i, d_bi_j, d_bi_scale = d_bi_i[bi_order], d_bi_j[bi_order], d_bi_scale[bi_order]
+
+        d_bi_flags = cp.zeros(bi_count, dtype=env.NUMPY_INT)
+        grid_b = ((bi_count + threads_per_block - 1) // threads_per_block,)
+        kernels['parallel_dedup'](grid_b, (threads_per_block,),
+            (d_bi_i, d_bi_j, d_bi_scale, np.int32(bi_count), d_bi_flags))
+        bi_scatter = cp.cumsum(d_bi_flags) - 1
+        bi_uniq = int(bi_scatter[bi_count - 1]) + 1
+        d_unique_i = cp.full(bi_uniq, -1, dtype=env.NUMPY_INT)
+        d_unique_j = cp.full(bi_uniq, -1, dtype=env.NUMPY_INT)
+        d_unique_scale = cp.zeros(bi_uniq, dtype=env.NUMPY_FLOAT)
+        d_unique_i[bi_scatter] = d_bi_i
+        d_unique_j[bi_scatter] = d_bi_j
+        d_unique_scale[bi_scatter] = d_bi_scale
+
+        self._exclusion_pairs = (d_unique_i, d_unique_j, d_unique_scale)
+
+        # --- forward CSR via pool_get buffers ---
+        num_pairs = bi_uniq
+        pool = self._excl_pool
+        d_count = pool_get(pool, "count", N + 1, env.NUMPY_INT, fill=0)
+        grid_c = ((num_pairs + threads_per_block - 1) // threads_per_block,)
+        kernels['count_row'](grid_c, (threads_per_block,),
+            (d_unique_i, np.int32(num_pairs), d_count))
+        d_offset = pool_get(pool, "offset", N + 1, env.NUMPY_INT)
+        cp.cumsum(d_count, dtype=cp.int32, out=d_offset)
+        d_neighbors = pool_get(pool, "neighbors", num_pairs, env.NUMPY_INT)
+        d_scale_out = pool_get(pool, "scale_out", num_pairs, env.NUMPY_FLOAT)
+        d_temp = pool_get(pool, "temp", N + 1, env.NUMPY_INT)
+        d_temp[:] = d_offset
+        kernels['scatter_pairs'](grid_c, (threads_per_block,),
+            (d_unique_i, d_unique_j, d_unique_scale, d_offset, np.int32(num_pairs),
+             d_neighbors, d_scale_out, d_temp))
+        self._exclusion_csr = (d_offset, d_neighbors, d_scale_out)
+
+        # --- reverse CSR ---
         n1 = (N + threads_per_block - 1) // threads_per_block
-
         d_rev_offset = cp.zeros(N + 1, dtype=env.NUMPY_INT)
-        kernels['rev_count'](
-            (n1,), (threads_per_block,),
-            (d_offset, d_neighbors, np.int32(N), d_rev_offset),
-        )
+        kernels['rev_count']((n1,), (threads_per_block,),
+            (d_offset, d_neighbors, np.int32(N), d_rev_offset))
         d_rev_offset = cp.cumsum(d_rev_offset, dtype=env.NUMPY_INT).astype(env.NUMPY_INT)
-
-        max_rev = total_pairs if total_pairs > 0 else int(d_rev_offset[-1])
+        max_rev = num_pairs if num_pairs > 0 else int(d_rev_offset[-1])
         d_rev_neighbors = cp.empty(max_rev, dtype=env.NUMPY_INT)
         d_rev_scale = cp.empty(max_rev, dtype=env.NUMPY_FLOAT)
-        d_temp = d_rev_offset.copy()
-        kernels['rev_fill'](
-            (n1,), (threads_per_block,),
-            (d_offset, d_neighbors, d_scale, d_rev_offset, np.int32(N),
-             d_rev_neighbors, d_rev_scale, d_temp),
-        )
+        d_temp2 = d_rev_offset.copy()
+        kernels['rev_fill']((n1,), (threads_per_block,),
+            (d_offset, d_neighbors, d_scale_out, d_rev_offset, np.int32(N),
+             d_rev_neighbors, d_rev_scale, d_temp2))
         self._exclusion_reverse_csr = (d_rev_offset, d_rev_neighbors, d_rev_scale)
+
         self._exclusion_dirty = False
 
     @property
@@ -194,43 +240,6 @@ class Topology:
             )
         )
 
-
-_PARALLEL_CSR_KERNEL = r'''
-extern "C" __global__
-void parallel_csr_kernel(
-    const int* __restrict__ sorted_i,
-    const int num_unique,
-    const int num_particles,
-    int* __restrict__ offset
-) {
-    int tid = blockIdx.x * blockDim.x + threadIdx.x;
-    if (tid == 0) {
-        offset[num_particles] = num_unique;
-    }
-    if (tid >= num_unique) return;
-    if (tid == 0 || sorted_i[tid] != sorted_i[tid - 1]) {
-        offset[sorted_i[tid]] = tid;
-    }
-}
-'''
-
-_FILL_CSR_GAPS_KERNEL = r'''
-extern "C" __global__
-void fill_csr_gaps_kernel(
-    int* __restrict__ offset,
-    const int num_particles
-) {
-    int i = blockIdx.x * blockDim.x + threadIdx.x;
-    if (i >= num_particles) return;
-    if (offset[i] >= 0) return;
-    for (int j = i + 1; j <= num_particles; j++) {
-        if (offset[j] >= 0) {
-            offset[i] = offset[j];
-            break;
-        }
-    }
-}
-'''
 
 _PARALLEL_DEDUP_KERNEL = r'''
 extern "C" __global__
@@ -337,8 +346,6 @@ def _get_gpu_kernels():
     global _gpu_kernels
     if _gpu_kernels is None:
         _gpu_kernels = {
-            'parallel_csr': cp.RawKernel(_PARALLEL_CSR_KERNEL, 'parallel_csr_kernel'),
-            'fill_csr_gaps': cp.RawKernel(_FILL_CSR_GAPS_KERNEL, 'fill_csr_gaps_kernel'),
             'parallel_dedup': cp.RawKernel(_PARALLEL_DEDUP_KERNEL, 'parallel_dedup_kernel'),
             'count_row': cp.RawKernel(_COUNT_ROW_KERNEL, 'count_row_kernel'),
             'scatter_pairs': cp.RawKernel(_SCATTER_PAIRS_KERNEL, 'scatter_pairs_kernel'),
@@ -401,145 +408,6 @@ def _build_bond_graph_exclusion_pairs(bond_indices, num_particles):
             len(all_i), n12, n13, n14)
 
 
-def build_exclusion_map_gpu(topology, scale_14=1.0):
-    num_particles = topology.num_particles
-
-    pair_i_np, pair_j_np, total_pairs, _, _, _ = _build_bond_graph_exclusion_pairs(
-        topology.bond_indices, num_particles
-    )
-    if total_pairs == 0:
-        d_offset = cp.zeros(num_particles + 1, dtype=cp.int32)
-        d_neighbors = cp.empty(0, dtype=cp.int32)
-        d_scale = cp.empty(0, dtype=cp.float32)
-        return d_offset, d_neighbors, d_scale, cp.empty(0, dtype=cp.int32)
-
-    kernels = _get_gpu_kernels()
-
-    d_pair_i = cp.asarray(pair_i_np)
-    d_pair_j = cp.asarray(pair_j_np)
-    d_pair_scale = cp.zeros(total_pairs, dtype=cp.float32)
-
-    scale_rank = (d_pair_scale > 0.0).astype(cp.int64)
-    sort_key = (d_pair_i.astype(cp.int64) * np.int64(2000000000)
-                + d_pair_j.astype(cp.int64) * np.int64(2)
-                + scale_rank)
-    order = cp.argsort(sort_key)
-    d_pair_i = d_pair_i[order]
-    d_pair_j = d_pair_j[order]
-    d_pair_scale = d_pair_scale[order]
-
-    d_flags = cp.zeros(total_pairs, dtype=cp.int32)
-    threads_per_block_dedup = 256
-    grid_dedup = ((total_pairs + threads_per_block_dedup - 1) // threads_per_block_dedup,)
-    kernels['parallel_dedup'](grid_dedup, (threads_per_block_dedup,),
-        (d_pair_i, d_pair_j, d_pair_scale,
-         np.int32(total_pairs), d_flags))
-
-    scatter_idx = cp.cumsum(d_flags) - 1
-    unique_count = int(scatter_idx[total_pairs - 1]) + 1
-
-    d_dedup_i = cp.full(unique_count, -1, dtype=cp.int32)
-    d_dedup_j = cp.full(unique_count, -1, dtype=cp.int32)
-    d_dedup_scale = cp.zeros(unique_count, dtype=cp.float32)
-
-    d_dedup_i[scatter_idx] = d_pair_i
-    d_dedup_j[scatter_idx] = d_pair_j
-    d_dedup_scale[scatter_idx] = d_pair_scale
-
-    d_bi_i = cp.concatenate([d_dedup_i, d_dedup_j])
-    d_bi_j = cp.concatenate([d_dedup_j, d_dedup_i])
-    d_bi_scale = cp.concatenate([d_dedup_scale, d_dedup_scale])
-    bi_count = len(d_bi_i)
-
-    bi_scale_rank = (d_bi_scale > 0.0).astype(cp.int64)
-    bi_sort_key = (d_bi_i.astype(cp.int64) * np.int64(2000000000)
-                   + d_bi_j.astype(cp.int64) * np.int64(2)
-                   + bi_scale_rank)
-    bi_order = cp.argsort(bi_sort_key)
-    d_bi_i = d_bi_i[bi_order]
-    d_bi_j = d_bi_j[bi_order]
-    d_bi_scale = d_bi_scale[bi_order]
-
-    d_bi_flags = cp.zeros(bi_count, dtype=cp.int32)
-    grid_dedup2 = ((bi_count + threads_per_block_dedup - 1) // threads_per_block_dedup,)
-    kernels['parallel_dedup'](grid_dedup2, (threads_per_block_dedup,),
-        (d_bi_i, d_bi_j, d_bi_scale,
-         np.int32(bi_count), d_bi_flags))
-
-    bi_scatter = cp.cumsum(d_bi_flags) - 1
-    bi_unique_count = int(bi_scatter[bi_count - 1]) + 1
-
-    d_unique_i = cp.full(bi_unique_count, -1, dtype=cp.int32)
-    d_unique_j = cp.full(bi_unique_count, -1, dtype=cp.int32)
-    d_unique_scale = cp.zeros(bi_unique_count, dtype=cp.float32)
-
-    d_unique_i[bi_scatter] = d_bi_i
-    d_unique_j[bi_scatter] = d_bi_j
-    d_unique_scale[bi_scatter] = d_bi_scale
-    unique_count = bi_unique_count
-
-    d_offset = cp.full(num_particles + 1, -1, dtype=cp.int32)
-    threads_per_block_csr = 256
-    grid_csr = ((unique_count + 1 + threads_per_block_csr - 1) // threads_per_block_csr,)
-    kernels['parallel_csr'](
-        grid_csr, (threads_per_block_csr,),
-        (d_unique_i, np.int32(unique_count),
-         np.int32(num_particles), d_offset))
-
-    threads_per_block_fill = 256
-    grid_fill = ((num_particles + threads_per_block_fill - 1) // threads_per_block_fill,)
-    kernels['fill_csr_gaps'](
-        grid_fill, (threads_per_block_fill,),
-        (d_offset, np.int32(num_particles)))
-
-    return d_offset, d_unique_j, d_unique_scale, d_unique_i
-
-
-def _excl_get(name, size, dtype, pool, fill=None):
-    """Return a reusable buffer from the given exclusion pool. The pool is
-    double-buffered: the caller selects pool A or B once per call, so a call's
-    outputs (next call's inputs) never alias."""
-    return pool_get(pool, name, size, dtype, fill)
-
-
-def build_csr_from_pairs_gpu(d_pair_i, d_pair_j, d_pair_scale,
-                              num_particles, pool):
-    """Build CSR (offset, neighbors, scale) from flat pair lists.
-
-    Inputs are PDB-order pair index arrays (no permutation applied).
-    Returns CSR arrays suitable for _build_masks_gpu consumption.
-    """
-    num_pairs = len(d_pair_i)
-    if num_pairs == 0:
-        d_offset = _excl_get("offset", num_particles + 1, np.int32, pool, fill=0)
-        d_neighbors = _excl_get("neighbors", 0, np.int32, pool)
-        d_scale = _excl_get("scale_out", 0, np.float32, pool)
-        return d_offset, d_neighbors, d_scale
-
-    kernels = _get_gpu_kernels()
-    threads_per_block = 256
-    grid = ((num_pairs + threads_per_block - 1) // threads_per_block,)
-
-    d_count = _excl_get("count", num_particles + 1, np.int32, pool, fill=0)
-    kernels['count_row'](grid, (threads_per_block,),
-        (d_pair_i, np.int32(num_pairs), d_count))
-
-    d_offset = _excl_get("offset", num_particles + 1, np.int32, pool)
-    cp.cumsum(d_count, dtype=cp.int32, out=d_offset)
-
-    d_neighbors = _excl_get("neighbors", num_pairs, np.int32, pool)
-    d_scale_out = _excl_get("scale_out", num_pairs, np.float32, pool)
-    d_temp = _excl_get("temp", num_particles + 1, np.int32, pool)
-    d_temp[:] = d_offset
-
-    kernels['scatter_pairs'](grid, (threads_per_block,),
-        (d_pair_i, d_pair_j, d_pair_scale, d_offset,
-         np.int32(num_pairs),
-         d_neighbors, d_scale_out, d_temp))
-
-    return d_offset, d_neighbors, d_scale_out
-
-
 class Builder:
 
     def __init__(self):
@@ -556,9 +424,6 @@ class Builder:
         self._angles: list[list] = []
         self._dihedrals: list[list] = []
         self._impropers: list[list] = []
-        self._exclusion_offset = None
-        self._exclusion_neighbors = None
-        self._exclusion_scale = None
 
     def set_particles(
         self,
@@ -618,64 +483,6 @@ class Builder:
                 [indices[row, 0], indices[row, 1],
                  parameters[row, 0], parameters[row, 1]]
             )
-        return self
-
-    def build_exclusion_map(self, scale_14: float = 1.0) -> Builder:
-        num_particles = self._num_particles
-        exclusion_dict: dict[int, dict[int, float]] = {
-            i: {} for i in range(num_particles)
-        }
-
-        def _add(pair_i: int, pair_j: int, scale: float):
-            if pair_j < pair_i:
-                pair_i, pair_j = pair_j, pair_i
-            if pair_j not in exclusion_dict[pair_i]:
-                exclusion_dict[pair_i][pair_j] = scale
-            else:
-                exclusion_dict[pair_i][pair_j] = min(
-                    exclusion_dict[pair_i][pair_j], scale
-                )
-
-        for bond in self._bonds:
-            _add(bond[0], bond[1], 0.0)
-
-        for angle in self._angles:
-            _add(angle[0], angle[2], 0.0)
-
-        for dihedral in self._dihedrals:
-            _add(dihedral[0], dihedral[3], 0.0)
-
-        for improper in self._impropers:
-            _add(improper[0], improper[3], 0.0)
-
-        sorted_pairs = []
-        for particle_index in range(num_particles):
-            neighbors = sorted(exclusion_dict[particle_index].keys())
-            for neighbor in neighbors:
-                scale = exclusion_dict[particle_index][neighbor]
-                sorted_pairs.append((particle_index, neighbor, scale))
-                sorted_pairs.append((neighbor, particle_index, scale))
-        sorted_pairs.sort()
-
-        offset = np.zeros(num_particles + 1, dtype=env.NUMPY_INT)
-        neighbors_array = np.empty(len(sorted_pairs), dtype=env.NUMPY_INT)
-        scale_array = np.empty(len(sorted_pairs), dtype=env.NUMPY_FLOAT)
-
-        pair_index = 0
-        for particle_index in range(num_particles):
-            offset[particle_index] = pair_index
-            while (
-                pair_index < len(sorted_pairs)
-                and sorted_pairs[pair_index][0] == particle_index
-            ):
-                neighbors_array[pair_index] = sorted_pairs[pair_index][1]
-                scale_array[pair_index] = sorted_pairs[pair_index][2]
-                pair_index += 1
-        offset[num_particles] = pair_index
-
-        self._exclusion_offset = offset
-        self._exclusion_neighbors = neighbors_array
-        self._exclusion_scale = scale_array
         return self
 
     def build(self) -> tuple:
