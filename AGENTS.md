@@ -168,13 +168,30 @@ BlockList provides **mapping** — it answers "which atoms are near which atoms"
 - Spatial sort indices (`d_raw_order`, `d_pdb_to_sorted`, `d_sorted_to_pdb`)
 - Block structure with `d_block_atoms` (now **pdb_id-keyed**, not sorted_id-keyed), `d_block_center`, `d_block_size`
 - Neighbor pair maps (`d_block_pairs`, exclusion/main classifications)
-- Exclusion and scaling masks built **from PDB-order pairs** via `build_csr_from_pairs_gpu` (`d_excl_offset`/`d_excl_neighbors`/`d_excl_scale`) — no permutation of input pairs
+- Block-indexed exclusion masks (`d_exclusion_masks`) built by `_build_masks_gpu` from `topology.exclusion_csr` / `topology.exclusion_reverse_csr` (atom-indexed, owned by Topology) — combines the cached CSR with the current block layout
 - Classified block-pair arrays for force kernels (`d_classify_excl_counter`, `d_classify_main_counter`)
 - Block-ordered SoA data buffer (`d_sorted_posq`) refreshed every step via `refresh_sorted_posq(gpu_context)` — gathers PDB-order positions+charges into a padded, warp-aligned float4 `[x,y,z,q]` layout that force kernels read. Also owns `d_sorted_types` refreshed on rebuild via `refresh_sorted_types(gpu_context)`.
 
 What BlockList does NOT do:
 - Sort any state arrays (positions, velocities, forces) — GPUContext holds them permanently in PDB order
 - Sort any force-term parameter data — force terms keep PDB-order params
+- Build or own the atom-indexed exclusion CSR — that is Topology's responsibility (see below)
+- Compute forces or energies
+
+### Topology — atom-indexed exclusion state (single source of truth)
+
+**Exclusion ownership split (decisive rule):** atom-id (PDB order) indexed exclusion data → `Topology`; block/pair/slot indexed masks → `BlockList`.
+
+Topology owns ALL atom-indexed exclusion state as lazy GPU properties — the single source of truth for "which atom pairs are excluded":
+
+- Unique bidirectional exclusion pairs (`exclusion_pairs` → `(d_i, d_j, d_scale)`)
+- Forward CSR (`exclusion_csr` → `(offset, neighbors, scale)`, atom-indexed)
+- Reverse (transposed) CSR (`exclusion_reverse_csr` → `(rev_offset, rev_neighbors, rev_scale)`)
+
+All three are GPU arrays, derived together by `_derive_exclusion_state()`, cached after first read, and gated by a dirty flag. `invalidate_exclusions()` marks them stale (for future bond break/form); recomputation is deferred to the next `exclusion_*` property read. The CSR + reverse are built ONCE (lazy, cached) and reused across spatial rebuilds — they are NOT rebuilt per block-list rebuild. Exclusion state is derived lazily on first property read; PSF parsing populates only bonds/angles/dihedrals/impropers and no longer eagerly builds an exclusion map.
+
+What Topology does NOT do:
+- Build block/pair/slot-indexed masks — that is BlockList's responsibility (block-indexed, layout-dependent)
 - Compute forces or energies
 
 ### GPUContext — pure PDB-order state storage
@@ -513,8 +530,9 @@ Data flow:
   PSFParser + PDBParser + CharmmTopparParser
     -> create_parameter_table()
     -> System(topology)          # pbc uploaded separately via upload_pbc()
+       -> Topology (particles/bonds/angles/...; owns lazy atom-indexed exclusion pairs/CSR/reverse-CSR — single GPU source of truth)
        -> GPUContext (pure PDB-order storage: d_positions*, d_velocities*, d_forces*, d_masses*, d_charges*)
-       -> BlockList (spatial sort + block structure + exclusion masks + d_sorted_posq block-ordered buffer)
+       -> BlockList (spatial sort + block structure + block-indexed exclusion masks [from Topology CSR] + d_sorted_posq block-ordered buffer)
        -> ForceTerms: BondedForce + NonbondedForce + PMEReciprocalForce (each owns PDB-order params)
        -> Integrator: Verlet / Langevin BAOAB
     -> GPU-only simulation loop
@@ -529,12 +547,12 @@ On block list rebuild (triggered by displacement > skin/2):
   1. BlockList.rebuild() → Morton sort → produces d_block_atoms (pdb_id-keyed)
   2. GPUContext.wrap_positions_with_prev_correction()
   3. BlockList.capture_snapshot()
-  4. BlockList.build_block_pairs() → neighbor pair maps + CSR from PDB-order exclusion pairs
+  4. BlockList.build_block_pairs() → neighbor pair maps + block-indexed exclusion masks (reads cached `topology.exclusion_csr` / `exclusion_reverse_csr`; the CSR itself is NOT rebuilt here — it is lazy-cached in Topology)
   5. No per-term rebuild work today (a future `post_rebuild_hook` would slot in here; see note under Force Terms). `BlockList.refresh_sorted_types(gpu)` runs in `System._do_rebuild` to refresh the shared sorted-types buffer.
 ```
 
 - **GPUContext**: owns all `d_*` state arrays **permanently in PDB order**; provides PBC wrapping only (no permutation kernels)
-- **BlockList**: spatial sort (Morton code) → pdb_id-keyed blocks → AABB overlap → block pairs → CSR masks. Owns `d_sorted_posq` (refreshed every step via `refresh_sorted_posq(gpu)`) and `d_sorted_types` (refreshed on rebuild via `refresh_sorted_types(gpu)`). Never sorts state arrays or force-term params.
+- **BlockList**: spatial sort (Morton code) → pdb_id-keyed blocks → AABB overlap → block pairs → block-indexed exclusion masks (built by `_build_masks_gpu` from `topology.exclusion_csr` / `exclusion_reverse_csr`). Owns `d_sorted_posq` (refreshed every step via `refresh_sorted_posq(gpu)`) and `d_sorted_types` (refreshed on rebuild via `refresh_sorted_types(gpu)`). Never sorts state arrays or force-term params; never builds the atom-indexed exclusion CSR (Topology owns it).
 - **Force terms**: each owns PDB-order parameter arrays. `NonbondedForce`'s `post_rebuild_hook` is currently an unimplemented stub.
 - **Unit system**: internal units only — Å / dalton / fs / e / K; `mdpy.unit` restricted to I/O layer
 - **Precision**: arrays use `env.NUMPY_FLOAT` (float32) / `env.NUMPY_INT` (int32)
@@ -546,8 +564,8 @@ On block list rebuild (triggered by displacement > skin/2):
 | `mdpy/environment.py` | Precision config (`env.NUMPY_FLOAT`, `env.NUMPY_INT`); platform always CUDA |
 | `mdpy/system.py` | Simulation driver with public atomic operations: `upload_positions(array)`, `upload_velocities(array)`, `update_neighbor_list()`, `compute_forces()` (calls `block_list.refresh_sorted_posq` first), `dump_state()`/`dump_forces()` (direct PDB-order returns), `dump_energy()` |
 | `mdpy/core/gpu_context.py` | Pure PDB-order GPU memory manager — owns all `d_*` state arrays, PBC wrap; no permutation kernels |
-| `mdpy/core/block_list.py` | Block-based neighbor list + block-ordered data services — GPU kernels (Morton/AABB/block-pair-find/CSR masks); owns `d_block_atoms` (pdb_id-keyed), `d_sorted_posq` / `d_sorted_types` buffers, `refresh_sorted_posq()` / `refresh_sorted_types()`, `gather_sorted()` primitive, `build_csr_from_pairs_gpu` |
-| `mdpy/core/topology.py` | Molecular topology (particles/bonds/angles/dihedrals/impropers), `join()` → compact arrays |
+| `mdpy/core/block_list.py` | Block-based neighbor list + block-ordered data services — GPU kernels (Morton/AABB/block-pair-find/mask build); owns `d_block_atoms` (pdb_id-keyed), `d_sorted_posq` / `d_sorted_types` buffers, `d_exclusion_masks` (block-indexed), `refresh_sorted_posq()` / `refresh_sorted_types()`, `gather_sorted()` primitive; reads `topology.exclusion_csr` / `exclusion_reverse_csr` and builds only spatial masks via `_build_masks_gpu` |
+| `mdpy/core/topology.py` | Molecular topology (particles/bonds/angles/dihedrals/impropers), `join()` → compact arrays; owns lazy atom-indexed exclusion state (pairs/forward CSR/reverse CSR) as the single GPU source of truth via `exclusion_pairs` / `exclusion_csr` / `exclusion_reverse_csr` + `invalidate_exclusions()` |
 | `mdpy/core/parameter_table.py` | ParameterTable with per-type and per-atom parameter dicts |
 | `mdpy/force/force_term.py` | `ForceTerm` base class — `compute(gpu_context, block_list)` |
 | `mdpy/force/bonded_force.py` | Single CuPy RawKernel (bond/angle/dihedral/improper); PDB-order indices (no remap) |
@@ -604,7 +622,7 @@ Scalar reads for kernel launch sizing and control flow. These are acceptable per
 
 > Note: the previous P2 item "`nonbonded_force.py:672` `getDeviceProperties` queried every compute call" is resolved — device properties are now cached once in `_lazy_compile()` (`nonbonded_force.py:502`).
 >
-> Note: the previous P2 items "`bonded_force.py` `_REMAP_INDICES_KERNEL` / `remap_indices_gpu`" and "`block_list.py` `permute_exclusion_pairs_gpu`" are resolved — both were removed in the PDB-order primary storage refactor. Bonded indices stay PDB order; the exclusion CSR is now built from PDB-order pairs directly by `build_csr_from_pairs_gpu`.
+> Note: the previous P2 items "`bonded_force.py` `_REMAP_INDICES_KERNEL` / `remap_indices_gpu`" and "`block_list.py` `permute_exclusion_pairs_gpu`" are resolved — both were removed in the PDB-order primary storage refactor. Bonded indices stay PDB order. The atom-indexed exclusion CSR is now owned by `Topology` as lazy GPU properties (`exclusion_csr` / `exclusion_reverse_csr`); `BlockList` builds only block-indexed masks from it via `_build_masks_gpu`. The interim `build_csr_from_pairs_gpu` / `build_exclusion_map_gpu` helpers and the `_excl_get` / `parallel_csr` / `fill_csr_gaps` kernels that briefly lived in `block_list.py` have been removed.
 
 ### P3 — Performance Optimizations
 

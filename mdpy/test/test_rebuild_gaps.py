@@ -106,7 +106,6 @@ def test_exclusion_csr_matches_brute_force():
     np.testing.assert_array_equal(cp.asnumpy(offset), ref_offset)
     # The GPU scatter kernel uses atomicAdd, so within-row neighbor order is
     # non-deterministic. Compare per-row sorted sets instead of exact arrays.
-    gpu_offset = cp.asnumpy(offset)
     gpu_neighbors = cp.asnumpy(neighbors)
     gpu_scale = cp.asnumpy(scale)
     for a in range(N):
