@@ -7,18 +7,10 @@ import numpy as np
 import cupy as cp
 from mdpy import env
 from mdpy.core.hilbert import HILBERT_ENCODE_KERNEL
-from mdpy.core.kernel_preambles import FILL_CONSTANT_INT32_KERNEL_SRC
+from mdpy.core.pool import pool_get
 
 BLOCK_SIZE = 32
 
-_fill_constant_kernel = cp.RawKernel(FILL_CONSTANT_INT32_KERNEL_SRC, "fill_constant_int32_kernel")
-
-
-def _fill_constant(arr, value):
-    n = arr.shape[0]
-    threads_per_block = 256
-    grid = ((n + threads_per_block - 1) // threads_per_block,)
-    _fill_constant_kernel(grid, (threads_per_block,), (arr, np.int32(n), np.int32(value)))
 NUM_ATOMS_SENTINEL = 0x7FFFFFFF
 
 # Thread count for the single-block parallel prefix-sum kernels
@@ -824,27 +816,10 @@ class BlockList:
         self._hilbert_levels = 2
         self._hilbert_bits = 6
 
-        self.d_block_atoms = cp.empty(0, dtype=env.NUMPY_INT)
-        self.d_block_center_x = cp.empty(0, dtype=env.NUMPY_FLOAT)
-        self.d_block_center_y = cp.empty(0, dtype=env.NUMPY_FLOAT)
-        self.d_block_center_z = cp.empty(0, dtype=env.NUMPY_FLOAT)
-        self.d_block_size_x = cp.empty(0, dtype=env.NUMPY_FLOAT)
-        self.d_block_size_y = cp.empty(0, dtype=env.NUMPY_FLOAT)
-        self.d_block_size_z = cp.empty(0, dtype=env.NUMPY_FLOAT)
-        self.d_atom_to_block = cp.empty(0, dtype=env.NUMPY_INT)
-        self.d_atom_to_slot = cp.empty(0, dtype=env.NUMPY_INT)
+        # Per-rebuild / per-step result buffers (allocated empty; grown on rebuild).
+        self._alloc_empty_buffers()
 
-        self.d_block_pairs = cp.empty(0, dtype=env.NUMPY_INT)
-        self.d_interacting_atoms = cp.empty(0, dtype=env.NUMPY_INT)
-
-        self.d_cell_block_offset = cp.empty(0, dtype=env.NUMPY_INT)
-        self.d_cell_block_count = cp.empty(0, dtype=env.NUMPY_INT)
-        self.d_block_to_cell = cp.empty(0, dtype=env.NUMPY_INT)
-
-        self.d_raw_order = cp.empty(0, dtype=env.NUMPY_INT)
-        self.d_pdb_to_sorted = cp.empty(0, dtype=env.NUMPY_INT)
-        self.d_sorted_to_pdb = cp.empty(0, dtype=env.NUMPY_INT)
-
+        # Persistent internal scratch (grown lazily by build_block_pairs).
         self._d_block_pair_buf = cp.empty(0, dtype=env.NUMPY_INT)
         self._d_interacting_buf = cp.empty(0, dtype=env.NUMPY_INT)
         self._d_block_pair_shift_x_buf = cp.empty(0, dtype=env.NUMPY_FLOAT)
@@ -862,35 +837,11 @@ class BlockList:
         self._d_reverse_scale = None
         self._total_exclusion_pairs = 0
 
-        self.d_exclusion_masks = cp.empty(0, dtype=np.uint32)
         self._d_exclusion_masks_buf = cp.empty(0, dtype=np.uint32)
-
-        self.num_main_block_pairs = 0
-        self.num_exclusion_block_pairs = 0
-        self.d_main_block_pairs = cp.empty(0, dtype=env.NUMPY_INT)
-        self.d_main_interacting_atoms = cp.empty(0, dtype=env.NUMPY_INT)
-        self.d_excl_block_pairs = cp.empty(0, dtype=env.NUMPY_INT)
-        self.d_excl_interacting_atoms = cp.empty(0, dtype=env.NUMPY_INT)
-        self.d_excl_exclusion_masks = cp.empty(0, dtype=np.uint32)
-
-        self.d_block_pair_shift_x = cp.empty(0, dtype=env.NUMPY_FLOAT)
-        self.d_block_pair_shift_y = cp.empty(0, dtype=env.NUMPY_FLOAT)
-        self.d_block_pair_shift_z = cp.empty(0, dtype=env.NUMPY_FLOAT)
-
-
-        self.d_main_shift_x = cp.empty(0, dtype=env.NUMPY_FLOAT)
-        self.d_main_shift_y = cp.empty(0, dtype=env.NUMPY_FLOAT)
-        self.d_main_shift_z = cp.empty(0, dtype=env.NUMPY_FLOAT)
-        self.d_excl_shift_x = cp.empty(0, dtype=env.NUMPY_FLOAT)
-        self.d_excl_shift_y = cp.empty(0, dtype=env.NUMPY_FLOAT)
-        self.d_excl_shift_z = cp.empty(0, dtype=env.NUMPY_FLOAT)
 
         self._exclusion_masks_np = None
 
         self.d_rebuild_flag = cp.zeros(1, dtype=env.NUMPY_INT)
-        self.d_positions_at_rebuild_x = cp.empty(0, dtype=env.NUMPY_FLOAT)
-        self.d_positions_at_rebuild_y = cp.empty(0, dtype=env.NUMPY_FLOAT)
-        self.d_positions_at_rebuild_z = cp.empty(0, dtype=env.NUMPY_FLOAT)
 
         self._pinned_int_buf = cp.cuda.alloc_pinned_memory(4)
         self._pinned_int_view = (ctypes.c_int32 * 1).from_address(
@@ -921,21 +872,8 @@ class BlockList:
     def _pool_get(self, name, size, dtype, fill=None):
         """Return a reusable buffer of the given size. Allocates on first call
         or when size grows; otherwise returns the cached array. If fill is not
-        None, fill the buffer (memsetAsync for 0, _fill_constant for others)."""
-        key = (name, dtype)
-        arr = self._pool.get(key)
-        if arr is None or arr.size < size:
-            arr = cp.empty(size, dtype=dtype)
-            self._pool[key] = arr
-        arr = arr[:size]
-        if fill is not None:
-            if fill == 0:
-                cp.cuda.runtime.memsetAsync(
-                    arr.data.ptr, 0, size * arr.itemsize, cp.cuda.Stream.null.ptr
-                )
-            else:
-                _fill_constant(arr, fill)
-        return arr
+        None, fill the buffer (memsetAsync for 0, int32 fill kernel for others)."""
+        return pool_get(self._pool, name, size, dtype, fill)
 
     def set_cutoff(self, cutoff):
         self.cutoff = float(cutoff)
@@ -1260,7 +1198,6 @@ class BlockList:
         self.d_block_pair_shift_z = self._d_block_pair_shift_z_buf
 
         self._build_masks_gpu(topology)
-        self._extract_exclusion_block_pairs()
 
     def _build_exclusion_state(self, topology):
         """Build CSR from cached PDB-order exclusion pairs.
@@ -1379,72 +1316,10 @@ class BlockList:
             ),
         )
 
-    def _extract_exclusion_block_pairs(self):
-        # Phase 2: unified mask path. The exclusion kernel handles ALL pairs
-        # (a zero mask = no exclusion = full force). Publish the unified arrays
-        # under the main_* names; set excl count to 0 so only one kernel launches.
-        if self.num_block_pairs == 0:
-            self.num_exclusion_block_pairs = 0
-            self.num_main_block_pairs = 0
-            return
-        self.num_main_block_pairs = self.num_block_pairs
-        self.num_exclusion_block_pairs = 0
-        # main arrays alias the raw find_interacting output
-        self.d_main_block_pairs = self.d_block_pairs
-        self.d_main_interacting_atoms = self.d_interacting_atoms
-        self.d_main_shift_x = self.d_block_pair_shift_x
-        self.d_main_shift_y = self.d_block_pair_shift_y
-        self.d_main_shift_z = self.d_block_pair_shift_z
-        # masks: the exclusion kernel reads d_excl_exclusion_masks for all pairs
-        self.d_excl_block_pairs = self.d_block_pairs
-        self.d_excl_interacting_atoms = self.d_interacting_atoms
-        self.d_excl_exclusion_masks = self.d_exclusion_masks
-        self.d_excl_shift_x = self.d_block_pair_shift_x
-        self.d_excl_shift_y = self.d_block_pair_shift_y
-        self.d_excl_shift_z = self.d_block_pair_shift_z
-
-    def check_rebuild(self, gpu_context) -> bool:
-        if not self._is_initialized:
-            return True
-        if self.d_positions_at_rebuild_x.size == 0:
-            return True
-
-        pos_x = gpu_context.d_positions_x
-        pos_y = gpu_context.d_positions_y
-        pos_z = gpu_context.d_positions_z
-
-        self.d_rebuild_flag[0] = 0
-        threshold_sq = (self.skin * 0.5) ** 2
-        threads_per_block = 256
-        grid = ((self.num_particles + threads_per_block - 1) // threads_per_block,)
-        self._kernels["check_rebuild"](
-            grid,
-            (threads_per_block,),
-            (
-                pos_x,
-                pos_y,
-                pos_z,
-                self.d_positions_at_rebuild_x,
-                self.d_positions_at_rebuild_y,
-                self.d_positions_at_rebuild_z,
-                np.int32(self.num_particles),
-                np.float32(threshold_sq),
-                self.d_rebuild_flag,
-            ),
-        )
-        flag = self._read_device_int(self.d_rebuild_flag)
-        return flag == 1
-
-    def check_rebuild_async(self, gpu_context) -> bool:
-        if not self._is_initialized:
-            return True
-        if self.d_positions_at_rebuild_x.size == 0:
-            return True
-
-        pos_x = gpu_context.d_positions_x
-        pos_y = gpu_context.d_positions_y
-        pos_z = gpu_context.d_positions_z
-
+    def _launch_check_rebuild(self, gpu_context):
+        """Launch the displacement-check kernel over all particles. Writes 1
+        to d_rebuild_flag if any atom moved past skin/2 since capture_snapshot.
+        Does not read the flag back — caller does that via read_flag_sync()."""
         self._ensure_kernels()
         threshold_sq = (self.skin * 0.5) ** 2
         threads_per_block = 256
@@ -1453,9 +1328,9 @@ class BlockList:
             grid,
             (threads_per_block,),
             (
-                pos_x,
-                pos_y,
-                pos_z,
+                gpu_context.d_positions_x,
+                gpu_context.d_positions_y,
+                gpu_context.d_positions_z,
                 self.d_positions_at_rebuild_x,
                 self.d_positions_at_rebuild_y,
                 self.d_positions_at_rebuild_z,
@@ -1464,6 +1339,22 @@ class BlockList:
                 self.d_rebuild_flag,
             ),
         )
+
+    def check_rebuild(self, gpu_context) -> bool:
+        if not self._is_initialized:
+            return True
+        if self.d_positions_at_rebuild_x.size == 0:
+            return True
+        self.d_rebuild_flag[0] = 0
+        self._launch_check_rebuild(gpu_context)
+        return self._read_device_int(self.d_rebuild_flag) == 1
+
+    def check_rebuild_async(self, gpu_context) -> bool:
+        if not self._is_initialized:
+            return True
+        if self.d_positions_at_rebuild_x.size == 0:
+            return True
+        self._launch_check_rebuild(gpu_context)
         return False
 
     def capture_snapshot(self, gpu_context):
@@ -1581,10 +1472,10 @@ class BlockList:
         """Reset d_rebuild_flag to 0. Call after reading and acting on it."""
         self.d_rebuild_flag[0] = 0
 
-    def _init_empty(self):
-        self.num_blocks = 0
-        self.num_block_pairs = 0
-        self.num_particles = 0
+    def _alloc_empty_buffers(self):
+        """Allocate (or re-zero, for _init_empty) all per-block / per-pair /
+        per-particle result buffers to empty. Single source of truth shared by
+        __init__ and _init_empty so the two paths cannot drift."""
         self.d_block_atoms = cp.empty(0, dtype=env.NUMPY_INT)
         self.d_block_center_x = cp.empty(0, dtype=env.NUMPY_FLOAT)
         self.d_block_center_y = cp.empty(0, dtype=env.NUMPY_FLOAT)
@@ -1602,27 +1493,20 @@ class BlockList:
         self.d_raw_order = cp.empty(0, dtype=env.NUMPY_INT)
         self.d_pdb_to_sorted = cp.empty(0, dtype=env.NUMPY_INT)
         self.d_sorted_to_pdb = cp.empty(0, dtype=env.NUMPY_INT)
-        self._sorted_positions = None
         self.d_exclusion_masks = cp.empty(0, dtype=np.uint32)
-        self.num_exclusion_block_pairs = 0
-        self.num_main_block_pairs = 0
-        self.d_excl_block_pairs = cp.empty(0, dtype=env.NUMPY_INT)
-        self.d_excl_interacting_atoms = cp.empty(0, dtype=env.NUMPY_INT)
-        self.d_excl_exclusion_masks = cp.empty(0, dtype=np.uint32)
-        self.d_main_block_pairs = cp.empty(0, dtype=env.NUMPY_INT)
-        self.d_main_interacting_atoms = cp.empty(0, dtype=env.NUMPY_INT)
         self.d_block_pair_shift_x = cp.empty(0, dtype=env.NUMPY_FLOAT)
         self.d_block_pair_shift_y = cp.empty(0, dtype=env.NUMPY_FLOAT)
         self.d_block_pair_shift_z = cp.empty(0, dtype=env.NUMPY_FLOAT)
-        self.d_main_shift_x = cp.empty(0, dtype=env.NUMPY_FLOAT)
-        self.d_main_shift_y = cp.empty(0, dtype=env.NUMPY_FLOAT)
-        self.d_main_shift_z = cp.empty(0, dtype=env.NUMPY_FLOAT)
-        self.d_excl_shift_x = cp.empty(0, dtype=env.NUMPY_FLOAT)
-        self.d_excl_shift_y = cp.empty(0, dtype=env.NUMPY_FLOAT)
-        self.d_excl_shift_z = cp.empty(0, dtype=env.NUMPY_FLOAT)
         self.d_positions_at_rebuild_x = cp.empty(0, dtype=env.NUMPY_FLOAT)
         self.d_positions_at_rebuild_y = cp.empty(0, dtype=env.NUMPY_FLOAT)
         self.d_positions_at_rebuild_z = cp.empty(0, dtype=env.NUMPY_FLOAT)
+
+    def _init_empty(self):
+        self.num_blocks = 0
+        self.num_block_pairs = 0
+        self.num_particles = 0
+        self._alloc_empty_buffers()
+        self._sorted_positions = None
         self._d_sorted_posq = None
         self._d_sorted_types = None
         self._invalidate_caches()

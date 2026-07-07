@@ -3,7 +3,7 @@ import inspect
 import textwrap
 
 from mdpy.force.markers import param as _param_marker, scalar as _scalar_marker
-from mdpy.force._utils import ExprInfo, _strip_trailing_digits, _MATH_FUNCTIONS, _numeric_literal
+from mdpy.force._transpiler_common import ExprInfo, _strip_trailing_digits, _MATH_FUNCTIONS, _numeric_literal
 from mdpy.force.ad_engine import TapeEntry, ForwardADEngine
 
 

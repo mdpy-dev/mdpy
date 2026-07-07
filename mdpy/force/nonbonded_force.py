@@ -267,8 +267,8 @@ class NonbondedForce(ForceTerm):
         self._d_sorted_per_particle = {}
         self._d_pair_params = {}
 
-        self._excl_kernel = None
-        self._excl_kernel_fo = None
+        self._pair_kernel = None
+        self._pair_kernel_fo = None
 
         self._n_types = 0
 
@@ -326,8 +326,8 @@ class NonbondedForce(ForceTerm):
             compute_energy=False,
         )
 
-        self._excl_kernel = cp.RawKernel(excl_src, "exclusion_block_pair_kernel")
-        self._excl_kernel_fo = cp.RawKernel(excl_src_fo, "exclusion_block_pair_kernel")
+        self._pair_kernel = cp.RawKernel(excl_src, "exclusion_block_pair_kernel")
+        self._pair_kernel_fo = cp.RawKernel(excl_src_fo, "exclusion_block_pair_kernel")
 
         self._add_forces_kernel = cp.RawKernel(
             _ADD_SORTED_FORCES_KERNEL_SRC, "add_sorted_forces_kernel"
@@ -408,16 +408,16 @@ class NonbondedForce(ForceTerm):
         grid_size = 16 * num_sm
 
         if compute_energy:
-            excl_kernel = self._excl_kernel
+            pair_kernel = self._pair_kernel
         else:
-            excl_kernel = self._excl_kernel_fo
+            pair_kernel = self._pair_kernel_fo
 
         # Assemble kernel args inline (replaces deleted _build_excl_args)
         args = [
             block_list.d_sorted_posq,
-            block_list.d_excl_shift_x,
-            block_list.d_excl_shift_y,
-            block_list.d_excl_shift_z,
+            block_list.d_block_pair_shift_x,
+            block_list.d_block_pair_shift_y,
+            block_list.d_block_pair_shift_z,
             self._d_sorted_fx,
             self._d_sorted_fy,
             self._d_sorted_fz,
@@ -427,9 +427,9 @@ class NonbondedForce(ForceTerm):
         args.extend(
             [
                 block_list.d_block_atoms,
-                block_list.d_excl_block_pairs,
-                block_list.d_excl_interacting_atoms,
-                block_list.d_excl_exclusion_masks,
+                block_list.d_block_pairs,
+                block_list.d_interacting_atoms,
+                block_list.d_exclusion_masks,
                 np.float32(self._cutoff_sq),
                 block_list._d_counters,
                 np.int32(gpu_context.num_particles),
@@ -450,7 +450,7 @@ class NonbondedForce(ForceTerm):
         for name in self._expr_info.scalars:
             args.append(np.float32(self._scalar_data.get(name, 0.0)))
 
-        excl_kernel((grid_size,), (256,), tuple(args))
+        pair_kernel((grid_size,), (256,), tuple(args))
 
         # Add slot-indexed forces into PDB-order force array
         self._add_sorted_forces(gpu_context, block_list)

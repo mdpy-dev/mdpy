@@ -3,6 +3,7 @@ from __future__ import annotations
 import cupy as cp
 import numpy as np
 from mdpy import env
+from mdpy.core.pool import pool_get
 
 
 
@@ -366,17 +367,7 @@ def _excl_get(name, size, dtype, pool, fill=None):
     """Return a reusable buffer from the given exclusion pool. The pool is
     double-buffered: the caller selects pool A or B once per call, so a call's
     outputs (next call's inputs) never alias."""
-    key = (name, dtype)
-    arr = pool.get(key)
-    if arr is None or arr.size < size:
-        arr = cp.empty(size, dtype=dtype)
-        pool[key] = arr
-    arr = arr[:size]
-    if fill == 0:
-        cp.cuda.runtime.memsetAsync(
-            arr.data.ptr, 0, size * arr.itemsize, cp.cuda.Stream.null.ptr
-        )
-    return arr
+    return pool_get(pool, name, size, dtype, fill)
 
 
 def build_csr_from_pairs_gpu(d_pair_i, d_pair_j, d_pair_scale,

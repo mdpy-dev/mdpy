@@ -582,9 +582,7 @@ class TestBlockPairClassification:
         bl.rebuild(topology, ctx, force=True)
         bl.build_block_pairs(topology, ctx)
 
-        assert bl.num_main_block_pairs + bl.num_exclusion_block_pairs == bl.num_block_pairs
-        if bl.num_exclusion_block_pairs > 0:
-            assert bl.d_excl_exclusion_masks.size >= bl.num_exclusion_block_pairs * BLOCK_SIZE
+        assert bl.d_exclusion_masks.size >= bl.num_block_pairs * BLOCK_SIZE
 
     def test_no_exclusion_all_main(self):
         n = 20
@@ -597,7 +595,7 @@ class TestBlockPairClassification:
         bl.rebuild(topology, ctx, force=True)
         bl.build_block_pairs(topology, ctx)
 
-        assert bl.num_main_block_pairs + bl.num_exclusion_block_pairs == bl.num_block_pairs
+        assert bl.d_exclusion_masks.size >= bl.num_block_pairs * BLOCK_SIZE
 
 
 class TestCheckRebuild:
