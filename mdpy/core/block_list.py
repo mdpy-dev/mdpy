@@ -1020,7 +1020,7 @@ class BlockList:
         self._hilbert_levels = L
         self._hilbert_bits = 3 * L
 
-    def rebuild(self, positions, topology, gpu_context, *, force=False):
+    def rebuild(self, topology, gpu_context, *, force=False):
         """Sort particles into cell-aligned blocks. Returns (pdb_to_sorted, None).
 
         When force=False (default), d_rebuild_flag is left untouched — the
@@ -1054,17 +1054,9 @@ class BlockList:
         if force:
             self.d_rebuild_flag[0] = 1
 
-        if isinstance(positions, tuple):
-            pos_x = positions[0]
-            pos_y = positions[1]
-            pos_z = positions[2]
-        else:
-            data = cp.asarray(
-                np.ascontiguousarray(positions.ravel(), dtype=env.NUMPY_FLOAT)
-            )
-            pos_x = data[0::3].copy()
-            pos_y = data[1::3].copy()
-            pos_z = data[2::3].copy()
+        pos_x = gpu_context.d_positions_x
+        pos_y = gpu_context.d_positions_y
+        pos_z = gpu_context.d_positions_z
 
         # K1: Fused cell-assign (cell_index + Hilbert key + atomic cell_counts
         # and composite_counts). The composite key (cell << (3*L)) | hilbert
@@ -1405,21 +1397,15 @@ class BlockList:
         self.d_excl_shift_y = self.d_block_pair_shift_y
         self.d_excl_shift_z = self.d_block_pair_shift_z
 
-    def check_rebuild(self, positions) -> bool:
+    def check_rebuild(self, gpu_context) -> bool:
         if not self._is_initialized:
             return True
         if self.d_positions_at_rebuild_x.size == 0:
             return True
 
-        if isinstance(positions, tuple):
-            pos_x, pos_y, pos_z = positions
-        else:
-            data = cp.asarray(
-                np.ascontiguousarray(positions.ravel(), dtype=env.NUMPY_FLOAT)
-            )
-            pos_x = cp.ascontiguousarray(data[0::3])
-            pos_y = cp.ascontiguousarray(data[1::3])
-            pos_z = cp.ascontiguousarray(data[2::3])
+        pos_x = gpu_context.d_positions_x
+        pos_y = gpu_context.d_positions_y
+        pos_z = gpu_context.d_positions_z
 
         self.d_rebuild_flag[0] = 0
         threshold_sq = (self.skin * 0.5) ** 2
@@ -1443,21 +1429,15 @@ class BlockList:
         flag = self._read_device_int(self.d_rebuild_flag)
         return flag == 1
 
-    def check_rebuild_async(self, positions) -> bool:
+    def check_rebuild_async(self, gpu_context) -> bool:
         if not self._is_initialized:
             return True
         if self.d_positions_at_rebuild_x.size == 0:
             return True
 
-        if isinstance(positions, tuple):
-            pos_x, pos_y, pos_z = positions
-        else:
-            data = cp.asarray(
-                np.ascontiguousarray(positions.ravel(), dtype=env.NUMPY_FLOAT)
-            )
-            pos_x = cp.ascontiguousarray(data[0::3])
-            pos_y = cp.ascontiguousarray(data[1::3])
-            pos_z = cp.ascontiguousarray(data[2::3])
+        pos_x = gpu_context.d_positions_x
+        pos_y = gpu_context.d_positions_y
+        pos_z = gpu_context.d_positions_z
 
         self._ensure_kernels()
         threshold_sq = (self.skin * 0.5) ** 2
@@ -1480,14 +1460,16 @@ class BlockList:
         )
         return False
 
-    def capture_snapshot(self, positions_soa):
+    def capture_snapshot(self, gpu_context):
         """Capture current positions as the rebuild-baseline snapshot.
 
         Must be called AFTER pbc wrapping so the snapshot is in the same
         PBC image as subsequent positions. This ensures check_rebuild
         measures true cumulative drift, not wrap-artifact coordinate jumps.
         """
-        pos_x, pos_y, pos_z = positions_soa
+        pos_x = gpu_context.d_positions_x
+        pos_y = gpu_context.d_positions_y
+        pos_z = gpu_context.d_positions_z
         N = self.num_particles
         snap_x = self._pool_get("snap_x", N, env.NUMPY_FLOAT)
         snap_y = self._pool_get("snap_y", N, env.NUMPY_FLOAT)

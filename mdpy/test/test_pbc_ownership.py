@@ -58,7 +58,6 @@ def test_block_list_uses_current_pbc_after_box_change():
 
     bl = BlockList(cutoff=4.0, skin=1.0, rebuild_check_interval=1)
     bl.rebuild(
-        (ctx.d_positions_x, ctx.d_positions_y, ctx.d_positions_z),
         topo,
         ctx,
         force=True,
@@ -71,7 +70,6 @@ def test_block_list_uses_current_pbc_after_box_change():
     # Re-rebuild reading PBC from GPUContext. The signature change must not
     # break the physical behavior: BlockList reads the current box.
     bl.rebuild(
-        (ctx.d_positions_x, ctx.d_positions_y, ctx.d_positions_z),
         topo,
         ctx,
         force=True,

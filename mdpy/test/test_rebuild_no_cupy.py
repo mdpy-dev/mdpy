@@ -47,13 +47,8 @@ def test_rebuild_no_cudamalloc_on_second_rebuild():
     s.update_neighbor_list(force_rebuild=True)  # init block list + populate pool
 
     bl = s._block_list
-    positions_soa = (
-        s.gpu.d_positions_x,
-        s.gpu.d_positions_y,
-        s.gpu.d_positions_z,
-    )
     # one extra rebuild to warm the pool (first call allocates all buffers)
-    bl.rebuild(positions_soa, s.topology, s.gpu)
+    bl.rebuild(s.topology, s.gpu)
 
     call_count = [0]
     orig_empty = cp.empty
@@ -70,7 +65,7 @@ def test_rebuild_no_cudamalloc_on_second_rebuild():
     cp.empty = counting_empty
     cp.zeros = counting_zeros
     try:
-        bl.rebuild(positions_soa, s.topology, s.gpu)
+        bl.rebuild(s.topology, s.gpu)
     finally:
         cp.empty = orig_empty
         cp.zeros = orig_zeros

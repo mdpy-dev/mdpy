@@ -154,11 +154,7 @@ class System:
             self._step_counter = 0
             return
 
-        self._block_list.check_rebuild_async((
-            self.gpu.d_positions_x,
-            self.gpu.d_positions_y,
-            self.gpu.d_positions_z,
-        ))
+        self._block_list.check_rebuild_async(self.gpu)
         self._step_counter += 1
         if self._step_counter < sync_interval:
             return
@@ -171,23 +167,9 @@ class System:
             flag_val = int(self._block_list.d_rebuild_flag[0])
             if flag_val == 0:
                 return
-        positions_soa = (
-            self.gpu.d_positions_x,
-            self.gpu.d_positions_y,
-            self.gpu.d_positions_z,
-        )
-        self._block_list.rebuild(
-            positions_soa,
-            self.topology,
-            self.gpu,
-            force=force,
-        )
+        self._block_list.rebuild(self.topology, self.gpu, force=force)
         self.gpu.wrap_positions_with_prev_correction()
-        self._block_list.capture_snapshot((
-            self.gpu.d_positions_x,
-            self.gpu.d_positions_y,
-            self.gpu.d_positions_z,
-        ))
+        self._block_list.capture_snapshot(self.gpu)
         self._block_list.build_block_pairs(self.topology, self.gpu)
         self.gpu._d_sorted_types = self._block_list.gather_sorted(self.gpu.d_types)
         self._block_list.d_rebuild_flag[0] = 0

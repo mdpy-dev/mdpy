@@ -16,13 +16,18 @@ class _PBCContext:
     """Minimal stand-in exposing d_pbc_matrix/d_pbc_inv for BlockList.rebuild,
     which now reads PBC from a GPUContext."""
 
-    def __init__(self, pbc_matrix, pbc_inv):
+    def __init__(self, pbc_matrix, pbc_inv, positions=None):
         self.d_pbc_matrix = cp.asarray(
             np.ascontiguousarray(pbc_matrix, dtype=np.float32).ravel()
         )
         self.d_pbc_inv = cp.asarray(
             np.ascontiguousarray(pbc_inv, dtype=np.float32).ravel()
         )
+        if positions is not None:
+            pos = np.asarray(positions, dtype=np.float32)
+            self.d_positions_x = cp.asarray(pos[:, 0])
+            self.d_positions_y = cp.asarray(pos[:, 1])
+            self.d_positions_z = cp.asarray(pos[:, 2])
 
 
 def _make_topology(n):
@@ -81,7 +86,7 @@ class TestMaxBlocksUpperBound:
         pbc_matrix = np.eye(3, dtype=np.float32) * box
         pbc_inv = np.linalg.inv(pbc_matrix)
         bl = BlockList(cutoff=10.0, skin=2.0)
-        bl.rebuild(positions, topology, _PBCContext(pbc_matrix, pbc_inv), force=True)
+        bl.rebuild(topology, _PBCContext(pbc_matrix, pbc_inv, positions), force=True)
         assert bl.num_blocks <= bl.max_blocks, (
             f"num_blocks={bl.num_blocks} exceeds max_blocks={bl.max_blocks}"
         )
@@ -98,7 +103,7 @@ class TestMaxBlocksUpperBound:
         pbc_matrix = np.eye(3, dtype=np.float32) * box
         pbc_inv = np.linalg.inv(pbc_matrix)
         bl = BlockList(cutoff=10.0, skin=2.0)
-        bl.rebuild(positions, topology, _PBCContext(pbc_matrix, pbc_inv), force=True)
+        bl.rebuild(topology, _PBCContext(pbc_matrix, pbc_inv, positions), force=True)
         ba = cp.asnumpy(bl.d_block_atoms)
         assert ba.size == bl.max_total_padded
         real = ba[ba >= 0]
@@ -111,7 +116,7 @@ class TestMaxBlocksUpperBound:
         pbc_matrix = np.eye(3, dtype=np.float32) * 50.0
         pbc_inv = np.linalg.inv(pbc_matrix)
         bl = BlockList(cutoff=10.0, skin=2.0)
-        bl.rebuild(positions, topology, _PBCContext(pbc_matrix, pbc_inv), force=True)
+        bl.rebuild(topology, _PBCContext(pbc_matrix, pbc_inv, positions), force=True)
         for attr in ("d_block_center_x", "d_block_center_y", "d_block_center_z",
                       "d_block_size_x", "d_block_size_y", "d_block_size_z"):
             arr = getattr(bl, attr)

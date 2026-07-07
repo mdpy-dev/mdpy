@@ -55,7 +55,7 @@ def _rebuild_and_build_block_pairs(n, box=50.0, cutoff=10.0, skin=2.0, seed=42, 
     pbc_inv = np.linalg.inv(pbc_matrix)
     ctx = _PBCContext(pbc_matrix, pbc_inv, positions)
     bl = BlockList(cutoff=cutoff, skin=skin)
-    bl.rebuild(positions, topology, ctx, force=True)
+    bl.rebuild(topology, ctx, force=True)
     bl.build_block_pairs(topology, ctx)
     # Read actual counts for test assertions (syncs — acceptable in tests,
     # NOT in the hot path where kernels read from device directly).
@@ -473,7 +473,7 @@ class TestExclusionMasks:
         pbc_inv = np.linalg.inv(pbc_matrix)
         bl = BlockList(cutoff=10.0, skin=2.0)
         ctx = _PBCContext(pbc_matrix, pbc_inv, positions)
-        bl.rebuild(positions, topology, ctx, force=True)
+        bl.rebuild(topology, ctx, force=True)
         bl.build_block_pairs(topology, ctx)
         bl.num_blocks = int(bl._d_num_blocks[0].get())
         bl.num_block_pairs = int(bl._d_counters[0].get())
@@ -521,7 +521,7 @@ class TestExclusionMasks:
         pbc_inv = np.linalg.inv(pbc_matrix)
         bl = BlockList(cutoff=10.0, skin=2.0)
         ctx = _PBCContext(pbc_matrix, pbc_inv, positions)
-        bl.rebuild(positions, topology, ctx, force=True)
+        bl.rebuild(topology, ctx, force=True)
         bl.build_block_pairs(topology, ctx)
         bl.num_blocks = int(bl._d_num_blocks[0].get())
         bl.num_block_pairs = int(bl._d_counters[0].get())
@@ -571,7 +571,7 @@ class TestBlockPairClassification:
         pbc_inv = np.linalg.inv(pbc_matrix)
         bl = BlockList(cutoff=10.0, skin=2.0)
         ctx = _PBCContext(pbc_matrix, pbc_inv, positions)
-        bl.rebuild(positions, topology, ctx, force=True)
+        bl.rebuild(topology, ctx, force=True)
         bl.build_block_pairs(topology, ctx)
 
         assert bl.num_main_block_pairs + bl.num_exclusion_block_pairs == bl.num_block_pairs
@@ -586,7 +586,7 @@ class TestBlockPairClassification:
         pbc_inv = np.linalg.inv(pbc_matrix)
         bl = BlockList(cutoff=8.0, skin=2.0)
         ctx = _PBCContext(pbc_matrix, pbc_inv, positions)
-        bl.rebuild(positions, topology, ctx, force=True)
+        bl.rebuild(topology, ctx, force=True)
         bl.build_block_pairs(topology, ctx)
 
         assert bl.num_main_block_pairs + bl.num_exclusion_block_pairs == bl.num_block_pairs
@@ -605,25 +605,24 @@ class TestCheckRebuild:
         pbc_matrix = _make_pbc(50.0)
         pbc_inv = np.linalg.inv(pbc_matrix)
         bl = BlockList(cutoff=10.0, skin=2.0)
-        bl.rebuild(positions, topology, _PBCContext(pbc_matrix, pbc_inv), force=True)
-        bl.capture_snapshot((
-            cp.asarray(np.ascontiguousarray(positions[:, 0], dtype=np.float32)),
-            cp.asarray(np.ascontiguousarray(positions[:, 1], dtype=np.float32)),
-            cp.asarray(np.ascontiguousarray(positions[:, 2], dtype=np.float32)),
-        ))
+        ctx = _PBCContext(pbc_matrix, pbc_inv, positions)
+        bl.rebuild(topology, ctx, force=True)
+        bl.capture_snapshot(ctx)
 
         for _ in range(19):
-            assert not bl.check_rebuild(positions)
+            assert not bl.check_rebuild(ctx)
 
         moved = positions.copy()
         moved[0, 0] += 2.0
-        assert bl.check_rebuild(moved)
+        assert bl.check_rebuild(_PBCContext(pbc_matrix, pbc_inv, moved))
 
     def test_check_rebuild_uninitialized(self):
         topology = _make_topology(4)
         positions = np.zeros((4, 3), dtype=np.float32)
+        pbc_matrix = _make_pbc(50.0)
+        pbc_inv = np.linalg.inv(pbc_matrix)
         bl = BlockList(cutoff=10.0, skin=2.0)
-        assert bl.check_rebuild(positions)
+        assert bl.check_rebuild(_PBCContext(pbc_matrix, pbc_inv, positions))
 
     def test_async_check_sticky_flag(self):
         n, box = 50, 50.0
@@ -632,25 +631,25 @@ class TestCheckRebuild:
         pbc_matrix = _make_pbc(box)
         pbc_inv = np.linalg.inv(pbc_matrix)
         bl = BlockList(cutoff=10.0, skin=2.0)
-        bl.rebuild(positions, topology, _PBCContext(pbc_matrix, pbc_inv), force=True)
-        bl.capture_snapshot((
-            cp.asarray(np.ascontiguousarray(positions[:, 0], dtype=np.float32)),
-            cp.asarray(np.ascontiguousarray(positions[:, 1], dtype=np.float32)),
-            cp.asarray(np.ascontiguousarray(positions[:, 2], dtype=np.float32)),
-        ))
+        bl.rebuild(topology, _PBCContext(pbc_matrix, pbc_inv, positions), force=True)
+        bl.capture_snapshot(_PBCContext(pbc_matrix, pbc_inv, positions))
 
         pos_x = bl.d_positions_at_rebuild_x.copy()
         pos_y = bl.d_positions_at_rebuild_y.copy()
         pos_z = bl.d_positions_at_rebuild_z.copy()
+        ctx = _PBCContext(pbc_matrix, pbc_inv)
+        ctx.d_positions_x = pos_x
+        ctx.d_positions_y = pos_y
+        ctx.d_positions_z = pos_z
 
         bl.d_rebuild_flag[0] = 0
         pos_x[:5] += 3.0
-        bl.check_rebuild_async((pos_x, pos_y, pos_z))
+        bl.check_rebuild_async(ctx)
         cp.cuda.Stream.null.synchronize()
         assert int(bl.d_rebuild_flag[0]) == 1
 
         pos_x[:5] -= 3.0
-        bl.check_rebuild_async((pos_x, pos_y, pos_z))
+        bl.check_rebuild_async(ctx)
         cp.cuda.Stream.null.synchronize()
         assert int(bl.d_rebuild_flag[0]) == 1, "flag must stay sticky"
 
@@ -661,15 +660,12 @@ class TestCheckRebuild:
         pbc_matrix = _make_pbc(box)
         pbc_inv = np.linalg.inv(pbc_matrix)
         bl = BlockList(cutoff=10.0, skin=2.0)
-        bl.rebuild(positions, topology, _PBCContext(pbc_matrix, pbc_inv), force=True)
+        bl.rebuild(topology, _PBCContext(pbc_matrix, pbc_inv, positions), force=True)
 
         wrapped = positions.copy()
         wrapped[0, 0] = 0.3
         wrapped[1, 1] = 0.7
-        pos_x = cp.asarray(np.ascontiguousarray(wrapped[:, 0], dtype=np.float32))
-        pos_y = cp.asarray(np.ascontiguousarray(wrapped[:, 1], dtype=np.float32))
-        pos_z = cp.asarray(np.ascontiguousarray(wrapped[:, 2], dtype=np.float32))
-        bl.capture_snapshot((pos_x, pos_y, pos_z))
+        bl.capture_snapshot(_PBCContext(pbc_matrix, pbc_inv, wrapped))
 
         snap_x = cp.asnumpy(bl.d_positions_at_rebuild_x)
         snap_y = cp.asnumpy(bl.d_positions_at_rebuild_y)
@@ -699,33 +695,21 @@ class TestCheckRebuild:
         pbc_matrix = _make_pbc(box)
         pbc_inv = np.linalg.inv(pbc_matrix)
         bl = BlockList(cutoff=cutoff, skin=skin)
-        bl.rebuild(positions, topology, _PBCContext(pbc_matrix, pbc_inv), force=True)
-        bl.capture_snapshot((
-            cp.asarray(positions[:, 0].astype(np.float32)),
-            cp.asarray(positions[:, 1].astype(np.float32)),
-            cp.asarray(positions[:, 2].astype(np.float32)),
-        ))
+        bl.rebuild(topology, _PBCContext(pbc_matrix, pbc_inv, positions), force=True)
+        bl.capture_snapshot(_PBCContext(pbc_matrix, pbc_inv, positions))
 
         # Simulate: particle 0 drifts to box+0.2 (pre-wrap), rebuild, wrap to 0.2
         drifted = positions.copy()
         drifted[0, 0] = box + 0.2
-        bl.rebuild(drifted, topology, _PBCContext(pbc_matrix, pbc_inv), force=True)
+        bl.rebuild(topology, _PBCContext(pbc_matrix, pbc_inv, drifted), force=True)
         wrapped = drifted.copy()
         wrapped[0, 0] = 0.2
-        bl.capture_snapshot((
-            cp.asarray(np.ascontiguousarray(wrapped[:, 0], dtype=np.float32)),
-            cp.asarray(np.ascontiguousarray(wrapped[:, 1], dtype=np.float32)),
-            cp.asarray(np.ascontiguousarray(wrapped[:, 2], dtype=np.float32)),
-        ))
+        bl.capture_snapshot(_PBCContext(pbc_matrix, pbc_inv, wrapped))
 
         # Next step: particle 0 drifts 0.05 from wrapped position
         next_pos = wrapped.copy()
         next_pos[0, 0] = 0.25
-        result = bl.check_rebuild((
-            cp.asarray(np.ascontiguousarray(next_pos[:, 0], dtype=np.float32)),
-            cp.asarray(np.ascontiguousarray(next_pos[:, 1], dtype=np.float32)),
-            cp.asarray(np.ascontiguousarray(next_pos[:, 2], dtype=np.float32)),
-        ))
+        result = bl.check_rebuild(_PBCContext(pbc_matrix, pbc_inv, next_pos))
         assert not result, (
             "check_rebuild false-triggered: snapshot likely holds pre-wrap "
             "position (box+0.2) instead of post-wrap (0.2)"
@@ -738,7 +722,7 @@ class TestCheckRebuild:
         pbc_matrix = _make_pbc(box)
         pbc_inv = np.linalg.inv(pbc_matrix)
         bl = BlockList(cutoff=10.0, skin=2.0)
-        bl.rebuild(positions, topology, _PBCContext(pbc_matrix, pbc_inv), force=True)
+        bl.rebuild(topology, _PBCContext(pbc_matrix, pbc_inv, positions), force=True)
 
         bl.d_rebuild_flag[0] = 0
         assert bl.read_flag_sync() == 0
@@ -753,7 +737,7 @@ class TestCheckRebuild:
         pbc_matrix = _make_pbc(box)
         pbc_inv = np.linalg.inv(pbc_matrix)
         bl = BlockList(cutoff=10.0, skin=2.0)
-        bl.rebuild(positions, topology, _PBCContext(pbc_matrix, pbc_inv), force=True)
+        bl.rebuild(topology, _PBCContext(pbc_matrix, pbc_inv, positions), force=True)
 
         bl.d_rebuild_flag[0] = 1
         bl.reset_flag()
@@ -771,7 +755,7 @@ class TestPostArgsortFusion:
         pbc_matrix = _make_pbc(box)
         pbc_inv = np.linalg.inv(pbc_matrix)
         bl = BlockList(cutoff=10.0, skin=2.0)
-        bl.rebuild(positions, topology, _PBCContext(pbc_matrix, pbc_inv), force=True)
+        bl.rebuild(topology, _PBCContext(pbc_matrix, pbc_inv, positions), force=True)
 
         assert bl.d_raw_order.shape == (n,)
         assert bl.d_pdb_to_sorted.shape == (n,)
@@ -802,7 +786,7 @@ class TestCellProcessingBatch:
         pbc_inv = np.linalg.inv(pbc_matrix)
         bl = BlockList(cutoff=10.0, skin=2.0)
         ctx = _PBCContext(pbc_matrix, pbc_inv, positions)
-        bl.rebuild(positions, topology, ctx, force=True)
+        bl.rebuild(topology, ctx, force=True)
 
         assert bl.num_blocks > 0
         assert bl.d_cell_block_offset is not None
@@ -828,7 +812,7 @@ class TestBlockToCellExpand:
         pbc_matrix = _make_pbc(box)
         pbc_inv = np.linalg.inv(pbc_matrix)
         bl = BlockList(cutoff=10.0, skin=2.0)
-        bl.rebuild(positions, topology, _PBCContext(pbc_matrix, pbc_inv), force=True)
+        bl.rebuild(topology, _PBCContext(pbc_matrix, pbc_inv, positions), force=True)
 
         block_to_cell = cp.asnumpy(bl.d_block_to_cell)
         block_count = cp.asnumpy(bl.d_cell_block_count)

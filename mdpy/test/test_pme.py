@@ -22,13 +22,18 @@ class _PBCContext:
     """Minimal stand-in exposing d_pbc_matrix/d_pbc_inv for BlockList.rebuild,
     which now reads PBC from a GPUContext."""
 
-    def __init__(self, pbc_matrix, pbc_inv):
+    def __init__(self, pbc_matrix, pbc_inv, positions=None):
         self.d_pbc_matrix = cp.asarray(
             np.ascontiguousarray(pbc_matrix, dtype=np.float32).ravel()
         )
         self.d_pbc_inv = cp.asarray(
             np.ascontiguousarray(pbc_inv, dtype=np.float32).ravel()
         )
+        if positions is not None:
+            pos = np.asarray(positions, dtype=np.float32)
+            self.d_positions_x = cp.asarray(pos[:, 0])
+            self.d_positions_y = cp.asarray(pos[:, 1])
+            self.d_positions_z = cp.asarray(pos[:, 2])
 
 
 class TestBSplineWeights:
@@ -117,7 +122,7 @@ class TestCellBasedChargeSpreading:
         pbc_inv = np.linalg.inv(pbc)
         positions = np.stack([pos_x, pos_y, pos_z], axis=1).astype(np.float64)
         topo = type('T', (), {'num_particles': N, 'particle_type_indices': np.zeros(N, dtype=np.int32)})()
-        bl.rebuild(positions, topo, _PBCContext(pbc, pbc_inv), force=True)
+        bl.rebuild(topo, _PBCContext(pbc, pbc_inv, positions), force=True)
 
         subgrid_dx = -(-grid_x // bl.num_cells_x) + 2 * order
         subgrid_dy = -(-grid_y // bl.num_cells_y) + 2 * order
@@ -232,7 +237,7 @@ class TestForceGathering:
         positions = np.stack([pos_x, pos_y, pos_z], axis=1).astype(np.float64)
         topo = type('T', (), {'num_particles': N, 'particle_type_indices': np.zeros(N, dtype=np.int32)})()
         bl = BlockList(cutoff=12.0, skin=1.0)
-        bl.rebuild(positions, topo, _PBCContext(pbc, pbc_inv), force=True)
+        bl.rebuild(topo, _PBCContext(pbc, pbc_inv, positions), force=True)
         subgrid_dx = -(-grid_x // bl.num_cells_x) + 2 * order
         subgrid_dy = -(-grid_y // bl.num_cells_y) + 2 * order
         subgrid_dz = -(-grid_z // bl.num_cells_z) + 2 * order
@@ -326,7 +331,7 @@ class TestPMEReciprocalForce:
         pbc_64 = np.asarray(pbc, dtype=np.float64).reshape(3, 3)
         pbc_inv = np.linalg.inv(pbc_64)
         bl = BlockList(cutoff=cutoff, skin=1.0)
-        bl.rebuild(pos.astype(np.float64), topo, _PBCContext(pbc_64, pbc_inv), force=True)
+        bl.rebuild(topo, _PBCContext(pbc_64, pbc_inv, pos.astype(np.float64)), force=True)
         return bl
 
     def test_nonzero_energy_and_forces(self):
@@ -742,7 +747,7 @@ class TestBilateralPaddingUnwrapped:
         pbc_inv = np.linalg.inv(pbc)
 
         bl = BlockList(cutoff=cutoff, skin=skin)
-        bl.rebuild(positions, topo, _PBCContext(pbc, pbc_inv), force=True)
+        bl.rebuild(topo, _PBCContext(pbc, pbc_inv, positions), force=True)
         subgrid_dx = -(-grid_x // bl.num_cells_x) + 2 * order
         subgrid_dy = -(-grid_y // bl.num_cells_y) + 2 * order
         subgrid_dz = -(-grid_z // bl.num_cells_z) + 2 * order
@@ -809,7 +814,7 @@ class TestBilateralPaddingUnwrapped:
         pbc = np.eye(3, dtype=np.float64) * box
         pbc_inv = np.linalg.inv(pbc)
         bl = BlockList(cutoff=cutoff, skin=skin)
-        bl.rebuild(positions, topo, _PBCContext(pbc, pbc_inv), force=True)
+        bl.rebuild(topo, _PBCContext(pbc, pbc_inv, positions), force=True)
         subgrid_dx = -(-grid_x // bl.num_cells_x) + 2 * order
         subgrid_dy = -(-grid_y // bl.num_cells_y) + 2 * order
         subgrid_dz = -(-grid_z // bl.num_cells_z) + 2 * order
