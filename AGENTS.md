@@ -136,8 +136,8 @@ The following functions — and every function they call directly or indirectly 
 |-----|---------|---------------|
 | `System.upload_positions(positions)` | — | CPU→GPU upload of `(N,3)` array |
 | `System.upload_velocities(velocities)` | — | CPU→GPU upload of `(N,3)` array |
-| `System.dump_state()` | `(positions, velocities)` as numpy arrays | `download_positions()` + `download_velocities()` |
-| `System.dump_forces()` | `forces` as `(N,3)` numpy array | `download_forces()` |
+| `System.dump_state()` | `(positions, velocities)` as numpy arrays, **PDB order** (no inverse permute) | `download_positions()` + `download_velocities()` |
+| `System.dump_forces()` | `forces` as `(N,3)` numpy array, **PDB order** (no inverse permute) | `download_forces()` |
 | `System.dump_energy()` | `dict[str, float]` of per-term energies | `cp.asnumpy(d_energy_accumulator)` |
 
 There are no `potential_energy` or `energies` properties on System. Energy is not "queryable state" — it is "output you explicitly request". Callers who need state during a loop collect it at explicit checkpoints:
@@ -161,41 +161,43 @@ for i in range(10000):
 
 Each class does exactly one thing. This is the architectural soul of mdpy.
 
-### BlockList — spatial partitioning only
+### BlockList — spatial partitioning + block-ordered data services
 
-BlockList provides **mapping** — it answers "which atoms are near which atoms". It owns:
+BlockList provides **mapping** — it answers "which atoms are near which atoms" — AND owns the derived block-ordered data buffer that force kernels read. It owns:
 
 - Spatial sort indices (`d_raw_order`, `d_pdb_to_sorted`, `d_sorted_to_pdb`)
-- Block structure (`d_block_atoms`, `d_block_center`, `d_block_size`)
+- Block structure with `d_block_atoms` (now **pdb_id-keyed**, not sorted_id-keyed), `d_block_center`, `d_block_size`
 - Neighbor pair maps (`d_block_pairs`, exclusion/main classifications)
-- Exclusion and scaling masks (`d_excl_offset`/`d_excl_neighbors`/`d_excl_scale`)
+- Exclusion and scaling masks built **from PDB-order pairs** via `build_csr_from_pairs_gpu` (`d_excl_offset`/`d_excl_neighbors`/`d_excl_scale`) — no permutation of input pairs
 - Classified block-pair arrays for force kernels (`d_classify_excl_counter`, `d_classify_main_counter`)
+- Block-ordered SoA data buffer (`d_sorted_data`) refreshed every step via `refresh_sorted_data(gpu_context)` — gathers PDB-order positions+charges into a padded, warp-aligned layout that force kernels read
 
 What BlockList does NOT do:
-- Sort any state arrays (positions, velocities, forces) — that's GPUContext's job
-- Sort any force-term data (parameters, charges, position_charge) — that's each force term's job
+- Sort any state arrays (positions, velocities, forces) — GPUContext holds them permanently in PDB order
+- Sort any force-term parameter data — force terms keep PDB-order params
 - Compute forces or energies
 
-### GPUContext — state array owner and sorter
+### GPUContext — pure PDB-order state storage
 
-GPUContext owns all per-particle state arrays (\(x\), \(y\), \(z\) for positions, velocities, forces, prev_positions, masses, charges). When BlockList rebuilds and produces a new sort order, GPUContext executes the permutation of all owned arrays via `permute_state_arrays()`.
+GPUContext owns all per-particle state arrays (\(x\), \(y\), \(z\) for positions, velocities, forces, prev_positions, masses, charges) — **ALL permanently in PDB order**. There is no sorted-atom-id storage and no permutation machinery.
 
 What GPUContext does NOT do:
 - Build spatial neighbor lists
 - Compute forces
-- Sort force-term-specific data
+- Permute state arrays (no `permute_to_sorted` / `permute_state_arrays` / `permute_from_sorted` — all removed)
+- Sort force-term-specific buffers
 
-### Force Terms — sort their own data
+### Force Terms — keep PDB-order parameters
 
-Each `ForceTerm` owns its own parameter arrays and working buffers. When BlockList rebuilds:
+Each `ForceTerm` owns its own parameter arrays in **PDB order**. They no longer sort/permute their data on rebuild:
 
-- **BondedForce**: remaps its own atom index arrays via `remap_indices_gpu(d_remap, d_rebuild_flag)`, reads sorted positions directly from GPUContext (indices are already remapped to sorted order)
-- **NonbondedForce**: permutes its own per-particle arrays using GPUContext's `permute_to_sorted()`, then packs its own sorted position_charge buffer via `pack_sorted_position_charge_kernel` using BlockList's `d_block_atoms`
+- **BondedForce**: atom indices stay PDB order (no `remap_indices_gpu`, no `bind_sorted`); reads PDB-order positions directly from GPUContext
+- **NonbondedForce**: reads block-ordered positions+charges from `block_list.d_sorted_data`; per-particle props stay PDB order; `post_rebuild_hook()` re-gathers the block-ordered per-particle props when the block list rebuilds (the only force term with rebuild work)
 
 This means:
-- A new force term that needs sorted data MUST implement its own sorting logic
-- GPUContext provides permutation utilities (`permute_to_sorted`, `permute_state_arrays`, `permute_from_sorted`) but does NOT know about force-term-specific buffers
-- BlockList tells the system the sort order; it does not apply it to anything
+- A new force term that needs block-ordered data reads from `block_list.d_sorted_data` — it does NOT own the sort
+- GPUContext has no permutation utilities; BlockList is the sole owner of the block-ordered buffer
+- `System.compute_forces()` calls `block_list.refresh_sorted_data(gpu)` once before any force term runs
 
 ## Force System: Expressions, Not Subclasses
 
@@ -322,7 +324,7 @@ mdpy is a pure-Python MD engine. All GPU kernels are written through Python tool
 
 Both `cupy.RawKernel` and `numba.cuda.jit` are acceptable:
 
-- **`cupy.RawKernel`**: CUDA C strings compiled at runtime. Used for nonbonded force (expression transpiler generates CUDA C), block list kernels, PBC wrapping, and permutation kernels. Prefer when you need fine control over register usage, shared memory, or warp intrinsics.
+- **`cupy.RawKernel`**: CUDA C strings compiled at runtime. Used for nonbonded force (expression transpiler generates CUDA C), block list kernels (including the `refresh_sorted_data` gather), and PBC wrapping. Prefer when you need fine control over register usage, shared memory, or warp intrinsics.
 - **`numba.cuda.jit`**: Python-to-PTX compilation. Used for integrators (Verlet, Langevin BAOAB). Prefer when readability of Python kernel code matters more than micro-optimization.
 
 No hard rule about which to use. Choose based on the kernel's needs: `cupy.RawKernel` for shared memory / warp-level control, `numba.cuda.jit` for simplicity and readability. The expression transpiler (bonded and nonbonded) targets CUDA C, so those force kernels are inherently `cupy.RawKernel`.
@@ -509,23 +511,29 @@ Data flow:
   PSFParser + PDBParser + CharmmTopparParser
     -> create_parameter_table()
     -> System(topology)          # pbc uploaded separately via upload_pbc()
-       -> GPUContext (owns all d_positions*, d_velocities*, d_forces*, d_masses*, d_charges*)
-       -> BlockList (spatial sort + block structure + exclusion masks)
-       -> ForceTerms: BondedForce + NonbondedForce + PMEReciprocalForce (each owns its own params)
+       -> GPUContext (pure PDB-order storage: d_positions*, d_velocities*, d_forces*, d_masses*, d_charges*)
+       -> BlockList (spatial sort + block structure + exclusion masks + d_sorted_data block-ordered buffer)
+       -> ForceTerms: BondedForce + NonbondedForce + PMEReciprocalForce (each owns PDB-order params)
        -> Integrator: Verlet / Langevin BAOAB
     -> GPU-only simulation loop
-       -> dump_state() / dump_energy() only when output needed
+       -> dump_state() / dump_energy() only when output needed (PDB order, direct)
 
-On block list rebuild:
-  1. BlockList.rebuild() sorts positions via Morton code → produces d_raw_order
-  2. System._permute_all_arrays() → GPUContext permutes all state arrays
-  3. BlockList.build_block_pairs() → builds neighbor pair maps and masks
-  4. Per force term: bind_sorted() → each term sorts its own data
+Per-step flow inside System.compute_forces():
+  1. zero_forces()
+  2. block_list.refresh_sorted_data(gpu) — gathers PDB-order positions+charges into block-ordered SoA
+  3. term.compute() for each force term
+
+On block list rebuild (triggered by displacement > skin/2):
+  1. BlockList.rebuild() → Morton sort → produces d_block_atoms (pdb_id-keyed)
+  2. GPUContext.wrap_positions_with_prev_correction()
+  3. BlockList.capture_snapshot()
+  4. BlockList.build_block_pairs() → neighbor pair maps + CSR from PDB-order exclusion pairs
+  5. Per force term: post_rebuild_hook() — only NonbondedForce re-gathers block-ordered per-particle props
 ```
 
-- **GPUContext**: owns all `d_*` state arrays; provides permutation kernels for sorting; handles PBC wrapping
-- **BlockList**: spatial sort (Morton code) → blocks → AABB overlap → block pairs → exclusion masks. Provides mappings only — never sorts state arrays or force-term data
-- **Force terms**: each owns its own parameter arrays. `bind_sorted()` sorts per-term data using GPUContext's permutation utilities and BlockList's block structure
+- **GPUContext**: owns all `d_*` state arrays **permanently in PDB order**; provides PBC wrapping only (no permutation kernels)
+- **BlockList**: spatial sort (Morton code) → pdb_id-keyed blocks → AABB overlap → block pairs → CSR masks. Owns `d_sorted_data` block-ordered buffer, refreshed every step via `refresh_sorted_data()`. Never sorts state arrays or force-term params.
+- **Force terms**: each owns PDB-order parameter arrays. Only `NonbondedForce` has a `post_rebuild_hook` to re-gather block-ordered per-particle props.
 - **Unit system**: internal units only — Å / dalton / fs / e / K; `mdpy.unit` restricted to I/O layer
 - **Precision**: arrays use `env.NUMPY_FLOAT` (float32) / `env.NUMPY_INT` (int32)
 
@@ -534,14 +542,14 @@ On block list rebuild:
 | File | Responsibility |
 |------|---------------|
 | `mdpy/environment.py` | Precision config (`env.NUMPY_FLOAT`, `env.NUMPY_INT`); platform always CUDA |
-| `mdpy/system.py` | Simulation driver with public atomic operations: `upload_positions(array)`, `upload_velocities(array)`, `update_neighbor_list()`, `compute_forces()`, `dump_state()`, `dump_forces()`, `dump_energy()` |
-| `mdpy/core/gpu_context.py` | GPU memory manager — owns all `d_*` state arrays, permutation kernels, PBC wrap |
-| `mdpy/core/block_list.py` | Block-based neighbor list — GPU kernels (Morton/AABB/block-pair-find/masks); provides mapping only |
+| `mdpy/system.py` | Simulation driver with public atomic operations: `upload_positions(array)`, `upload_velocities(array)`, `update_neighbor_list()`, `compute_forces()` (calls `block_list.refresh_sorted_data` first), `dump_state()`/`dump_forces()` (direct PDB-order returns), `dump_energy()` |
+| `mdpy/core/gpu_context.py` | Pure PDB-order GPU memory manager — owns all `d_*` state arrays, PBC wrap; no permutation kernels |
+| `mdpy/core/block_list.py` | Block-based neighbor list + block-ordered data services — GPU kernels (Morton/AABB/block-pair-find/CSR masks); owns `d_block_atoms` (pdb_id-keyed), `d_sorted_data` block-ordered buffer, `refresh_sorted_data()`, `build_csr_from_pairs_gpu` |
 | `mdpy/core/topology.py` | Molecular topology (particles/bonds/angles/dihedrals/impropers), `join()` → compact arrays |
 | `mdpy/core/parameter_table.py` | ParameterTable with per-type and per-atom parameter dicts |
 | `mdpy/force/force_term.py` | `ForceTerm` base class — `compute(gpu_context, block_list)` |
-| `mdpy/force/bonded_force.py` | Single CuPy RawKernel (bond/angle/dihedral/improper); owns indices, remaps via `d_remap` |
-| `mdpy/force/nonbonded_force.py` | CuPy RawKernel (self/cross block pair) + expression transpiler; owns sorted position_charge, params |
+| `mdpy/force/bonded_force.py` | Single CuPy RawKernel (bond/angle/dihedral/improper); PDB-order indices (no remap) |
+| `mdpy/force/nonbonded_force.py` | CuPy RawKernel (self/cross block pair) + expression transpiler; reads block-ordered posq from `block_list.d_sorted_data`; PDB-order params + `post_rebuild_hook` |
 | `mdpy/force/force_group.py` | Homogeneous force composition; fuses nonbonded expressions into one kernel via `+` |
 | `mdpy/force/primitives.py` | `param`/`scalar` markers + `distance`/`angle`/`dihedral` geometry helpers |
 | `mdpy/force/ad_engine.py` | `ForwardADEngine` — forward-mode AD over a tape for CUDA gradient generation |
@@ -593,6 +601,8 @@ Scalar reads for kernel launch sizing and control flow. These are acceptable per
 | `environment.py` | `set_platform()`, `'CPU'` option, `supported_platforms` — platform is always CUDA |
 
 > Note: the previous P2 item "`nonbonded_force.py:672` `getDeviceProperties` queried every compute call" is resolved — device properties are now cached once in `_lazy_compile()` (`nonbonded_force.py:502`).
+>
+> Note: the previous P2 items "`bonded_force.py` `_REMAP_INDICES_KERNEL` / `remap_indices_gpu`" and "`block_list.py` `permute_exclusion_pairs_gpu`" are resolved — both were removed in the PDB-order primary storage refactor. Bonded indices stay PDB order; the exclusion CSR is now built from PDB-order pairs directly by `build_csr_from_pairs_gpu`.
 
 ### P3 — Performance Optimizations
 
