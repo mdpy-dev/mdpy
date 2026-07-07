@@ -31,9 +31,13 @@ def _make_pbc(box):
 
 class _PBCContext:
     """Minimal stand-in exposing d_pbc_matrix/d_pbc_inv for BlockList.rebuild
-    and build_block_pairs, which now read PBC from a GPUContext."""
+    and build_block_pairs, which now read PBC from a GPUContext.
 
-    def __init__(self, pbc_matrix, pbc_inv, positions=None):
+    Also exposes d_positions_x/y/z, d_charges, d_types so that
+    BlockList.refresh_sorted_posq / refresh_sorted_types can be tested
+    without constructing a full GPUContext."""
+
+    def __init__(self, pbc_matrix, pbc_inv, positions=None, charges=None, types=None):
         self.d_pbc_matrix = cp.asarray(
             np.ascontiguousarray(pbc_matrix, dtype=np.float32).ravel()
         )
@@ -45,6 +49,10 @@ class _PBCContext:
             self.d_positions_x = cp.asarray(pos[:, 0])
             self.d_positions_y = cp.asarray(pos[:, 1])
             self.d_positions_z = cp.asarray(pos[:, 2])
+        if charges is not None:
+            self.d_charges = cp.asarray(np.asarray(charges, dtype=np.float32))
+        if types is not None:
+            self.d_types = cp.asarray(np.asarray(types, dtype=np.int32))
 
 
 def _rebuild_and_build_block_pairs(n, box=50.0, cutoff=10.0, skin=2.0, seed=42, positions=None):
@@ -1469,6 +1477,89 @@ class TestPackPosq:
             cp.zeros(1, dtype=np.float32),
         )
         assert result.size == 0
+
+
+class TestRefreshSortedPosq:
+    """Verify refresh_sorted_posq gathers pos+charge from gpu_context into
+    block-ordered float4 buffer owned by BlockList."""
+
+    def test_refresh_matches_block_atoms_indexing(self):
+        n = 8
+        box = 50.0
+        positions = np.zeros((n, 3), dtype=np.float32)
+        positions[:, 0] = np.arange(n, dtype=np.float32) + 1.0
+        positions[:, 1] = np.arange(n, dtype=np.float32) * 10.0 + 10.0
+        positions[:, 2] = np.arange(n, dtype=np.float32) * 100.0 + 100.0
+        charges = np.arange(n, dtype=np.float32) * 0.1 + 0.1
+        bl, *_ = _rebuild_and_build_block_pairs(n, box, cutoff=10.0, skin=2.0)
+        assert bl.num_blocks > 0
+
+        ctx = _PBCContext(
+            _make_pbc(box),
+            np.linalg.inv(_make_pbc(box)),
+            positions=positions,
+            charges=charges,
+        )
+        bl.refresh_sorted_posq(ctx)
+
+        posq = bl.d_sorted_posq
+        assert posq is not None
+        total_slots = bl.num_blocks * BLOCK_SIZE
+        assert posq.size == total_slots * 4
+
+        posq_np = cp.asnumpy(posq).reshape(-1, 4)
+        block_atoms_np = cp.asnumpy(bl.d_block_atoms)
+        for slot in range(total_slots):
+            atom_id = block_atoms_np[slot]
+            if 0 <= atom_id < n:
+                assert posq_np[slot, 0] == pytest.approx(positions[atom_id, 0], abs=1e-6), (
+                    f"slot {slot} (atom {atom_id}): x mismatch"
+                )
+                assert posq_np[slot, 1] == pytest.approx(positions[atom_id, 1], abs=1e-6), (
+                    f"slot {slot} (atom {atom_id}): y mismatch"
+                )
+                assert posq_np[slot, 2] == pytest.approx(positions[atom_id, 2], abs=1e-6), (
+                    f"slot {slot} (atom {atom_id}): z mismatch"
+                )
+                assert posq_np[slot, 3] == pytest.approx(charges[atom_id], abs=1e-6), (
+                    f"slot {slot} (atom {atom_id}): charge mismatch"
+                )
+            else:
+                assert posq_np[slot, 0] == 0.0, f"padding slot {slot}: x not zero"
+                assert posq_np[slot, 1] == 0.0, f"padding slot {slot}: y not zero"
+                assert posq_np[slot, 2] == 0.0, f"padding slot {slot}: z not zero"
+                assert posq_np[slot, 3] == 0.0, f"padding slot {slot}: charge not zero"
+
+    def test_refresh_reuses_buffer_across_calls(self):
+        n = 8
+        box = 50.0
+        positions = np.zeros((n, 3), dtype=np.float32)
+        charges = np.zeros(n, dtype=np.float32)
+        bl, *_ = _rebuild_and_build_block_pairs(n, box, cutoff=10.0, skin=2.0)
+        ctx = _PBCContext(
+            _make_pbc(box),
+            np.linalg.inv(_make_pbc(box)),
+            positions=positions,
+            charges=charges,
+        )
+        bl.refresh_sorted_posq(ctx)
+        first = bl.d_sorted_posq
+        bl.refresh_sorted_posq(ctx)
+        second = bl.d_sorted_posq
+        # Grow-only reuse: same buffer object when num_blocks unchanged.
+        assert first is second or first.data.ptr == second.data.ptr
+
+    def test_refresh_with_no_blocks_is_noop(self):
+        bl = BlockList(cutoff=10.0, skin=2.0)
+        ctx = _PBCContext(
+            _make_pbc(50.0),
+            np.linalg.inv(_make_pbc(50.0)),
+            positions=np.zeros((1, 3), dtype=np.float32),
+            charges=np.zeros(1, dtype=np.float32),
+        )
+        bl.refresh_sorted_posq(ctx)
+        # num_blocks == 0 -> d_sorted_posq stays None (no allocation).
+        assert bl.d_sorted_posq is None or bl.d_sorted_posq.size == 0
 
 
 class TestGatherSorted:

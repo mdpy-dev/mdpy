@@ -897,6 +897,12 @@ class BlockList:
             self._pinned_int_buf.ptr
         )
 
+        # Block-ordered derived buffers. Owned by BlockList because the
+        # gather uses self.d_block_atoms (block structure). Refreshed at
+        # distinct cadences (see refresh_sorted_posq / refresh_sorted_types).
+        self._d_sorted_posq = None      # [x,y,z,q] per slot, float32, per-step
+        self._d_sorted_types = None     # atom types, int32, per-rebuild
+
         self._block_atoms_np = None
         self._block_pairs_np = None
         self._interacting_atoms_np = None
@@ -1545,6 +1551,58 @@ class BlockList:
         )
         return dst
 
+    def refresh_sorted_posq(self, gpu_context):
+        """Refresh self._d_sorted_posq from gpu_context's PDB-order positions+charges.
+
+        Per-step refresh: called by System.compute_forces() every step
+        because positions change every integrator step. Gathers PDB-order
+        (d_positions_x/y/z, d_charges) through self.d_block_atoms into a
+        padded, warp-aligned float4 [x,y,z,q] buffer that the nonbonded
+        kernel reads for coalesced access. Same-size buffer reuse.
+        """
+        if self.num_blocks == 0:
+            self._d_sorted_posq = None
+            return
+        self._ensure_kernels()
+        total_slots = self.num_blocks * BLOCK_SIZE
+        if self._d_sorted_posq is None or self._d_sorted_posq.size != total_slots * 4:
+            self._d_sorted_posq = cp.empty(total_slots * 4, dtype=env.NUMPY_FLOAT)
+        threads_per_block = 256
+        grid = ((total_slots + threads_per_block - 1) // threads_per_block,)
+        self._kernels["pack_sorted_data"](
+            grid, (threads_per_block,),
+            (
+                gpu_context.d_positions_x,
+                gpu_context.d_positions_y,
+                gpu_context.d_positions_z,
+                gpu_context.d_charges,
+                self.d_block_atoms,
+                np.int32(gpu_context.d_positions_x.size),
+                np.int32(total_slots),
+                self._d_sorted_posq,
+            ),
+        )
+
+    def refresh_sorted_types(self, gpu_context):
+        """Refresh self._d_sorted_types from gpu_context's PDB-order atom types.
+
+        Per-rebuild refresh: called by System._do_rebuild() because types
+        are static but block membership changes when the block list
+        rebuilds. Thin wrapper around the generic gather_sorted primitive.
+        """
+        self._d_sorted_types = self.gather_sorted(gpu_context.d_types)
+
+    @property
+    def d_sorted_posq(self):
+        """Block-ordered [x,y,z,q] float4 buffer. None until first
+        refresh_sorted_posq call (or when num_blocks == 0)."""
+        return self._d_sorted_posq
+
+    @property
+    def d_sorted_types(self):
+        """Block-ordered atom types (int32). None until first rebuild."""
+        return self._d_sorted_types
+
     def read_flag_sync(self):
         """Read d_rebuild_flag with a GPU sync. Returns 0 or 1."""
         return self._read_device_int(self.d_rebuild_flag)
@@ -1595,4 +1653,6 @@ class BlockList:
         self.d_positions_at_rebuild_x = cp.empty(0, dtype=env.NUMPY_FLOAT)
         self.d_positions_at_rebuild_y = cp.empty(0, dtype=env.NUMPY_FLOAT)
         self.d_positions_at_rebuild_z = cp.empty(0, dtype=env.NUMPY_FLOAT)
+        self._d_sorted_posq = None
+        self._d_sorted_types = None
         self._invalidate_caches()
