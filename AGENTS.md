@@ -192,7 +192,7 @@ What GPUContext does NOT do:
 Each `ForceTerm` owns its own parameter arrays in **PDB order**. They no longer sort/permute their data on rebuild:
 
 - **BondedForce**: atom indices stay PDB order (no `remap_indices_gpu`, no `bind_sorted`); reads PDB-order positions directly from GPUContext
-- **NonbondedForce**: reads block-ordered positions+charges from `block_list.d_sorted_data`; per-particle props stay PDB order; `post_rebuild_hook()` re-gathers the block-ordered per-particle props when the block list rebuilds (the only force term with rebuild work)
+- **NonbondedForce**: reads block-ordered positions+charges from `block_list.d_sorted_data`; per-particle props stay PDB order; `post_rebuild_hook()` re-gathers the block-ordered per-particle props when the block list rebuilds (the only force term with rebuild work). Force writes go to private slot-indexed buffers (`_d_sorted_fx/y/z`) for coalesced atomicAdd within warps; a one-pass add kernel accumulates these into PDB-order `d_forces_x/y/z` at the end of `compute()`. This is entirely internal — `System` and other force terms are unaware of the buffers.
 
 This means:
 - A new force term that needs block-ordered data reads from `block_list.d_sorted_data` — it does NOT own the sort
