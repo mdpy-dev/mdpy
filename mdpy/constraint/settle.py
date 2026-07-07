@@ -1,10 +1,7 @@
 import cupy as cp
 import numpy as np
 from .constraint_base import ConstraintBase
-from mdpy.core.kernel_preambles import (
-    PBC_MIN_IMAGE_DEVICE_FN,
-    REMAP_INDICES_KERNEL_SRC as _REMAP_INDICES_KERNEL,
-)
+from mdpy.core.kernel_preambles import PBC_MIN_IMAGE_DEVICE_FN
 
 # SETTLE constraint algorithm for rigid water (Miyamoto & Kollman, J Comp Chem 1992).
 #
@@ -193,14 +190,6 @@ void settle_kernel(
 class SettleConstraint(ConstraintBase):
     name = 'settle'
 
-    _remap_kernel = None
-
-    @classmethod
-    def _get_remap_kernel(cls):
-        if cls._remap_kernel is None:
-            cls._remap_kernel = cp.RawKernel(_REMAP_INDICES_KERNEL, "remap_indices_kernel")
-        return cls._remap_kernel
-
     def __init__(self, water_triplets, masses, dOH=1.0, dHH=1.63298):
         self.num_waters = len(water_triplets)
         self.dOH = dOH
@@ -248,11 +237,3 @@ class SettleConstraint(ConstraintBase):
             np.float32(self.inv_dHH),
             np.float32(time_step),
         ))
-
-    def remap_indices_gpu(self, d_remap):
-        if self.num_waters == 0:
-            return
-        kernel = self._get_remap_kernel()
-        threads_per_block = 256
-        grid = ((self._n_idx + threads_per_block - 1) // threads_per_block,)
-        kernel(grid, (threads_per_block,), (d_remap, self.d_water_idx, np.int32(self._n_idx)))

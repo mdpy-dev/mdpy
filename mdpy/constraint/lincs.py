@@ -1,10 +1,7 @@
 import cupy as cp
 import numpy as np
 from .constraint_base import ConstraintBase
-from mdpy.core.kernel_preambles import (
-    PBC_MIN_IMAGE_DEVICE_FN,
-    REMAP_INDICES_KERNEL_SRC as _REMAP_INDICES_KERNEL,
-)
+from mdpy.core.kernel_preambles import PBC_MIN_IMAGE_DEVICE_FN
 
 # LINCS constraint algorithm (Hess et al., J Chem Theory Comput 2008).
 #
@@ -316,14 +313,6 @@ def _build_coupling_data(constraint_pairs, masses, target_lengths, block_size=25
 class LincsConstraint(ConstraintBase):
     name = 'lincs'
 
-    _remap_kernel = None
-
-    @classmethod
-    def _get_remap_kernel(cls):
-        if cls._remap_kernel is None:
-            cls._remap_kernel = cp.RawKernel(_REMAP_INDICES_KERNEL, "remap_indices_kernel")
-        return cls._remap_kernel
-
     def __init__(self, constraint_pairs, target_lengths, masses,
                  expansion_order=4, num_iterations=1):
         self.num_constraints = len(constraint_pairs)
@@ -381,12 +370,3 @@ class LincsConstraint(ConstraintBase):
             np.int32(self.expansion_order),
             np.int32(self.num_iterations),
         ), shared_mem=shared_mem)
-
-    def remap_indices_gpu(self, d_remap):
-        if self.num_constraints == 0:
-            return
-        kernel = self._get_remap_kernel()
-        threads_per_block = 256
-        n = self.d_constraint_indices.size
-        grid = ((n + threads_per_block - 1) // threads_per_block,)
-        kernel(grid, (threads_per_block,), (d_remap, self.d_constraint_indices, np.int32(n)))
