@@ -6,8 +6,6 @@ optimization applies everywhere at once.
 
 Consumers:
     PBC_MIN_IMAGE_DEVICE_FN   — constraint/lincs.py, constraint/settle.py
-    REMAP_INDICES_KERNEL_SRC  — force/_utils.py, constraint/settle.py,
-                                constraint/lincs.py
 """
 
 PBC_MIN_IMAGE_DEVICE_FN = r"""
@@ -23,22 +21,6 @@ __device__ __forceinline__ void pbc_min_image(
     dx = fx*pbc_matrix[0] + fy*pbc_matrix[3] + fz*pbc_matrix[6];
     dy = fx*pbc_matrix[1] + fy*pbc_matrix[4] + fz*pbc_matrix[7];
     dz = fx*pbc_matrix[2] + fy*pbc_matrix[5] + fz*pbc_matrix[8];
-}
-"""
-
-REMAP_INDICES_KERNEL_SRC = r"""
-extern "C" __global__
-void remap_indices_kernel(
-    const int* __restrict__ d_remap,
-    int* __restrict__ d_indices,
-    int num_indices
-) {
-    int i = blockIdx.x * blockDim.x + threadIdx.x;
-    if (i >= num_indices) return;
-    int val = d_indices[i];
-    if (val >= 0) {
-        d_indices[i] = d_remap[val];
-    }
 }
 """
 

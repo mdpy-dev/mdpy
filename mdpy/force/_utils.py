@@ -1,7 +1,5 @@
 import re
 
-from mdpy.core.kernel_preambles import REMAP_INDICES_KERNEL_SRC as _REMAP_INDICES_KERNEL
-
 _MATH_FUNCTIONS = {
     'sqrt': 'sqrtf', 'sin': 'sinf', 'cos': 'cosf',
     'exp': 'expf', 'log': 'logf', 'abs': 'fabsf',
