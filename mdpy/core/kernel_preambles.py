@@ -41,3 +41,16 @@ void remap_indices_kernel(
     }
 }
 """
+
+FILL_CONSTANT_INT32_KERNEL_SRC = r"""
+extern "C" __global__
+void fill_constant_int32_kernel(
+    int* __restrict__ out,
+    int number_elements,
+    int value
+) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= number_elements) return;
+    out[i] = value;
+}
+"""

@@ -1,6 +1,6 @@
 import numpy as np
 import cupy as cp
-from mdpy.core.fill_kernel import fill_constant
+from mdpy.core.block_list import _fill_constant as fill_constant
 
 
 class TestFillConstant:
