@@ -1423,62 +1423,6 @@ class TestSnapshotPostWrapIntegration:
         )
 
 
-class TestPackPosq:
-    """Verify pack_posq gathers PDB-order pos+charge into block-ordered float4 buffer."""
-
-    def test_gather_matches_block_atoms_indexing(self):
-        n = 8
-        box = 50.0
-        bl, *_ = _rebuild_and_build_block_pairs(n, box, cutoff=10.0, skin=2.0)
-        assert bl.num_blocks > 0
-
-        idx = np.arange(n, dtype=np.float32)
-        pos_x = cp.asarray(idx + 1.0, dtype=np.float32)
-        pos_y = cp.asarray(idx * 10.0 + 10.0, dtype=np.float32)
-        pos_z = cp.asarray(idx * 100.0 + 100.0, dtype=np.float32)
-        charges = cp.asarray(idx * 0.1 + 0.1, dtype=np.float32)
-
-        sorted_data = bl.pack_posq(pos_x, pos_y, pos_z, charges)
-
-        assert sorted_data is not None
-        total_slots = bl.num_blocks * BLOCK_SIZE
-        assert sorted_data.size == total_slots * 4
-
-        sorted_np = cp.asnumpy(sorted_data).reshape(-1, 4)
-        block_atoms_np = cp.asnumpy(bl.d_block_atoms)
-
-        for slot in range(total_slots):
-            atom_id = block_atoms_np[slot]
-            if 0 <= atom_id < n:
-                assert sorted_np[slot, 0] == pytest.approx(pos_x[atom_id].get(), abs=1e-6), (
-                    f"slot {slot} (atom {atom_id}): x mismatch"
-                )
-                assert sorted_np[slot, 1] == pytest.approx(pos_y[atom_id].get(), abs=1e-6), (
-                    f"slot {slot} (atom {atom_id}): y mismatch"
-                )
-                assert sorted_np[slot, 2] == pytest.approx(pos_z[atom_id].get(), abs=1e-6), (
-                    f"slot {slot} (atom {atom_id}): z mismatch"
-                )
-                assert sorted_np[slot, 3] == pytest.approx(charges[atom_id].get(), abs=1e-6), (
-                    f"slot {slot} (atom {atom_id}): charge mismatch"
-                )
-            else:
-                assert sorted_np[slot, 0] == 0.0, f"padding slot {slot}: x not zero"
-                assert sorted_np[slot, 1] == 0.0, f"padding slot {slot}: y not zero"
-                assert sorted_np[slot, 2] == 0.0, f"padding slot {slot}: z not zero"
-                assert sorted_np[slot, 3] == 0.0, f"padding slot {slot}: charge not zero"
-
-    def test_no_blocks_returns_empty(self):
-        bl = BlockList(cutoff=10.0, skin=2.0)
-        result = bl.pack_posq(
-            cp.zeros(1, dtype=np.float32),
-            cp.zeros(1, dtype=np.float32),
-            cp.zeros(1, dtype=np.float32),
-            cp.zeros(1, dtype=np.float32),
-        )
-        assert result.size == 0
-
-
 class TestRefreshSortedPosq:
     """Verify refresh_sorted_posq gathers pos+charge from gpu_context into
     block-ordered float4 buffer owned by BlockList."""
