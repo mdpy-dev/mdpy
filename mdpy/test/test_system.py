@@ -11,6 +11,10 @@ from mdpy.force.factories.charmm import create_bonded_group
 from mdpy.system import System
 from mdpy.integrator.verlet import VerletIntegrator
 from mdpy.integrator.langevin import LangevinBAOABIntegrator
+from mdpy.force.nonbonded_transpiler import nonbonded_expression
+from mdpy.force.markers import param
+from mdpy.force.expressions.geometry import distance
+from mdpy.force.nonbonded_force import NonbondedForce
 
 
 def _make_system(topology, pbc_matrix, cutoff=12.0, skin=None,
@@ -189,6 +193,81 @@ class TestSystem:
 
         forces = system.dump_forces()
         assert not np.all(forces == 0)
+
+    def test_nonbonded_forces_match_bruteforce(self):
+        """Nonbonded forces from full pipeline must match O(N²) brute force."""
+
+        @nonbonded_expression
+        def lj_only(pos1, pos2, sigma=param, epsilon=param):
+            r = distance(pos1, pos2)
+            sr = sigma / r
+            sr6 = sr * sr * sr * sr * sr * sr
+            return 4.0 * epsilon * (sr6 * sr6 - sr6)
+
+        # 8 atoms in a compact box — ensures block pairs exist
+        builder = Builder()
+        builder.set_particles(
+            masses=np.full(8, 12.0, dtype=env.NUMPY_FLOAT),
+            charges=np.zeros(8, dtype=env.NUMPY_FLOAT),
+            particle_type_indices=np.zeros(8, dtype=env.NUMPY_INT),
+        )
+        topology, _ = builder.build()
+
+        sigma_matrix = np.full((1, 1), 3.4, dtype=np.float32)
+        epsilon_matrix = np.full((1, 1), 0.1, dtype=np.float32)
+
+        pbc = np.eye(3, dtype=np.float64) * 20.0
+        system = System(topology)
+        system.upload_pbc(pbc)
+
+        nb = NonbondedForce(lj_only, cutoff=8.0)
+        nb.set_pair_parameter('sigma', sigma_matrix)
+        nb.set_pair_parameter('epsilon', epsilon_matrix)
+        system.add_force_term(nb)
+
+        positions = np.array([
+            [1.0, 1.0, 1.0],
+            [2.0, 1.0, 1.0],
+            [1.0, 2.0, 1.0],
+            [2.0, 2.0, 1.0],
+            [1.0, 1.0, 2.0],
+            [2.0, 1.0, 2.0],
+            [1.0, 2.0, 2.0],
+            [2.0, 2.0, 2.0],
+        ], dtype=env.NUMPY_FLOAT)
+        system.upload_positions(positions)
+        system.upload_velocities(np.zeros((8, 3), dtype=env.NUMPY_FLOAT))
+
+        system.update_neighbor_list()
+        system.compute_forces()
+        mdpy_forces = system.dump_forces()
+
+        # Brute-force reference
+        cutoff_sq = 8.0 ** 2
+        ref_forces = np.zeros((8, 3), dtype=np.float64)
+        sigma_val, eps_val = 3.4, 0.1
+        for i in range(8):
+            for j in range(i + 1, 8):
+                dx = positions[j, 0] - positions[i, 0]
+                dy = positions[j, 1] - positions[i, 1]
+                dz = positions[j, 2] - positions[i, 2]
+                r = np.sqrt(dx*dx + dy*dy + dz*dz)
+                if r > 1e-6 and r*r <= cutoff_sq:
+                    sr = sigma_val / r
+                    sr6 = sr**6
+                    f_mag = -4.0 * eps_val * (12 * sr6 * sr6 / r - 6 * sr6 / r)
+                    fx = f_mag * dx / r
+                    fy = f_mag * dy / r
+                    fz = f_mag * dz / r
+                    ref_forces[i, 0] += fx
+                    ref_forces[i, 1] += fy
+                    ref_forces[i, 2] += fz
+                    ref_forces[j, 0] -= fx
+                    ref_forces[j, 1] -= fy
+                    ref_forces[j, 2] -= fz
+
+        np.testing.assert_allclose(mdpy_forces, ref_forces, atol=1e-3,
+                                    err_msg="Nonbonded forces must match brute-force reference")
 
     def test_system_single_step_verlet(self):
         topology, term_params = _build_simple_bond()
