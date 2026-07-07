@@ -72,7 +72,8 @@ class TestKernelAssembly:
         assert 'sorted_charge' not in src
         assert 'd_charge' not in src
         assert 'position_charge_i.w' in src
-        assert 'jcharge[gj]' in src
+        assert 'jdata.w' in src
+        assert 'jcharge' not in src
 
     def test_kernel_has_pair_param_matrices(self):
         energy_cuda, total_expr = _prepare_energy_expression(lj_ad.energy_cuda)

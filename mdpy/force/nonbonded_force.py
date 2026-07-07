@@ -97,7 +97,7 @@ def _assemble_exclusion_kernel(
     load_j_from_array = ""
     for arg_name, base_name in j_props.items():
         if base_name == "charge":
-            load_j_from_array += f"\n            {arg_name} = jcharge[gj];"
+            load_j_from_array += f"\n            {arg_name} = jdata.w;"
         else:
             load_j_from_array += f"\n            {arg_name} = d_{base_name}[gj];"
 
@@ -128,10 +128,7 @@ def _assemble_exclusion_kernel(
     kernel = f"""extern "C" __global__
 void exclusion_block_pair_kernel(
     const float4* __restrict__ sorted_data,
-    const float* __restrict__ jpos_x,
-    const float* __restrict__ jpos_y,
-    const float* __restrict__ jpos_z,
-    const float* __restrict__ jcharge,
+    const int* __restrict__ pdb_to_slot,
     const float* __restrict__ shift_x,
     const float* __restrict__ shift_y,
     const float* __restrict__ shift_z,
@@ -184,9 +181,11 @@ void exclusion_block_pair_kernel(
         float shfl_px = 0.0f, shfl_py = 0.0f, shfl_pz = 0.0f;
 {load_j_init}
         if (gj >= 0 && gj < num_particles) {{
-            shfl_px = jpos_x[gj];
-            shfl_py = jpos_y[gj];
-            shfl_pz = jpos_z[gj];
+            int j_slot = pdb_to_slot[gj];
+            float4 jdata = sorted_data[j_slot];
+            shfl_px = jdata.x;
+            shfl_py = jdata.y;
+            shfl_pz = jdata.z;
         {load_j_from_array}
         }}
         atom_indices_shared[threadIdx.x] = gj;
@@ -384,10 +383,7 @@ class NonbondedForce(ForceTerm):
     def _build_excl_args(self, gpu_context, block_list, compute_energy):
         args = [
             block_list.d_sorted_data,
-            gpu_context.d_positions_x,
-            gpu_context.d_positions_y,
-            gpu_context.d_positions_z,
-            gpu_context.d_charges,
+            block_list.d_pdb_to_slot,
             block_list.d_excl_shift_x,
             block_list.d_excl_shift_y,
             block_list.d_excl_shift_z,
