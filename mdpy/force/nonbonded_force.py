@@ -38,6 +38,30 @@ def _unique_prop_bases(per_particle):
     return list(dict.fromkeys(per_particle.values()))
 
 
+_ADD_SORTED_FORCES_KERNEL_SRC = r"""
+extern "C" __global__
+void add_sorted_forces_kernel(
+    const float* __restrict__ sorted_fx,
+    const float* __restrict__ sorted_fy,
+    const float* __restrict__ sorted_fz,
+    const int* __restrict__ block_atoms,
+    int total_slots,
+    float* __restrict__ pdb_fx,
+    float* __restrict__ pdb_fy,
+    float* __restrict__ pdb_fz
+) {
+    int slot = blockIdx.x * blockDim.x + threadIdx.x;
+    if (slot >= total_slots) return;
+    int pdb_id = block_atoms[slot];
+    if (pdb_id >= 0) {
+        atomicAdd(&pdb_fx[pdb_id], sorted_fx[slot]);
+        atomicAdd(&pdb_fy[pdb_id], sorted_fy[slot]);
+        atomicAdd(&pdb_fz[pdb_id], sorted_fz[slot]);
+    }
+}
+"""
+
+
 def _assemble_exclusion_kernel(
     expr_info, energy_cuda, grad_cuda, radial_force_cuda, total_energy_expr, compute_energy=True
 ):
@@ -298,6 +322,10 @@ class NonbondedForce(ForceTerm):
 
         self._excl_kernel = cp.RawKernel(excl_src, "exclusion_block_pair_kernel")
         self._excl_kernel_fo = cp.RawKernel(excl_src_fo, "exclusion_block_pair_kernel")
+
+        self._add_forces_kernel = cp.RawKernel(
+            _ADD_SORTED_FORCES_KERNEL_SRC, "add_sorted_forces_kernel"
+        )
 
         self._compiled = True
 
