@@ -431,51 +431,6 @@ void find_interacting_blocks_kernel(
 }
 """
 
-_BUILD_REVERSE_COUNT_KERNEL = r"""
-extern "C" __global__
-void build_reverse_count_kernel(
-    const int* __restrict__ exclusion_offset,
-    const int* __restrict__ exclusion_neighbors,
-    const int num_particles,
-    int* __restrict__ reverse_offset
-) {
-    int atom_a = blockIdx.x * blockDim.x + threadIdx.x;
-    if (atom_a >= num_particles) return;
-    int start = exclusion_offset[atom_a];
-    int end = exclusion_offset[atom_a + 1];
-    for (int k = start; k < end; k++) {
-        int neighbor = exclusion_neighbors[k];
-        atomicAdd(&reverse_offset[neighbor + 1], 1);
-    }
-}
-"""
-
-_FILL_REVERSE_KERNEL = r"""
-extern "C" __global__
-void fill_reverse_kernel(
-    const int* __restrict__ exclusion_offset,
-    const int* __restrict__ exclusion_neighbors,
-    const float* __restrict__ exclusion_scale,
-    const int* __restrict__ reverse_offset,
-    const int num_particles,
-    int* __restrict__ reverse_neighbors,
-    float* __restrict__ reverse_scale,
-    int* __restrict__ temp_offset
-) {
-    int atom_a = blockIdx.x * blockDim.x + threadIdx.x;
-    if (atom_a >= num_particles) return;
-    int start = exclusion_offset[atom_a];
-    int end = exclusion_offset[atom_a + 1];
-    for (int k = start; k < end; k++) {
-        int neighbor = exclusion_neighbors[k];
-        float scale = exclusion_scale[k];
-        int pos = atomicAdd(&temp_offset[neighbor], 1);
-        reverse_neighbors[pos] = atom_a;
-        reverse_scale[pos] = scale;
-    }
-}
-"""
-
 _BUILD_MASKS_KERNEL = r"""
 extern "C" __global__
 void build_masks_kernel(
@@ -779,8 +734,6 @@ def _compile_gpu_kernels():
         "find_interacting": cp.RawKernel(
             _FIND_INTERACTING_BLOCKS_KERNEL, "find_interacting_blocks_kernel"
         ),
-        "rev_count": cp.RawKernel(_BUILD_REVERSE_COUNT_KERNEL, "build_reverse_count_kernel"),
-        "rev_fill": cp.RawKernel(_FILL_REVERSE_KERNEL, "fill_reverse_kernel"),
         "build_masks": cp.RawKernel(_BUILD_MASKS_KERNEL, "build_masks_kernel"),
         "check_rebuild": cp.RawKernel(_CHECK_REBUILD_KERNEL, "check_rebuild_kernel"),
         "counting_scatter": cp.RawKernel(_COUNTING_SCATTER_KERNEL, "counting_scatter_kernel"),
@@ -829,14 +782,6 @@ class BlockList:
 
         self._kernels = None
 
-        self._d_excl_offset = None
-        self._d_excl_neighbors = None
-        self._d_excl_scale = None
-        self._d_reverse_offset = None
-        self._d_reverse_neighbors = None
-        self._d_reverse_scale = None
-        self._total_exclusion_pairs = 0
-
         self._d_exclusion_masks_buf = cp.empty(0, dtype=np.uint32)
 
         self._exclusion_masks_np = None
@@ -859,15 +804,6 @@ class BlockList:
         self._interacting_atoms_np = None
 
         self._pool = {}
-
-        # Exclusion pair-list cache (PDB order on first build; re-permuted each
-        # rebuild to current sorted order). Owned exclusively by BlockList.
-        self._d_unique_i = None
-        self._d_unique_j = None
-        self._d_unique_scale = None
-        self._excl_pool_A = {}
-        self._excl_pool_B = {}
-        self._excl_flip = False
 
     def _pool_get(self, name, size, dtype, fill=None):
         """Return a reusable buffer of the given size. Allocates on first call
@@ -1128,10 +1064,6 @@ class BlockList:
             ),
         )
 
-        self._d_reverse_offset = None
-        self._d_reverse_neighbors = None
-        self._d_reverse_scale = None
-
         self._is_initialized = True
 
         raw_order = self.d_raw_order
@@ -1199,98 +1131,15 @@ class BlockList:
 
         self._build_masks_gpu(topology)
 
-    def _build_exclusion_state(self, topology):
-        """Build CSR from cached PDB-order exclusion pairs.
-
-        First call: builds unique pairs from topology's PDB-order bond graph and
-        caches them. EVERY call then builds CSR arrays (offset, neighbors, scale)
-        from the cached pairs via build_csr_from_pairs_gpu. No permutation —
-        pairs stay PDB order, matching PDB-order positions in GPUContext.
-
-        Topology is never mutated -- read only.
-        """
-        from mdpy.core.topology import (
-            build_exclusion_map_gpu, build_csr_from_pairs_gpu,
-        )
-
-        N = topology.num_particles
-
-        if self._d_unique_i is None:
-            _, d_pair_j, d_pair_scale, d_pair_i = build_exclusion_map_gpu(
-                topology, scale_14=1.0
-            )
-            self._d_unique_i = d_pair_i
-            self._d_unique_j = d_pair_j
-            self._d_unique_scale = d_pair_scale
-
-        pool = self._excl_pool_B if self._excl_flip else self._excl_pool_A
-        self._excl_flip = not self._excl_flip
-        d_offset, d_neighbors, d_scale = build_csr_from_pairs_gpu(
-            self._d_unique_i,
-            self._d_unique_j,
-            self._d_unique_scale,
-            N,
-            pool,
-        )
-        self._d_excl_offset = d_offset
-        self._d_excl_neighbors = d_neighbors
-        self._d_excl_scale = d_scale
-        self._total_exclusion_pairs = int(d_neighbors.shape[0])
-        self._d_reverse_offset = None
-        self._d_reverse_neighbors = None
-        self._d_reverse_scale = None
-
     def _build_masks_gpu(self, topology):
         if self.num_block_pairs == 0:
             self.d_exclusion_masks = cp.empty(0, dtype=np.uint32)
             return
 
-        self._build_exclusion_state(topology)
+        d_excl_offset, d_excl_neighbors, d_excl_scale = topology.exclusion_csr
+        d_rev_offset, d_rev_neighbors, d_rev_scale = topology.exclusion_reverse_csr
         N = self.num_particles
         threads_per_block = 256
-
-        if self._d_reverse_offset is None:
-            d_rev_offset = cp.zeros(N + 1, dtype=env.NUMPY_INT)
-            n1 = (N + threads_per_block - 1) // threads_per_block
-            self._kernels["rev_count"](
-                (n1,),
-                (threads_per_block,),
-                (
-                    self._d_excl_offset,
-                    self._d_excl_neighbors,
-                    np.int32(N),
-                    d_rev_offset,
-                ),
-            )
-
-            d_rev_offset = cp.cumsum(d_rev_offset, dtype=env.NUMPY_INT).astype(env.NUMPY_INT)
-            max_rev = (
-                self._total_exclusion_pairs
-                if self._total_exclusion_pairs > 0
-                else int(d_rev_offset[-1])
-            )
-            d_rev_neighbors = cp.empty(max_rev, dtype=env.NUMPY_INT)
-            d_rev_scale = cp.empty(max_rev, dtype=env.NUMPY_FLOAT)
-            d_temp = d_rev_offset.copy()
-
-            self._kernels["rev_fill"](
-                (n1,),
-                (threads_per_block,),
-                (
-                    self._d_excl_offset,
-                    self._d_excl_neighbors,
-                    self._d_excl_scale,
-                    d_rev_offset,
-                    np.int32(N),
-                    d_rev_neighbors,
-                    d_rev_scale,
-                    d_temp,
-                ),
-            )
-
-            self._d_reverse_offset = d_rev_offset
-            self._d_reverse_neighbors = d_rev_neighbors
-            self._d_reverse_scale = d_rev_scale
 
         max_total_work = self._max_block_pairs * BLOCK_SIZE
         grid = ((max_total_work + threads_per_block - 1) // threads_per_block,)
@@ -1306,10 +1155,10 @@ class BlockList:
                 self.d_block_atoms,
                 self.d_atom_to_block,
                 self.d_atom_to_slot,
-                self._d_excl_offset,
-                self._d_excl_neighbors,
-                self._d_reverse_offset,
-                self._d_reverse_neighbors,
+                d_excl_offset,
+                d_excl_neighbors,
+                d_rev_offset,
+                d_rev_neighbors,
                 self._d_counters,
                 np.int32(N),
                 self.d_exclusion_masks,
