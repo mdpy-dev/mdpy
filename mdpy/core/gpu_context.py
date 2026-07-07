@@ -109,6 +109,11 @@ class GPUContext:
         self.d_types = cp.asarray(topology.particle_type_indices.astype(np.int32))
         self.d_charges = cp.asarray(topology.charges.astype(np.float32))
 
+        # Block-ordered derived buffers — refreshed by System via BlockList methods.
+        # GPUContext owns storage only; does not call BlockList.
+        self._d_sorted_data = None     # [x,y,z,q] per slot, float32, refreshed every step
+        self._d_sorted_types = None    # atom types, int32, refreshed on rebuild
+
         self.d_energy = cp.zeros(1, dtype=np.float32)
         self.d_energy_accumulator = None
 
@@ -319,6 +324,16 @@ class GPUContext:
     @property
     def inv_box_z(self):
         return self._inv_box_z
+
+    @property
+    def d_sorted_data(self):
+        """Block-ordered posq buffer [x,y,z,q] per slot. None until first compute_forces."""
+        return self._d_sorted_data
+
+    @property
+    def d_sorted_types(self):
+        """Block-ordered atom types (int32). None until first rebuild."""
+        return self._d_sorted_types
 
     @property
     def has_pbc(self):
