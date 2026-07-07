@@ -132,20 +132,6 @@ class TestCellAssignment:
                     assert atom_to_block[atom_id] == bi
                     assert atom_to_slot[atom_id] == slot
 
-    def test_pdb_to_slot_maps_correctly(self):
-        """d_pdb_to_slot[pdb_id] = block * BLOCK_SIZE + slot gives the
-        index into d_block_atoms where pdb_id lives."""
-        n, box = 100, 50.0
-        bl, *_ = _rebuild_and_build_block_pairs(n, box)
-        pdb_to_slot = cp.asnumpy(bl.d_pdb_to_slot)
-        block_atoms = cp.asnumpy(bl.d_block_atoms)
-        for pdb_id in range(n):
-            slot = pdb_to_slot[pdb_id]
-            assert block_atoms[slot] == pdb_id, (
-                f"pdb_to_slot[{pdb_id}] = {slot}, but block_atoms[{slot}] = "
-                f"{block_atoms[slot]} (expected {pdb_id})"
-            )
-
     def test_sort_order_is_correct(self):
         n, box = 100, 50.0
         bl, *_ = _rebuild_and_build_block_pairs(n, box)
@@ -181,6 +167,7 @@ class TestInteractingBlocks:
         block_pairs = bl.block_pairs
         interacting = bl.interacting_atoms
         ba = bl.block_atoms
+        block_atoms_flat = cp.asnumpy(bl.d_block_atoms)
         build_radius_sq = bl.build_radius ** 2
         pbc_2d = pbc_matrix.reshape(3, 3)
         box_diag = np.array([pbc_2d[0, 0], pbc_2d[1, 1], pbc_2d[2, 2]])
@@ -190,9 +177,10 @@ class TestInteractingBlocks:
             interacting_row = interacting[ti]
             source_atoms = ba[source_block]
             for slot in range(BLOCK_SIZE):
-                aj = interacting_row[slot]
-                if aj < 0 or aj == NUM_ATOMS_SENTINEL:
+                j_slot = interacting_row[slot]
+                if j_slot < 0:
                     continue
+                aj = block_atoms_flat[j_slot]
                 pos_j = positions[aj]
                 found_close = False
                 for si in range(BLOCK_SIZE):
@@ -218,6 +206,7 @@ class TestInteractingBlocks:
         block_pairs = bl.block_pairs
         interacting = bl.interacting_atoms
         ba = bl.block_atoms
+        block_atoms_flat = cp.asnumpy(bl.d_block_atoms)
         build_radius_sq = bl.build_radius ** 2
         pbc_2d = pbc_matrix.reshape(3, 3)
         box_diag = np.array([pbc_2d[0, 0], pbc_2d[1, 1], pbc_2d[2, 2]])
@@ -232,9 +221,10 @@ class TestInteractingBlocks:
                 if ak < 0:
                     continue
                 for sj in range(BLOCK_SIZE):
-                    aj = interacting_row[sj]
-                    if aj < 0 or aj == NUM_ATOMS_SENTINEL:
+                    j_slot = interacting_row[sj]
+                    if j_slot < 0:
                         continue
+                    aj = block_atoms_flat[j_slot]
                     if ak != aj:
                         found_pairs.add((min(ak, aj), max(ak, aj)))
 
@@ -262,13 +252,15 @@ class TestInteractingBlocks:
         bl, *_ = _rebuild_and_build_block_pairs(n, box, cutoff=10.0, skin=2.0)
         block_pairs = bl.block_pairs
         interacting = bl.interacting_atoms
+        block_atoms_flat = cp.asnumpy(bl.d_block_atoms)
         seen = set()
         for ti in range(bl.num_block_pairs):
             source_block = block_pairs[ti]
             for sj in range(BLOCK_SIZE):
-                aj = interacting[ti, sj]
-                if aj < 0 or aj == NUM_ATOMS_SENTINEL:
+                j_slot = interacting[ti, sj]
+                if j_slot < 0:
                     continue
+                aj = block_atoms_flat[j_slot]
                 pair = (source_block, aj)
                 assert pair not in seen, (
                     f"Duplicate (block={source_block}, sorted_atom={aj}) in block_pairs"
@@ -337,11 +329,12 @@ class TestInteractingBlocks:
             j_atoms = int_atoms[t]
             all_from_self = True
             for a in j_atoms:
-                if a < 0 or a == NUM_ATOMS_SENTINEL:
+                if a < 0:
                     continue
+                pdb_a = block_atoms_np.flat[a]
                 found_in_self = False
                 for s in range(32):
-                    if block_atoms_np[bx, s] == a:
+                    if block_atoms_np[bx, s] == pdb_a:
                         found_in_self = True
                         break
                 if not found_in_self:
@@ -383,9 +376,10 @@ class TestInteractingBlocks:
             bx = block_pairs[t]
             sx, sy, sz = shift_x[t], shift_y[t], shift_z[t]
             for lane in range(32):
-                gj = int_atoms[t, lane]
-                if gj < 0 or gj == NUM_ATOMS_SENTINEL:
+                j_slot = int_atoms[t, lane]
+                if j_slot < 0:
                     continue
+                gj = block_atoms_np.flat[j_slot]
                 xj, yj, zj = pos_x[gj], pos_y[gj], pos_z[gj]
                 for k in range(32):
                     gi = block_atoms_np[bx, k]
@@ -426,6 +420,7 @@ class TestPBCHandling:
         assert bl.num_block_pairs > 0
         sorted_to_pdb = cp.asnumpy(bl.d_sorted_to_pdb)
         ba = bl.block_atoms
+        block_atoms_flat = cp.asnumpy(bl.d_block_atoms)
         block_pairs = bl.block_pairs
         interacting = bl.interacting_atoms
         has_cross = False
@@ -439,9 +434,10 @@ class TestPBCHandling:
             source_left = any(positions[p, 0] < box / 2 for p in source_pdbs)
             source_right = any(positions[p, 0] > box / 2 for p in source_pdbs)
             for sj in range(BLOCK_SIZE):
-                aj = interacting[ti, sj]
-                if aj < 0 or aj == NUM_ATOMS_SENTINEL:
+                j_slot = interacting[ti, sj]
+                if j_slot < 0:
                     continue
+                aj = block_atoms_flat[j_slot]
                 pdb_j = sorted_to_pdb[aj]
                 inter_left = positions[pdb_j, 0] < box / 2
                 inter_right = positions[pdb_j, 0] > box / 2
@@ -486,12 +482,14 @@ class TestExclusionMasks:
         ia = bl.interacting_atoms
         atb = cp.asnumpy(bl.d_atom_to_block)
         ats = cp.asnumpy(bl.d_atom_to_slot)
+        block_atoms_flat = cp.asnumpy(bl.d_block_atoms)
         for t in range(bl.num_block_pairs):
             bx = bl.block_pairs[t]
             for sj in range(BLOCK_SIZE):
-                aj = ia[t, sj]
-                if aj < 0 or aj >= n:
+                j_slot = ia[t, sj]
+                if j_slot < 0:
                     continue
+                aj = block_atoms_flat[j_slot]
                 if atb[aj] != bx:
                     continue
                 mask = excl[t, sj]
@@ -532,12 +530,14 @@ class TestExclusionMasks:
         ia = bl.interacting_atoms
         atb = cp.asnumpy(bl.d_atom_to_block)
         ats = cp.asnumpy(bl.d_atom_to_slot)
+        block_atoms_flat = cp.asnumpy(bl.d_block_atoms)
         for t in range(bl.num_block_pairs):
             bx = bl.block_pairs[t]
             for sj in range(BLOCK_SIZE):
-                aj = ia[t, sj]
-                if aj < 0 or aj >= n:
+                j_slot = ia[t, sj]
+                if j_slot < 0:
                     continue
+                aj = block_atoms_flat[j_slot]
                 if atb[aj] != bx:
                     continue
                 slot_aj = ats[aj]
@@ -859,6 +859,7 @@ class TestCellSubsetDecomposition:
         block_pairs = bl.block_pairs
         interacting = bl.interacting_atoms
         ba = bl.block_atoms
+        block_atoms_flat = cp.asnumpy(bl.d_block_atoms)
         build_radius_sq = bl.build_radius ** 2
         pbc_2d = pbc_matrix.reshape(3, 3)
         box_diag = np.array([pbc_2d[0, 0], pbc_2d[1, 1], pbc_2d[2, 2]])
@@ -868,9 +869,10 @@ class TestCellSubsetDecomposition:
             interacting_row = interacting[ti]
             source_atoms = ba[source_block]
             for slot in range(BLOCK_SIZE):
-                aj = interacting_row[slot]
-                if aj < 0 or aj == NUM_ATOMS_SENTINEL:
+                j_slot = interacting_row[slot]
+                if j_slot < 0:
                     continue
+                aj = block_atoms_flat[j_slot]
                 pos_j = positions[aj]
                 found_close = False
                 for si in range(BLOCK_SIZE):
@@ -897,6 +899,7 @@ class TestCellSubsetDecomposition:
 
         block_pairs = bl.block_pairs
         interacting = bl.interacting_atoms
+        block_atoms_flat = cp.asnumpy(bl.d_block_atoms)
 
         self_pair_count = 0
         for ti in range(bl.num_block_pairs):
@@ -904,8 +907,8 @@ class TestCellSubsetDecomposition:
             source_atoms = set(int(a) for a in bl.block_atoms[source_block] if a >= 0)
             interacting_row = interacting[ti]
             interacting_set = set(
-                int(a) for a in interacting_row
-                if a >= 0 and a != NUM_ATOMS_SENTINEL
+                int(block_atoms_flat[a]) for a in interacting_row
+                if a >= 0
             )
             if source_atoms == interacting_set:
                 self_pair_count += 1
@@ -1072,6 +1075,7 @@ class TestShiftGroupedPacking:
         block_pairs = bl.block_pairs
         interacting = bl.interacting_atoms
         ba = bl.block_atoms
+        block_atoms_flat = cp.asnumpy(bl.d_block_atoms)
         shift_x = cp.asnumpy(bl.d_block_pair_shift_x[:bl.num_block_pairs])
         shift_y = cp.asnumpy(bl.d_block_pair_shift_y[:bl.num_block_pairs])
         shift_z = cp.asnumpy(bl.d_block_pair_shift_z[:bl.num_block_pairs])
@@ -1085,9 +1089,10 @@ class TestShiftGroupedPacking:
             source_atoms = ba[bx]
             interacting_row = interacting[ti]
             for slot in range(BLOCK_SIZE):
-                aj = int(interacting_row[slot])
-                if aj < 0 or aj == NUM_ATOMS_SENTINEL:
+                j_slot = int(interacting_row[slot])
+                if j_slot < 0:
                     continue
+                aj = int(block_atoms_flat[j_slot])
                 pos_j = positions[aj]
                 found_close = False
                 for si in range(BLOCK_SIZE):
@@ -1120,6 +1125,7 @@ class TestShiftGroupedPacking:
         block_pairs = bl.block_pairs
         interacting = bl.interacting_atoms
         ba = bl.block_atoms
+        block_atoms_flat = cp.asnumpy(bl.d_block_atoms)
         build_radius_sq = bl.build_radius ** 2
         pbc_2d = pbc_matrix.reshape(3, 3)
         box_diag = np.array([pbc_2d[0, 0], pbc_2d[1, 1], pbc_2d[2, 2]])
@@ -1134,9 +1140,10 @@ class TestShiftGroupedPacking:
                 if ak < 0:
                     continue
                 for sj in range(BLOCK_SIZE):
-                    aj = int(interacting_row[sj])
-                    if aj < 0 or aj == NUM_ATOMS_SENTINEL:
+                    j_slot = int(interacting_row[sj])
+                    if j_slot < 0:
                         continue
+                    aj = int(block_atoms_flat[j_slot])
                     if ak != aj:
                         found_pairs.add(
                             (min(int(ak), aj), max(int(ak), aj))
@@ -1169,13 +1176,15 @@ class TestShiftGroupedPacking:
         bl, *_ = _rebuild_and_build_block_pairs(n, box, cutoff, skin)
         block_pairs = bl.block_pairs
         interacting = bl.interacting_atoms
+        block_atoms_flat = cp.asnumpy(bl.d_block_atoms)
         seen = set()
         for ti in range(bl.num_block_pairs):
             source_block = int(block_pairs[ti])
             for sj in range(BLOCK_SIZE):
-                aj = int(interacting[ti, sj])
-                if aj < 0 or aj == NUM_ATOMS_SENTINEL:
+                j_slot = int(interacting[ti, sj])
+                if j_slot < 0:
                     continue
+                aj = int(block_atoms_flat[j_slot])
                 pair = (source_block, aj)
                 assert pair not in seen, (
                     f"Duplicate (block={source_block}, atom={aj}) — "
@@ -1202,6 +1211,7 @@ class TestShiftGroupedPacking:
         block_pairs = bl.block_pairs
         interacting = bl.interacting_atoms
         ba = bl.block_atoms
+        block_atoms_flat = cp.asnumpy(bl.d_block_atoms)
         shift_x = cp.asnumpy(bl.d_block_pair_shift_x[:bl.num_block_pairs])
         shift_y = cp.asnumpy(bl.d_block_pair_shift_y[:bl.num_block_pairs])
         shift_z = cp.asnumpy(bl.d_block_pair_shift_z[:bl.num_block_pairs])
@@ -1215,9 +1225,10 @@ class TestShiftGroupedPacking:
             source_atoms = ba[bx]
             interacting_row = interacting[ti]
             for slot in range(BLOCK_SIZE):
-                aj = int(interacting_row[slot])
-                if aj < 0 or aj == NUM_ATOMS_SENTINEL:
+                j_slot = int(interacting_row[slot])
+                if j_slot < 0:
                     continue
+                aj = int(block_atoms_flat[j_slot])
                 pos_j = positions[aj]
                 found_close = False
                 for si in range(BLOCK_SIZE):

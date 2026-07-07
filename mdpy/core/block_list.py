@@ -349,7 +349,7 @@ void find_interacting_blocks_kernel(
 
                         unsigned int ballot = __ballot_sync(0xffffffff, interacts);
                         int rank = __popc(ballot & ((1u << tgx) - 1));
-                        if (interacts) my_buf[nBuf + rank] = gj;
+                        if (interacts) my_buf[nBuf + rank] = target_bj * 32 + tgx;
                         nBuf += __popc(ballot);
 
                         while (nBuf >= 32) {
@@ -399,7 +399,7 @@ void find_interacting_blocks_kernel(
         int interacts = (gj >= 0 && gj < num_particles) ? 1 : 0;
         unsigned int ballot = __ballot_sync(0xffffffff, interacts);
         int rank = __popc(ballot & ((1u << tgx) - 1));
-        if (interacts) my_buf[nBuf + rank] = gj;
+        if (interacts) my_buf[nBuf + rank] = bx * 32 + tgx;
         nBuf += __popc(ballot);
 
         while (nBuf >= 32) {
@@ -433,7 +433,7 @@ void find_interacting_blocks_kernel(
                 shift_z_out[ti] = 0.0f;
             }
             interacting_atoms_out[ti * 32 + tgx] =
-                (tgx < nBuf) ? my_buf[tgx] : 0x7FFFFFFF;
+                (tgx < nBuf) ? my_buf[tgx] : -1;
         }
     }
 }
@@ -510,7 +510,8 @@ void build_masks_kernel(
     int pair_idx = idx / 32;
     int slot_j = idx % 32;
     int block_x = block_pairs[pair_idx];
-    int atom_j = interacting_atoms[pair_idx * 32 + slot_j];
+    int j_slot = interacting_atoms[pair_idx * 32 + slot_j];
+    int atom_j = (j_slot >= 0) ? block_atoms[j_slot] : -1;
 
     unsigned int excl = 0;
 
@@ -1150,8 +1151,6 @@ class BlockList:
             ),
         )
 
-        self.d_pdb_to_slot = self.d_atom_to_block * BLOCK_SIZE + self.d_atom_to_slot
-
         self._d_reverse_offset = None
         self._d_reverse_neighbors = None
         self._d_reverse_scale = None
@@ -1519,7 +1518,6 @@ class BlockList:
         self.d_block_size_z = cp.empty(0, dtype=env.NUMPY_FLOAT)
         self.d_atom_to_block = cp.empty(0, dtype=env.NUMPY_INT)
         self.d_atom_to_slot = cp.empty(0, dtype=env.NUMPY_INT)
-        self.d_pdb_to_slot = cp.empty(0, dtype=env.NUMPY_INT)
         self.d_block_pairs = cp.empty(0, dtype=env.NUMPY_INT)
         self.d_interacting_atoms = cp.empty(0, dtype=env.NUMPY_INT)
         self.d_cell_block_offset = cp.empty(0, dtype=env.NUMPY_INT)

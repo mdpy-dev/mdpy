@@ -128,7 +128,6 @@ def _assemble_exclusion_kernel(
     kernel = f"""extern "C" __global__
 void exclusion_block_pair_kernel(
     const float4* __restrict__ sorted_data,
-    const int* __restrict__ pdb_to_slot,
     const float* __restrict__ shift_x,
     const float* __restrict__ shift_y,
     const float* __restrict__ shift_z,
@@ -177,11 +176,11 @@ void exclusion_block_pair_kernel(
         if (gi >= 0 && gi < num_particles) {{
             type_i = __ldg(&d_types[gi]);
         }}
-        int gj = interacting_atoms[pos * 32 + tgx];
+        int j_slot = interacting_atoms[pos * 32 + tgx];
+        int gj = (j_slot >= 0) ? block_atoms[j_slot] : -1;
         float shfl_px = 0.0f, shfl_py = 0.0f, shfl_pz = 0.0f;
 {load_j_init}
         if (gj >= 0 && gj < num_particles) {{
-            int j_slot = pdb_to_slot[gj];
             float4 jdata = sorted_data[j_slot];
             shfl_px = jdata.x;
             shfl_py = jdata.y;
@@ -383,7 +382,6 @@ class NonbondedForce(ForceTerm):
     def _build_excl_args(self, gpu_context, block_list, compute_energy):
         args = [
             block_list.d_sorted_data,
-            block_list.d_pdb_to_slot,
             block_list.d_excl_shift_x,
             block_list.d_excl_shift_y,
             block_list.d_excl_shift_z,
