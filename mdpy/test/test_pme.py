@@ -276,10 +276,14 @@ class TestForceGathering:
         d_energy = cp.zeros(1, dtype=np.float32)
 
         gather_k = get_gather_kernel()
+        total_slots = bl.num_blocks * 32
+        grid_1d = ((total_slots + 255) // 256,)
         gather_k(
-            (1,), (256,),
+            grid_1d, (256,),
             (d_pos_x, d_pos_y, d_pos_z, d_charges,
              np.int32(N),
+             bl.d_block_atoms,
+             np.int32(total_slots),
              np.float32(1.0 / box_x), np.float32(1.0 / box_y), np.float32(1.0 / box_z),
              np.int32(grid_x), np.int32(grid_y), np.int32(grid_z), np.int32(order),
              d_phi_grid, d_fx, d_fy, d_fz, d_energy),

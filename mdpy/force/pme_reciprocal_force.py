@@ -300,6 +300,8 @@ void gather_kernel(
     const float* __restrict__ positions_z,
     const float* __restrict__ charges,
     int num_particles,
+    const int* __restrict__ block_atoms,
+    int total_slots,
     float recip_box_x, float recip_box_y, float recip_box_z,
     int grid_x, int grid_y, int grid_z,
     int order,
@@ -309,8 +311,10 @@ void gather_kernel(
     float* __restrict__ forces_z,
     float* __restrict__ energy_buffer
 ) {
-    int i = blockIdx.x * blockDim.x + threadIdx.x;
-    if (i >= num_particles) return;
+    int slot = blockIdx.x * blockDim.x + threadIdx.x;
+    if (slot >= total_slots) return;
+    int i = block_atoms[slot];
+    if (i < 0 || i >= num_particles) return;
 
     float px = positions_x[i];
     float py = positions_y[i];
@@ -561,7 +565,8 @@ class PMEReciprocalForce(ForceTerm):
         gx, gy, gz = self.grid_x, self.grid_y, self.grid_z
 
         threads_per_block = 256
-        grid_1d = ((N + threads_per_block - 1) // threads_per_block,)
+        total_slots = block_list.num_blocks * 32
+        grid_1d = ((total_slots + threads_per_block - 1) // threads_per_block,)
 
         self._d_charge_grid[:] = 0
 
@@ -630,6 +635,8 @@ class PMEReciprocalForce(ForceTerm):
                 gpu_context.d_positions_z,
                 gpu_context.d_charges,
                 np.int32(N),
+                block_list.d_block_atoms,
+                np.int32(total_slots),
                 np.float32(gpu_context.inv_box_x),
                 np.float32(gpu_context.inv_box_y),
                 np.float32(gpu_context.inv_box_z),
