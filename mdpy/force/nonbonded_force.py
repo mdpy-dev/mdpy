@@ -397,14 +397,14 @@ class NonbondedForce(ForceTerm):
             return
         self._ensure_gather_kernels()
         total_slots = block_list.num_blocks * 32
-        tpb = 256
-        grid = ((total_slots + tpb - 1) // tpb,)
+        threads_per_block = 256
+        grid = ((total_slots + threads_per_block - 1) // threads_per_block,)
         for base_name in non_charge_bases:
             d_arr = self._d_per_particle[base_name]
             sorted_arr = cp.empty(total_slots, dtype=np.float32)
             self._gather_kernels["gather_sorted"](
                 grid,
-                (tpb,),
+                (threads_per_block,),
                 (
                     d_arr,
                     block_list.d_block_atoms,
@@ -447,13 +447,13 @@ class NonbondedForce(ForceTerm):
 
         N = gpu_context.num_particles
         total_slots = block_list.num_blocks * 32
-        tpb = 256
-        grid = ((total_slots + tpb - 1) // tpb,)
+        threads_per_block = 256
+        grid = ((total_slots + threads_per_block - 1) // threads_per_block,)
         self._d_sorted_position_charge = cp.zeros(total_slots * 4, dtype=np.float32)
         d_charges = gpu_context.d_charges
         self._pack_position_charge_kernel(
             grid,
-            (tpb,),
+            (threads_per_block,),
             (
                 gpu_context.d_positions_x,
                 gpu_context.d_positions_y,
@@ -470,14 +470,14 @@ class NonbondedForce(ForceTerm):
     def _refresh_position_charge(self, gpu_context, block_list):
         N = gpu_context.num_particles
         total_slots = block_list.num_blocks * 32
-        tpb = 256
-        grid = ((total_slots + tpb - 1) // tpb,)
+        threads_per_block = 256
+        grid = ((total_slots + threads_per_block - 1) // threads_per_block,)
         if self._d_sorted_position_charge.size != total_slots * 4:
             self._d_sorted_position_charge = cp.zeros(total_slots * 4, dtype=np.float32)
         d_charges = gpu_context.d_charges
         self._pack_position_charge_kernel(
             grid,
-            (tpb,),
+            (threads_per_block,),
             (
                 gpu_context.d_positions_x,
                 gpu_context.d_positions_y,

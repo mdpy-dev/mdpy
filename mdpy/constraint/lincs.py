@@ -354,10 +354,10 @@ class LincsConstraint(ConstraintBase):
     def apply(self, gpu_context, time_step, **kwargs):
         if self.num_constraints == 0:
             return
-        block = 256
-        grid = (self.num_constraint_threads + block - 1) // block
-        shared_mem = 3 * block * 4
-        self._kernel((grid,), (block,), (
+        threads_per_block = 256
+        grid = (self.num_constraint_threads + threads_per_block - 1) // threads_per_block
+        shared_mem = 3 * threads_per_block * 4
+        self._kernel((grid,), (threads_per_block,), (
             gpu_context.d_prev_positions_x,
             gpu_context.d_prev_positions_y,
             gpu_context.d_prev_positions_z,
@@ -386,7 +386,7 @@ class LincsConstraint(ConstraintBase):
         if self.num_constraints == 0:
             return
         kernel = self._get_remap_kernel()
-        tpb = 256
+        threads_per_block = 256
         n = self.d_constraint_indices.size
-        grid = ((n + tpb - 1) // tpb,)
-        kernel(grid, (tpb,), (d_remap, self.d_constraint_indices, np.int32(n)))
+        grid = ((n + threads_per_block - 1) // threads_per_block,)
+        kernel(grid, (threads_per_block,), (d_remap, self.d_constraint_indices, np.int32(n)))

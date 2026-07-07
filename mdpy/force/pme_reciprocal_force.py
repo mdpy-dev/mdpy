@@ -560,8 +560,8 @@ class PMEReciprocalForce(ForceTerm):
         order = self.order
         gx, gy, gz = self.grid_x, self.grid_y, self.grid_z
 
-        tpb = 256
-        grid_1d = ((N + tpb - 1) // tpb,)
+        threads_per_block = 256
+        grid_1d = ((N + threads_per_block - 1) // threads_per_block,)
 
         self._d_charge_grid[:] = 0
 
@@ -583,7 +583,7 @@ class PMEReciprocalForce(ForceTerm):
         shmem = self._subgrid_total * 4
         cell_spread_k(
             (block_list.num_cells_total,),
-            (tpb,),
+            (threads_per_block,),
             (
                 sorted_pos_x,
                 sorted_pos_y,
@@ -623,7 +623,7 @@ class PMEReciprocalForce(ForceTerm):
         gather_k = get_gather_kernel()
         gather_k(
             grid_1d,
-            (tpb,),
+            (threads_per_block,),
             (
                 gpu_context.d_positions_x,
                 gpu_context.d_positions_y,

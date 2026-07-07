@@ -162,11 +162,11 @@ class LangevinBAOABIntegrator:
     def step(self, system):
         gpu = system.gpu
         number = gpu.num_particles
-        block = 256
-        grid = (number + block - 1) // block
+        threads_per_block = 256
+        grid = (number + threads_per_block - 1) // threads_per_block
 
         if not self._initialized:
-            _kernels['init']((grid,), (block,), (
+            _kernels['init']((grid,), (threads_per_block,), (
                 gpu.d_positions_x, gpu.d_positions_y, gpu.d_positions_z,
                 gpu.d_velocities_x, gpu.d_velocities_y, gpu.d_velocities_z,
                 gpu.d_forces_x, gpu.d_forces_y, gpu.d_forces_z,
@@ -180,7 +180,7 @@ class LangevinBAOABIntegrator:
 
         self._step_counter += 1
 
-        _kernels['step']((grid,), (block,), (
+        _kernels['step']((grid,), (threads_per_block,), (
             gpu.d_positions_x, gpu.d_positions_y, gpu.d_positions_z,
             gpu.d_prev_positions_x, gpu.d_prev_positions_y, gpu.d_prev_positions_z,
             gpu.d_forces_x, gpu.d_forces_y, gpu.d_forces_z,

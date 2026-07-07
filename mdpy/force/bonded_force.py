@@ -245,9 +245,9 @@ class BondedForce(ForceTerm):
         kernel = self._get_remap_kernel()
         indices = self._d_indices.ravel()
         n = indices.size
-        tpb = 256
-        grid = ((n + tpb - 1) // tpb,)
-        kernel(grid, (tpb,), (d_remap, indices, np.int32(n)))
+        threads_per_block = 256
+        grid = ((n + threads_per_block - 1) // threads_per_block,)
+        kernel(grid, (threads_per_block,), (d_remap, indices, np.int32(n)))
 
     def bind_sorted(self, topology, block_list, gpu_context):
         sort_order = block_list.d_raw_order

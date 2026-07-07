@@ -21,6 +21,6 @@ _fill_kernel = cp.RawKernel(_FILL_CONSTANT_KERNEL, "fill_constant_int32_kernel")
 
 def fill_constant(arr: cp.ndarray, value: int) -> None:
     N = arr.shape[0]
-    tpb = 256
-    grid = ((N + tpb - 1) // tpb,)
-    _fill_kernel(grid, (tpb,), (arr, np.int32(N), np.int32(value)))
+    threads_per_block = 256
+    grid = ((N + threads_per_block - 1) // threads_per_block,)
+    _fill_kernel(grid, (threads_per_block,), (arr, np.int32(N), np.int32(value)))

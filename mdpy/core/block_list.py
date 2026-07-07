@@ -960,7 +960,7 @@ class BlockList:
         self._ensure_kernels()
         self._invalidate_caches()
         self.num_particles = N
-        tpb = 256
+        threads_per_block = 256
 
         # 36-byte D→H transfer for cell-grid sizing; rebuild is not the
         # hot path (AGENTS.md P1). cell_assign below reads d_pbc_matrix
@@ -993,9 +993,9 @@ class BlockList:
         cell_indices = self._pool_get("cell_indices", N, env.NUMPY_INT)
         d_cell_counts = self._pool_get("cell_counts", self.num_cells_total, env.NUMPY_INT, fill=0)
         d_composite_counts = self._pool_get("composite_counts", composite_buckets, env.NUMPY_INT, fill=0)
-        nm = (N + tpb - 1) // tpb
+        nm = (N + threads_per_block - 1) // threads_per_block
         self._kernels["cell_assign"](
-            (nm,), (tpb,),
+            (nm,), (threads_per_block,),
             (
                 pos_x, pos_y, pos_z,
                 gpu_context.d_pbc_matrix, gpu_context.d_pbc_inv,
@@ -1067,7 +1067,7 @@ class BlockList:
         sorted_to_pdb = cp.empty(N, dtype=env.NUMPY_INT)
         cell_indices_sorted = self._pool_get("cell_indices_sorted", N, env.NUMPY_INT)
         self._kernels["counting_scatter"](
-            (nm,), (tpb,),
+            (nm,), (threads_per_block,),
             (
                 cell_indices, sort_keys, composite_offset, composite_cursor,
                 cell_offset, cell_offset_padded,
@@ -1087,7 +1087,7 @@ class BlockList:
 
         self.d_block_to_cell = block_to_cell[:self.max_blocks]
 
-        nb = (self.max_blocks + tpb - 1) // tpb
+        nb = (self.max_blocks + threads_per_block - 1) // threads_per_block
         self.d_block_center_x = self._pool_get("block_center_x", self.max_blocks, env.NUMPY_FLOAT)
         self.d_block_center_y = self._pool_get("block_center_y", self.max_blocks, env.NUMPY_FLOAT)
         self.d_block_center_z = self._pool_get("block_center_z", self.max_blocks, env.NUMPY_FLOAT)
@@ -1100,7 +1100,7 @@ class BlockList:
         self.d_atom_to_block = self._pool_get("atom_to_block", N, env.NUMPY_INT)
         self.d_atom_to_slot = self._pool_get("atom_to_slot", N, env.NUMPY_INT)
         self._kernels["block_meta"](
-            (nb,), (tpb,),
+            (nb,), (threads_per_block,),
             (
                 pos_x, pos_y, pos_z, self.d_block_atoms,
                 d_num_blocks, np.int32(N),
@@ -1146,11 +1146,11 @@ class BlockList:
             self._max_block_pairs = max_block_pairs
         self._d_counters[0] = 0
 
-        tpb = 256
+        threads_per_block = 256
         grid_blocks = max((self.max_blocks * cell_subsets + 7) // 8, 1)
         d_num_blocks = self._pool.get(("num_blocks", env.NUMPY_INT))
         self._kernels["find_interacting"](
-            (grid_blocks,), (tpb,),
+            (grid_blocks,), (threads_per_block,),
             (
                 pos_x, pos_y, pos_z,
                 self.d_block_atoms,
@@ -1234,14 +1234,14 @@ class BlockList:
 
         self._build_exclusion_state(topology)
         N = self.num_particles
-        tpb = 256
+        threads_per_block = 256
 
         if self._d_reverse_offset is None:
             d_rev_offset = cp.zeros(N + 1, dtype=env.NUMPY_INT)
-            n1 = (N + tpb - 1) // tpb
+            n1 = (N + threads_per_block - 1) // threads_per_block
             self._kernels["rev_count"](
                 (n1,),
-                (tpb,),
+                (threads_per_block,),
                 (
                     self._d_excl_offset,
                     self._d_excl_neighbors,
@@ -1262,7 +1262,7 @@ class BlockList:
 
             self._kernels["rev_fill"](
                 (n1,),
-                (tpb,),
+                (threads_per_block,),
                 (
                     self._d_excl_offset,
                     self._d_excl_neighbors,
@@ -1280,13 +1280,13 @@ class BlockList:
             self._d_reverse_scale = d_rev_scale
 
         max_total_work = self._max_block_pairs * BLOCK_SIZE
-        grid = ((max_total_work + tpb - 1) // tpb,)
+        grid = ((max_total_work + threads_per_block - 1) // threads_per_block,)
         if self._d_exclusion_masks_buf.size < max_total_work:
             self._d_exclusion_masks_buf = cp.empty(max_total_work, dtype=np.uint32)
         self.d_exclusion_masks = self._d_exclusion_masks_buf
         self._kernels["build_masks"](
             grid,
-            (tpb,),
+            (threads_per_block,),
             (
                 self.d_block_pairs,
                 self.d_interacting_atoms,
@@ -1345,11 +1345,11 @@ class BlockList:
 
         self.d_rebuild_flag[0] = 0
         threshold_sq = (self.skin * 0.5) ** 2
-        tpb = 256
-        grid = ((self.num_particles + tpb - 1) // tpb,)
+        threads_per_block = 256
+        grid = ((self.num_particles + threads_per_block - 1) // threads_per_block,)
         self._kernels["check_rebuild"](
             grid,
-            (tpb,),
+            (threads_per_block,),
             (
                 pos_x,
                 pos_y,
@@ -1383,11 +1383,11 @@ class BlockList:
 
         self._ensure_kernels()
         threshold_sq = (self.skin * 0.5) ** 2
-        tpb = 256
-        grid = ((self.num_particles + tpb - 1) // tpb,)
+        threads_per_block = 256
+        grid = ((self.num_particles + threads_per_block - 1) // threads_per_block,)
         self._kernels["check_rebuild"](
             grid,
-            (tpb,),
+            (threads_per_block,),
             (
                 pos_x,
                 pos_y,
@@ -1414,10 +1414,10 @@ class BlockList:
         snap_x = self._pool_get("snap_x", N, env.NUMPY_FLOAT)
         snap_y = self._pool_get("snap_y", N, env.NUMPY_FLOAT)
         snap_z = self._pool_get("snap_z", N, env.NUMPY_FLOAT)
-        tpb = 256
-        grid = ((N + tpb - 1) // tpb,)
+        threads_per_block = 256
+        grid = ((N + threads_per_block - 1) // threads_per_block,)
         self._kernels["capture_snapshot"](
-            grid, (tpb,),
+            grid, (threads_per_block,),
             (pos_x, pos_y, pos_z,
              snap_x, snap_y, snap_z, np.int32(N)),
         )

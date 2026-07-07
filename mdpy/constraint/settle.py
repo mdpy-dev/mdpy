@@ -228,9 +228,9 @@ class SettleConstraint(ConstraintBase):
     def apply(self, gpu_context, time_step, **kwargs):
         if self.num_waters == 0:
             return
-        block = 256
-        grid = (self.num_waters + block - 1) // block
-        self._kernel((grid,), (block,), (
+        threads_per_block = 256
+        grid = (self.num_waters + threads_per_block - 1) // threads_per_block
+        self._kernel((grid,), (threads_per_block,), (
             gpu_context.d_prev_positions_x,
             gpu_context.d_prev_positions_y,
             gpu_context.d_prev_positions_z,
@@ -253,6 +253,6 @@ class SettleConstraint(ConstraintBase):
         if self.num_waters == 0:
             return
         kernel = self._get_remap_kernel()
-        tpb = 256
-        grid = ((self._n_idx + tpb - 1) // tpb,)
-        kernel(grid, (tpb,), (d_remap, self.d_water_idx, np.int32(self._n_idx)))
+        threads_per_block = 256
+        grid = ((self._n_idx + threads_per_block - 1) // threads_per_block,)
+        kernel(grid, (threads_per_block,), (d_remap, self.d_water_idx, np.int32(self._n_idx)))

@@ -256,11 +256,11 @@ class GPUContext:
     def wrap_positions_with_prev_correction(self):
         self._ensure_wrap_correct_kernel()
         N = self.num_particles
-        tpb = 256
-        grid = ((N + tpb - 1) // tpb,)
+        threads_per_block = 256
+        grid = ((N + threads_per_block - 1) // threads_per_block,)
         self._wrap_correct_kernel(
             grid,
-            (tpb,),
+            (threads_per_block,),
             (
                 self.d_positions_x,
                 self.d_positions_y,
@@ -277,11 +277,11 @@ class GPUContext:
     def _wrap_positions_inplace(self):
         self._ensure_wrap_kernel()
         N = self.num_particles
-        tpb = 256
-        grid = ((N + tpb - 1) // tpb,)
+        threads_per_block = 256
+        grid = ((N + threads_per_block - 1) // threads_per_block,)
         self._wrap_kernel(
             grid,
-            (tpb,),
+            (threads_per_block,),
             (
                 self.d_positions_x,
                 self.d_positions_y,
@@ -334,12 +334,12 @@ class GPUContext:
         if N == 0:
             return
         self._ensure_permutation_kernels()
-        tpb = 256
-        grid = ((N + tpb - 1) // tpb,)
+        threads_per_block = 256
+        grid = ((N + threads_per_block - 1) // threads_per_block,)
         for name, src in arrays_float.items():
             dst = cp.empty_like(src)
             self._permutation_kernels["permute"](
-                grid, (tpb,),
+                grid, (threads_per_block,),
                 (src, permutation, np.int32(N), dst)
             )
             arrays_float[name] = dst
@@ -347,7 +347,7 @@ class GPUContext:
             for name, src in arrays_int.items():
                 dst = cp.empty_like(src)
                 self._permutation_kernels["permute_int"](
-                    grid, (tpb,),
+                    grid, (threads_per_block,),
                     (src, permutation, np.int32(N), dst)
                 )
                 arrays_int[name] = dst
@@ -355,7 +355,7 @@ class GPUContext:
             for name, src in arrays_2comp.items():
                 dst = cp.empty_like(src)
                 self._permutation_kernels["permute_2comp"](
-                    grid, (tpb,),
+                    grid, (threads_per_block,),
                     (src, permutation, np.int32(N), dst)
                 )
                 arrays_2comp[name] = dst
@@ -369,10 +369,10 @@ class GPUContext:
         if N == 0:
             return
         self._ensure_permutation_kernels()
-        tpb = 256
-        grid = ((N + tpb - 1) // tpb,)
+        threads_per_block = 256
+        grid = ((N + threads_per_block - 1) // threads_per_block,)
         self._permutation_kernels["permute"](
-            grid, (tpb,),
+            grid, (threads_per_block,),
             (src, permutation, np.int32(N), dst)
         )
 
@@ -386,15 +386,15 @@ class GPUContext:
         if N == 0:
             return list(zip(name_list, src_list))
         self._ensure_permutation_kernels()
-        tpb = 256
-        grid = ((N + tpb - 1) // tpb,)
+        threads_per_block = 256
+        grid = ((N + threads_per_block - 1) // threads_per_block,)
         self._ensure_perm_pool(N)
         pool = self._perm_pool_B if self._perm_flip else self._perm_pool_A
         self._perm_flip = not self._perm_flip
         dst_list = [pool[i][:N] for i in range(14)]
         self._permutation_kernels["permute_state_arrays"](
             grid,
-            (tpb,),
+            (threads_per_block,),
             tuple(src_list + [permutation, np.int32(N)] + dst_list),
         )
         return list(zip(name_list, dst_list))
@@ -404,11 +404,11 @@ class GPUContext:
         if N == 0:
             return sorted_array
         self._ensure_permutation_kernels()
-        tpb = 256
-        grid = ((N + tpb - 1) // tpb,)
+        threads_per_block = 256
+        grid = ((N + threads_per_block - 1) // threads_per_block,)
         pdb_array = cp.empty_like(sorted_array)
         self._permutation_kernels["inverse_permute"](
-            grid, (tpb,), (sorted_array, sorted_to_pdb, np.int32(N), pdb_array)
+            grid, (threads_per_block,), (sorted_array, sorted_to_pdb, np.int32(N), pdb_array)
         )
         return pdb_array
 
@@ -486,11 +486,11 @@ class GPUContext:
     def zero_forces(self):
         self._ensure_zero_forces_kernel()
         N = self.num_particles
-        tpb = 256
-        grid = ((N + tpb - 1) // tpb,)
+        threads_per_block = 256
+        grid = ((N + threads_per_block - 1) // threads_per_block,)
         self._zero_forces_kernel(
             grid,
-            (tpb,),
+            (threads_per_block,),
             (
                 self.d_forces_x,
                 self.d_forces_y,

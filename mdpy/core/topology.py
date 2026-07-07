@@ -317,9 +317,9 @@ def build_exclusion_map_gpu(topology, scale_14=1.0):
     d_pair_scale = d_pair_scale[order]
 
     d_flags = cp.zeros(total_pairs, dtype=cp.int32)
-    tpb_dedup = 256
-    grid_dedup = ((total_pairs + tpb_dedup - 1) // tpb_dedup,)
-    kernels['parallel_dedup'](grid_dedup, (tpb_dedup,),
+    threads_per_block_dedup = 256
+    grid_dedup = ((total_pairs + threads_per_block_dedup - 1) // threads_per_block_dedup,)
+    kernels['parallel_dedup'](grid_dedup, (threads_per_block_dedup,),
         (d_pair_i, d_pair_j, d_pair_scale,
          np.int32(total_pairs), d_flags))
 
@@ -349,8 +349,8 @@ def build_exclusion_map_gpu(topology, scale_14=1.0):
     d_bi_scale = d_bi_scale[bi_order]
 
     d_bi_flags = cp.zeros(bi_count, dtype=cp.int32)
-    grid_dedup2 = ((bi_count + tpb_dedup - 1) // tpb_dedup,)
-    kernels['parallel_dedup'](grid_dedup2, (tpb_dedup,),
+    grid_dedup2 = ((bi_count + threads_per_block_dedup - 1) // threads_per_block_dedup,)
+    kernels['parallel_dedup'](grid_dedup2, (threads_per_block_dedup,),
         (d_bi_i, d_bi_j, d_bi_scale,
          np.int32(bi_count), d_bi_flags))
 
@@ -367,17 +367,17 @@ def build_exclusion_map_gpu(topology, scale_14=1.0):
     unique_count = bi_unique_count
 
     d_offset = cp.full(num_particles + 1, -1, dtype=cp.int32)
-    tpb_csr = 256
-    grid_csr = ((unique_count + 1 + tpb_csr - 1) // tpb_csr,)
+    threads_per_block_csr = 256
+    grid_csr = ((unique_count + 1 + threads_per_block_csr - 1) // threads_per_block_csr,)
     kernels['parallel_csr'](
-        grid_csr, (tpb_csr,),
+        grid_csr, (threads_per_block_csr,),
         (d_unique_i, np.int32(unique_count),
          np.int32(num_particles), d_offset))
 
-    tpb_fill = 256
-    grid_fill = ((num_particles + tpb_fill - 1) // tpb_fill,)
+    threads_per_block_fill = 256
+    grid_fill = ((num_particles + threads_per_block_fill - 1) // threads_per_block_fill,)
     kernels['fill_csr_gaps'](
-        grid_fill, (tpb_fill,),
+        grid_fill, (threads_per_block_fill,),
         (d_offset, np.int32(num_particles)))
 
     return d_offset, d_unique_j, d_unique_scale, d_unique_i
@@ -415,15 +415,15 @@ def permute_exclusion_pairs_gpu(d_cached_i, d_cached_j, d_cached_scale,
     d_new_j = _excl_get("new_j", num_pairs, np.int32, pool)
     d_new_scale = _excl_get("new_scale", num_pairs, np.float32, pool)
 
-    tpb = 256
-    grid = ((num_pairs + tpb - 1) // tpb,)
-    kernels['permute_pairs'](grid, (tpb,),
+    threads_per_block = 256
+    grid = ((num_pairs + threads_per_block - 1) // threads_per_block,)
+    kernels['permute_pairs'](grid, (threads_per_block,),
         (d_cached_i, d_cached_j, d_cached_scale,
          d_composed_perm, np.int32(num_pairs),
          d_new_i, d_new_j, d_new_scale))
 
     d_count = _excl_get("count", num_particles + 1, np.int32, pool, fill=0)
-    kernels['count_row'](grid, (tpb,),
+    kernels['count_row'](grid, (threads_per_block,),
         (d_new_i, np.int32(num_pairs), d_count))
 
     d_offset = _excl_get("offset", num_particles + 1, np.int32, pool)
@@ -434,7 +434,7 @@ def permute_exclusion_pairs_gpu(d_cached_i, d_cached_j, d_cached_scale,
     d_temp = _excl_get("temp", num_particles + 1, np.int32, pool)
     d_temp[:] = d_offset
 
-    kernels['scatter_pairs'](grid, (tpb,),
+    kernels['scatter_pairs'](grid, (threads_per_block,),
         (d_new_i, d_new_j, d_new_scale, d_offset,
          np.int32(num_pairs),
          d_neighbors, d_scale_out, d_temp))
