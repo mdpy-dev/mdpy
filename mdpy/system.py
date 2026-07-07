@@ -96,7 +96,12 @@ class System:
         self._ensure_uploaded()
         self.gpu.zero_forces()
         if self._block_list is not None:
-            self._block_list.refresh_sorted_data(self.gpu)
+            self.gpu._d_sorted_data = self._block_list.pack_posq(
+                self.gpu.d_positions_x,
+                self.gpu.d_positions_y,
+                self.gpu.d_positions_z,
+                self.gpu.d_charges,
+            )
 
         if not self._pme_force_terms:
             for term in self._primary_force_terms:
@@ -180,6 +185,7 @@ class System:
             self.gpu.d_positions_z,
         ))
         self._block_list.build_block_pairs(self.topology, self.gpu)
+        self.gpu._d_sorted_types = self._block_list.gather_sorted(self.gpu.d_types)
         for term in self.force_terms:
             if hasattr(term, "post_rebuild_hook"):
                 term.post_rebuild_hook(self._block_list, self.gpu)
@@ -190,7 +196,12 @@ class System:
             return {}
         self.gpu.zero_forces()
         if self._block_list is not None:
-            self._block_list.refresh_sorted_data(self.gpu)
+            self.gpu._d_sorted_data = self._block_list.pack_posq(
+                self.gpu.d_positions_x,
+                self.gpu.d_positions_y,
+                self.gpu.d_positions_z,
+                self.gpu.d_charges,
+            )
         for term_index, term in enumerate(self.force_terms):
             self.gpu.zero_energy()
             term.compute(self.gpu, self._block_list, compute_energy=True)
