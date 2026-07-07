@@ -6,6 +6,7 @@ import cupy as cp
 import numpy as np
 
 from mdpy.force.force_term import ForceTerm
+from mdpy import env
 
 
 def _prepare_energy_expression(energy_cuda):
@@ -276,6 +277,11 @@ class NonbondedForce(ForceTerm):
         self._num_sm = None
         self._compiled = False
 
+        self._d_sorted_fx = None       # slot-indexed force buffer, 3 separate arrays
+        self._d_sorted_fy = None       # matching GPUContext's d_forces_x/y/z convention
+        self._d_sorted_fz = None
+        self._sorted_force_slots = 0   # current allocated size (total_slots)
+
         self._energy_cuda = None
         self._total_energy_expr = None
 
@@ -356,15 +362,87 @@ class NonbondedForce(ForceTerm):
         self._resolve_per_particle(gpu_context)
         self._gather_per_particle(block_list)
 
-    def _build_excl_args(self, gpu_context, block_list, compute_energy):
+    def _ensure_sorted_force_buffer(self, block_list):
+        """Ensure slot-indexed force buffers are allocated for current block count.
+
+        Uses grow-only allocation: buffers grow when num_blocks increases,
+        never shrinks. Reused across steps to avoid per-step allocation.
+        """
+        total_slots = block_list.num_blocks * 32
+        if total_slots == 0:
+            return
+        if self._d_sorted_fx is None or self._sorted_force_slots < total_slots:
+            self._d_sorted_fx = cp.empty(total_slots, dtype=env.NUMPY_FLOAT)
+            self._d_sorted_fy = cp.empty(total_slots, dtype=env.NUMPY_FLOAT)
+            self._d_sorted_fz = cp.empty(total_slots, dtype=env.NUMPY_FLOAT)
+            self._sorted_force_slots = total_slots
+
+    def _zero_sorted_forces(self, total_slots):
+        """Zero the slot-indexed force buffers via async memset."""
+        if self._d_sorted_fx is None or total_slots == 0:
+            return
+        nbytes = total_slots * 4  # 4 bytes per float32
+        stream_ptr = cp.cuda.Stream.null.ptr
+        for buf in (self._d_sorted_fx, self._d_sorted_fy, self._d_sorted_fz):
+            cp.cuda.runtime.memsetAsync(buf.data.ptr, 0, nbytes, stream_ptr)
+
+    def _add_sorted_forces(self, gpu_context, block_list):
+        """Add slot-indexed forces into PDB-order force array via one-pass kernel.
+
+        atomicAdd(&pdb_fx[block_atoms[slot]], sorted_fx[slot]) — accumulates
+        the sorted buffer's forces into the shared PDB-order force pool.
+        """
+        total_slots = block_list.num_blocks * 32
+        if total_slots == 0 or self._d_sorted_fx is None:
+            return
+        threads = 256
+        grid = ((total_slots + threads - 1) // threads,)
+        self._add_forces_kernel(
+            grid, (threads,),
+            (
+                self._d_sorted_fx, self._d_sorted_fy, self._d_sorted_fz,
+                block_list.d_block_atoms,
+                np.int32(total_slots),
+                gpu_context.d_forces_x,
+                gpu_context.d_forces_y,
+                gpu_context.d_forces_z,
+            ),
+        )
+
+    def compute(self, gpu_context, block_list=None, compute_energy=True):
+        if not self._compiled:
+            self._lazy_compile(gpu_context)
+
+        self._resolve_per_particle(gpu_context)
+
+        if block_list is None:
+            return
+
+        total_slots = block_list.num_blocks * 32
+        if total_slots == 0:
+            return
+
+        # Ensure slot-indexed force buffers exist and are zeroed
+        self._ensure_sorted_force_buffer(block_list)
+        self._zero_sorted_forces(total_slots)
+
+        num_sm = self._num_sm
+        grid_size = 16 * num_sm
+
+        if compute_energy:
+            excl_kernel = self._excl_kernel
+        else:
+            excl_kernel = self._excl_kernel_fo
+
+        # Assemble kernel args inline (replaces deleted _build_excl_args)
         args = [
             gpu_context.d_sorted_data,
             block_list.d_excl_shift_x,
             block_list.d_excl_shift_y,
             block_list.d_excl_shift_z,
-            gpu_context.d_forces_x,
-            gpu_context.d_forces_y,
-            gpu_context.d_forces_z,
+            self._d_sorted_fx,
+            self._d_sorted_fy,
+            self._d_sorted_fz,
         ]
         if compute_energy:
             args.append(gpu_context.d_energy)
@@ -393,25 +471,8 @@ class NonbondedForce(ForceTerm):
         args.append(np.int32(self._n_types))
         for name in self._expr_info.scalars:
             args.append(np.float32(self._scalar_data.get(name, 0.0)))
-        return tuple(args)
 
-    def compute(self, gpu_context, block_list=None, compute_energy=True):
-        if not self._compiled:
-            self._lazy_compile(gpu_context)
+        excl_kernel((grid_size,), (256,), tuple(args))
 
-        self._resolve_per_particle(gpu_context)
-
-        if block_list is None:
-            return
-
-        # posq and types already refreshed by System via BlockList.pack_posq/gather_sorted
-        num_sm = self._num_sm
-        grid_size = 16 * num_sm
-
-        if compute_energy:
-            excl_kernel = self._excl_kernel
-        else:
-            excl_kernel = self._excl_kernel_fo
-
-        excl_args = self._build_excl_args(gpu_context, block_list, compute_energy)
-        excl_kernel((grid_size,), (256,), excl_args)
+        # Add slot-indexed forces into PDB-order force array
+        self._add_sorted_forces(gpu_context, block_list)
