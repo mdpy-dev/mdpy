@@ -206,14 +206,15 @@ void exclusion_block_pair_kernel(
             tj = (tj + 1) & 31;
         }}
         if (gi >= 0 && gi < num_particles) {{
-            atomicAdd(&f_x[gi], force_x);
-            atomicAdd(&f_y[gi], force_y);
-            atomicAdd(&f_z[gi], force_z);
+            int slot_i = block_x * 32 + tgx;
+            atomicAdd(&f_x[slot_i], force_x);
+            atomicAdd(&f_y[slot_i], force_y);
+            atomicAdd(&f_z[slot_i], force_z);
         }}
-        if (gj >= 0 && gj < num_particles) {{
-            atomicAdd(&f_x[gj], shfl_fx);
-            atomicAdd(&f_y[gj], shfl_fy);
-            atomicAdd(&f_z[gj], shfl_fz);
+        if (j_slot >= 0) {{
+            atomicAdd(&f_x[j_slot], shfl_fx);
+            atomicAdd(&f_y[j_slot], shfl_fy);
+            atomicAdd(&f_z[j_slot], shfl_fz);
         }}
     }}
 {energy_reduce}
