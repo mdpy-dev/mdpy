@@ -2,7 +2,6 @@ import pytest
 
 test_order = [
     'new_particle_table',
-    'new_pbc',
     'new_topology',
     'new_force_term',
     'bonded_force',
