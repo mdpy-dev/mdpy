@@ -132,6 +132,20 @@ class TestCellAssignment:
                     assert atom_to_block[atom_id] == bi
                     assert atom_to_slot[atom_id] == slot
 
+    def test_pdb_to_slot_maps_correctly(self):
+        """d_pdb_to_slot[pdb_id] = block * BLOCK_SIZE + slot gives the
+        index into d_block_atoms where pdb_id lives."""
+        n, box = 100, 50.0
+        bl, *_ = _rebuild_and_build_block_pairs(n, box)
+        pdb_to_slot = cp.asnumpy(bl.d_pdb_to_slot)
+        block_atoms = cp.asnumpy(bl.d_block_atoms)
+        for pdb_id in range(n):
+            slot = pdb_to_slot[pdb_id]
+            assert block_atoms[slot] == pdb_id, (
+                f"pdb_to_slot[{pdb_id}] = {slot}, but block_atoms[{slot}] = "
+                f"{block_atoms[slot]} (expected {pdb_id})"
+            )
+
     def test_sort_order_is_correct(self):
         n, box = 100, 50.0
         bl, *_ = _rebuild_and_build_block_pairs(n, box)

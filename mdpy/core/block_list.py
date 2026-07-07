@@ -1150,6 +1150,8 @@ class BlockList:
             ),
         )
 
+        self.d_pdb_to_slot = self.d_atom_to_block * BLOCK_SIZE + self.d_atom_to_slot
+
         self._d_reverse_offset = None
         self._d_reverse_neighbors = None
         self._d_reverse_scale = None
@@ -1517,6 +1519,7 @@ class BlockList:
         self.d_block_size_z = cp.empty(0, dtype=env.NUMPY_FLOAT)
         self.d_atom_to_block = cp.empty(0, dtype=env.NUMPY_INT)
         self.d_atom_to_slot = cp.empty(0, dtype=env.NUMPY_INT)
+        self.d_pdb_to_slot = cp.empty(0, dtype=env.NUMPY_INT)
         self.d_block_pairs = cp.empty(0, dtype=env.NUMPY_INT)
         self.d_interacting_atoms = cp.empty(0, dtype=env.NUMPY_INT)
         self.d_cell_block_offset = cp.empty(0, dtype=env.NUMPY_INT)
