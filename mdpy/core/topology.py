@@ -165,26 +165,6 @@ void parallel_dedup_kernel(
 }
 '''
 
-_PERMUTE_PAIRS_KERNEL = r'''
-extern "C" __global__
-void permute_pairs_kernel(
-    const int* __restrict__ old_i,
-    const int* __restrict__ old_j,
-    const float* __restrict__ old_scale,
-    const int* __restrict__ permutation,
-    const int num_pairs,
-    int* __restrict__ new_i,
-    int* __restrict__ new_j,
-    float* __restrict__ new_scale
-) {
-    int tid = blockIdx.x * blockDim.x + threadIdx.x;
-    if (tid >= num_pairs) return;
-    new_i[tid] = permutation[old_i[tid]];
-    new_j[tid] = permutation[old_j[tid]];
-    new_scale[tid] = old_scale[tid];
-}
-'''
-
 _COUNT_ROW_KERNEL = r"""
 extern "C" __global__
 void count_row_kernel(
@@ -229,7 +209,6 @@ def _get_gpu_kernels():
             'parallel_csr': cp.RawKernel(_PARALLEL_CSR_KERNEL, 'parallel_csr_kernel'),
             'fill_csr_gaps': cp.RawKernel(_FILL_CSR_GAPS_KERNEL, 'fill_csr_gaps_kernel'),
             'parallel_dedup': cp.RawKernel(_PARALLEL_DEDUP_KERNEL, 'parallel_dedup_kernel'),
-            'permute_pairs': cp.RawKernel(_PERMUTE_PAIRS_KERNEL, 'permute_pairs_kernel'),
             'count_row': cp.RawKernel(_COUNT_ROW_KERNEL, 'count_row_kernel'),
             'scatter_pairs': cp.RawKernel(_SCATTER_PAIRS_KERNEL, 'scatter_pairs_kernel'),
         }
@@ -400,31 +379,27 @@ def _excl_get(name, size, dtype, pool, fill=None):
     return arr
 
 
-def permute_exclusion_pairs_gpu(d_cached_i, d_cached_j, d_cached_scale,
-                                 d_composed_perm, num_particles, pool):
-    num_pairs = len(d_cached_i)
+def build_csr_from_pairs_gpu(d_pair_i, d_pair_j, d_pair_scale,
+                              num_particles, pool):
+    """Build CSR (offset, neighbors, scale) from flat pair lists.
+
+    Inputs are PDB-order pair index arrays (no permutation applied).
+    Returns CSR arrays suitable for _build_masks_gpu consumption.
+    """
+    num_pairs = len(d_pair_i)
     if num_pairs == 0:
         d_offset = _excl_get("offset", num_particles + 1, np.int32, pool, fill=0)
         d_neighbors = _excl_get("neighbors", 0, np.int32, pool)
         d_scale = _excl_get("scale_out", 0, np.float32, pool)
-        return d_offset, d_neighbors, d_scale, d_cached_i, d_cached_j, d_cached_scale
+        return d_offset, d_neighbors, d_scale
 
     kernels = _get_gpu_kernels()
-
-    d_new_i = _excl_get("new_i", num_pairs, np.int32, pool)
-    d_new_j = _excl_get("new_j", num_pairs, np.int32, pool)
-    d_new_scale = _excl_get("new_scale", num_pairs, np.float32, pool)
-
     threads_per_block = 256
     grid = ((num_pairs + threads_per_block - 1) // threads_per_block,)
-    kernels['permute_pairs'](grid, (threads_per_block,),
-        (d_cached_i, d_cached_j, d_cached_scale,
-         d_composed_perm, np.int32(num_pairs),
-         d_new_i, d_new_j, d_new_scale))
 
     d_count = _excl_get("count", num_particles + 1, np.int32, pool, fill=0)
     kernels['count_row'](grid, (threads_per_block,),
-        (d_new_i, np.int32(num_pairs), d_count))
+        (d_pair_i, np.int32(num_pairs), d_count))
 
     d_offset = _excl_get("offset", num_particles + 1, np.int32, pool)
     cp.cumsum(d_count, dtype=cp.int32, out=d_offset)
@@ -435,11 +410,11 @@ def permute_exclusion_pairs_gpu(d_cached_i, d_cached_j, d_cached_scale,
     d_temp[:] = d_offset
 
     kernels['scatter_pairs'](grid, (threads_per_block,),
-        (d_new_i, d_new_j, d_new_scale, d_offset,
+        (d_pair_i, d_pair_j, d_pair_scale, d_offset,
          np.int32(num_pairs),
          d_neighbors, d_scale_out, d_temp))
 
-    return d_offset, d_neighbors, d_scale_out, d_new_i, d_new_j, d_new_scale
+    return d_offset, d_neighbors, d_scale_out
 
 
 class Builder:

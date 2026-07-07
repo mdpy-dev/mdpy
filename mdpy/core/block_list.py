@@ -1222,19 +1222,17 @@ class BlockList:
         self._extract_exclusion_block_pairs()
 
     def _build_exclusion_state(self, topology):
-        """Build or re-permute the exclusion pair list into current sorted order.
+        """Build CSR from cached PDB-order exclusion pairs.
 
         First call: builds unique pairs from topology's PDB-order bond graph and
-        caches them. EVERY call (including the first) then permutes the cached
-        pairs by d_pdb_to_sorted to produce CSR arrays in the current sorted
-        order. On the first rebuild d_pdb_to_sorted = pdb->sorted_1; on rebuild
-        k>1 it = sorted_{k-1}->sorted_k. Either way the permutation correctly
-        re-indexes the cached pairs into the current sorted order.
+        caches them. EVERY call then builds CSR arrays (offset, neighbors, scale)
+        from the cached pairs via build_csr_from_pairs_gpu. No permutation —
+        pairs stay PDB order, matching PDB-order positions in GPUContext.
 
         Topology is never mutated -- read only.
         """
         from mdpy.core.topology import (
-            build_exclusion_map_gpu, permute_exclusion_pairs_gpu,
+            build_exclusion_map_gpu, build_csr_from_pairs_gpu,
         )
 
         N = topology.num_particles
@@ -1249,21 +1247,17 @@ class BlockList:
 
         pool = self._excl_pool_B if self._excl_flip else self._excl_pool_A
         self._excl_flip = not self._excl_flip
-        result = permute_exclusion_pairs_gpu(
+        d_offset, d_neighbors, d_scale = build_csr_from_pairs_gpu(
             self._d_unique_i,
             self._d_unique_j,
             self._d_unique_scale,
-            self.d_pdb_to_sorted,
             N,
             pool,
         )
-        self._d_excl_offset = result[0]
-        self._d_excl_neighbors = result[1]
-        self._d_excl_scale = result[2]
-        self._d_unique_i = result[3]
-        self._d_unique_j = result[4]
-        self._d_unique_scale = result[5]
-        self._total_exclusion_pairs = int(result[1].shape[0])
+        self._d_excl_offset = d_offset
+        self._d_excl_neighbors = d_neighbors
+        self._d_excl_scale = d_scale
+        self._total_exclusion_pairs = int(d_neighbors.shape[0])
         self._d_reverse_offset = None
         self._d_reverse_neighbors = None
         self._d_reverse_scale = None
