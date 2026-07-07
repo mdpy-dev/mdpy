@@ -81,23 +81,6 @@ def test_rebuild_no_cudamalloc_on_second_rebuild():
     )
 
 
-def test_permute_state_arrays_no_alloc_on_second_rebuild():
-    """Second rebuild must not allocate new state-permutation buffers."""
-    s = _build_ion()
-    s.update_neighbor_list(force_rebuild=True)  # warm: allocates pool_A + pool_B
-    gpu = s.gpu
-    assert gpu._perm_pool_A is not None
-    assert gpu._perm_pool_B is not None
-    # Snapshot the pool buffer data pointers
-    ptrs_A_before = [arr.data.ptr for arr in gpu._perm_pool_A]
-    ptrs_B_before = [arr.data.ptr for arr in gpu._perm_pool_B]
-    s.update_neighbor_list(force_rebuild=True)  # should reuse same buffers
-    ptrs_A_after = [arr.data.ptr for arr in gpu._perm_pool_A]
-    ptrs_B_after = [arr.data.ptr for arr in gpu._perm_pool_B]
-    assert ptrs_A_before == ptrs_A_after, "pool_A was reallocated"
-    assert ptrs_B_before == ptrs_B_after, "pool_B was reallocated"
-
-
 def test_no_cp_arange_in_permute_path():
     """The permute path must not use cp.arange."""
     import inspect
@@ -105,23 +88,3 @@ def test_no_cp_arange_in_permute_path():
     src = inspect.getsource(system)
     count = sum(1 for line in src.split('\n') if 'cp.arange' in line and not line.strip().startswith('#'))
     assert count == 0, f"system.py still uses cp.arange ({count} occurrences)"
-
-
-def test_excl_buffers_no_aliasing_across_rebuilds():
-    """permute_exclusion_pairs_gpu double-buffers: a call's output buffers
-    (returned as the next call's input) must never be the same memory as the
-    previous call's output. Aliasing would corrupt the permute_pairs kernel,
-    which reads d_cached_* and writes d_new_* simultaneously."""
-    s = _build_ion()
-    # Every rebuild (including the first) permutes via the double-buffered
-    # pool owned by BlockList._build_exclusion_state.
-    s.update_neighbor_list(force_rebuild=True)  # prime (builds + permutes)
-    bl = s.block_list
-    s.update_neighbor_list(force_rebuild=True)
-    ptr_A = bl._d_unique_i.data.ptr
-    s.update_neighbor_list(force_rebuild=True)
-    ptr_B = bl._d_unique_i.data.ptr
-    assert ptr_A != ptr_B, "Double-buffering failed: same buffer reused (aliasing risk)"
-    s.update_neighbor_list(force_rebuild=True)
-    ptr_A2 = bl._d_unique_i.data.ptr
-    assert ptr_A2 == ptr_A, "Double-buffering flip pattern wrong (should cycle A->B->A)"

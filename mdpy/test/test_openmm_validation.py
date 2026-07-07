@@ -56,13 +56,11 @@ def _setup_mdpy_system(psf_path, pdb_path, prm_path, cutoff=12.0):
     system.upload_velocities(np.zeros((topology.num_particles, 3), dtype=np.float32))
     system.update_neighbor_list(force_rebuild=True)
     system.compute_forces()
-    bl = system.block_list
     gpu = system.gpu
-    sorted_to_pdb = bl.d_sorted_to_pdb
     frc = np.stack([
-        gpu.permute_from_sorted(sorted_to_pdb, gpu.d_forces_x).get(),
-        gpu.permute_from_sorted(sorted_to_pdb, gpu.d_forces_y).get(),
-        gpu.permute_from_sorted(sorted_to_pdb, gpu.d_forces_z).get(),
+        gpu.d_forces_x.get(),
+        gpu.d_forces_y.get(),
+        gpu.d_forces_z.get(),
     ], axis=1)
     system._validation_forces = frc
     system._validation_positions = wrapped.astype(np.float32)

@@ -33,13 +33,18 @@ class _PBCContext:
     """Minimal stand-in exposing d_pbc_matrix/d_pbc_inv for BlockList.rebuild
     and build_block_pairs, which now read PBC from a GPUContext."""
 
-    def __init__(self, pbc_matrix, pbc_inv):
+    def __init__(self, pbc_matrix, pbc_inv, positions=None):
         self.d_pbc_matrix = cp.asarray(
             np.ascontiguousarray(pbc_matrix, dtype=np.float32).ravel()
         )
         self.d_pbc_inv = cp.asarray(
             np.ascontiguousarray(pbc_inv, dtype=np.float32).ravel()
         )
+        if positions is not None:
+            pos = np.asarray(positions, dtype=np.float32)
+            self.d_positions_x = cp.asarray(pos[:, 0])
+            self.d_positions_y = cp.asarray(pos[:, 1])
+            self.d_positions_z = cp.asarray(pos[:, 2])
 
 
 def _rebuild_and_build_block_pairs(n, box=50.0, cutoff=10.0, skin=2.0, seed=42, positions=None):
@@ -48,9 +53,10 @@ def _rebuild_and_build_block_pairs(n, box=50.0, cutoff=10.0, skin=2.0, seed=42, 
     topology = _make_topology(n)
     pbc_matrix = _make_pbc(box)
     pbc_inv = np.linalg.inv(pbc_matrix)
+    ctx = _PBCContext(pbc_matrix, pbc_inv, positions)
     bl = BlockList(cutoff=cutoff, skin=skin)
-    bl.rebuild(positions, topology, _PBCContext(pbc_matrix, pbc_inv), force=True)
-    bl.build_block_pairs(topology, _PBCContext(pbc_matrix, pbc_inv))
+    bl.rebuild(positions, topology, ctx, force=True)
+    bl.build_block_pairs(topology, ctx)
     # Read actual counts for test assertions (syncs — acceptable in tests,
     # NOT in the hot path where kernels read from device directly).
     bl.num_blocks = int(bl._d_num_blocks[0].get())
@@ -158,7 +164,6 @@ class TestInteractingBlocks:
         n, box = 100, 50.0
         cutoff, skin = 10.0, 2.0
         bl, positions, pbc_matrix, _, _ = _rebuild_and_build_block_pairs(n, box, cutoff, skin)
-        sorted_to_pdb = cp.asnumpy(bl.d_sorted_to_pdb)
         block_pairs = bl.block_pairs
         interacting = bl.interacting_atoms
         ba = bl.block_atoms
@@ -174,15 +179,13 @@ class TestInteractingBlocks:
                 aj = interacting_row[slot]
                 if aj < 0 or aj == NUM_ATOMS_SENTINEL:
                     continue
-                pdb_j = sorted_to_pdb[aj]
-                pos_j = positions[pdb_j]
+                pos_j = positions[aj]
                 found_close = False
                 for si in range(BLOCK_SIZE):
                     ak = source_atoms[si]
                     if ak < 0:
                         continue
-                    pdb_k = sorted_to_pdb[ak]
-                    pos_k = positions[pdb_k]
+                    pos_k = positions[ak]
                     dx = pos_j - pos_k
                     dx -= box_diag * np.round(dx / box_diag)
                     dist_sq = np.sum(dx ** 2)
@@ -190,7 +193,7 @@ class TestInteractingBlocks:
                         found_close = True
                         break
                 assert found_close, (
-                    f"Block-pair {ti}: interacting atom sorted_idx={aj} pdb={pdb_j} "
+                    f"Block-pair {ti}: interacting atom pdb={aj} "
                     f"is not within build_radius of any atom in source block {source_block}"
                 )
 
@@ -198,7 +201,6 @@ class TestInteractingBlocks:
         n, box = 100, 50.0
         cutoff, skin = 10.0, 2.0
         bl, positions, pbc_matrix, _, _ = _rebuild_and_build_block_pairs(n, box, cutoff, skin)
-        sorted_to_pdb = cp.asnumpy(bl.d_sorted_to_pdb)
         block_pairs = bl.block_pairs
         interacting = bl.interacting_atoms
         ba = bl.block_atoms
@@ -222,10 +224,9 @@ class TestInteractingBlocks:
                     if ak != aj:
                         found_pairs.add((min(ak, aj), max(ak, aj)))
 
-        sorted_pos_x, sorted_pos_y, sorted_pos_z = bl._sorted_positions
-        spx = cp.asnumpy(sorted_pos_x)
-        spy = cp.asnumpy(sorted_pos_y)
-        spz = cp.asnumpy(sorted_pos_z)
+        spx = positions[:, 0]
+        spy = positions[:, 1]
+        spz = positions[:, 2]
 
         missing = 0
         for i in range(n):
@@ -239,7 +240,7 @@ class TestInteractingBlocks:
                 dist_sq = dx * dx + dy * dy + dz * dz
                 if dist_sq <= build_radius_sq:
                     assert (i, j) in found_pairs, (
-                        f"Pair (sorted {i}, sorted {j}) within build_radius but not found in block_pairs"
+                        f"Pair (pdb {i}, pdb {j}) within build_radius but not found in block_pairs"
                     )
 
     def test_newton_third_law_no_duplicates(self):
@@ -461,8 +462,9 @@ class TestExclusionMasks:
         pbc_matrix = _make_pbc(box)
         pbc_inv = np.linalg.inv(pbc_matrix)
         bl = BlockList(cutoff=10.0, skin=2.0)
-        bl.rebuild(positions, topology, _PBCContext(pbc_matrix, pbc_inv), force=True)
-        bl.build_block_pairs(topology, _PBCContext(pbc_matrix, pbc_inv))
+        ctx = _PBCContext(pbc_matrix, pbc_inv, positions)
+        bl.rebuild(positions, topology, ctx, force=True)
+        bl.build_block_pairs(topology, ctx)
         bl.num_blocks = int(bl._d_num_blocks[0].get())
         bl.num_block_pairs = int(bl._d_counters[0].get())
 
@@ -506,8 +508,9 @@ class TestExclusionMasks:
         pbc_matrix = _make_pbc(box)
         pbc_inv = np.linalg.inv(pbc_matrix)
         bl = BlockList(cutoff=10.0, skin=2.0)
-        bl.rebuild(positions, topology, _PBCContext(pbc_matrix, pbc_inv), force=True)
-        bl.build_block_pairs(topology, _PBCContext(pbc_matrix, pbc_inv))
+        ctx = _PBCContext(pbc_matrix, pbc_inv, positions)
+        bl.rebuild(positions, topology, ctx, force=True)
+        bl.build_block_pairs(topology, ctx)
         bl.num_blocks = int(bl._d_num_blocks[0].get())
         bl.num_block_pairs = int(bl._d_counters[0].get())
 
@@ -553,8 +556,9 @@ class TestBlockPairClassification:
         pbc_matrix = _make_pbc(box)
         pbc_inv = np.linalg.inv(pbc_matrix)
         bl = BlockList(cutoff=10.0, skin=2.0)
-        bl.rebuild(positions, topology, _PBCContext(pbc_matrix, pbc_inv), force=True)
-        bl.build_block_pairs(topology, _PBCContext(pbc_matrix, pbc_inv))
+        ctx = _PBCContext(pbc_matrix, pbc_inv, positions)
+        bl.rebuild(positions, topology, ctx, force=True)
+        bl.build_block_pairs(topology, ctx)
 
         assert bl.num_main_block_pairs + bl.num_exclusion_block_pairs == bl.num_block_pairs
         if bl.num_exclusion_block_pairs > 0:
@@ -567,8 +571,9 @@ class TestBlockPairClassification:
         pbc_matrix = _make_pbc(30.0)
         pbc_inv = np.linalg.inv(pbc_matrix)
         bl = BlockList(cutoff=8.0, skin=2.0)
-        bl.rebuild(positions, topology, _PBCContext(pbc_matrix, pbc_inv), force=True)
-        bl.build_block_pairs(topology, _PBCContext(pbc_matrix, pbc_inv))
+        ctx = _PBCContext(pbc_matrix, pbc_inv, positions)
+        bl.rebuild(positions, topology, ctx, force=True)
+        bl.build_block_pairs(topology, ctx)
 
         assert bl.num_main_block_pairs + bl.num_exclusion_block_pairs == bl.num_block_pairs
 
@@ -782,7 +787,8 @@ class TestCellProcessingBatch:
         pbc_matrix = _make_pbc(box)
         pbc_inv = np.linalg.inv(pbc_matrix)
         bl = BlockList(cutoff=10.0, skin=2.0)
-        bl.rebuild(positions, topology, _PBCContext(pbc_matrix, pbc_inv), force=True)
+        ctx = _PBCContext(pbc_matrix, pbc_inv, positions)
+        bl.rebuild(positions, topology, ctx, force=True)
 
         assert bl.num_blocks > 0
         assert bl.d_cell_block_offset is not None
@@ -794,7 +800,7 @@ class TestCellProcessingBatch:
         real_atoms = block_atoms_np[block_atoms_np >= 0]
         assert len(np.unique(real_atoms)) == n
 
-        bl.build_block_pairs(topology, _PBCContext(pbc_matrix, pbc_inv))
+        bl.build_block_pairs(topology, ctx)
         assert bl.num_block_pairs > 0
 
 
@@ -836,7 +842,6 @@ class TestCellSubsetDecomposition:
         bl, positions, pbc_matrix, _, _ = _rebuild_and_build_block_pairs(n, box, cutoff, skin)
         assert bl.num_cell_subsets > 1, "Test requires K > 1 to be meaningful"
 
-        sorted_to_pdb = cp.asnumpy(bl.d_sorted_to_pdb)
         block_pairs = bl.block_pairs
         interacting = bl.interacting_atoms
         ba = bl.block_atoms
@@ -852,15 +857,13 @@ class TestCellSubsetDecomposition:
                 aj = interacting_row[slot]
                 if aj < 0 or aj == NUM_ATOMS_SENTINEL:
                     continue
-                pdb_j = sorted_to_pdb[aj]
-                pos_j = positions[pdb_j]
+                pos_j = positions[aj]
                 found_close = False
                 for si in range(BLOCK_SIZE):
                     ak = source_atoms[si]
                     if ak < 0:
                         continue
-                    pdb_k = sorted_to_pdb[ak]
-                    pos_k = positions[pdb_k]
+                    pos_k = positions[ak]
                     dx = pos_j - pos_k
                     dx -= box_diag * np.round(dx / box_diag)
                     dist_sq = np.sum(dx ** 2)
@@ -868,7 +871,7 @@ class TestCellSubsetDecomposition:
                         found_close = True
                         break
                 assert found_close, (
-                    f"Block-pair {ti}: interacting atom sorted_idx={aj} pdb={pdb_j} "
+                    f"Block-pair {ti}: interacting atom pdb={aj} "
                     f"is not within build_radius of any atom in source block {source_block}"
                 )
 
@@ -1052,7 +1055,6 @@ class TestShiftGroupedPacking:
             n, box, cutoff, skin
         )
 
-        sorted_to_pdb = cp.asnumpy(bl.d_sorted_to_pdb)
         block_pairs = bl.block_pairs
         interacting = bl.interacting_atoms
         ba = bl.block_atoms
@@ -1072,15 +1074,13 @@ class TestShiftGroupedPacking:
                 aj = int(interacting_row[slot])
                 if aj < 0 or aj == NUM_ATOMS_SENTINEL:
                     continue
-                pdb_j = sorted_to_pdb[aj]
-                pos_j = positions[pdb_j]
+                pos_j = positions[aj]
                 found_close = False
                 for si in range(BLOCK_SIZE):
                     ak = source_atoms[si]
                     if ak < 0:
                         continue
-                    pdb_k = sorted_to_pdb[ak]
-                    pos_k = positions[pdb_k]
+                    pos_k = positions[ak]
                     dx = (pos_j[0] + sx) - pos_k[0]
                     dy = (pos_j[1] + sy) - pos_k[1]
                     dz = (pos_j[2] + sz) - pos_k[2]
@@ -1088,7 +1088,7 @@ class TestShiftGroupedPacking:
                         found_close = True
                         break
                 assert found_close, (
-                    f"Tile {ti}: j-atom sorted={aj} (pdb={pdb_j}) "
+                    f"Tile {ti}: j-atom pdb={aj} "
                     f"with shift ({sx},{sy},{sz}) not within build_radius "
                     f"of any i-atom in block {bx}. "
                     f"Incompatible shifts may have been packed together."
@@ -1128,9 +1128,9 @@ class TestShiftGroupedPacking:
                             (min(int(ak), aj), max(int(ak), aj))
                         )
 
-        spx = cp.asnumpy(bl._sorted_positions[0])
-        spy = cp.asnumpy(bl._sorted_positions[1])
-        spz = cp.asnumpy(bl._sorted_positions[2])
+        spx = positions[:, 0]
+        spy = positions[:, 1]
+        spz = positions[:, 2]
 
         for i in range(n):
             for j in range(i + 1, n):
@@ -1142,7 +1142,7 @@ class TestShiftGroupedPacking:
                 dz -= box_diag[2] * round(dz / box_diag[2])
                 if dx * dx + dy * dy + dz * dz <= build_radius_sq:
                     assert (i, j) in found_pairs, (
-                        f"Pair (sorted {i}, {j}) within build_radius "
+                        f"Pair (pdb {i}, {j}) within build_radius "
                         f"but missing from block_pairs — "
                         f"cross-cell packing dropped it."
                     )
@@ -1185,7 +1185,6 @@ class TestShiftGroupedPacking:
             n, box, cutoff, skin, positions=positions
         )
 
-        sorted_to_pdb = cp.asnumpy(bl.d_sorted_to_pdb)
         block_pairs = bl.block_pairs
         interacting = bl.interacting_atoms
         ba = bl.block_atoms
@@ -1205,15 +1204,13 @@ class TestShiftGroupedPacking:
                 aj = int(interacting_row[slot])
                 if aj < 0 or aj == NUM_ATOMS_SENTINEL:
                     continue
-                pdb_j = sorted_to_pdb[aj]
-                pos_j = positions[pdb_j]
+                pos_j = positions[aj]
                 found_close = False
                 for si in range(BLOCK_SIZE):
                     ak = source_atoms[si]
                     if ak < 0:
                         continue
-                    pdb_k = sorted_to_pdb[ak]
-                    pos_k = positions[pdb_k]
+                    pos_k = positions[ak]
                     dx = (pos_j[0] + sx) - pos_k[0]
                     dy = (pos_j[1] + sy) - pos_k[1]
                     dz = (pos_j[2] + sz) - pos_k[2]
@@ -1221,7 +1218,7 @@ class TestShiftGroupedPacking:
                         found_close = True
                         break
                 assert found_close, (
-                    f"PBC tile {ti}: j-atom {aj} (pdb={pdb_j}) with shift "
+                    f"PBC tile {ti}: j-atom pdb={aj} with shift "
                     f"({sx},{sy},{sz}) not within build_radius of block {bx}. "
                     f"Incompatible shifts may have been packed together."
                 )

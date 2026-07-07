@@ -124,8 +124,10 @@ class TestCellBasedChargeSpreading:
         subgrid_dz = -(-grid_z // bl.num_cells_z) + 2 * order
         subgrid_total = subgrid_dx * subgrid_dy * subgrid_dz
 
-        sorted_pos_x, sorted_pos_y, sorted_pos_z = bl._sorted_positions
-        sorted_charges = d_charges[bl.d_sorted_to_pdb]
+        sorted_pos_x = d_pos_x
+        sorted_pos_y = d_pos_y
+        sorted_pos_z = d_pos_z
+        sorted_charges = d_charges
 
         d_grid_cell = cp.zeros(grid_x * grid_y * grid_z, dtype=np.float32)
         cell_spread_k = get_cell_spread_kernel()
@@ -236,8 +238,10 @@ class TestForceGathering:
         subgrid_dz = -(-grid_z // bl.num_cells_z) + 2 * order
         subgrid_total = subgrid_dx * subgrid_dy * subgrid_dz
 
-        sorted_pos_x, sorted_pos_y, sorted_pos_z = bl._sorted_positions
-        sorted_charges_gpu = d_charges[bl.d_sorted_to_pdb]
+        sorted_pos_x = d_pos_x
+        sorted_pos_y = d_pos_y
+        sorted_pos_z = d_pos_z
+        sorted_charges_gpu = d_charges
 
         d_charge_grid = cp.zeros(grid_x * grid_y * grid_z, dtype=np.float32)
         cell_spread_k = get_cell_spread_kernel()
@@ -669,6 +673,7 @@ class TestPMEIntegration6PO6:
     def test_pme_energy_nonzero(self):
         system, pme = self._build_pme_system()
 
+        system.compute_forces()
         energies = system.dump_energy()
         print(f"PME energies: {energies}")
 
@@ -806,8 +811,10 @@ class TestBilateralPaddingUnwrapped:
         subgrid_dz = -(-grid_z // bl.num_cells_z) + 2 * order
         subgrid_total = subgrid_dx * subgrid_dy * subgrid_dz
 
-        sorted_pos_x, sorted_pos_y, sorted_pos_z = bl._sorted_positions
-        sorted_charges = d_charges[bl.d_sorted_to_pdb]
+        sorted_pos_x = d_pos_x
+        sorted_pos_y = d_pos_y
+        sorted_pos_z = d_pos_z
+        sorted_charges = d_charges
 
         d_grid_cell = cp.zeros(grid_x * grid_y * grid_z, dtype=np.float32)
         cell_spread_k = get_cell_spread_kernel()

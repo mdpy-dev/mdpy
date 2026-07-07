@@ -738,17 +738,16 @@ class TestRebuildSortCorrectness:
         np.testing.assert_array_equal(s2p_final[p2s_final], identity,
             err_msg="Permutation invariant broken after multiple rebuilds")
 
-        import cupy as cp
-        bl = system.block_list
-        d_stp = bl.d_sorted_to_pdb
-        pdb_gpu_x = system.gpu.permute_from_sorted(d_stp, system.gpu.d_positions_x)
-        pdb_gpu_y = system.gpu.permute_from_sorted(d_stp, system.gpu.d_positions_y)
-        pdb_gpu_z = system.gpu.permute_from_sorted(d_stp, system.gpu.d_positions_z)
-        gpu_pos = np.stack([pdb_gpu_x.get(), pdb_gpu_y.get(), pdb_gpu_z.get()], axis=1)
+        gpu = system.gpu
+        gpu_pos = np.stack([
+            gpu.d_positions_x.get(),
+            gpu.d_positions_y.get(),
+            gpu.d_positions_z.get(),
+        ], axis=1)
 
         np.testing.assert_allclose(gpu_pos, pos_after_many, atol=1e-5,
-            err_msg="GPU sorted positions don't match dump_state output — "
-                     "sorted→PDB mapping is wrong")
+            err_msg="GPU positions don't match dump_state output — "
+                     "PDB-order state is wrong")
 
 
 class TestLazyEnergy:

@@ -56,7 +56,7 @@ def _build_system():
     return system, pme
 
 
-def test_pme_charges_sorted_after_rebuild():
+def test_pme_charges_unchanged_after_rebuild():
     system, pme = _build_system()
 
     charges_before = cp.asnumpy(system.gpu.d_charges).copy()
@@ -69,11 +69,9 @@ def test_pme_charges_sorted_after_rebuild():
 
     charges_after = cp.asnumpy(system.gpu.d_charges)
 
-    perm = cp.asnumpy(bl.d_raw_order)
-    expected_sorted = charges_before[perm]
     np.testing.assert_array_almost_equal(
-        charges_after, expected_sorted, decimal=5,
-        err_msg="PME charges not correctly permuted to sorted order"
+        charges_after, charges_before, decimal=5,
+        err_msg="Charges should stay PDB order (unchanged by rebuild)"
     )
 
 

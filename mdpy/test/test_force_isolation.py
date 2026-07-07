@@ -85,6 +85,7 @@ def _run_simulation(include_bonded, include_nonbonded, num_steps):
     energies_list = []
     for step in range(num_steps):
         system.update_neighbor_list(sync_interval=10)
+        system.compute_forces()
         energies = system.dump_energy()
         total = sum(energies.values()) * KCAL
         energies_list.append(total)
