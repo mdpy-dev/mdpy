@@ -189,6 +189,8 @@ class System:
         if self.gpu.d_energy_accumulator is None:
             return {}
         self.gpu.zero_forces()
+        if self._block_list is not None:
+            self._block_list.refresh_sorted_data(self.gpu)
         for term_index, term in enumerate(self.force_terms):
             self.gpu.zero_energy()
             term.compute(self.gpu, self._block_list, compute_energy=True)
