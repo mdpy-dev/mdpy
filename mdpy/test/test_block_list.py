@@ -1431,21 +1431,8 @@ class TestSnapshotPostWrapIntegration:
         )
 
 
-class _SortedDataContext:
-    """Minimal stand-in exposing d_positions_x/y/z, d_charges, and
-    num_particles for BlockList.refresh_sorted_data."""
-
-    def __init__(self, pos_x, pos_y, pos_z, charges, num_particles):
-        self.d_positions_x = pos_x
-        self.d_positions_y = pos_y
-        self.d_positions_z = pos_z
-        self.d_charges = charges
-        self.num_particles = num_particles
-
-
-class TestRefreshSortedData:
-    """Verify refresh_sorted_data gathers per-particle pos+charge into the
-    block-ordered SoA buffer via d_block_atoms."""
+class TestPackPosq:
+    """Verify pack_posq gathers PDB-order pos+charge into block-ordered float4 buffer."""
 
     def test_gather_matches_block_atoms_indexing(self):
         n = 8
@@ -1453,19 +1440,14 @@ class TestRefreshSortedData:
         bl, *_ = _rebuild_and_build_block_pairs(n, box, cutoff=10.0, skin=2.0)
         assert bl.num_blocks > 0
 
-        # Predictable per-particle values: pos_x[i] = i+1, pos_y = 10*(i+1),
-        # pos_z = 100*(i+1), charge = 0.1*(i+1). Values need NOT be physically
-        # meaningful — the test only verifies the gather indexes correctly.
         idx = np.arange(n, dtype=np.float32)
         pos_x = cp.asarray(idx + 1.0, dtype=np.float32)
         pos_y = cp.asarray(idx * 10.0 + 10.0, dtype=np.float32)
         pos_z = cp.asarray(idx * 100.0 + 100.0, dtype=np.float32)
         charges = cp.asarray(idx * 0.1 + 0.1, dtype=np.float32)
-        ctx = _SortedDataContext(pos_x, pos_y, pos_z, charges, n)
 
-        bl.refresh_sorted_data(ctx)
+        sorted_data = bl.pack_posq(pos_x, pos_y, pos_z, charges)
 
-        sorted_data = bl.d_sorted_data
         assert sorted_data is not None
         total_slots = bl.num_blocks * BLOCK_SIZE
         assert sorted_data.size == total_slots * 4
@@ -1494,52 +1476,72 @@ class TestRefreshSortedData:
                 assert sorted_np[slot, 2] == 0.0, f"padding slot {slot}: z not zero"
                 assert sorted_np[slot, 3] == 0.0, f"padding slot {slot}: charge not zero"
 
-    def test_buffer_resizes_when_num_blocks_changes(self):
-        # Build a small system (1 block for 4 atoms within cutoff), refresh,
-        # then simulate a block-count growth on the SAME object and verify
-        # the buffer is reallocated to the new size (exercises the resize
-        # branch, not just initial allocation).
-        n_small = 4
-        positions_small = np.array([
-            [1.0, 1.0, 1.0],
-            [2.0, 2.0, 2.0],
-            [3.0, 3.0, 3.0],
-            [4.0, 4.0, 4.0],
-        ], dtype=np.float32)
-        bl, *_ = _rebuild_and_build_block_pairs(
-            n_small, 50.0, cutoff=100.0, skin=10.0, positions=positions_small
-        )
-        assert bl.num_blocks == 1
-        ctx_small = _SortedDataContext(
-            cp.zeros(n_small, dtype=np.float32),
-            cp.zeros(n_small, dtype=np.float32),
-            cp.zeros(n_small, dtype=np.float32),
-            cp.zeros(n_small, dtype=np.float32),
-            n_small,
-        )
-        bl.refresh_sorted_data(ctx_small)
-        small_size = bl.d_sorted_data.size
-        assert small_size == 1 * BLOCK_SIZE * 4
-
-        # Simulate growth: more blocks now. d_block_atoms must also be large
-        # enough for the kernel to read without OOB, so grow it to match.
-        grown_blocks = 5
-        bl.num_blocks = grown_blocks
-        bl.d_block_atoms = cp.full(grown_blocks * BLOCK_SIZE, -1, dtype=np.int32)
-        bl.refresh_sorted_data(ctx_small)
-        assert bl.d_sorted_data.size == grown_blocks * BLOCK_SIZE * 4
-        assert bl.d_sorted_data.size > small_size, "buffer did not grow on resize"
-
-
-    def test_no_blocks_is_noop(self):
+    def test_no_blocks_returns_empty(self):
         bl = BlockList(cutoff=10.0, skin=2.0)
-        # num_blocks is 0 before any rebuild; refresh_sorted_data must be a no-op
-        bl.refresh_sorted_data(_SortedDataContext(
+        result = bl.pack_posq(
             cp.zeros(1, dtype=np.float32),
             cp.zeros(1, dtype=np.float32),
             cp.zeros(1, dtype=np.float32),
             cp.zeros(1, dtype=np.float32),
-            1,
-        ))
-        assert bl.d_sorted_data is None
+        )
+        assert result.size == 0
+
+
+class TestGatherSorted:
+    """Verify gather_sorted gathers any PDB-order array into block order."""
+
+    def test_gather_int_matches_block_atoms_indexing(self):
+        n = 8
+        box = 50.0
+        bl, *_ = _rebuild_and_build_block_pairs(n, box, cutoff=10.0, skin=2.0)
+        assert bl.num_blocks > 0
+
+        types = cp.arange(n, dtype=np.int32)
+        sorted_types = bl.gather_sorted(types)
+
+        total_slots = bl.num_blocks * BLOCK_SIZE
+        assert sorted_types.size == total_slots
+        assert sorted_types.dtype == np.int32
+
+        sorted_np = cp.asnumpy(sorted_types)
+        block_atoms_np = cp.asnumpy(bl.d_block_atoms)
+
+        for slot in range(total_slots):
+            atom_id = block_atoms_np[slot]
+            if 0 <= atom_id < n:
+                assert sorted_np[slot] == atom_id, (
+                    f"slot {slot} (atom {atom_id}): type mismatch"
+                )
+            else:
+                assert sorted_np[slot] == 0, f"padding slot {slot}: not zero"
+
+    def test_gather_float_matches_block_atoms_indexing(self):
+        n = 8
+        box = 50.0
+        bl, *_ = _rebuild_and_build_block_pairs(n, box, cutoff=10.0, skin=2.0)
+        assert bl.num_blocks > 0
+
+        values = cp.arange(n, dtype=np.float32) * 0.5
+        sorted_values = bl.gather_sorted(values)
+
+        total_slots = bl.num_blocks * BLOCK_SIZE
+        assert sorted_values.size == total_slots
+        assert sorted_values.dtype == np.float32
+
+        sorted_np = cp.asnumpy(sorted_values)
+        block_atoms_np = cp.asnumpy(bl.d_block_atoms)
+
+        for slot in range(total_slots):
+            atom_id = block_atoms_np[slot]
+            if 0 <= atom_id < n:
+                assert sorted_np[slot] == pytest.approx(values[atom_id].get(), abs=1e-6), (
+                    f"slot {slot} (atom {atom_id}): value mismatch"
+                )
+            else:
+                assert sorted_np[slot] == 0.0, f"padding slot {slot}: not zero"
+
+    def test_no_blocks_returns_empty(self):
+        bl = BlockList(cutoff=10.0, skin=2.0)
+        result = bl.gather_sorted(cp.zeros(1, dtype=np.int32))
+        assert result.size == 0
 
