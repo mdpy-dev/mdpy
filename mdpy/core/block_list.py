@@ -1123,8 +1123,7 @@ class BlockList:
         self.d_pdb_to_sorted = pdb_to_sorted
         self.d_sorted_to_pdb = sorted_to_pdb
         self._d_cell_indices_sorted = cell_indices_sorted
-        pos_x, pos_y, pos_z = sorted_pos_x, sorted_pos_y, sorted_pos_z
-        self._sorted_positions = (pos_x, pos_y, pos_z)
+        self._sorted_positions = (sorted_pos_x, sorted_pos_y, sorted_pos_z)
 
         self.d_block_to_cell = block_to_cell[:self.max_blocks]
 
@@ -1169,7 +1168,9 @@ class BlockList:
             return
         self._invalidate_caches()
 
-        pos_x, pos_y, pos_z = self._sorted_positions
+        pos_x = gpu_context.d_positions_x
+        pos_y = gpu_context.d_positions_y
+        pos_z = gpu_context.d_positions_z
         num_blocks = self.num_blocks
         # Cell-subset decomposition: split the 27-cell scan into K subsets
         # to fill the GPU. Target ~2 full waves (80 SMs x 4 blocks/SM = 320/wave).
