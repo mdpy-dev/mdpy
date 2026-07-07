@@ -201,43 +201,21 @@ class System:
         return result
 
     def dump_state(self):
-        bl = self._block_list
         gpu = self.gpu
-        if bl is not None and bl.d_sorted_to_pdb.size > 0 and bl.num_particles > 0:
-            sorted_to_pdb = bl.d_sorted_to_pdb
-            pos = np.stack([
-                gpu.permute_from_sorted(sorted_to_pdb, gpu.d_positions_x).get(),
-                gpu.permute_from_sorted(sorted_to_pdb, gpu.d_positions_y).get(),
-                gpu.permute_from_sorted(sorted_to_pdb, gpu.d_positions_z).get(),
-            ], axis=1)
-            vel = np.stack([
-                gpu.permute_from_sorted(sorted_to_pdb, gpu.d_velocities_x).get(),
-                gpu.permute_from_sorted(sorted_to_pdb, gpu.d_velocities_y).get(),
-                gpu.permute_from_sorted(sorted_to_pdb, gpu.d_velocities_z).get(),
-            ], axis=1)
-        else:
-            pos = np.stack([
-                gpu.d_positions_x.get(),
-                gpu.d_positions_y.get(),
-                gpu.d_positions_z.get(),
-            ], axis=1)
-            vel = np.stack([
-                gpu.d_velocities_x.get(),
-                gpu.d_velocities_y.get(),
-                gpu.d_velocities_z.get(),
-            ], axis=1)
+        pos = np.stack([
+            gpu.d_positions_x.get(),
+            gpu.d_positions_y.get(),
+            gpu.d_positions_z.get(),
+        ], axis=1)
+        vel = np.stack([
+            gpu.d_velocities_x.get(),
+            gpu.d_velocities_y.get(),
+            gpu.d_velocities_z.get(),
+        ], axis=1)
         return pos, vel
 
     def dump_forces(self):
-        bl = self._block_list
         gpu = self.gpu
-        if bl is not None and bl.d_sorted_to_pdb.size > 0 and bl.num_particles > 0:
-            sorted_to_pdb = bl.d_sorted_to_pdb
-            return np.stack([
-                gpu.permute_from_sorted(sorted_to_pdb, gpu.d_forces_x).get(),
-                gpu.permute_from_sorted(sorted_to_pdb, gpu.d_forces_y).get(),
-                gpu.permute_from_sorted(sorted_to_pdb, gpu.d_forces_z).get(),
-            ], axis=1)
         return np.stack([
             gpu.d_forces_x.get(),
             gpu.d_forces_y.get(),
