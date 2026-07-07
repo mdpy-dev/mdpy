@@ -18,7 +18,7 @@ class Topology:
         'masses', 'charges', 'particle_type_indices', 'molecule_ids',
         'particle_names', 'type_names', 'chain_ids', 'molecule_types',
         '_exclusion_dirty', '_exclusion_pairs', '_exclusion_csr',
-        '_exclusion_reverse_csr', '_excl_pool',
+        '_exclusion_reverse_csr', '_exclusion_pool',
     ]
 
     def __init__(self, builder: Builder | None = None):
@@ -96,7 +96,7 @@ class Topology:
         self._exclusion_pairs = None       # (d_i, d_j, d_scale) unique pairs
         self._exclusion_csr = None         # (offset, neighbors, scale)
         self._exclusion_reverse_csr = None  # (rev_offset, rev_neighbors, rev_scale)
-        self._excl_pool = {}
+        self._exclusion_pool = {}
 
     def _derive_exclusion_state(self):
         """Build unique pairs + forward CSR + reverse CSR from the bond graph.
@@ -171,7 +171,7 @@ class Topology:
 
         # --- forward CSR via pool_get buffers ---
         num_pairs = bi_uniq
-        pool = self._excl_pool
+        pool = self._exclusion_pool
         d_count = pool_get(pool, "count", N + 1, env.NUMPY_INT, fill=0)
         grid_c = ((num_pairs + threads_per_block - 1) // threads_per_block,)
         kernels['count_row'](grid_c, (threads_per_block,),

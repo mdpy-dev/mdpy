@@ -565,7 +565,7 @@ On block list rebuild (triggered by displacement > skin/2):
 | `mdpy/system.py` | Simulation driver with public atomic operations: `upload_positions(array)`, `upload_velocities(array)`, `update_neighbor_list()`, `compute_forces()` (calls `block_list.refresh_sorted_posq` first), `dump_state()`/`dump_forces()` (direct PDB-order returns), `dump_energy()` |
 | `mdpy/core/gpu_context.py` | Pure PDB-order GPU memory manager — owns all `d_*` state arrays, PBC wrap; no permutation kernels |
 | `mdpy/core/block_list.py` | Block-based neighbor list + block-ordered data services — GPU kernels (Morton/AABB/block-pair-find/mask build); owns `d_block_atoms` (pdb_id-keyed), `d_sorted_posq` / `d_sorted_types` buffers, `d_exclusion_masks` (block-indexed), `refresh_sorted_posq()` / `refresh_sorted_types()`, `gather_sorted()` primitive; reads `topology.exclusion_csr` / `exclusion_reverse_csr` and builds only spatial masks via `_build_masks_gpu` |
-| `mdpy/core/topology.py` | Molecular topology (particles/bonds/angles/dihedrals/impropers), `join()` → compact arrays; owns lazy atom-indexed exclusion state (pairs/forward CSR/reverse CSR) as the single GPU source of truth via `exclusion_pairs` / `exclusion_csr` / `exclusion_reverse_csr` + `invalidate_exclusions()` |
+| `mdpy/core/topology.py` | Molecular topology (particles/bonds/angles/dihedrals/impropers); owns lazy atom-indexed exclusion state (pairs/forward CSR/reverse CSR) as the single GPU source of truth via `exclusion_pairs` / `exclusion_csr` / `exclusion_reverse_csr` + `invalidate_exclusions()` |
 | `mdpy/core/parameter_table.py` | ParameterTable with per-type and per-atom parameter dicts |
 | `mdpy/force/force_term.py` | `ForceTerm` base class — `compute(gpu_context, block_list)` |
 | `mdpy/force/bonded_force.py` | Single CuPy RawKernel (bond/angle/dihedral/improper); PDB-order indices (no remap) |
@@ -591,7 +591,6 @@ On block list rebuild (triggered by displacement > skin/2):
 
 - All arrays default to `env.NUMPY_FLOAT` (float32) / `env.NUMPY_INT` (int32)
 - GPU kernel strategy: both `cupy.RawKernel` and `numba.cuda.jit` are valid; choose based on kernel needs
-- `Topology.join()` must be called before creating a System (`System.__init__` calls it automatically)
 - Unit-dependent constants are **derived**, never hardcoded, and defined **file-locally** in each module that uses them (scope = that file): `COULOMB_CONST = 1/(4π·EPSILON0)` ≈ 0.13893557 (in `expressions/coulomb.py`/`nb14.py`/`screened_coulomb.py`/`pme_reciprocal_force.py`) and `BOLTZMANN = KB → default_energy_unit/K` ≈ 8.31446e-7 (in `integrator/langevin.py`/`utils/velocity.py`). Base constants `EPSILON0`/`KB` live in `mdpy/unit`. Values are in the internal energy unit `dalton·Å²/fs²` (≈ 9999.93 kJ/mol) — **not** kcal/mol
 - The expression transpiler (nonbonded + bonded) resolves named module-level constants from a decorated function's `__globals__` and inlines them as CUDA float literals; hand-written CUDA strings (PME, screened_coulomb override) inject the value via the `__MDPY_COULOMB__` placeholder
 - Block list rebuild: triggered when max atom displacement > skin/2; runs fully on GPU (Morton sort + block form + AABB + block-pair find + mask construction + block-pair classification)
