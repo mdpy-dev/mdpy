@@ -1,6 +1,10 @@
 import cupy as cp
 import numpy as np
 from .constraint_base import ConstraintBase
+from mdpy.core.kernel_preambles import (
+    PBC_MIN_IMAGE_DEVICE_FN,
+    REMAP_INDICES_KERNEL_SRC as _REMAP_INDICES_KERNEL,
+)
 
 # SETTLE constraint algorithm for rigid water (Miyamoto & Kollman, J Comp Chem 1992).
 #
@@ -16,7 +20,7 @@ from .constraint_base import ConstraintBase
 #   ra, rb, rc = canonical triangle side lengths in the molecular frame
 #   wh = hydrogen mass fraction = m_H / (m_O + 2*m_H)
 
-_SETTLE_KERNEL = r"""
+_SETTLE_KERNEL = PBC_MIN_IMAGE_DEVICE_FN + r"""
 extern "C" __global__
 void settle_kernel(
     const float* __restrict__ old_x,
@@ -50,25 +54,9 @@ void settle_kernel(
 
     // Old O->H vectors with PBC minimum image
     float d21x = h1x - ox, d21y = h1y - oy, d21z = h1z - oz;
-    {
-        float fx = d21x*pbc_inv[0] + d21y*pbc_inv[3] + d21z*pbc_inv[6];
-        float fy = d21x*pbc_inv[1] + d21y*pbc_inv[4] + d21z*pbc_inv[7];
-        float fz = d21x*pbc_inv[2] + d21y*pbc_inv[5] + d21z*pbc_inv[8];
-        fx -= roundf(fx); fy -= roundf(fy); fz -= roundf(fz);
-        d21x = fx*pbc_matrix[0] + fy*pbc_matrix[3] + fz*pbc_matrix[6];
-        d21y = fx*pbc_matrix[1] + fy*pbc_matrix[4] + fz*pbc_matrix[7];
-        d21z = fx*pbc_matrix[2] + fy*pbc_matrix[5] + fz*pbc_matrix[8];
-    }
+    pbc_min_image(d21x, d21y, d21z, pbc_inv, pbc_matrix);
     float d31x = h2x - ox, d31y = h2y - oy, d31z = h2z - oz;
-    {
-        float fx = d31x*pbc_inv[0] + d31y*pbc_inv[3] + d31z*pbc_inv[6];
-        float fy = d31x*pbc_inv[1] + d31y*pbc_inv[4] + d31z*pbc_inv[7];
-        float fz = d31x*pbc_inv[2] + d31y*pbc_inv[5] + d31z*pbc_inv[8];
-        fx -= roundf(fx); fy -= roundf(fy); fz -= roundf(fz);
-        d31x = fx*pbc_matrix[0] + fy*pbc_matrix[3] + fz*pbc_matrix[6];
-        d31y = fx*pbc_matrix[1] + fy*pbc_matrix[4] + fz*pbc_matrix[7];
-        d31z = fx*pbc_matrix[2] + fy*pbc_matrix[5] + fz*pbc_matrix[8];
-    }
+    pbc_min_image(d31x, d31y, d31z, pbc_inv, pbc_matrix);
 
     // Load NEW (unconstrained) positions
     float nox = new_x[ow1], noy = new_y[ow1], noz = new_z[ow1];
@@ -77,25 +65,9 @@ void settle_kernel(
 
     // New O->H vectors with PBC
     float nd21x = nh1x - nox, nd21y = nh1y - noy, nd21z = nh1z - noz;
-    {
-        float fx = nd21x*pbc_inv[0] + nd21y*pbc_inv[3] + nd21z*pbc_inv[6];
-        float fy = nd21x*pbc_inv[1] + nd21y*pbc_inv[4] + nd21z*pbc_inv[7];
-        float fz = nd21x*pbc_inv[2] + nd21y*pbc_inv[5] + nd21z*pbc_inv[8];
-        fx -= roundf(fx); fy -= roundf(fy); fz -= roundf(fz);
-        nd21x = fx*pbc_matrix[0] + fy*pbc_matrix[3] + fz*pbc_matrix[6];
-        nd21y = fx*pbc_matrix[1] + fy*pbc_matrix[4] + fz*pbc_matrix[7];
-        nd21z = fx*pbc_matrix[2] + fy*pbc_matrix[5] + fz*pbc_matrix[8];
-    }
+    pbc_min_image(nd21x, nd21y, nd21z, pbc_inv, pbc_matrix);
     float nd31x = nh2x - nox, nd31y = nh2y - noy, nd31z = nh2z - noz;
-    {
-        float fx = nd31x*pbc_inv[0] + nd31y*pbc_inv[3] + nd31z*pbc_inv[6];
-        float fy = nd31x*pbc_inv[1] + nd31y*pbc_inv[4] + nd31z*pbc_inv[7];
-        float fz = nd31x*pbc_inv[2] + nd31y*pbc_inv[5] + nd31z*pbc_inv[8];
-        fx -= roundf(fx); fy -= roundf(fy); fz -= roundf(fz);
-        nd31x = fx*pbc_matrix[0] + fy*pbc_matrix[3] + fz*pbc_matrix[6];
-        nd31y = fx*pbc_matrix[1] + fy*pbc_matrix[4] + fz*pbc_matrix[7];
-        nd31z = fx*pbc_matrix[2] + fy*pbc_matrix[5] + fz*pbc_matrix[8];
-    }
+    pbc_min_image(nd31x, nd31y, nd31z, pbc_inv, pbc_matrix);
 
     // Hess optimization: reference from O, not COM
     float a1x = -(nd21x + nd31x) * wh;
@@ -214,19 +186,6 @@ void settle_kernel(
     new_x[hw3] = nh2x + dxH2;
     new_y[hw3] = nh2y + dyH2;
     new_z[hw3] = nh2z + dzH2;
-}
-"""
-
-_REMAP_INDICES_KERNEL = r"""
-extern "C" __global__
-void remap_indices_kernel(
-    const int* __restrict__ d_remap,
-    int* __restrict__ d_indices,
-    int num_indices
-) {
-    int i = blockIdx.x * blockDim.x + threadIdx.x;
-    if (i >= num_indices) return;
-    d_indices[i] = d_remap[d_indices[i]];
 }
 """
 

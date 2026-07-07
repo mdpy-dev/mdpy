@@ -1,6 +1,10 @@
 import cupy as cp
 import numpy as np
 from .constraint_base import ConstraintBase
+from mdpy.core.kernel_preambles import (
+    PBC_MIN_IMAGE_DEVICE_FN,
+    REMAP_INDICES_KERNEL_SRC as _REMAP_INDICES_KERNEL,
+)
 
 # LINCS constraint algorithm (Hess et al., J Chem Theory Comput 2008).
 #
@@ -22,7 +26,7 @@ from .constraint_base import ConstraintBase
 #   6. Centripetal-projection refinement iterations (geometric correction,
 #      each with its own embedded Neumann-series solve)
 
-_LINCS_KERNEL = r"""
+_LINCS_KERNEL = PBC_MIN_IMAGE_DEVICE_FN + r"""
 extern "C" __global__
 void lincs_kernel(
     const float* __restrict__ old_x,
@@ -77,13 +81,7 @@ void lincs_kernel(
         float ox = old_x[atom_i_sorted], oy = old_y[atom_i_sorted], oz = old_z[atom_i_sorted];
         float jx = old_x[atom_j_sorted], jy = old_y[atom_j_sorted], jz = old_z[atom_j_sorted];
         float dx = jx - ox, dy = jy - oy, dz = jz - oz;
-        float fx = dx*pbc_inv[0] + dy*pbc_inv[3] + dz*pbc_inv[6];
-        float fy = dx*pbc_inv[1] + dy*pbc_inv[4] + dz*pbc_inv[7];
-        float fz = dx*pbc_inv[2] + dy*pbc_inv[5] + dz*pbc_inv[8];
-        fx -= roundf(fx); fy -= roundf(fy); fz -= roundf(fz);
-        dx = fx*pbc_matrix[0] + fy*pbc_matrix[3] + fz*pbc_matrix[6];
-        dy = fx*pbc_matrix[1] + fy*pbc_matrix[4] + fz*pbc_matrix[7];
-        dz = fx*pbc_matrix[2] + fy*pbc_matrix[5] + fz*pbc_matrix[8];
+        pbc_min_image(dx, dy, dz, pbc_inv, pbc_matrix);
         float inverse_current_distance = rsqrtf(dx*dx + dy*dy + dz*dz + 1e-30f);
         reference_direction_x = dx * inverse_current_distance; reference_direction_y = dy * inverse_current_distance; reference_direction_z = dz * inverse_current_distance;
         shared_memory[lid*3+0] = reference_direction_x; shared_memory[lid*3+1] = reference_direction_y; shared_memory[lid*3+2] = reference_direction_z;
@@ -110,13 +108,7 @@ void lincs_kernel(
         float nix = pos_x[atom_i_sorted], niy = pos_y[atom_i_sorted], niz = pos_z[atom_i_sorted];
         float njx = pos_x[atom_j_sorted], njy = pos_y[atom_j_sorted], njz = pos_z[atom_j_sorted];
         float dx = njx - nix, dy = njy - niy, dz = njz - niz;
-        float fx = dx*pbc_inv[0] + dy*pbc_inv[3] + dz*pbc_inv[6];
-        float fy = dx*pbc_inv[1] + dy*pbc_inv[4] + dz*pbc_inv[7];
-        float fz = dx*pbc_inv[2] + dy*pbc_inv[5] + dz*pbc_inv[8];
-        fx -= roundf(fx); fy -= roundf(fy); fz -= roundf(fz);
-        dx = fx*pbc_matrix[0] + fy*pbc_matrix[3] + fz*pbc_matrix[6];
-        dy = fx*pbc_matrix[1] + fy*pbc_matrix[4] + fz*pbc_matrix[7];
-        dz = fx*pbc_matrix[2] + fy*pbc_matrix[5] + fz*pbc_matrix[8];
+        pbc_min_image(dx, dy, dz, pbc_inv, pbc_matrix);
         solution = coupling_denominator * (reference_direction_x*dx + reference_direction_y*dy + reference_direction_z*dz - target_distance);
     }
 
@@ -162,13 +154,7 @@ void lincs_kernel(
             float nix = pos_x[atom_i_sorted], niy = pos_y[atom_i_sorted], niz = pos_z[atom_i_sorted];
             float njx = pos_x[atom_j_sorted], njy = pos_y[atom_j_sorted], njz = pos_z[atom_j_sorted];
             float dx = njx - nix, dy = njy - niy, dz = njz - niz;
-            float fx = dx*pbc_inv[0] + dy*pbc_inv[3] + dz*pbc_inv[6];
-            float fy = dx*pbc_inv[1] + dy*pbc_inv[4] + dz*pbc_inv[7];
-            float fz = dx*pbc_inv[2] + dy*pbc_inv[5] + dz*pbc_inv[8];
-            fx -= roundf(fx); fy -= roundf(fy); fz -= roundf(fz);
-            dx = fx*pbc_matrix[0] + fy*pbc_matrix[3] + fz*pbc_matrix[6];
-            dy = fx*pbc_matrix[1] + fy*pbc_matrix[4] + fz*pbc_matrix[7];
-            dz = fx*pbc_matrix[2] + fy*pbc_matrix[5] + fz*pbc_matrix[8];
+            pbc_min_image(dx, dy, dz, pbc_inv, pbc_matrix);
             float current_distance_squared = dx*dx + dy*dy + dz*dz;
             // projection_distance_squared = 2*target_distance^2 - |r|^2; the
             // argument whose sqrt appears in the centripetal projection.
@@ -209,22 +195,6 @@ void lincs_kernel(
             atomicAdd(&pos_z[atom_j_sorted], reference_direction_z*cj);
         }
         __syncthreads();
-    }
-}
-"""
-
-_REMAP_INDICES_KERNEL = r"""
-extern "C" __global__
-void remap_indices_kernel(
-    const int* __restrict__ d_remap,
-    int* __restrict__ d_indices,
-    int num_indices
-) {
-    int i = blockIdx.x * blockDim.x + threadIdx.x;
-    if (i >= num_indices) return;
-    int val = d_indices[i];
-    if (val >= 0) {
-        d_indices[i] = d_remap[val];
     }
 }
 """
