@@ -13,8 +13,6 @@ def _extract_trailing_digit(name):
         return int(m.group(1))
     return None
 
-from mdpy.force._utils import _REMAP_INDICES_KERNEL
-
 _PREAMBLE = r'''
 __device__ __forceinline__ float3 make_f3(float x, float y, float z) {
     return make_float3(x, y, z);
@@ -142,15 +140,6 @@ void compute_bonded(
 
 class BondedForce(ForceTerm):
     name = 'bonded'
-    _remap_kernel = None
-
-    @classmethod
-    def _get_remap_kernel(cls):
-        if cls._remap_kernel is None:
-            cls._remap_kernel = cp.RawKernel(
-                _REMAP_INDICES_KERNEL, "remap_indices_kernel"
-            )
-        return cls._remap_kernel
 
     def __init__(self, expression):
         self._expression = expression
@@ -234,20 +223,6 @@ class BondedForce(ForceTerm):
         self._kernel_source = _PREAMBLE + _MAIN_TEMPLATE.format(
             body=body, extra_params=extra_params,
         )
-
-    def remap_indices_gpu(self, d_remap):
-        if self._count == 0:
-            return
-        if self._dirty:
-            self.sync()
-        if self._d_indices is None:
-            return
-        kernel = self._get_remap_kernel()
-        indices = self._d_indices.ravel()
-        n = indices.size
-        threads_per_block = 256
-        grid = ((n + threads_per_block - 1) // threads_per_block,)
-        kernel(grid, (threads_per_block,), (d_remap, indices, np.int32(n)))
 
     def bind_sorted(self, topology, block_list, gpu_context):
         sort_order = block_list.d_raw_order
