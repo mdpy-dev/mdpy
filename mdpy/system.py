@@ -101,6 +101,7 @@ class System:
                 self.gpu.d_positions_y,
                 self.gpu.d_positions_z,
                 self.gpu.d_charges,
+                dst=self.gpu._d_sorted_data,
             )
 
         if not self._pme_force_terms:
@@ -201,6 +202,7 @@ class System:
                 self.gpu.d_positions_y,
                 self.gpu.d_positions_z,
                 self.gpu.d_charges,
+                dst=self.gpu._d_sorted_data,
             )
         for term_index, term in enumerate(self.force_terms):
             self.gpu.zero_energy()

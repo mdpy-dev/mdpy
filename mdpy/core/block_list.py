@@ -1503,17 +1503,19 @@ class BlockList:
         self.d_positions_at_rebuild_y = snap_y
         self.d_positions_at_rebuild_z = snap_z
 
-    def pack_posq(self, pos_x, pos_y, pos_z, charge):
+    def pack_posq(self, pos_x, pos_y, pos_z, charge, dst=None):
         """Pack PDB-order pos+charge into block-ordered float4 buffer.
 
-        Returns a fresh device array of size num_blocks * BLOCK_SIZE * 4,
+        Returns a device array of size num_blocks * BLOCK_SIZE * 4,
         laid out as [x, y, z, q] per slot. Padding slots are zero-filled.
+        If dst is provided and correctly sized, it is reused (avoids per-step allocation).
         """
         if self.num_blocks == 0:
             return cp.empty(0, dtype=env.NUMPY_FLOAT)
         self._ensure_kernels()
         total_slots = self.num_blocks * BLOCK_SIZE
-        dst = cp.empty(total_slots * 4, dtype=env.NUMPY_FLOAT)
+        if dst is None or dst.size != total_slots * 4:
+            dst = cp.empty(total_slots * 4, dtype=env.NUMPY_FLOAT)
         threads_per_block = 256
         grid = ((total_slots + threads_per_block - 1) // threads_per_block,)
         self._kernels["pack_sorted_data"](
