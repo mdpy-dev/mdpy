@@ -66,14 +66,6 @@ def _setup_system():
     return system
 
 
-def _get_positions_soa(system):
-    return (
-        system.gpu.d_positions_x,
-        system.gpu.d_positions_y,
-        system.gpu.d_positions_z,
-    )
-
-
 @pytest.mark.slow
 class TestRebuildPipeline:
 
@@ -81,8 +73,7 @@ class TestRebuildPipeline:
         system = _setup_system()
         pos_before, _ = system.dump_state()
 
-        positions_soa = _get_positions_soa(system)
-        system._do_rebuild(positions_soa, force=True)
+        system._do_rebuild(force=True)
 
         pos_after, _ = system.dump_state()
 
@@ -99,13 +90,11 @@ class TestRebuildPipeline:
         integrator = VerletIntegrator(0.5)
 
         system.compute_forces()
-        positions_soa = _get_positions_soa(system)
-        system._do_rebuild(positions_soa, force=True)
+        system._do_rebuild(force=True)
 
         integrator.step(system)
 
-        positions_soa = _get_positions_soa(system)
-        system._do_rebuild(positions_soa, force=True)
+        system._do_rebuild(force=True)
         system.compute_forces()
 
         energies = system.dump_energy()
@@ -139,8 +128,7 @@ class TestRebuildPipeline:
         integrator = VerletIntegrator(0.5)
 
         system.compute_forces()
-        positions_soa = _get_positions_soa(system)
-        system._do_rebuild(positions_soa, force=True)
+        system._do_rebuild(force=True)
 
         integrator.step(system)
 
@@ -152,8 +140,7 @@ class TestRebuildPipeline:
             f"Positions above {BOX_SIZE + 1.0:.0f} (bad wrap)"
         )
 
-        positions_soa = _get_positions_soa(system)
-        system._do_rebuild(positions_soa, force=True)
+        system._do_rebuild(force=True)
 
         positions2, _ = system.dump_state()
 

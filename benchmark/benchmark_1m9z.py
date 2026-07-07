@@ -28,7 +28,7 @@ from mdpy.utils import generate_velocity_from_temperature
 BOX_SIZE = 108.0
 CUTOFF = 12.0
 TIME_STEP_FS = 2
-NUM_BLOCKS = 10
+NUM_BLOCKS = 5
 BLOCK_STEPS = 2500
 WARMUP_STEPS = 50
 EWALD_RTOL = float(os.environ.get("EWALD_RTOL", "1e-5"))

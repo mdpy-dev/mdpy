@@ -148,31 +148,34 @@ class System:
             )
             force_rebuild = True
 
+        if force_rebuild:
+            cp.cuda.Stream.null.synchronize()
+            self._do_rebuild(force=True)
+            self._step_counter = 0
+            return
+
+        self._block_list.check_rebuild_async((
+            self.gpu.d_positions_x,
+            self.gpu.d_positions_y,
+            self.gpu.d_positions_z,
+        ))
+        self._step_counter += 1
+        if self._step_counter < sync_interval:
+            return
+
+        self._do_rebuild(force=False)
+        self._step_counter = 0
+
+    def _do_rebuild(self, *, force=False):
+        if not force:
+            flag_val = int(self._block_list.d_rebuild_flag[0])
+            if flag_val == 0:
+                return
         positions_soa = (
             self.gpu.d_positions_x,
             self.gpu.d_positions_y,
             self.gpu.d_positions_z,
         )
-
-        if force_rebuild:
-            cp.cuda.Stream.null.synchronize()
-            self._do_rebuild(positions_soa, force=True)
-            self._step_counter = 0
-            return
-
-        self._block_list.check_rebuild_async(positions_soa)
-        self._step_counter += 1
-        if self._step_counter < sync_interval:
-            return
-
-        self._do_rebuild(positions_soa, force=False)
-        self._step_counter = 0
-
-    def _do_rebuild(self, positions_soa, *, force=False):
-        if not force:
-            flag_val = int(self._block_list.d_rebuild_flag[0])
-            if flag_val == 0:
-                return
         self._block_list.rebuild(
             positions_soa,
             self.topology,
@@ -187,9 +190,6 @@ class System:
         ))
         self._block_list.build_block_pairs(self.topology, self.gpu)
         self.gpu._d_sorted_types = self._block_list.gather_sorted(self.gpu.d_types)
-        for term in self.force_terms:
-            if hasattr(term, "post_rebuild_hook"):
-                term.post_rebuild_hook(self._block_list, self.gpu)
         self._block_list.d_rebuild_flag[0] = 0
 
     def dump_energy(self):

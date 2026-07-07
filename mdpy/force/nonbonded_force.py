@@ -340,28 +340,6 @@ class NonbondedForce(ForceTerm):
             if base_name == "charge":
                 self._d_per_particle[base_name] = gpu_context.d_charges
 
-    def _gather_per_particle(self, block_list):
-        if block_list.num_blocks == 0:
-            return
-        for base_name in self._prop_bases:
-            if base_name == "charge":
-                continue
-            self._d_sorted_per_particle[base_name] = block_list.gather_sorted(
-                self._d_per_particle[base_name]
-            )
-
-    def post_rebuild_hook(self, block_list, gpu_context):
-        """Re-gather block-ordered per-particle properties after rebuild.
-
-        Per-particle property VALUES are static (epsilon, sigma don't change).
-        Only the block LAYOUT changes on rebuild, so we re-gather.
-        Types are gathered by System (via GPUContext.d_sorted_types).
-        """
-        if not self._compiled:
-            self._lazy_compile(gpu_context)
-        self._resolve_per_particle(gpu_context)
-        self._gather_per_particle(block_list)
-
     def _ensure_sorted_force_buffer(self, block_list):
         """Ensure slot-indexed force buffers are allocated for current block count.
 
