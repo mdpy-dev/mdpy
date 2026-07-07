@@ -27,6 +27,26 @@ void gather_sorted_kernel(
 }
 """
 
+_GATHER_SORTED_INT_KERNEL_SRC = r"""
+extern "C" __global__
+void gather_sorted_int_kernel(
+    const int* __restrict__ src,
+    const int* __restrict__ block_atoms,
+    int total_slots,
+    int num_particles,
+    int* __restrict__ dst
+) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= total_slots) return;
+    int atom_id = block_atoms[idx];
+    int val = 0;
+    if (atom_id >= 0 && atom_id < num_particles) {
+        val = src[atom_id];
+    }
+    dst[idx] = val;
+}
+"""
+
 
 def _prepare_energy_expression(energy_cuda):
     if not energy_cuda:
@@ -270,6 +290,7 @@ class NonbondedForce(ForceTerm):
         self._gather_kernels = None
 
         self._d_types = None
+        self._d_sorted_types = None
         self._n_types = 0
 
         self._cutoff = cutoff
@@ -335,6 +356,9 @@ class NonbondedForce(ForceTerm):
             "gather_sorted": cp.RawKernel(
                 _GATHER_SORTED_KERNEL_SRC, "gather_sorted_kernel"
             ),
+            "gather_sorted_int": cp.RawKernel(
+                _GATHER_SORTED_INT_KERNEL_SRC, "gather_sorted_int_kernel"
+            ),
         }
 
     def _resolve_per_particle(self, gpu_context):
@@ -368,6 +392,28 @@ class NonbondedForce(ForceTerm):
             )
             self._d_sorted_per_particle[base_name] = sorted_arr
 
+    def _gather_types(self, block_list):
+        """Gather PDB-order types into block-ordered buffer for coalesced kernel access."""
+        if block_list.num_blocks == 0:
+            return
+        self._ensure_gather_kernels()
+        total_slots = block_list.num_blocks * 32
+        if self._d_sorted_types is None or self._d_sorted_types.size != total_slots:
+            self._d_sorted_types = cp.empty(total_slots, dtype=np.int32)
+        threads_per_block = 256
+        grid = ((total_slots + threads_per_block - 1) // threads_per_block,)
+        self._gather_kernels["gather_sorted_int"](
+            grid,
+            (threads_per_block,),
+            (
+                self._d_types,
+                block_list.d_block_atoms,
+                np.int32(total_slots),
+                np.int32(block_list.num_particles),
+                self._d_sorted_types,
+            ),
+        )
+
     def post_rebuild_hook(self, block_list, gpu_context):
         """Re-gather block-ordered per-particle properties after rebuild.
 
@@ -377,6 +423,7 @@ class NonbondedForce(ForceTerm):
         if not self._compiled:
             self._lazy_compile(gpu_context)
         self._resolve_per_particle(gpu_context)
+        self._gather_types(block_list)
         self._gather_per_particle(block_list)
 
     def _build_excl_args(self, gpu_context, block_list, compute_energy):
