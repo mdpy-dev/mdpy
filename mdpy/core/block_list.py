@@ -680,18 +680,6 @@ void counting_scatter_kernel(
 }
 """
 
-_CONDITIONAL_FILL_INT = r"""
-extern "C" __global__
-void conditional_fill_int_kernel(
-    int* __restrict__ buf,
-    int n,
-    int fill_value
-) {
-    int i = blockIdx.x * blockDim.x + threadIdx.x;
-    if (i < n) buf[i] = fill_value;
-}
-"""
-
 _CAPTURE_SNAPSHOT_KERNEL = r"""
 extern "C" __global__
 void capture_snapshot_kernel(
@@ -726,7 +714,6 @@ def _compile_gpu_kernels():
         "counting_scatter": cp.RawKernel(_COUNTING_SCATTER_KERNEL, "counting_scatter_kernel"),
         "cell_prefix_sum": cp.RawKernel(_CELL_PREFIX_SUM_KERNEL, "cell_prefix_sum_kernel"),
         "composite_prefix_sum": cp.RawKernel(_COMPOSITE_PREFIX_SUM_KERNEL, "composite_prefix_sum_kernel"),
-        "conditional_fill": cp.RawKernel(_CONDITIONAL_FILL_INT, "conditional_fill_int_kernel"),
         "capture_snapshot": cp.RawKernel(_CAPTURE_SNAPSHOT_KERNEL, "capture_snapshot_kernel"),
     }
 
@@ -1066,13 +1053,7 @@ class BlockList:
         # preserves the intra-cell
         # Hilbert ordering, keeping blocks Hilbert-compact -> tight AABBs.
         # block_atoms must be pre-filled with -1 (padding) before launch.
-        block_atoms = self._pool_get("block_atoms", self.max_total_padded, env.NUMPY_INT)
-        n_ba = max((self.max_total_padded + tpb - 1) // tpb, 1)
-        self._kernels["conditional_fill"](
-            (n_ba,), (tpb,),
-            (block_atoms,
-             np.int32(self.max_total_padded), np.int32(-1)),
-        )
+        block_atoms = self._pool_get("block_atoms", self.max_total_padded, env.NUMPY_INT, fill=-1)
         composite_cursor = self._pool_get("composite_cursor", composite_buckets, env.NUMPY_INT, fill=0)
         sorted_pos_x = self._pool_get("sorted_pos_x", N, env.NUMPY_FLOAT)
         sorted_pos_y = self._pool_get("sorted_pos_y", N, env.NUMPY_FLOAT)
