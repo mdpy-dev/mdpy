@@ -123,6 +123,27 @@ class TestKernelAssembly:
         assert 'energy_buffer' not in src
         assert 'total_energy' not in src
 
+    def test_kernel_writes_force_to_slot_index(self):
+        """Force writes must use slot index (block_x*32+tgx), not pdb_id (gi)."""
+        energy_cuda, total_expr = _prepare_energy_expression(lj_ad.energy_cuda)
+        src = _assemble_exclusion_kernel(
+            lj_ad.expr_info, energy_cuda, lj_ad.grad_cuda,
+            lj_ad.radial_force_cuda, total_expr,
+        )
+        # i-side: slot index is computed from block_x and tgx into a local var
+        assert 'int slot_i = block_x * 32 + tgx' in src, \
+            "i-side must compute slot index from block_x and tgx"
+        assert 'atomicAdd(&f_x[slot_i]' in src, \
+            "i-side force must write to slot_i, not pdb_id"
+        # j-side: must write to j_slot
+        assert 'atomicAdd(&f_x[j_slot]' in src, \
+            "j-side force must write to j_slot, not pdb_id"
+        # Must NOT write to gi or gj
+        assert 'atomicAdd(&f_x[gi]' not in src, \
+            "i-side force must not use pdb_id (gi)"
+        assert 'atomicAdd(&f_x[gj]' not in src, \
+            "j-side force must not use pdb_id (gj)"
+
 
 class TestHelpers:
     def test_split_per_particle_coulomb(self):
