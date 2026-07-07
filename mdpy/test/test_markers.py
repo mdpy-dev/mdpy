@@ -1,14 +1,14 @@
 import pytest
-from mdpy.force.primitives import param, scalar
+from mdpy.force.markers import param, scalar
 
 
 class TestMarkers:
     def test_param_identity(self):
-        from mdpy.force.primitives import param as p2
+        from mdpy.force.markers import param as p2
         assert param is p2
 
     def test_scalar_identity(self):
-        from mdpy.force.primitives import scalar as s2
+        from mdpy.force.markers import scalar as s2
         assert scalar is s2
 
     def test_param_repr(self):

@@ -2,7 +2,7 @@ import ast
 import inspect
 import textwrap
 
-from mdpy.force.primitives import param as _param_marker, scalar as _scalar_marker, point as _point_marker
+from mdpy.force.markers import param as _param_marker, scalar as _scalar_marker, point as _point_marker
 from mdpy.force._utils import ExprInfo, _strip_trailing_digits, _MATH_FUNCTIONS, _numeric_literal
 from mdpy.force.ad_engine import TapeEntry, ForwardADEngine
 

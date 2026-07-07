@@ -1,6 +1,6 @@
 import pytest
 from mdpy.force.nonbonded_transpiler import nonbonded_expression
-from mdpy.force.primitives import param, scalar
+from mdpy.force.markers import param, scalar
 
 # Module-level constant used to verify the transpiler inlines named constants
 # resolved from the decorated function's module globals.

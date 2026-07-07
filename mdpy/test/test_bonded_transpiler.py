@@ -30,7 +30,7 @@ class TestBondedTranspiler:
         assert '_grad_r' in harmonic_bond.cuda_fragment or 'grad' in harmonic_bond.cuda_fragment
 
     def test_charmm_angle_classification(self):
-        from mdpy.force.primitives import param
+        from mdpy.force.markers import param
         @bonded_expression(body=3)
         def charmm_angle(pos1, pos2, pos3, k=param, theta0=param, k_ub=param, r_ub=param):
             theta = angle(pos1, pos2, pos3)
@@ -43,7 +43,7 @@ class TestBondedTranspiler:
         assert info.params == ['k', 'theta0', 'k_ub', 'r_ub']
 
     def test_periodic_dihedral_cuda(self):
-        from mdpy.force.primitives import param
+        from mdpy.force.markers import param
         @bonded_expression(body=4)
         def periodic_dihedral(pos1, pos2, pos3, pos4, k=param, n=param, delta=param):
             phi = dihedral(pos1, pos2, pos3, pos4)
@@ -52,7 +52,7 @@ class TestBondedTranspiler:
         assert '_result_energy' in periodic_dihedral.cuda_fragment
 
     def test_harmonic_improper_cuda(self):
-        from mdpy.force.primitives import param
+        from mdpy.force.markers import param
         @bonded_expression(body=4)
         def harmonic_improper(pos1, pos2, pos3, pos4, k=param, psi0=param):
             psi = dihedral(pos1, pos2, pos3, pos4)
@@ -62,7 +62,7 @@ class TestBondedTranspiler:
 
 
 def test_point_marker_classification():
-    from mdpy.force.primitives import param, point
+    from mdpy.force.markers import param, point
 
     @bonded_expression(body=1)
     def expr(p1, ref=point, k=param):
@@ -76,7 +76,7 @@ def test_point_marker_classification():
 
 
 def test_distance_to_point_compiles():
-    from mdpy.force.primitives import param, point
+    from mdpy.force.markers import param, point
 
     @bonded_expression(body=1)
     def restraint(p1, ref=point, k=param):

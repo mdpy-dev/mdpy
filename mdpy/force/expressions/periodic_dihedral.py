@@ -1,5 +1,5 @@
 from mdpy.force.bonded_transpiler import bonded_expression
-from mdpy.force.primitives import dihedral
+from mdpy.force.expressions.geometry import dihedral
 
 
 @bonded_expression(body=4)

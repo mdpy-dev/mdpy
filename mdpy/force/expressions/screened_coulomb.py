@@ -2,7 +2,7 @@ import math
 
 from mdpy.unit import EPSILON0
 from mdpy.force.nonbonded_transpiler import nonbonded_expression
-from mdpy.force.primitives import scalar as scalar_marker
+from mdpy.force.markers import scalar as scalar_marker
 
 # Coulomb constant 1/(4*pi*epsilon0) in mdpy internal units (file-local).
 COULOMB_CONST = 1.0 / (4.0 * math.pi * float(EPSILON0.value))

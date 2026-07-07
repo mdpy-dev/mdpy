@@ -12,7 +12,8 @@ import pytest
 from mdpy import env
 from mdpy.force.bonded_force import BondedForce
 from mdpy.force.bonded_transpiler import bonded_expression
-from mdpy.force.primitives import param, scalar as scalar_marker, distance_to_point, distance, angle, dihedral
+from mdpy.force.markers import param, scalar as scalar_marker
+from mdpy.force.expressions.geometry import distance_to_point, distance, angle, dihedral
 
 
 class MockGPUContext:

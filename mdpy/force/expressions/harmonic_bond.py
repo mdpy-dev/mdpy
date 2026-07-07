@@ -1,5 +1,5 @@
 from mdpy.force.bonded_transpiler import bonded_expression
-from mdpy.force.primitives import distance
+from mdpy.force.expressions.geometry import distance
 
 
 @bonded_expression(body=2)

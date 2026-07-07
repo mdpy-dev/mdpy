@@ -10,7 +10,7 @@ from mdpy.force.nonbonded_force import (
     _split_per_particle,
     _unique_prop_bases,
 )
-from mdpy.force.primitives import param, scalar as scalar_marker
+from mdpy.force.markers import param, scalar as scalar_marker
 
 
 @nonbonded_expression

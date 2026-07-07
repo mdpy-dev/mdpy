@@ -1,5 +1,6 @@
 from mdpy.force.nonbonded_transpiler import nonbonded_expression
-from mdpy.force.primitives import param, distance
+from mdpy.force.markers import param
+from mdpy.force.expressions.geometry import distance
 
 # NOTE: This expression uses a "decorate then override" pattern.
 # The @nonbonded_expression decorator auto-compiles the energy via AD,

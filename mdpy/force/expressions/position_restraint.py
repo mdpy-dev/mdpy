@@ -1,5 +1,6 @@
 from mdpy.force.bonded_transpiler import bonded_expression
-from mdpy.force.primitives import param, point, distance_to_point
+from mdpy.force.markers import param, point
+from mdpy.force.expressions.geometry import distance_to_point
 
 
 @bonded_expression(body=1)
