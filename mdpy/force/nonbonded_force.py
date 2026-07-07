@@ -119,7 +119,7 @@ def _assemble_exclusion_kernel(
         if base_name == "charge":
             load_j_from_array += f"\n            {arg_name} = jdata.w;"
         else:
-            load_j_from_array += f"\n            {arg_name} = d_{base_name}[gj];"
+            load_j_from_array += f"\n            {arg_name} = sorted_{base_name}[j_slot];"
 
     shuffle_j = ""
     for arg_name in j_props:
@@ -163,7 +163,7 @@ void exclusion_block_pair_kernel(
     const int* __restrict__ d_block_pair_count,
     int num_particles
     {sorted_decls}{unsorted_decls}{pair_decls},
-    const int* __restrict__ d_types,
+    const int* __restrict__ d_sorted_types,
     int n_types
     {scalar_decls}
 ) {{
@@ -192,10 +192,7 @@ void exclusion_block_pair_kernel(
         float sy = shift_y[pos];
         float sz = shift_z[pos];
 {load_i}
-        int type_i = 0;
-        if (gi >= 0 && gi < num_particles) {{
-            type_i = __ldg(&d_types[gi]);
-        }}
+        int type_i = d_sorted_types[block_x * 32 + tgx];
         int j_slot = interacting_atoms[pos * 32 + tgx];
         int gj = (j_slot >= 0) ? block_atoms[j_slot] : -1;
         float shfl_px = 0.0f, shfl_py = 0.0f, shfl_pz = 0.0f;
@@ -207,24 +204,24 @@ void exclusion_block_pair_kernel(
             shfl_pz = jdata.z;
         {load_j_from_array}
         }}
-        atom_indices_shared[threadIdx.x] = gj;
+        atom_indices_shared[threadIdx.x] = j_slot;
         excl_shared[threadIdx.x] = exclusion_masks[pos * 32 + tgx];
         float force_x = 0.0f, force_y = 0.0f, force_z = 0.0f;
         float shfl_fx = 0.0f, shfl_fy = 0.0f, shfl_fz = 0.0f;
         int tj = tgx;
         for (int j = 0; j < 32; j++) {{
             unsigned int excl_j = excl_shared[tbx + tj];
-            int atom2 = atom_indices_shared[tbx + tj];
+            int slot2 = atom_indices_shared[tbx + tj];
             float dx = shfl_px - px_i + sx;
             float dy = shfl_py - py_i + sy;
             float dz = shfl_pz - pz_i + sz;
             float dist_sq = dx * dx + dy * dy + dz * dz;
-            bool excluded = (atom2 < 0 || atom2 >= num_particles)
+            bool excluded = (slot2 < 0)
                          || ((excl_j >> tgx) & 1);
             if (!excluded && dist_sq > 1.0e-12f && dist_sq <= cutoff_sq && gi >= 0 && gi < num_particles) {{
                 float inv_dist = rsqrtf(dist_sq);
                 float r = dist_sq * inv_dist;
-                int type_j = __ldg(&d_types[atom2]);
+                int type_j = d_sorted_types[slot2];
                 int pair_idx = type_i * n_types + type_j;
 {load_pair}
 {energy_cuda}
@@ -253,11 +250,10 @@ void exclusion_block_pair_kernel(
             atomicAdd(&f_y[gi], force_y);
             atomicAdd(&f_z[gi], force_z);
         }}
-        int gj_out = atom_indices_shared[threadIdx.x];
-        if (gj_out >= 0 && gj_out < num_particles) {{
-            atomicAdd(&f_x[gj_out], shfl_fx);
-            atomicAdd(&f_y[gj_out], shfl_fy);
-            atomicAdd(&f_z[gj_out], shfl_fz);
+        if (gj >= 0 && gj < num_particles) {{
+            atomicAdd(&f_x[gj], shfl_fx);
+            atomicAdd(&f_y[gj], shfl_fy);
+            atomicAdd(&f_z[gj], shfl_fz);
         }}
     }}
 {energy_reduce}
@@ -459,7 +455,7 @@ class NonbondedForce(ForceTerm):
             args.append(self._d_per_particle[base])
         for name in self._expr_info.params:
             args.append(self._d_pair_params[name])
-        args.append(self._d_types)
+        args.append(self._d_sorted_types)
         args.append(np.int32(self._n_types))
         for name in self._expr_info.scalars:
             args.append(np.float32(self._scalar_data.get(name, 0.0)))
