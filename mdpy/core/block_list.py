@@ -739,6 +739,47 @@ void pack_sorted_data_kernel(
 """
 
 
+_GATHER_SORTED_KERNEL_SRC = r"""
+extern "C" __global__
+void gather_sorted_kernel(
+    const float* __restrict__ src,
+    const int* __restrict__ block_atoms,
+    int total_slots,
+    int num_particles,
+    float* __restrict__ dst
+) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= total_slots) return;
+    int atom_id = block_atoms[idx];
+    float val = 0.0f;
+    if (atom_id >= 0 && atom_id < num_particles) {
+        val = src[atom_id];
+    }
+    dst[idx] = val;
+}
+"""
+
+_GATHER_SORTED_INT_KERNEL_SRC = r"""
+extern "C" __global__
+void gather_sorted_int_kernel(
+    const int* __restrict__ src,
+    const int* __restrict__ block_atoms,
+    int total_slots,
+    int num_particles,
+    int* __restrict__ dst
+) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= total_slots) return;
+    int atom_id = block_atoms[idx];
+    int val = 0;
+    if (atom_id >= 0 && atom_id < num_particles) {
+        val = src[atom_id];
+    }
+    dst[idx] = val;
+}
+"""
+
+
 def _compile_gpu_kernels():
     return {
         "cell_assign": cp.RawKernel(_CELL_ASSIGN_KERNEL, "cell_assign_kernel"),
@@ -755,6 +796,8 @@ def _compile_gpu_kernels():
         "composite_prefix_sum": cp.RawKernel(_COMPOSITE_PREFIX_SUM_KERNEL, "composite_prefix_sum_kernel"),
         "capture_snapshot": cp.RawKernel(_CAPTURE_SNAPSHOT_KERNEL, "capture_snapshot_kernel"),
         "pack_sorted_data": cp.RawKernel(_PACK_SORTED_DATA_KERNEL, "pack_sorted_data_kernel"),
+        "gather_sorted": cp.RawKernel(_GATHER_SORTED_KERNEL_SRC, "gather_sorted_kernel"),
+        "gather_sorted_int": cp.RawKernel(_GATHER_SORTED_INT_KERNEL_SRC, "gather_sorted_int_kernel"),
     }
 
 
@@ -857,8 +900,6 @@ class BlockList:
         self._block_atoms_np = None
         self._block_pairs_np = None
         self._interacting_atoms_np = None
-
-        self._d_sorted_data = None
 
         self._pool = {}
 
@@ -1462,40 +1503,63 @@ class BlockList:
         self.d_positions_at_rebuild_y = snap_y
         self.d_positions_at_rebuild_z = snap_z
 
-    def refresh_sorted_data(self, gpu_context):
-        """Gather PDB-order positions+charges into block-ordered SoA buffer.
+    def pack_posq(self, pos_x, pos_y, pos_z, charge):
+        """Pack PDB-order pos+charge into block-ordered float4 buffer.
 
-        Called by System.compute_forces() every step (positions change) and
-        implicitly handles rebuild (buffer auto-resizes if num_blocks changed).
-        Reads d_block_atoms[block_slot] to get atom_id, then gathers
-        (pos_x[atom_id], pos_y[atom_id], pos_z[atom_id], charge[atom_id])
-        into sorted_data[slot*4 + 0..3].
+        Returns a fresh device array of size num_blocks * BLOCK_SIZE * 4,
+        laid out as [x, y, z, q] per slot. Padding slots are zero-filled.
         """
         if self.num_blocks == 0:
-            return
+            return cp.empty(0, dtype=env.NUMPY_FLOAT)
+        self._ensure_kernels()
         total_slots = self.num_blocks * BLOCK_SIZE
-        if self._d_sorted_data is None or self._d_sorted_data.size != total_slots * 4:
-            self._d_sorted_data = cp.empty(total_slots * 4, dtype=env.NUMPY_FLOAT)
+        dst = cp.empty(total_slots * 4, dtype=env.NUMPY_FLOAT)
         threads_per_block = 256
         grid = ((total_slots + threads_per_block - 1) // threads_per_block,)
         self._kernels["pack_sorted_data"](
             grid, (threads_per_block,),
             (
-                gpu_context.d_positions_x,
-                gpu_context.d_positions_y,
-                gpu_context.d_positions_z,
-                gpu_context.d_charges,
+                pos_x,
+                pos_y,
+                pos_z,
+                charge,
                 self.d_block_atoms,
-                np.int32(gpu_context.num_particles),
+                np.int32(pos_x.size),
                 np.int32(total_slots),
-                self._d_sorted_data,
+                dst,
             ),
         )
+        return dst
 
-    @property
-    def d_sorted_data(self):
-        """Block-ordered SoA posq buffer: [x,y,z,q] per slot, padded to num_blocks*BLOCK_SIZE."""
-        return self._d_sorted_data
+    def gather_sorted(self, src_pdb):
+        """Generic PDB→block-order gather using d_block_atoms.
+
+        Takes any PDB-order device array (int32 or float32), returns a fresh
+        block-ordered device array padded to num_blocks * BLOCK_SIZE.
+        Dispatches to int or float kernel based on src_pdb.dtype.
+        """
+        if self.num_blocks == 0:
+            return cp.empty(0, dtype=src_pdb.dtype)
+        self._ensure_kernels()
+        total_slots = self.num_blocks * BLOCK_SIZE
+        dst = cp.empty(total_slots, dtype=src_pdb.dtype)
+        threads_per_block = 256
+        grid = ((total_slots + threads_per_block - 1) // threads_per_block,)
+        if src_pdb.dtype == np.int32:
+            kernel = self._kernels["gather_sorted_int"]
+        else:
+            kernel = self._kernels["gather_sorted"]
+        kernel(
+            grid, (threads_per_block,),
+            (
+                src_pdb,
+                self.d_block_atoms,
+                np.int32(total_slots),
+                np.int32(self.num_particles),
+                dst,
+            ),
+        )
+        return dst
 
     def read_flag_sync(self):
         """Read d_rebuild_flag with a GPU sync. Returns 0 or 1."""
@@ -1527,7 +1591,6 @@ class BlockList:
         self.d_pdb_to_sorted = cp.empty(0, dtype=env.NUMPY_INT)
         self.d_sorted_to_pdb = cp.empty(0, dtype=env.NUMPY_INT)
         self._sorted_positions = None
-        self._d_sorted_data = None
         self.d_exclusion_masks = cp.empty(0, dtype=np.uint32)
         self.num_exclusion_block_pairs = 0
         self.num_main_block_pairs = 0
