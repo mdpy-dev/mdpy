@@ -123,8 +123,13 @@ class Topology:
         d_pair_j = cp.asarray(pair_j_np)
         d_pair_scale = cp.zeros(total_pairs, dtype=env.NUMPY_FLOAT)
 
-        sort_key = (d_pair_i.astype(cp.int64) * np.int64(2000000000)
-                    + d_pair_j.astype(cp.int64) * np.int64(2))
+        # Encode (i, j) into a single int64 for radix sort: key = i*STRIDE + j.
+        # STRIDE must exceed max(atom_index); 2e9 assumes N < 1e9 atoms (safe
+        # for any real system). int64 is required because max_i * 2e9 ~ 1e14,
+        # far exceeding int32's 2.1e9 ceiling. Sorting groups identical pairs
+        # adjacent (for parallel_dedup) and clusters same-i rows (for CSR build).
+        _STRIDE = np.int64(2_000_000_000)
+        sort_key = d_pair_i.astype(cp.int64) * _STRIDE + d_pair_j.astype(cp.int64)
         order = cp.argsort(sort_key)
         d_pair_i, d_pair_j, d_pair_scale = d_pair_i[order], d_pair_j[order], d_pair_scale[order]
 
@@ -147,8 +152,7 @@ class Topology:
         d_bi_j = cp.concatenate([d_u_j, d_u_i])
         d_bi_scale = cp.concatenate([d_u_scale, d_u_scale])
         bi_count = d_bi_i.shape[0]
-        bi_key = (d_bi_i.astype(cp.int64) * np.int64(2000000000)
-                  + d_bi_j.astype(cp.int64) * np.int64(2))
+        bi_key = d_bi_i.astype(cp.int64) * _STRIDE + d_bi_j.astype(cp.int64)
         bi_order = cp.argsort(bi_key)
         d_bi_i, d_bi_j, d_bi_scale = d_bi_i[bi_order], d_bi_j[bi_order], d_bi_scale[bi_order]
 

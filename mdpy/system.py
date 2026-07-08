@@ -166,7 +166,7 @@ class System:
         self._block_list.capture_snapshot(self.gpu)
         self._block_list.build_block_pairs(self.topology, self.gpu)
         self._block_list.refresh_sorted_types(self.gpu)
-        self._block_list.d_rebuild_flag[0] = 0
+        self._block_list.reset_flag()
 
     def dump_energy(self):
         if self.gpu.d_energy_accumulator is None:
