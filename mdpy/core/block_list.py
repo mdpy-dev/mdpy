@@ -1223,15 +1223,6 @@ class BlockList:
             ),
         )
 
-    def check_rebuild(self, gpu_context) -> bool:
-        if not self._is_initialized:
-            return True
-        if self.d_positions_at_rebuild_x.size == 0:
-            return True
-        self.d_rebuild_flag[0] = 0
-        self._launch_check_rebuild(gpu_context)
-        return self._read_device_int(self.d_rebuild_flag) == 1
-
     def check_rebuild_async(self, gpu_context) -> bool:
         if not self._is_initialized:
             return True

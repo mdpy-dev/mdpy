@@ -612,11 +612,17 @@ class TestCheckRebuild:
         bl.capture_snapshot(ctx)
 
         for _ in range(19):
-            assert not bl.check_rebuild(ctx)
+            bl.d_rebuild_flag[0] = 0
+            bl.check_rebuild_async(ctx)
+            cp.cuda.Stream.null.synchronize()
+            assert bl.read_flag_sync() == 0
 
         moved = positions.copy()
         moved[0, 0] += 2.0
-        assert bl.check_rebuild(_PBCContext(pbc_matrix, pbc_inv, moved))
+        bl.d_rebuild_flag[0] = 0
+        bl.check_rebuild_async(_PBCContext(pbc_matrix, pbc_inv, moved))
+        cp.cuda.Stream.null.synchronize()
+        assert bl.read_flag_sync() == 1
 
     def test_check_rebuild_uninitialized(self):
         topology = _make_topology(4)
@@ -624,7 +630,8 @@ class TestCheckRebuild:
         pbc_matrix = _make_pbc(50.0)
         pbc_inv = np.linalg.inv(pbc_matrix)
         bl = BlockList(cutoff=10.0, skin=2.0)
-        assert bl.check_rebuild(_PBCContext(pbc_matrix, pbc_inv, positions))
+        # Uninitialized block list: check_rebuild_async returns True (forces rebuild)
+        assert bl.check_rebuild_async(_PBCContext(pbc_matrix, pbc_inv, positions))
 
     def test_async_check_sticky_flag(self):
         n, box = 50, 50.0
@@ -711,7 +718,10 @@ class TestCheckRebuild:
         # Next step: particle 0 drifts 0.05 from wrapped position
         next_pos = wrapped.copy()
         next_pos[0, 0] = 0.25
-        result = bl.check_rebuild(_PBCContext(pbc_matrix, pbc_inv, next_pos))
+        bl.d_rebuild_flag[0] = 0
+        bl.check_rebuild_async(_PBCContext(pbc_matrix, pbc_inv, next_pos))
+        cp.cuda.Stream.null.synchronize()
+        result = bl.read_flag_sync() == 1
         assert not result, (
             "check_rebuild false-triggered: snapshot likely holds pre-wrap "
             "position (box+0.2) instead of post-wrap (0.2)"
