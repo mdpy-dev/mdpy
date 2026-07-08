@@ -12,10 +12,12 @@ REF_PATH = os.path.join(BENCH_DIR, "pme_reference.npz")
 
 @pytest.fixture(scope="module")
 def ion_system():
+    from mdpy.core.state import State
+    from mdpy.system import System
     from mdpy.io.psf_parser import PSFParser
     from mdpy.io.pdb_parser import PDBParser
-    from mdpy.io.charmm_toppar_parser import CharmmTopparParser
-    from mdpy.factories.system_factory import create_system
+    from mdpy.io.charmm_toppar_parser import CharmmTopparParser, create_parameter_table
+    from mdpy.force.factories.charmm import create_charmm_forces
 
     data_dir = os.path.join(BENCH_DIR, "data")
     psf = PSFParser(os.path.join(data_dir, "ion.psf"))
@@ -25,7 +27,20 @@ def ion_system():
         os.path.join(data_dir, "par_water.prm"),
     )
     pbc = np.diag([75.450, 77.623, 69.668])
-    system = create_system(psf, pdb, toppar, pbc, cutoff=12.0)
+
+    topology = psf.topology
+    parameter_table = create_parameter_table(topology, toppar)
+    state = State(topology.num_particles)
+    state.set_pbc(pbc)
+    state.set_positions(pdb.positions)
+    state.set_charges(psf.charges)
+    state.set_masses(psf.masses)
+    state.set_type_indices(psf.particle_type_indices)
+    forces = create_charmm_forces(topology, parameter_table, pbc, cutoff=12.0)
+    system = System(topology, state)
+    system.add_force_term(forces['bonded'])
+    system.add_force_term(forces['nonbonded'])
+    system.add_force_term(forces['pme'], stream='pme')
     system.set_velocities(np.zeros((system.num_particles, 3), dtype=np.float32))
     system.update_neighbor_list(force_rebuild=True)
     system.compute_forces()
