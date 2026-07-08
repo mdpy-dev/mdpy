@@ -7,7 +7,7 @@ import pytest
 from mdpy.core.state import State
 from mdpy.core.topology import Topology
 from mdpy.system import System
-from mdpy.minimizer import SteepestDescentMinimizer, ConjugateGradientMinimizer, LBFGSMinimizer
+from mdpy.minimizer import SteepestDescentMinimizer, ConjugateGradientMinimizer, LBFGSMinimizer, FIREMinimizer
 
 
 def _make_system(num_particles, positions, forces, masses=None):
@@ -190,3 +190,23 @@ class TestLBFGS:
         final_x1 = float(system.state.d_positions_x[1])
         final_dist = abs(final_x1 - final_x0)
         assert final_dist < 2.0
+
+
+class TestFIRE:
+    def test_step_moves_toward_minimum(self):
+        positions = np.array([[1.0, 0.0, 0.0]], dtype=np.float32)
+        forces = np.array([[-2.0, 0.0, 0.0]], dtype=np.float32)
+        system = _make_system(1, positions, forces)
+        minimizer = FIREMinimizer(time_step=0.5)
+        minimizer.step(system)
+        new_pos = system.state.download_positions()
+        assert new_pos[0, 0] < 1.0
+
+    def test_time_step_zero_does_not_move(self):
+        positions = np.array([[1.0, 0.0, 0.0]], dtype=np.float32)
+        forces = np.array([[-2.0, 0.0, 0.0]], dtype=np.float32)
+        system = _make_system(1, positions, forces)
+        minimizer = FIREMinimizer(time_step=0.0)
+        minimizer.step(system)
+        new_pos = system.state.download_positions()
+        np.testing.assert_allclose(new_pos, positions)
