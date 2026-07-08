@@ -37,7 +37,7 @@ void max_force_kernel(
     }
 
     if (tid == 0) {
-        atomicAdd(output, shared[0]);
+        output[blockIdx.x] = shared[0];
     }
 }
 """
@@ -79,7 +79,7 @@ void rms_force_kernel(
     }
 
     if (tid == 0) {
-        atomicAdd(output, shared[0]);
+        output[blockIdx.x] = shared[0];
     }
 }
 """

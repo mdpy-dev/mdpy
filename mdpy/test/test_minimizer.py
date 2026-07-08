@@ -22,9 +22,9 @@ def _make_system(num_particles, positions, forces, masses=None):
                      else np.asarray(masses, dtype=np.float32))
     state.set_type_indices(np.zeros(num_particles, dtype=np.int32))
     state.set_pbc(np.eye(3, dtype=np.float32) * 100.0)
-    state.d_forces_x[:] = cp.asarray(np.asarray(forces[:, 0], dtype=np.float32))
-    state.d_forces_y[:] = cp.asarray(np.asarray(forces[:, 1], dtype=np.float32))
-    state.d_forces_z[:] = cp.asarray(np.asarray(forces[:, 2], dtype=np.float32))
+    state.d_forces_x[:] = cp.asarray(forces[:, 0])
+    state.d_forces_y[:] = cp.asarray(forces[:, 1])
+    state.d_forces_z[:] = cp.asarray(forces[:, 2])
     return System(topology, state)
 
 
@@ -111,4 +111,24 @@ class TestForceReduction:
         minimizer = SteepestDescentMinimizer()
         rms_f = minimizer.compute_rms_force(system)
         expected_rms = np.sqrt((1.0**2 + 2.0**2) / 2)
+        assert rms_f == pytest.approx(expected_rms)
+
+    def test_compute_max_force_multi_block(self):
+        num_particles = 300
+        positions = np.zeros((num_particles, 3), dtype=np.float32)
+        forces = np.zeros((num_particles, 3), dtype=np.float32)
+        forces[200, 1] = 7.0
+        system = _make_system(num_particles, positions, forces)
+        minimizer = SteepestDescentMinimizer()
+        max_f = minimizer.compute_max_force(system)
+        assert max_f == pytest.approx(7.0)
+
+    def test_compute_rms_force_multi_block(self):
+        num_particles = 300
+        positions = np.zeros((num_particles, 3), dtype=np.float32)
+        forces = np.ones((num_particles, 3), dtype=np.float32)
+        system = _make_system(num_particles, positions, forces)
+        minimizer = SteepestDescentMinimizer()
+        rms_f = minimizer.compute_rms_force(system)
+        expected_rms = np.sqrt(3.0)
         assert rms_f == pytest.approx(expected_rms)
