@@ -483,7 +483,6 @@ class PMEReciprocalForce(ForceTerm):
 
         self._d_bk_factors = None
         self._d_charge_grid = None
-        self._self_energy_factor = 0.0
 
         self._N = 0
         self._fft_warmed = False
@@ -500,8 +499,6 @@ class PMEReciprocalForce(ForceTerm):
     def initialize_grid(self, topology, parameter_table, pbc_matrix=None):
         N = topology.num_particles
         self._N = N
-
-        charges = parameter_table.particle_parameters["charge"].astype(np.float32)
 
         if pbc_matrix is None:
             raise ValueError(
@@ -541,13 +538,6 @@ class PMEReciprocalForce(ForceTerm):
             box_z,
         )
         self._d_bk_factors = cp.asarray(bk)
-
-        self._self_energy_factor = (
-            -COULOMB_CONST
-            * self.alpha
-            / SQRT_PI
-            * float(np.sum(charges.astype(np.float64) ** 2))
-        )
 
         self._warm_fft()
 
@@ -652,6 +642,9 @@ class PMEReciprocalForce(ForceTerm):
             ),
         )
 
-        self_k = get_self_energy_kernel()
-        self_k((1,), (1,), (np.float32(self._self_energy_factor), state.d_energy))
+        if compute_energy:
+            sum_q2 = float(cp.sum(state.d_charges.astype(cp.float64) ** 2))
+            self_energy_factor = -COULOMB_CONST * self.alpha / SQRT_PI * sum_q2
+            self_k = get_self_energy_kernel()
+            self_k((1,), (1,), (np.float32(self_energy_factor), state.d_energy))
 

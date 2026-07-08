@@ -352,8 +352,7 @@ class TestPMEReciprocalForce:
 
         pt = ParameterTable()
         np.random.seed(42)
-        pt.particle_parameters['charge'] = np.random.randn(N).astype(np.float32)
-        topo.charges = pt.particle_parameters['charge'].copy()
+        topo.charges = np.random.randn(N).astype(np.float32)
 
         state = State(topo.num_particles)
         state.set_charges(topo.charges)
@@ -403,8 +402,7 @@ class TestPMEReciprocalForce:
 
         np.random.seed(7)
         pt = ParameterTable()
-        pt.particle_parameters['charge'] = np.random.randn(N).astype(np.float32)
-        topo.charges = pt.particle_parameters['charge'].copy()
+        topo.charges = np.random.randn(N).astype(np.float32)
 
         state = State(topo.num_particles)
         state.set_charges(topo.charges)
@@ -478,7 +476,6 @@ class TestGridSizing:
         topo.num_particles = N
         topo.particle_type_indices = np.zeros(N, dtype=np.int32)
         pt = ParameterTable()
-        pt.particle_parameters['charge'] = np.zeros(N, dtype=np.float32)
         pbc = np.eye(3, dtype=np.float32) * box
         from mdpy.force.pme_reciprocal_force import PMEReciprocalForce
         pme = PMEReciprocalForce(cutoff)
@@ -500,7 +497,6 @@ class TestGridSizing:
         topo.num_particles = N
         topo.particle_type_indices = np.zeros(N, dtype=np.int32)
         pt = ParameterTable()
-        pt.particle_parameters['charge'] = np.zeros(N, dtype=np.float32)
         pbc = np.eye(3, dtype=np.float32) * box
         pme = PMEReciprocalForce(cutoff)
         pme.initialize_grid(topo, pt, pbc_matrix=pbc)
@@ -520,7 +516,6 @@ class TestGridSizing:
         topo.num_particles = N
         topo.particle_type_indices = np.zeros(N, dtype=np.int32)
         pt = ParameterTable()
-        pt.particle_parameters['charge'] = np.zeros(N, dtype=np.float32)
         pbc = np.diag(np.array([box_x, box_y, box_z], dtype=np.float32))
         pme = PMEReciprocalForce(cutoff)
         pme.initialize_grid(topo, pt, pbc_matrix=pbc)
@@ -541,7 +536,6 @@ class TestGridSizing:
         topo.num_particles = N
         topo.particle_type_indices = np.zeros(N, dtype=np.int32)
         pt = ParameterTable()
-        pt.particle_parameters['charge'] = np.zeros(N, dtype=np.float32)
         pbc = np.eye(3, dtype=np.float32) * box
         pme_default = PMEReciprocalForce(cutoff)
         pme_default.initialize_grid(topo, pt, pbc_matrix=pbc)
@@ -562,7 +556,6 @@ class TestGridSizing:
         topo.num_particles = N
         topo.particle_type_indices = np.zeros(N, dtype=np.int32)
         pt = ParameterTable()
-        pt.particle_parameters['charge'] = np.zeros(N, dtype=np.float32)
         pbc = np.eye(3, dtype=np.float32) * box
         pme_loose = PMEReciprocalForce(cutoff, ewald_rtol=1e-3)
         pme_loose.initialize_grid(topo, pt, pbc_matrix=pbc)
@@ -679,7 +672,7 @@ class TestPMEIntegration6PO6:
 
         alpha = _calc_ewald_coefficient(self.cutoff)
 
-        charges = self.parameter_table.particle_parameters['charge'].astype(np.float64)
+        charges = self.topology.charges.astype(np.float64)
         COULOMB_CONST = 0.13893556595455
         SQRT_PI = 1.772453850905516
 
@@ -708,6 +701,25 @@ class TestPMEIntegration6PO6:
             f"PME did not respond to state.d_charges mutation: "
             f"baseline={baseline}, doubled={doubled}"
         )
+
+    def test_self_energy_reflects_single_charge_mutation(self):
+        system, pme = self._build_pme_system()
+
+        system.compute_forces()
+        e_before = system.dump_energy()['pme_reciprocal']
+
+        orig = float(system.state.d_charges[0].get())
+        system.state.d_charges[0] = orig * 2.0
+
+        system.compute_forces()
+        e_after = system.dump_energy()['pme_reciprocal']
+
+        assert abs(e_after - e_before) > 1e-6, (
+            f"PME energy did not reflect single-charge mutation: "
+            f"before={e_before}, after={e_after}"
+        )
+
+        system.state.d_charges[0] = orig
 
 
 class TestBilateralPaddingUnwrapped:

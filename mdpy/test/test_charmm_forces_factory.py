@@ -143,7 +143,7 @@ class TestNb14Force:
         forces = create_charmm_forces(topology, table, np.eye(3)*108.0)
         bonded = forces['bonded']
         nb14_force = [f for f in bonded._forces if f.name == 'nb14'][0]
-        assert 'charge' in nb14_force._per_particle_gpu
+        assert 'charge' in nb14_force._per_particle_properties
 
     def test_nb14_count_positive(self, topology_and_table):
         topology, table = topology_and_table

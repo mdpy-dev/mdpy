@@ -15,7 +15,7 @@ class ParameterTable:
     particle_parameters : dict[str, ndarray]
         Maps parameter name to an array of shape (num_particles,).
         Indexed by particle index. Example entry:
-        ``self.particle_parameters['charge']`` → ``charge[particle_index]``.
+        ``self.particle_parameters['mass']`` → ``mass[particle_index]``.
 
     term_parameters : dict[str, ndarray]
         Maps term type name to a 2D array of shape (num_terms, k).
@@ -40,7 +40,7 @@ class ParameterTable:
     def add_particle_parameter(self, name, values):
         """Store a parameter indexed by individual particle.
 
-        name   : str — parameter name, e.g. ``'charge'``.
+        name   : str — parameter name, e.g. ``'mass'``.
         values : array of shape (num_particles,) — one value per particle.
         """
         self.particle_parameters[name] = np.asarray(values, dtype=env.NUMPY_FLOAT)

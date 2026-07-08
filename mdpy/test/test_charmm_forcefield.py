@@ -79,7 +79,6 @@ class TestParameterTable:
         table = create_parameter_table(topology, toppar)
         assert 'sigma' in table.type_parameters
         assert 'epsilon' in table.type_parameters
-        assert 'charge' in table.particle_parameters
 
     def test_parameter_table_values_positive(self):
         psf = PSFParser(os.path.join(DATA_DIR, '6PO6.psf'))
@@ -91,13 +90,14 @@ class TestParameterTable:
         assert np.all(sigma > 0)
         assert np.all(epsilon > 0)
 
-    def test_parameter_table_charge_particle(self):
+    def test_charge_not_in_parameter_table(self):
         psf = PSFParser(os.path.join(DATA_DIR, '6PO6.psf'))
         toppar = CharmmTopparParser(os.path.join(DATA_DIR, 'par_all36_prot.prm'))
         topology = psf.topology
         table = create_parameter_table(topology, toppar)
-        charges = table.particle_parameters['charge']
-        assert charges.shape == (49,)
+        assert 'charge' not in table.particle_parameters
+        assert 'charge_14' not in table.particle_parameters
+        assert topology.charges.shape == (49,)
 
     def test_sigma_conversion_factor(self):
         from mdpy.io.charmm_toppar_parser import RMIN_TO_SIGMA_FACTOR

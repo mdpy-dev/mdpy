@@ -201,5 +201,13 @@ class PSFParser:
         return self._particle_type_indices
 
     @property
+    def charges(self):
+        return self._charges
+
+    @property
+    def masses(self):
+        return self._masses
+
+    @property
     def topology(self) -> Topology:
         return self._topology

@@ -86,9 +86,6 @@ def _create_nb14_force(topology, parameter_table):
 
     force = BondedForce(nb14_lj_coulomb)
     force.name = 'nb14'
-    charges = parameter_table.particle_parameters.get('charge')
-    if charges is not None:
-        force.set_parameter('charge', charges)
     lj_pair_14 = parameter_table.type_pair_parameters['lj_pair_14']
     n_types = int(np.sqrt(len(lj_pair_14) // 2))
     particle_type_indices = topology.particle_type_indices
@@ -123,9 +120,6 @@ def _create_pme_exclusion_force(topology, alpha):
 
     force = BondedForce(pme_exclusion_correction)
     force.name = 'pme_exclusion'
-
-    charges = topology.charges
-    force.set_parameter('charge', charges)
 
     bond_indices = topology.bond_indices
     if len(bond_indices) > 0:

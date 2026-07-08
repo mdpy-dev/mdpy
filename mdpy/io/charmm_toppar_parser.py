@@ -425,7 +425,7 @@ def create_parameter_table(topology, toppar_parser):
     -------
     ParameterTable
         With type_parameters (sigma, epsilon, sigma_14, epsilon_14),
-        particle_parameters (charge, charge_14), and
+        type_pair_parameters (lj_pair, lj_pair_14), and
         term_parameters (bond, angle, dihedral, improper).
     """
     parameters = toppar_parser.parameters
@@ -467,8 +467,6 @@ def create_parameter_table(topology, toppar_parser):
     table.add_type_parameter("epsilon", epsilon_array)
     table.add_type_parameter("sigma_14", sigma_14_array)
     table.add_type_parameter("epsilon_14", epsilon_14_array)
-    table.add_particle_parameter("charge", topology.charges.copy())
-    table.add_particle_parameter("charge_14", topology.charges.copy())
 
     def _build_pair_matrix(sigma_arr, epsilon_arr, n):
         sigma_half = 0.5 * sigma_arr

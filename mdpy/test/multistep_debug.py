@@ -71,10 +71,8 @@ def main():
     bf_angle_params = parameter_table.get_term_parameter('angle').copy()
     bf_dihedral_params = parameter_table.get_term_parameter('dihedral').copy()
     bf_improper_params = parameter_table.get_term_parameter('improper').copy()
-    bf_charges = parameter_table.particle_parameters['charge'].astype(np.float64).copy()
-    bf_charges_14 = parameter_table.particle_parameters.get(
-        'charge_14', bf_charges,
-    ).astype(np.float64).copy()
+    bf_charges = topology.charges.astype(np.float64).copy()
+    bf_charges_14 = bf_charges.copy()
     bf_lj_pair = parameter_table.type_pair_parameters['lj_pair'].astype(
         np.float64,
     ).copy()
