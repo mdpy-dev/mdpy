@@ -1,7 +1,7 @@
 import numpy as np
 import cupy as cp
 import pytest
-from mdpy.core.topology import Builder
+from mdpy.core.topology import Topology
 from mdpy.core.state import State
 from mdpy.constraint.lincs import LincsConstraint
 
@@ -33,7 +33,8 @@ def test_lincs_preserves_bond_lengths():
     np.random.seed(42)
     pairs, lengths, masses, positions, mol_ids, pbc = _make_ethane_system()
     lincs = LincsConstraint(pairs, lengths, masses, expansion_order=4, num_iterations=1)
-    topology = Builder().set_particles(len(masses)).build()[0]
+    topology = Topology()
+    topology.num_particles = len(masses)
     state = State(topology.num_particles)
     state.set_pbc(pbc.flatten())
     state.set_positions(positions)
@@ -54,7 +55,8 @@ def test_lincs_no_change_if_already_correct():
     np.random.seed(42)
     pairs, lengths, masses, positions, mol_ids, pbc = _make_ethane_system()
     lincs = LincsConstraint(pairs, lengths, masses, expansion_order=4, num_iterations=1)
-    topology = Builder().set_particles(len(masses)).build()[0]
+    topology = Topology()
+    topology.num_particles = len(masses)
     state = State(topology.num_particles)
     state.set_pbc(pbc.flatten())
     state.set_positions(positions)
@@ -66,7 +68,6 @@ def test_lincs_no_change_if_already_correct():
 
 
 def _make_rebuild_test_system():
-    from mdpy.core.topology import Builder
     from mdpy.core.parameter_table import ParameterTable
     from mdpy.force.bonded_force import BondedForce
     from mdpy.force.factories.charmm import create_bonded_forces
@@ -90,16 +91,26 @@ def _make_rebuild_test_system():
         [7.63, 5.0, 5.0],
     ], dtype=np.float32)
 
-    builder = Builder()
-    builder.add_bond(0, 1, 450.0, 1.09)
-    builder.add_bond(0, 2, 450.0, 1.09)
-    builder.add_bond(0, 3, 450.0, 1.09)
-    builder.add_bond(4, 5, 450.0, 1.09)
-    builder.add_bond(4, 6, 450.0, 1.09)
-    builder.add_bond(4, 7, 450.0, 1.09)
-    builder.add_bond(0, 4, 450.0, 1.54)
-    builder.set_particles(8)
-    topology, term_params = builder.build()
+    topology = Topology()
+    topology.num_particles = 8
+    topology.add_bond(0, 1)
+    topology.add_bond(0, 2)
+    topology.add_bond(0, 3)
+    topology.add_bond(4, 5)
+    topology.add_bond(4, 6)
+    topology.add_bond(4, 7)
+    topology.add_bond(0, 4)
+    term_params = {
+        'bond': np.array([
+            [450.0, 1.09],
+            [450.0, 1.09],
+            [450.0, 1.09],
+            [450.0, 1.09],
+            [450.0, 1.09],
+            [450.0, 1.09],
+            [450.0, 1.54],
+        ], dtype=np.float32),
+    }
 
     pt = ParameterTable()
     for name, values in term_params.items():
@@ -182,7 +193,8 @@ def test_lincs_many_groups_multi_block():
         f"num_constraints={n_groups} due to per-group block alignment"
     )
 
-    topology = Builder().set_particles(n_atoms).build()[0]
+    topology = Topology()
+    topology.num_particles = n_atoms
     state = State(topology.num_particles)
     state.set_pbc(pbc_matrix.flatten())
     state.set_positions(positions)
@@ -242,7 +254,8 @@ def test_lincs_shared_atom_atomicAdd():
     pbc_matrix = np.diag([20.0, 20.0, 20.0]).astype(np.float32)
 
     lincs = LincsConstraint(constraint_pairs, target_lengths, masses, expansion_order=4, num_iterations=1)
-    topology = Builder().set_particles(5).build()[0]
+    topology = Topology()
+    topology.num_particles = 5
     state = State(topology.num_particles)
     state.set_pbc(pbc_matrix.flatten())
     state.set_positions(positions)
@@ -274,7 +287,8 @@ def test_lincs_ring_topology():
     pbc_matrix = np.diag([20.0, 20.0, 20.0]).astype(np.float32)
 
     lincs = LincsConstraint(constraint_pairs, target_lengths, masses, expansion_order=4, num_iterations=1)
-    topology = Builder().set_particles(n_atoms).build()[0]
+    topology = Topology()
+    topology.num_particles = n_atoms
     state = State(topology.num_particles)
     state.set_pbc(pbc_matrix.flatten())
     state.set_positions(positions)
