@@ -1,7 +1,7 @@
 import cupy as cp
 import numpy as np
 from .constraint_base import ConstraintBase
-from mdpy.core.kernel_preambles import PBC_MIN_IMAGE_DEVICE_FN
+from ._constraint_common import PBC_MIN_IMAGE_DEVICE_FN
 
 # SETTLE constraint algorithm for rigid water (Miyamoto & Kollman, J Comp Chem 1992).
 #
