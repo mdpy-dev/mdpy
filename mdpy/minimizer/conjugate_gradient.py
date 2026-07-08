@@ -56,9 +56,6 @@ void conjugate_gradient_step_kernel(
     const float* __restrict__ fy,
     const float* __restrict__ fz,
     const float* __restrict__ masses,
-    float* __restrict__ prev_gx,
-    float* __restrict__ prev_gy,
-    float* __restrict__ prev_gz,
     float* __restrict__ dir_x,
     float* __restrict__ dir_y,
     float* __restrict__ dir_z,
@@ -84,10 +81,6 @@ void conjugate_gradient_step_kernel(
     pos_y[i] += step_size * dy;
     pos_z[i] += step_size * dz;
 
-    prev_gx[i] = gx;
-    prev_gy[i] = gy;
-    prev_gz[i] = gz;
-
     dir_x[i] = dx;
     dir_y[i] = dy;
     dir_z[i] = dz;
@@ -102,9 +95,6 @@ class ConjugateGradientMinimizer(Minimizer):
         self.step_size = float(step_size)
         self._step_kernel = None
         self._grad_sq_kernel = None
-        self._prev_gradient_x = None
-        self._prev_gradient_y = None
-        self._prev_gradient_z = None
         self._direction_x = None
         self._direction_y = None
         self._direction_z = None
@@ -126,11 +116,8 @@ class ConjugateGradientMinimizer(Minimizer):
         )
 
     def _ensure_buffers(self, num_particles):
-        if self._prev_gradient_x is not None and self._prev_gradient_x.size >= num_particles:
+        if self._direction_x is not None and self._direction_x.size >= num_particles:
             return
-        self._prev_gradient_x = cp.zeros(num_particles, dtype=cp.float32)
-        self._prev_gradient_y = cp.zeros(num_particles, dtype=cp.float32)
-        self._prev_gradient_z = cp.zeros(num_particles, dtype=cp.float32)
         self._direction_x = cp.zeros(num_particles, dtype=cp.float32)
         self._direction_y = cp.zeros(num_particles, dtype=cp.float32)
         self._direction_z = cp.zeros(num_particles, dtype=cp.float32)
@@ -174,7 +161,6 @@ class ConjugateGradientMinimizer(Minimizer):
             (state.d_positions_x, state.d_positions_y, state.d_positions_z,
              state.d_forces_x, state.d_forces_y, state.d_forces_z,
              state.d_masses,
-             self._prev_gradient_x, self._prev_gradient_y, self._prev_gradient_z,
              self._direction_x, self._direction_y, self._direction_z,
              np.float32(self.step_size), np.float32(beta), np.int32(num_particles)),
         )
