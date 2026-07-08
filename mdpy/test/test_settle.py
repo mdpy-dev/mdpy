@@ -48,7 +48,7 @@ def test_settle_preserves_bond_lengths():
         np.zeros(len(masses), dtype=np.int32),
         mol_ids,
     ).build()[0]
-    state = State(topology)
+    state = State(topology.num_particles)
     state.set_pbc(pbc_matrix.flatten())
     state.set_positions(positions)
     state.set_prev_positions(positions.copy())
@@ -78,7 +78,7 @@ def test_settle_no_change_if_already_correct():
         np.zeros(len(masses), dtype=np.int32),
         mol_ids,
     ).build()[0]
-    state = State(topology)
+    state = State(topology.num_particles)
     state.set_pbc(pbc_matrix.flatten())
     state.set_positions(positions)
     state.set_prev_positions(positions.copy())
@@ -102,7 +102,7 @@ def test_settle_pbc_boundary_crossing():
         np.zeros(3, dtype=np.int32),
         mol_ids,
     ).build()[0]
-    state = State(topology)
+    state = State(topology.num_particles)
     state.set_pbc(pbc_matrix.flatten())
     settle = SettleConstraint([(0, 1, 2)], masses, dOH, dHH)
     n_cases = 0
@@ -142,7 +142,7 @@ def test_settle_large_perturbation():
         np.zeros(len(masses), dtype=np.int32),
         mol_ids,
     ).build()[0]
-    state = State(topology)
+    state = State(topology.num_particles)
     state.set_pbc(pbc_matrix.flatten())
     state.set_positions(positions)
     state.set_prev_positions(positions.copy())
@@ -172,7 +172,7 @@ def test_settle_center_of_mass_conservation():
         np.zeros(len(masses), dtype=np.int32),
         mol_ids,
     ).build()[0]
-    state = State(topology)
+    state = State(topology.num_particles)
     state.set_pbc(pbc_matrix.flatten())
     state.set_positions(positions)
     state.set_prev_positions(positions.copy())
@@ -204,7 +204,7 @@ def test_settle_tip3p_real_parameters():
         np.zeros(len(masses), dtype=np.int32),
         mol_ids,
     ).build()[0]
-    state = State(topology)
+    state = State(topology.num_particles)
     state.set_pbc(pbc_matrix.flatten())
     state.set_positions(positions)
     state.set_prev_positions(positions.copy())

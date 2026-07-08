@@ -39,7 +39,7 @@ def test_lincs_preserves_bond_lengths():
         np.zeros(len(masses), dtype=np.int32),
         mol_ids,
     ).build()[0]
-    state = State(topology)
+    state = State(topology.num_particles)
     state.set_pbc(pbc.flatten())
     state.set_positions(positions)
     state.set_prev_positions(positions.copy())
@@ -65,7 +65,7 @@ def test_lincs_no_change_if_already_correct():
         np.zeros(len(masses), dtype=np.int32),
         mol_ids,
     ).build()[0]
-    state = State(topology)
+    state = State(topology.num_particles)
     state.set_pbc(pbc.flatten())
     state.set_positions(positions)
     state.set_prev_positions(positions.copy())
@@ -193,7 +193,7 @@ def test_lincs_many_groups_multi_block():
         np.zeros(n_atoms, dtype=np.int32),
         mol_ids,
     ).build()[0]
-    state = State(topology)
+    state = State(topology.num_particles)
     state.set_pbc(pbc_matrix.flatten())
     state.set_positions(positions)
     state.set_prev_positions(positions.copy())
@@ -258,7 +258,7 @@ def test_lincs_shared_atom_atomicAdd():
         np.zeros(5, dtype=np.int32),
         mol_ids,
     ).build()[0]
-    state = State(topology)
+    state = State(topology.num_particles)
     state.set_pbc(pbc_matrix.flatten())
     state.set_positions(positions)
     state.set_prev_positions(positions.copy())
@@ -295,7 +295,7 @@ def test_lincs_ring_topology():
         np.zeros(n_atoms, dtype=np.int32),
         mol_ids,
     ).build()[0]
-    state = State(topology)
+    state = State(topology.num_particles)
     state.set_pbc(pbc_matrix.flatten())
     state.set_positions(positions)
     state.set_prev_positions(positions.copy())

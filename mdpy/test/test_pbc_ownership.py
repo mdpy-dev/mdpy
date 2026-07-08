@@ -15,7 +15,7 @@ def _make_topology(n=4):
 
 def test_state_exposes_public_pbc_properties():
     topo = _make_topology(4)
-    ctx = State(topo)
+    ctx = State(topo.num_particles)
     ctx.set_pbc(np.diag(np.array([10.0, 20.0, 30.0], dtype=np.float32)).flatten())
 
     assert ctx.box_x == pytest.approx(10.0)
@@ -28,7 +28,7 @@ def test_state_exposes_public_pbc_properties():
 
 def test_state_pbc_properties_update_after_set_pbc():
     topo = _make_topology(4)
-    ctx = State(topo)
+    ctx = State(topo.num_particles)
     ctx.set_pbc(np.diag(np.array([10.0, 20.0, 30.0], dtype=np.float32)).flatten())
     ctx.set_pbc(np.diag(np.array([40.0, 50.0, 60.0], dtype=np.float32)).flatten())
 
@@ -51,7 +51,7 @@ def test_block_list_uses_current_pbc_after_box_change():
     rng = np.random.default_rng(42)
     positions = rng.uniform(0, 10, (64, 3)).astype(np.float32)
 
-    ctx = State(topo)
+    ctx = State(topo.num_particles)
     ctx.set_pbc((np.eye(3, dtype=np.float32) * 10.0).flatten())
     ctx.set_positions(positions)
     ctx.set_velocities(np.zeros((64, 3), dtype=np.float32))
@@ -119,7 +119,7 @@ def test_system_update_neighbor_list_raises_if_set_pbc_not_called():
 def test_state_lazy_pbc():
     """State constructed without PBC; has_pbc False until set_pbc."""
     topo = _make_topology(4)
-    ctx = State(topo)
+    ctx = State(topo.num_particles)
     assert ctx.has_pbc is False
     assert ctx.d_pbc_matrix is None
     assert ctx.d_pbc_inv is None

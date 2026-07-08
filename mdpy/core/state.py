@@ -84,8 +84,8 @@ void zero_forces_kernel(
 
 class State:
 
-    def __init__(self, topology):
-        self.num_particles = topology.num_particles
+    def __init__(self, num_particles):
+        self.num_particles = num_particles
 
         # Per-particle state arrays (zero-filled; populated by set_* methods).
         self.d_positions_x = cp.zeros(self.num_particles, dtype=np.float32)
@@ -104,10 +104,10 @@ class State:
         self.d_prev_positions_y = cp.zeros(self.num_particles, dtype=np.float32)
         self.d_prev_positions_z = cp.zeros(self.num_particles, dtype=np.float32)
 
-        # Topology-derived per-particle properties (known at construction).
-        self.d_masses = cp.asarray(topology.masses.astype(np.float32))
-        self.d_types = cp.asarray(topology.particle_type_indices.astype(np.int32))
-        self.d_charges = cp.asarray(topology.charges.astype(np.float32))
+        # Per-particle properties (zero-filled; populated by set_* methods).
+        self.d_masses = cp.zeros(self.num_particles, dtype=np.float32)
+        self.d_types = cp.zeros(self.num_particles, dtype=np.int32)
+        self.d_charges = cp.zeros(self.num_particles, dtype=np.float32)
 
         self.d_energy = cp.zeros(1, dtype=np.float32)
         self.d_energy_accumulator = None
@@ -122,10 +122,13 @@ class State:
         self._inv_box_y = 0.0
         self._inv_box_z = 0.0
 
-        # State-set flags (queried via has_* properties).
-        self._has_pbc = False
+        # State-set flags (queried via has_* properties / is_ready).
         self._has_positions = False
         self._has_velocities = False
+        self._has_charges = False
+        self._has_masses = False
+        self._has_types = False
+        self._has_pbc = False
 
         # Lazy kernel caches.
         self._zero_forces_kernel = None
@@ -240,14 +243,17 @@ class State:
     def set_charges(self, charges):
         data = np.ascontiguousarray(np.asarray(charges, dtype=np.float32))
         self.d_charges[:] = cp.asarray(data)
+        self._has_charges = True
 
     def set_masses(self, masses):
         data = np.ascontiguousarray(np.asarray(masses, dtype=np.float32))
         self.d_masses[:] = cp.asarray(data)
+        self._has_masses = True
 
     def set_types(self, particle_type_indices):
         data = np.ascontiguousarray(np.asarray(particle_type_indices, dtype=np.int32))
         self.d_types[:] = cp.asarray(data)
+        self._has_types = True
 
     def download_positions(self):
         return np.stack(
@@ -343,3 +349,9 @@ class State:
     @property
     def has_velocities(self):
         return self._has_velocities
+
+    @property
+    def is_ready(self):
+        return (self._has_positions and self._has_velocities
+                and self._has_charges and self._has_masses
+                and self._has_types and self._has_pbc)

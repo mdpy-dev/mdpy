@@ -11,7 +11,11 @@ class System:
     def __init__(self, topology):
         self.topology = topology
         self.num_particles = topology.num_particles
-        self.state = State(topology)
+        self.state = State(topology.num_particles)
+        # Transitional seeding (topology still holds these — removed in Phase 7):
+        self.state.set_masses(topology.masses)
+        self.state.set_charges(topology.charges)
+        self.state.set_types(topology.particle_type_indices)
 
         self._cutoff = None
         self._skin = 1.0
@@ -85,15 +89,14 @@ class System:
     def set_velocities(self, velocities):
         self.state.set_velocities(velocities)
 
-    def _ensure_uploaded(self):
-        if not self.state.has_positions or not self.state.has_velocities:
+    def _ensure_ready(self):
+        if not self.state.is_ready:
             raise RuntimeError(
-                "Positions and/or velocities not uploaded to GPU. "
-                "Call system.set_positions() and system.set_velocities() first."
-            )
+                "State not fully set: positions/velocities/charges/masses/types/pbc "
+                "must all be set before compute.")
 
     def compute_forces(self):
-        self._ensure_uploaded()
+        self._ensure_ready()
         self.state.zero_forces()
         if self._block_list is not None:
             self._block_list.refresh_sorted_posq(self.state)
@@ -127,9 +130,9 @@ class System:
         cp.cuda.Stream.null.wait_event(self._ev_pme_done)
 
     def update_neighbor_list(self, sync_interval=10, force_rebuild=False):
-        self._ensure_uploaded()
         if not self.state.has_pbc:
             raise RuntimeError("PBC not set. Call set_pbc() first.")
+        self._ensure_ready()
 
         if self._block_list is None:
             if self._cutoff is None:

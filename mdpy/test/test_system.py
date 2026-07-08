@@ -92,7 +92,7 @@ class TestState:
     def test_initialize_cpu(self):
         topology, _ = _build_four_particle()
         pbc_matrix = _make_large_pbc()
-        ctx = State(topology)
+        ctx = State(topology.num_particles)
         ctx.set_pbc(pbc_matrix.flatten())
 
         assert ctx.num_particles == 4
@@ -110,7 +110,7 @@ class TestState:
     def test_upload_download_round_trip(self):
         topology, _ = _build_four_particle()
         pbc_matrix = _make_large_pbc()
-        ctx = State(topology)
+        ctx = State(topology.num_particles)
         ctx.set_pbc(pbc_matrix.flatten())
 
         original_positions = _four_particle_positions()
@@ -128,7 +128,7 @@ class TestState:
     def test_zero_forces_energy(self):
         topology, _ = _build_four_particle()
         pbc_matrix = _make_large_pbc()
-        ctx = State(topology)
+        ctx = State(topology.num_particles)
         ctx.set_pbc(pbc_matrix.flatten())
 
         ctx.d_forces_x[:] = 1.0
@@ -143,6 +143,14 @@ class TestState:
         assert np.all(ctx.d_forces_y.get() == 0)
         assert np.all(ctx.d_forces_z.get() == 0)
         assert ctx.d_energy[0] == 0
+
+    def test_state_constructed_from_num_particles(self):
+        state = State(4)
+        assert state.num_particles == 4
+        assert state.d_charges.shape == (4,)
+        assert state.d_masses.shape == (4,)
+        assert state.d_types.shape == (4,)
+        assert state.is_ready is False
 
 
 class TestSystem:
