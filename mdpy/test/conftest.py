@@ -1,9 +1,7 @@
 import pytest
 
 test_order = [
-    'new_particle_table',
     'new_topology',
-    'new_force_term',
     'bonded_force',
     'block_list',
     'block_list_minimization',
