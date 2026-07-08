@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 
 from mdpy import env
-from mdpy.core.topology import Builder
+from mdpy.core.topology import Topology
 from mdpy.core.state import State
 from mdpy.system import System
 from mdpy.integrator.verlet import VerletIntegrator
@@ -14,9 +14,8 @@ DT = 0.5
 def _make_system(n_atoms, box_size, cutoff=None):
     if cutoff is None:
         cutoff = box_size / 2.0
-    builder = Builder()
-    builder.set_particles(n_atoms)
-    topology, _ = builder.build()
+    topology = Topology()
+    topology.num_particles = n_atoms
     pbc_matrix = np.eye(3, dtype=env.NUMPY_FLOAT) * box_size
     state = State(n_atoms)
     state.set_masses(np.full(n_atoms, 12.0, dtype=env.NUMPY_FLOAT))

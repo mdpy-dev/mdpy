@@ -2,11 +2,13 @@ import numpy as np
 import pytest
 
 from mdpy.core.state import State
-from mdpy.core.topology import Builder
+from mdpy.core.topology import Topology
 
 
 def _make_topology(n=4):
-    return Builder().set_particles(n).build()[0]
+    topology = Topology()
+    topology.num_particles = n
+    return topology
 
 
 def test_state_exposes_public_pbc_properties():

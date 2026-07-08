@@ -8,7 +8,7 @@ from the GPU.
 import numpy as np
 import cupy as cp
 import pytest
-from mdpy.core.topology import Builder
+from mdpy.core.topology import Topology
 from mdpy.core.block_list import BlockList, BLOCK_SIZE
 
 
@@ -31,9 +31,8 @@ class _PBCContext:
 
 
 def _make_topology(n):
-    builder = Builder()
-    builder.set_particles(n)
-    topology, _ = builder.build()
+    topology = Topology()
+    topology.num_particles = n
     return topology
 
 
