@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 from mdpy import env
-from mdpy.core.topology import Builder
+from mdpy.core.topology import Topology
 from mdpy.core.state import State
 from mdpy.core.block_list import BlockList
 from mdpy.core.parameter_table import ParameterTable
@@ -62,22 +62,31 @@ def _make_parameter_table(term_params):
 
 
 def _build_four_particle():
-    builder = Builder()
-    builder.set_particles(4)
-    builder.add_bond(0, 1, 100.0, 1.5)
-    builder.add_bond(1, 2, 100.0, 1.5)
-    builder.add_bond(2, 3, 100.0, 1.5)
-    builder.add_angle(0, 1, 2, 50.0, np.pi * 170 / 180, 0.0, 0.0)
-    builder.add_angle(1, 2, 3, 50.0, np.pi * 170 / 180, 0.0, 0.0)
-    builder.add_dihedral(0, 1, 2, 3, 20.0, 2.0, np.pi)
-    return builder.build()
+    topology = Topology()
+    topology.num_particles = 4
+    topology.add_bond(0, 1)
+    topology.add_bond(1, 2)
+    topology.add_bond(2, 3)
+    topology.add_angle(0, 1, 2)
+    topology.add_angle(1, 2, 3)
+    topology.add_dihedral(0, 1, 2, 3)
+    term_params = {
+        'bond': np.array([[100.0, 1.5], [100.0, 1.5], [100.0, 1.5]], dtype=env.NUMPY_FLOAT),
+        'angle': np.array([[50.0, np.pi * 170 / 180, 0.0, 0.0],
+                           [50.0, np.pi * 170 / 180, 0.0, 0.0]], dtype=env.NUMPY_FLOAT),
+        'dihedral': np.array([[20.0, 2.0, np.pi]], dtype=env.NUMPY_FLOAT),
+    }
+    return topology, term_params
 
 
 def _build_simple_bond():
-    builder = Builder()
-    builder.set_particles(2)
-    builder.add_bond(0, 1, 200.0, 1.5)
-    return builder.build()
+    topology = Topology()
+    topology.num_particles = 2
+    topology.add_bond(0, 1)
+    term_params = {
+        'bond': np.array([[200.0, 1.5]], dtype=env.NUMPY_FLOAT),
+    }
+    return topology, term_params
 
 
 def _four_particle_positions():
@@ -227,9 +236,8 @@ class TestSystem:
             return 4.0 * epsilon * (sr6 * sr6 - sr6)
 
         # 8 atoms in a compact box — ensures block pairs exist
-        builder = Builder()
-        builder.set_particles(8)
-        topology, _ = builder.build()
+        topology = Topology()
+        topology.num_particles = 8
 
         sigma_matrix = np.full((1, 1), 3.4, dtype=np.float32)
         epsilon_matrix = np.full((1, 1), 0.1, dtype=np.float32)
@@ -739,11 +747,13 @@ class TestRebuildSortCorrectness:
 
     def test_rebuild_with_large_displacement(self):
         n = 50
-        builder = Builder()
-        builder.set_particles(n)
+        topology = Topology()
+        topology.num_particles = n
         for i in range(n - 1):
-            builder.add_bond(i, i + 1, k=300.0, r0=1.5)
-        topology, term_params = builder.build()
+            topology.add_bond(i, i + 1)
+        term_params = {
+            'bond': np.array([[300.0, 1.5]] * (n - 1), dtype=env.NUMPY_FLOAT),
+        }
         parameter_table = _make_parameter_table(term_params)
 
         box = 80.0
@@ -792,11 +802,13 @@ class TestRebuildSortCorrectness:
 
     def test_second_rebuild_positions_consistent(self):
         n = 100
-        builder = Builder()
-        builder.set_particles(n)
+        topology = Topology()
+        topology.num_particles = n
         for i in range(n - 1):
-            builder.add_bond(i, i + 1, k=300.0, r0=1.5)
-        topology, term_params = builder.build()
+            topology.add_bond(i, i + 1)
+        term_params = {
+            'bond': np.array([[300.0, 1.5]] * (n - 1), dtype=env.NUMPY_FLOAT),
+        }
         parameter_table = _make_parameter_table(term_params)
 
         box = 80.0
@@ -996,11 +1008,13 @@ class TestAsyncRebuild:
 
     def test_async_rebuild_preserves_permutation_invariant(self):
         n = 100
-        builder = Builder()
-        builder.set_particles(n)
+        topology = Topology()
+        topology.num_particles = n
         for i in range(n - 1):
-            builder.add_bond(i, i + 1, k=300.0, r0=1.5)
-        topology, term_params = builder.build()
+            topology.add_bond(i, i + 1)
+        term_params = {
+            'bond': np.array([[300.0, 1.5]] * (n - 1), dtype=env.NUMPY_FLOAT),
+        }
         parameter_table = _make_parameter_table(term_params)
         pbc_matrix = np.eye(3, dtype=env.NUMPY_FLOAT) * 80.0
         system = _make_system(topology, pbc_matrix, cutoff=10.0, skin=1.0)
