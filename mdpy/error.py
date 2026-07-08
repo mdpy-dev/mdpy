@@ -16,6 +16,15 @@ class EnvironmentVariableError(Exception):
     '''
     pass
 
+class PrecisionError(Exception):
+    '''This error occurs when:
+    - The requested numeric precision is not supported
+
+    Used in:
+    - mdpy.precision
+    '''
+    pass
+
 class UnitDimensionMismatchedError(Exception):
     '''This error occurs when:
     - The base dimension of two quantities is mismatched for a specific operation.
