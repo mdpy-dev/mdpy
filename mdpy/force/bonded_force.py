@@ -173,7 +173,7 @@ class BondedForce(ForceTerm):
         self._parameters.append([params.get(name, 0.0) for name in self._parameter_names])
         self._dirty = True
 
-    def sync(self):
+    def _sync(self):
         if not self._dirty:
             return
         if len(self._indices) == 0:
@@ -229,7 +229,7 @@ class BondedForce(ForceTerm):
         if num_terms_local == 0:
             return
         if self._dirty:
-            self.sync()
+            self._sync()
         if self._kernel_source is None:
             self._assemble_kernel()
         self._ensure_compiled()

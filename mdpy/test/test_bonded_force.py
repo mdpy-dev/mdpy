@@ -325,7 +325,6 @@ def test_incremental_add_and_sync():
 
     force.add([0, 2], k=k, r0=r0)
     context2 = MockState(positions, pbc_matrix)
-    force.sync()
     force.compute(context2)
 
     energy_after = float(context2.d_energy[0])
