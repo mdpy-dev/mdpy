@@ -8,7 +8,6 @@ from mdpy.force.nonbonded_force import (
     _assemble_exclusion_kernel,
     _prepare_energy_expression,
     _split_per_particle,
-    _unique_prop_bases,
 )
 from mdpy.force.markers import param, scalar as scalar_marker
 
@@ -160,10 +159,6 @@ class TestHelpers:
         assert len(i_props) == 0
         assert len(j_props) == 0
 
-    def test_unique_prop_bases(self):
-        bases = _unique_prop_bases({'charge1': 'charge', 'charge2': 'charge'})
-        assert bases == ['charge']
-
     def test_prepare_energy_single(self):
         energy_cuda, total_expr = _prepare_energy_expression(lj_ad.energy_cuda)
         assert '_result_energy' in energy_cuda
@@ -237,7 +232,7 @@ class TestClassInstantiation:
         nb = NonbondedForce(combined_lj_coulomb)
         assert 'sigma' in nb._expr_info.params
         assert 'epsilon' in nb._expr_info.params
-        assert 'charge' in nb._prop_bases
+        assert 'charge' in nb._expr_info.per_particle.values()
 
     def test_set_pair_parameter(self):
         nb = NonbondedForce(lj_ad)

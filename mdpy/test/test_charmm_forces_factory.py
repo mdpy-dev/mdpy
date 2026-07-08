@@ -166,7 +166,7 @@ class TestNonbondedForce:
         topology, table = topology_and_table
         forces = create_charmm_forces(topology, table, np.eye(3)*108.0)
         nb = forces['nonbonded']
-        assert 'charge' in nb._prop_bases
+        assert 'charge' in nb._expr_info.per_particle.values()
 
     def test_nonbonded_has_sigma_epsilon(self, topology_and_table):
         topology, table = topology_and_table

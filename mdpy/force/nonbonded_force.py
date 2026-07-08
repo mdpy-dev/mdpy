@@ -35,10 +35,6 @@ def _split_per_particle(per_particle):
     return i_props, j_props
 
 
-def _unique_prop_bases(per_particle):
-    return list(dict.fromkeys(per_particle.values()))
-
-
 _ADD_SORTED_FORCES_KERNEL_SRC = r"""
 extern "C" __global__
 void add_sorted_forces_kernel(
@@ -67,16 +63,12 @@ def _assemble_exclusion_kernel(
     expr_info, energy_cuda, grad_cuda, radial_force_cuda, total_energy_expr, compute_energy=True
 ):
     i_props, j_props = _split_per_particle(expr_info.per_particle)
-    bases = _unique_prop_bases(expr_info.per_particle)
-    non_charge_bases = [b for b in bases if b != "charge"]
-
-    sorted_decls = ""
-    for base in non_charge_bases:
-        sorted_decls += f",\n    const float* __restrict__ sorted_{base}"
-
-    unsorted_decls = ""
-    for base in non_charge_bases:
-        unsorted_decls += f",\n    const float* __restrict__ d_{base}"
+    for base in expr_info.per_particle.values():
+        if base != "charge":
+            raise NotImplementedError(
+                f"Non-charge per-particle property '{base}' is not supported. "
+                f"See AGENTS.md (_d_sorted_per_particle stub)."
+            )
 
     pair_decls = ""
     for name in expr_info.params:
@@ -87,24 +79,16 @@ def _assemble_exclusion_kernel(
         scalar_decls += f",\n    float {name}"
 
     load_i = ""
-    for arg_name, base_name in i_props.items():
-        if base_name == "charge":
-            load_i += f"\n        float {arg_name} = position_charge_i.w;"
-        else:
-            load_i += (
-                f"\n        float {arg_name} = sorted_{base_name}[block_x * 32 + tgx];"
-            )
+    for arg_name in i_props:
+        load_i += f"\n        float {arg_name} = position_charge_i.w;"
 
     load_j_init = ""
     for arg_name in j_props:
         load_j_init += f"\n        float {arg_name} = 0.0f;"
 
     load_j_from_array = ""
-    for arg_name, base_name in j_props.items():
-        if base_name == "charge":
-            load_j_from_array += f"\n            {arg_name} = jdata.w;"
-        else:
-            load_j_from_array += f"\n            {arg_name} = sorted_{base_name}[j_slot];"
+    for arg_name in j_props:
+        load_j_from_array += f"\n            {arg_name} = jdata.w;"
 
     shuffle_j = ""
     for arg_name in j_props:
@@ -147,7 +131,7 @@ void exclusion_block_pair_kernel(
     float cutoff_sq,
     const int* __restrict__ d_block_pair_count,
     int num_particles
-    {sorted_decls}{unsorted_decls}{pair_decls},
+    {pair_decls},
     const int* __restrict__ d_sorted_types,
     int n_types
     {scalar_decls}
@@ -256,8 +240,6 @@ class NonbondedForce(ForceTerm):
         self._radial_force_cuda = expression.radial_force_cuda
         self._grad_cuda = getattr(expression, "grad_cuda", None)
         self._energy_cuda_raw = expression.energy_cuda
-
-        self._prop_bases = _unique_prop_bases(self._expr_info.per_particle)
 
         self._pair_param_data = {}
         self._scalar_data = {}
