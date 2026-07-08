@@ -16,7 +16,7 @@ class System:
             # Transitional seeding (topology still holds these — removed in Phase 7):
             state.set_masses(topology.masses)
             state.set_charges(topology.charges)
-            state.set_types(topology.particle_type_indices)
+            state.set_type_indices(topology.particle_type_indices)
         self.state = state
 
         self._cutoff = None
@@ -170,7 +170,7 @@ class System:
         self.state.wrap_positions_with_prev_correction()
         self._block_list.capture_snapshot(self.state)
         self._block_list.build_block_pairs(self.topology, self.state)
-        self._block_list.refresh_sorted_types(self.state)
+        self._block_list.refresh_sorted_type_indices(self.state)
         self._block_list.reset_flag()
 
     def dump_energy(self):

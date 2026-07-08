@@ -155,7 +155,7 @@ class TestState:
         assert state.num_particles == 4
         assert state.d_charges.shape == (4,)
         assert state.d_masses.shape == (4,)
-        assert state.d_types.shape == (4,)
+        assert state.d_type_indices.shape == (4,)
         assert state.is_ready is False
 
     def test_state_is_ready_after_all_fields_set(self):
@@ -165,7 +165,7 @@ class TestState:
         state.set_velocities(np.zeros((2, 3), dtype=np.float32))
         state.set_charges(np.zeros(2, dtype=np.float32))
         state.set_masses(np.ones(2, dtype=np.float32))
-        state.set_types(np.zeros(2, dtype=np.int32))
+        state.set_type_indices(np.zeros(2, dtype=np.int32))
         assert state.is_ready is True
 
 

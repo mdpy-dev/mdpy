@@ -23,7 +23,7 @@ def create_system(psf, pdb, toppar, pbc_matrix, cutoff=12.0,
     state.set_positions(pdb.positions)
     state.set_charges(psf.charges)
     state.set_masses(psf.masses)
-    state.set_types(psf.particle_type_indices)
+    state.set_type_indices(psf.particle_type_indices)
 
     forces = create_charmm_forces(
         topology, parameter_table, pbc_matrix, cutoff,

@@ -808,9 +808,9 @@ class BlockList:
 
         # Block-ordered derived buffers. Owned by BlockList because the
         # gather uses self.d_block_atoms (block structure). Refreshed at
-        # distinct cadences (see refresh_sorted_posq / refresh_sorted_types).
+        # distinct cadences (see refresh_sorted_posq / refresh_sorted_type_indices).
         self._d_sorted_posq = None      # [x,y,z,q] per slot, float32, per-step
-        self._d_sorted_types = None     # atom types, int32, per-rebuild
+        self._d_sorted_type_indices = None     # atom type indices, int32, per-rebuild
 
         self._block_atoms_np = None
         self._block_pairs_np = None
@@ -1304,14 +1304,14 @@ class BlockList:
             ),
         )
 
-    def refresh_sorted_types(self, state):
-        """Refresh self._d_sorted_types from state's PDB-order atom types.
+    def refresh_sorted_type_indices(self, state):
+        """Refresh self._d_sorted_type_indices from state's PDB-order atom type indices.
 
         Per-rebuild refresh: called by System._do_rebuild() because types
         are static but block membership changes when the block list
         rebuilds. Thin wrapper around the generic gather_sorted primitive.
         """
-        self._d_sorted_types = self.gather_sorted(state.d_types)
+        self._d_sorted_type_indices = self.gather_sorted(state.d_type_indices)
 
     @property
     def d_sorted_posq(self):
@@ -1320,9 +1320,9 @@ class BlockList:
         return self._d_sorted_posq
 
     @property
-    def d_sorted_types(self):
-        """Block-ordered atom types (int32). None until first rebuild."""
-        return self._d_sorted_types
+    def d_sorted_type_indices(self):
+        """Block-ordered atom type indices (int32). None until first rebuild."""
+        return self._d_sorted_type_indices
 
     @property
     def num_blocks(self):
@@ -1383,5 +1383,5 @@ class BlockList:
         self._d_num_blocks = None
         self._alloc_empty_buffers()
         self._d_sorted_posq = None
-        self._d_sorted_types = None
+        self._d_sorted_type_indices = None
         self._invalidate_caches()

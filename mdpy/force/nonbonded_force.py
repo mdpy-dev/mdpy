@@ -132,7 +132,7 @@ void exclusion_block_pair_kernel(
     const int* __restrict__ d_block_pair_count,
     int num_particles
     {pair_decls},
-    const int* __restrict__ d_sorted_types,
+    const int* __restrict__ d_sorted_type_indices,
     int n_types
     {scalar_decls}
 ) {{
@@ -161,7 +161,7 @@ void exclusion_block_pair_kernel(
         float sy = shift_y[pos];
         float sz = shift_z[pos];
 {load_i}
-        int type_i = d_sorted_types[block_x * 32 + tgx];
+        int type_i = d_sorted_type_indices[block_x * 32 + tgx];
         int j_slot = interacting_atoms[pos * 32 + tgx];
         int gj = (j_slot >= 0) ? block_atoms[j_slot] : -1;
         float shfl_px = 0.0f, shfl_py = 0.0f, shfl_pz = 0.0f;
@@ -190,7 +190,7 @@ void exclusion_block_pair_kernel(
             if (!excluded && dist_sq > 1.0e-12f && dist_sq <= cutoff_sq && gi >= 0 && gi < num_particles) {{
                 float inv_dist = rsqrtf(dist_sq);
                 float r = dist_sq * inv_dist;
-                int type_j = d_sorted_types[slot2];
+                int type_j = d_sorted_type_indices[slot2];
                 int pair_idx = type_i * n_types + type_j;
 {load_pair}
 {energy_cuda}
@@ -279,7 +279,7 @@ class NonbondedForce(ForceTerm):
             first_matrix = next(iter(self._pair_param_data.values()))
             self._n_types = int(np.sqrt(first_matrix.shape[0]))
         else:
-            self._n_types = int(cp.max(state.d_types).get()) + 1
+            self._n_types = int(cp.max(state.d_type_indices).get()) + 1
 
         for name, mat in self._pair_param_data.items():
             self._d_pair_params[name] = cp.asarray(mat)
@@ -409,7 +409,7 @@ class NonbondedForce(ForceTerm):
         )
         for name in self._expr_info.params:
             args.append(self._d_pair_params[name])
-        args.append(block_list.d_sorted_types)
+        args.append(block_list.d_sorted_type_indices)
         args.append(np.int32(self._n_types))
         for name in self._expr_info.scalars:
             args.append(np.float32(self._scalar_data.get(name, 0.0)))

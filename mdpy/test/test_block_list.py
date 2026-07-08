@@ -32,8 +32,8 @@ class _PBCContext:
     """Minimal stand-in exposing d_pbc_matrix/d_pbc_inv for BlockList.rebuild
     and build_block_pairs, which now read PBC from a State.
 
-    Also exposes d_positions_x/y/z, d_charges, d_types so that
-    BlockList.refresh_sorted_posq / refresh_sorted_types can be tested
+    Also exposes d_positions_x/y/z, d_charges, d_type_indices so that
+    BlockList.refresh_sorted_posq / refresh_sorted_type_indices can be tested
     without constructing a full State."""
 
     def __init__(self, pbc_matrix, pbc_inv, positions=None, charges=None, types=None):
@@ -51,7 +51,7 @@ class _PBCContext:
         if charges is not None:
             self.d_charges = cp.asarray(np.asarray(charges, dtype=np.float32))
         if types is not None:
-            self.d_types = cp.asarray(np.asarray(types, dtype=np.int32))
+            self.d_type_indices = cp.asarray(np.asarray(types, dtype=np.int32))
 
 
 def _rebuild_and_build_block_pairs(n, box=50.0, cutoff=10.0, skin=2.0, seed=42, positions=None):

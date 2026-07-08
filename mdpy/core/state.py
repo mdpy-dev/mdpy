@@ -106,7 +106,7 @@ class State:
 
         # Per-particle properties (zero-filled; populated by set_* methods).
         self.d_masses = cp.zeros(self.num_particles, dtype=np.float32)
-        self.d_types = cp.zeros(self.num_particles, dtype=np.int32)
+        self.d_type_indices = cp.zeros(self.num_particles, dtype=np.int32)
         self.d_charges = cp.zeros(self.num_particles, dtype=np.float32)
 
         self.d_energy = cp.zeros(1, dtype=np.float32)
@@ -127,7 +127,7 @@ class State:
         self._has_velocities = False
         self._has_charges = False
         self._has_masses = False
-        self._has_types = False
+        self._has_type_indices = False
         self._has_pbc = False
 
         # Lazy kernel caches.
@@ -250,10 +250,10 @@ class State:
         self.d_masses[:] = cp.asarray(data)
         self._has_masses = True
 
-    def set_types(self, particle_type_indices):
+    def set_type_indices(self, particle_type_indices):
         data = np.ascontiguousarray(np.asarray(particle_type_indices, dtype=np.int32))
-        self.d_types[:] = cp.asarray(data)
-        self._has_types = True
+        self.d_type_indices[:] = cp.asarray(data)
+        self._has_type_indices = True
 
     def download_positions(self):
         return np.stack(
@@ -354,4 +354,4 @@ class State:
     def is_ready(self):
         return (self._has_positions and self._has_velocities
                 and self._has_charges and self._has_masses
-                and self._has_types and self._has_pbc)
+                and self._has_type_indices and self._has_pbc)
