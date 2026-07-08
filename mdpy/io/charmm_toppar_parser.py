@@ -416,13 +416,13 @@ def create_parameter_table(topology, toppar_parser, *, type_names=None):
     Parameters
     ----------
     topology : Topology
-        Must have particle_type_indices, type_names, charges, and bonded
-        indices (bond_indices, angle_indices, etc.).
+        Must have bonded indices (bond_indices, angle_indices, etc.).
+        If ``type_names`` is None, must also have ``type_names``.
     toppar_parser : CharmmTopparParser
         Parsed CHARMM parameter data.
     type_names : list[str], keyword-only
-        Per-particle atom type names. Falls back to ``topology.type_names``
-        when None (kept so existing positional callers keep working).
+        Per-particle atom type names. Defaults to ``topology.type_names``
+        when not provided.
 
     Returns
     -------

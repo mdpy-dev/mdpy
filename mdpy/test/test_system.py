@@ -1,3 +1,5 @@
+import os
+
 import numpy as np
 import pytest
 
@@ -15,6 +17,10 @@ from mdpy.force.nonbonded_transpiler import nonbonded_expression
 from mdpy.force.markers import param
 from mdpy.force.expressions.geometry import distance
 from mdpy.force.nonbonded_force import NonbondedForce
+from mdpy.io.psf_parser import PSFParser
+from mdpy.io.pdb_parser import PDBParser
+from mdpy.io.charmm_toppar_parser import CharmmTopparParser
+from mdpy.factories.system_factory import create_system
 
 
 def _make_system(topology, pbc_matrix, cutoff=12.0, skin=None,
@@ -1092,12 +1098,6 @@ class TestAsyncRebuild:
 class TestCreateSystemFactory:
 
     def test_create_system_wires_everything(self):
-        import os
-        from mdpy.io.psf_parser import PSFParser
-        from mdpy.io.pdb_parser import PDBParser
-        from mdpy.io.charmm_toppar_parser import CharmmTopparParser
-        from mdpy.factories.system_factory import create_system
-
         data_dir = os.path.join(os.path.dirname(__file__), 'data')
         psf = PSFParser(os.path.join(data_dir, '6PO6.psf'))
         pdb = PDBParser(os.path.join(data_dir, '6PO6.pdb'))
@@ -1110,7 +1110,7 @@ class TestCreateSystemFactory:
         assert system.state.is_ready is False
         assert system.num_particles == 49
 
-        system.state.set_velocities(
+        system.set_velocities(
             np.zeros((system.num_particles, 3), dtype=np.float32))
         assert system.state.is_ready is True
 

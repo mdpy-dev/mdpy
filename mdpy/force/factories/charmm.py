@@ -157,6 +157,11 @@ def create_charmm_forces(topology, parameter_table, pbc_matrix, cutoff=12.0,
         parameter_table: parameter table from CHARMM toppar parser.
         pbc_matrix: 3x3 PBC matrix (needed for PME).
         cutoff: nonbonded cutoff in Angstroms.
+        ewald_rtol: PME Ewald coefficient relative tolerance.
+        fourier_spacing: PME Fourier grid spacing in Angstroms.
+        particle_type_indices: per-particle type indices (keyword-only).
+            Defaults to ``topology.particle_type_indices`` when not provided;
+            used for 1-4 LJ parameter lookup.
 
     Returns:
         dict with keys:

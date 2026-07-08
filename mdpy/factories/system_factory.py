@@ -11,7 +11,7 @@ def create_system(psf, pdb, toppar, pbc_matrix, cutoff=12.0,
 
     Reads per-particle data and metadata from the parsers, populates State,
     and wires force terms + constraints. The caller must still call
-    system.state.set_velocities(...) before running (velocities often come
+    system.set_velocities(...) before running (velocities often come
     from generate_velocity_from_temperature, which needs masses).
     """
     topology = psf.topology
@@ -33,7 +33,7 @@ def create_system(psf, pdb, toppar, pbc_matrix, cutoff=12.0,
     system = System(topology, state)
     system.add_force_term(forces['bonded'])
     system.add_force_term(forces['nonbonded'])
-    system.add_force_term(forces['pme'], stream='pme')
+    system.add_force_term(forces['pme'], stream='pme')  # PME overlaps primary terms on its own stream
 
     for constraint in create_constraints(
         topology, parameter_table, scheme,
