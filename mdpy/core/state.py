@@ -122,7 +122,7 @@ class State:
         self._inv_box_y = 0.0
         self._inv_box_z = 0.0
 
-        # Upload-state flags (queried via has_* properties).
+        # State-set flags (queried via has_* properties).
         self._has_pbc = False
         self._has_positions = False
         self._has_velocities = False
