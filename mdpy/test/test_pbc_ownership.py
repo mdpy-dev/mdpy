@@ -99,7 +99,7 @@ def test_system_update_neighbor_list_raises_if_set_pbc_not_called():
     system = System(topo)
     # Note: do NOT call system.set_pbc(...)
 
-    # Upload positions+velocities so the _ensure_uploaded gate passes.
+    # set positions+velocities so the _ensure_ready gate passes.
     rng = np.random.default_rng(0)
     system.set_positions(rng.uniform(0, 5, (8, 3)).astype(np.float32))
     system.set_velocities(np.zeros((8, 3), dtype=np.float32))
