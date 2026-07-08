@@ -605,7 +605,7 @@ Scalar reads for kernel launch sizing and control flow. These are acceptable per
 | Location | Scalar read | Purpose |
 |----------|------------|---------|
 | `block_list.py:973` | `int(d_num_blocks[0])`, `int(d_total_padded[0])` | Block count / padded size for array sizing |
-| `block_list.py:1089` | `int(self._d_counters[0])` | Block-pair count for array sizing |
+| `block_list.py:861` | `int(self.d_num_block_pairs[0])` | Block-pair count for array sizing |
 | `block_list.py:1284-1285` | `int(self._d_classify_excl_counter[0])`, `int(self._d_classify_main_counter[0])` | Exclusion/main block-pair counts |
 | `system.py:193` | `int(self._block_list.d_rebuild_flag[0])` | `_do_rebuild` scalar gate — one sync per sync_interval steps (Option A). Gates all Python-level side effects before any kernel runs. |
 

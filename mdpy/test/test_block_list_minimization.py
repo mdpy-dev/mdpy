@@ -57,7 +57,7 @@ def test_unified_mask_path_all_pairs_have_masks():
     s = _build_ion_system()
     s.update_neighbor_list(force_rebuild=True)
     bl = s._block_list
-    bl.num_block_pairs = int(bl._d_counters[0].get())
+    bl.num_block_pairs = int(bl.d_num_block_pairs[0].get())
     # masks array covers every pair
     assert bl.d_exclusion_masks.size >= bl.num_block_pairs * 32
     # most masks are zero (no exclusion), a few nonzero (1-2/1-3 pairs)

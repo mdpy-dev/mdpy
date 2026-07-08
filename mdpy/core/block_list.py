@@ -799,7 +799,7 @@ class BlockList:
         self._d_block_pair_shift_x_buf = cp.empty(0, dtype=env.NUMPY_FLOAT)
         self._d_block_pair_shift_y_buf = cp.empty(0, dtype=env.NUMPY_FLOAT)
         self._d_block_pair_shift_z_buf = cp.empty(0, dtype=env.NUMPY_FLOAT)
-        self._d_counters = cp.zeros(1, dtype=env.NUMPY_INT)
+        self.d_num_block_pairs = cp.zeros(1, dtype=env.NUMPY_INT)
 
         self._kernels = None
 
@@ -858,14 +858,14 @@ class BlockList:
     @property
     def block_pairs(self):
         if self._block_pairs_np is None and self.d_block_pairs.size > 0:
-            n = int(self._d_counters[0].get())
+            n = int(self.d_num_block_pairs[0].get())
             self._block_pairs_np = cp.asnumpy(self.d_block_pairs[:n])
         return self._block_pairs_np
 
     @property
     def interacting_atoms(self):
         if self._interacting_atoms_np is None and self.d_interacting_atoms.size > 0:
-            n = int(self._d_counters[0].get())
+            n = int(self.d_num_block_pairs[0].get())
             self._interacting_atoms_np = cp.asnumpy(
                 self.d_interacting_atoms[: n * BLOCK_SIZE]
             ).reshape(-1, BLOCK_SIZE)
@@ -874,7 +874,7 @@ class BlockList:
     @property
     def exclusion_masks(self):
         if self._exclusion_masks_np is None and self.d_exclusion_masks.size > 0:
-            n = int(self._d_counters[0].get())
+            n = int(self.d_num_block_pairs[0].get())
             self._exclusion_masks_np = cp.asnumpy(
                 self.d_exclusion_masks[: n * BLOCK_SIZE]
             ).reshape(-1, BLOCK_SIZE)
@@ -1130,7 +1130,7 @@ class BlockList:
             self._d_block_pair_shift_y_buf = cp.empty(max_block_pairs, dtype=env.NUMPY_FLOAT)
             self._d_block_pair_shift_z_buf = cp.empty(max_block_pairs, dtype=env.NUMPY_FLOAT)
             self._max_block_pairs = max_block_pairs
-        self._d_counters[0] = 0
+        self.d_num_block_pairs[0] = 0
 
         threads_per_block = 256
         grid_blocks = max((self.max_blocks * cell_subsets + 7) // 8, 1)
@@ -1151,7 +1151,7 @@ class BlockList:
                 gpu_context.d_pbc_matrix,
                 self._d_block_pair_buf, self._d_interacting_buf,
                 self._d_block_pair_shift_x_buf, self._d_block_pair_shift_y_buf, self._d_block_pair_shift_z_buf,
-                self._d_counters, np.int32(max_block_pairs),
+                self.d_num_block_pairs, np.int32(max_block_pairs),
             ),
         )
 
@@ -1193,7 +1193,7 @@ class BlockList:
                 d_excl_neighbors,
                 d_rev_offset,
                 d_rev_neighbors,
-                self._d_counters,
+                self.d_num_block_pairs,
                 np.int32(N),
                 self.d_exclusion_masks,
             ),

@@ -431,7 +431,7 @@ class NonbondedForce(ForceTerm):
                 block_list.d_interacting_atoms,
                 block_list.d_exclusion_masks,
                 np.float32(self._cutoff_sq),
-                block_list._d_counters,
+                block_list.d_num_block_pairs,
                 np.int32(gpu_context.num_particles),
             ]
         )
