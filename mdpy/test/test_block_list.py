@@ -361,11 +361,11 @@ class TestInteractingBlocks:
         positions[32:, 0] = box - 1.0
         positions[:, 1] = 12.5 + rng.uniform(-0.1, 0.1, n)
         positions[:, 2] = 12.5 + rng.uniform(-0.1, 0.1, n)
-        bl, _, pbc_matrix, _, _ = _rebuild_and_build_block_pairs(n, box, cutoff, skin, positions=positions)
+        bl, pdb_positions, pbc_matrix, _, _ = _rebuild_and_build_block_pairs(n, box, cutoff, skin, positions=positions)
 
-        pos_x = cp.asnumpy(bl._sorted_positions[0])
-        pos_y = cp.asnumpy(bl._sorted_positions[1])
-        pos_z = cp.asnumpy(bl._sorted_positions[2])
+        pos_x = pdb_positions[:, 0]
+        pos_y = pdb_positions[:, 1]
+        pos_z = pdb_positions[:, 2]
         pbc_2d = np.asarray(pbc_matrix).reshape(3, 3)
         box_x = float(pbc_2d[0, 0])
         box_y = float(pbc_2d[1, 1])
@@ -779,12 +779,10 @@ class TestPostArgsortFusion:
 
         assert np.all(p2s[raw] == np.arange(n))
 
-        pos_x = cp.asnumpy(bl._sorted_positions[0])
-        pos_y = cp.asnumpy(bl._sorted_positions[1])
-        pos_z = cp.asnumpy(bl._sorted_positions[2])
-        assert np.allclose(pos_x, positions[:, 0][raw], atol=1e-6)
-        assert np.allclose(pos_y, positions[:, 1][raw], atol=1e-6)
-        assert np.allclose(pos_z, positions[:, 2][raw], atol=1e-6)
+        # sorted positions verification removed: counting_scatter no longer
+        # writes _sorted_positions (production reads d_sorted_posq instead).
+        # The order maps (raw_order, pdb_to_sorted, sorted_to_pdb) above are
+        # the authoritative scatter-output contract.
 
 
 class TestCellProcessingBatch:

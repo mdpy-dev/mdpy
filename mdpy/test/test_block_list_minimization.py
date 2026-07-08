@@ -125,9 +125,8 @@ def test_counting_sort_groups_by_cell():
     cis = bl._d_cell_indices_sorted.get() if hasattr(bl, '_d_cell_indices_sorted') else None
     if cis is not None:
         assert (np.diff(cis) >= 0).all(), "atoms not grouped by cell"
-    # sorted positions array exists and has the right size
-    sx, sy, sz = bl._sorted_positions
-    assert sx.shape[0] == bl.num_particles
+    # _sorted_positions removed: counting_scatter no longer writes sorted
+    # position buffers (production reads d_sorted_posq, refreshed each step).
     # block_atoms covers total_padded slots, real slots are valid sorted indices
     ba = bl.d_block_atoms.get()
     real = ba[ba >= 0]

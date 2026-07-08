@@ -630,11 +630,7 @@ void counting_scatter_kernel(
     int* __restrict__ composite_cursor,
     const int* __restrict__ cell_offset,
     const int* __restrict__ cell_offset_padded,
-    const float* __restrict__ src_x,
-    const float* __restrict__ src_y,
-    const float* __restrict__ src_z,
     int num_particles,
-    float* __restrict__ dst_x, float* __restrict__ dst_y, float* __restrict__ dst_z,
     int* __restrict__ block_atoms,
     int* __restrict__ raw_order,
     int* __restrict__ pdb_to_sorted,
@@ -649,7 +645,6 @@ void counting_scatter_kernel(
     int slot = composite_offset[ckey] + local;
     int intra = slot - cell_offset[cell];
     int padded = cell_offset_padded[cell] + intra;
-    dst_x[slot] = src_x[i]; dst_y[slot] = src_y[i]; dst_z[slot] = src_z[i];
     block_atoms[padded] = i;
     raw_order[slot] = i;
     pdb_to_sorted[i] = slot;
@@ -1044,9 +1039,6 @@ class BlockList:
         # block_atoms must be pre-filled with -1 (padding) before launch.
         block_atoms = self._pool_get("block_atoms", self.max_total_padded, env.NUMPY_INT, fill=-1)
         composite_cursor = self._pool_get("composite_cursor", composite_buckets, env.NUMPY_INT, fill=0)
-        sorted_pos_x = self._pool_get("sorted_pos_x", N, env.NUMPY_FLOAT)
-        sorted_pos_y = self._pool_get("sorted_pos_y", N, env.NUMPY_FLOAT)
-        sorted_pos_z = self._pool_get("sorted_pos_z", N, env.NUMPY_FLOAT)
         raw_order = self._pool_get("raw_order", N, env.NUMPY_INT)
         pdb_to_sorted = self._pool_get("pdb_to_sorted", N, env.NUMPY_INT)
         # sorted_to_pdb is NOT pooled: line 808 captures prev_sorted_to_pdb =
@@ -1060,8 +1052,7 @@ class BlockList:
             (
                 cell_indices, sort_keys, composite_offset, composite_cursor,
                 cell_offset, cell_offset_padded,
-                pos_x, pos_y, pos_z, np.int32(N),
-                sorted_pos_x, sorted_pos_y, sorted_pos_z,
+                np.int32(N),
                 block_atoms, raw_order, pdb_to_sorted, sorted_to_pdb,
                 cell_indices_sorted,
             ),
@@ -1071,7 +1062,6 @@ class BlockList:
         self.d_pdb_to_sorted = pdb_to_sorted
         self.d_sorted_to_pdb = sorted_to_pdb
         self._d_cell_indices_sorted = cell_indices_sorted
-        self._sorted_positions = (sorted_pos_x, sorted_pos_y, sorted_pos_z)
 
         self.d_block_to_cell = block_to_cell[:self.max_blocks]
 
@@ -1108,7 +1098,7 @@ class BlockList:
 
     def build_block_pairs(self, topology, gpu_context):
         """Find interacting block pairs using cell-based neighbor search."""
-        if self.num_particles == 0 or not hasattr(self, '_sorted_positions'):
+        if self.num_particles == 0 or not self._is_initialized:
             return
         self._invalidate_caches()
 
@@ -1380,7 +1370,6 @@ class BlockList:
         self.num_block_pairs = 0
         self.num_particles = 0
         self._alloc_empty_buffers()
-        self._sorted_positions = None
         self._d_sorted_posq = None
         self._d_sorted_types = None
         self._invalidate_caches()
