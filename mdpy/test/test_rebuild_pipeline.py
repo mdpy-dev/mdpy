@@ -24,6 +24,7 @@ CUTOFF = 12.0
 
 
 def _setup_system():
+    from mdpy.core.state import State
     from mdpy.force.bonded_force import BondedForce
     from mdpy.force.factories.charmm import create_bonded_group
     from mdpy.force.expressions.coulomb import coulomb
@@ -43,7 +44,11 @@ def _setup_system():
     pbc_matrix = np.eye(3, dtype=np.float64) * BOX_SIZE
     pbc_inv = np.linalg.inv(pbc_matrix)
 
-    system = System(topology)
+    state = State(topology.num_particles)
+    state.set_masses(psf.masses)
+    state.set_charges(psf.charges)
+    state.set_type_indices(psf.particle_type_indices)
+    system = System(topology, state)
 
     system.set_pbc(pbc_matrix)
     system.add_force_term(create_bonded_group(topology, parameter_table))

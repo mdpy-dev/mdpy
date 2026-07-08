@@ -18,6 +18,7 @@ DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
 
 
 def _setup_mdpy_system(psf_path, pdb_path, prm_path, cutoff=12.0):
+    from mdpy.core.state import State
     from mdpy.io.psf_parser import PSFParser
     from mdpy.io.pdb_parser import PDBParser
     from mdpy.io.charmm_toppar_parser import CharmmTopparParser
@@ -37,7 +38,11 @@ def _setup_mdpy_system(psf_path, pdb_path, prm_path, cutoff=12.0):
     pbc_matrix = np.eye(3, dtype=np.float64) * 100.0
     pbc_inv = np.linalg.inv(pbc_matrix)
 
-    system = System(topology)
+    state = State(topology.num_particles)
+    state.set_masses(psf.masses)
+    state.set_charges(psf.charges)
+    state.set_type_indices(psf.particle_type_indices)
+    system = System(topology, state)
 
     system.set_pbc(pbc_matrix)
     system.add_force_term(create_bonded_group(topology, parameter_table))

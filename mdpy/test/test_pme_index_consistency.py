@@ -13,6 +13,7 @@ from mdpy.force.expressions.screened_coulomb import screened_coulomb
 from mdpy.force.pme_reciprocal_force import PMEReciprocalForce
 from mdpy.integrator.verlet import VerletIntegrator
 from mdpy.system import System
+from mdpy.core.state import State
 
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
 PSF = os.path.join(DATA_DIR, '6PO6.psf')
@@ -30,7 +31,11 @@ def _build_system():
     parameter_table = create_parameter_table(topology, toppar)
     pbc_matrix = np.eye(3, dtype=np.float32) * BOX
 
-    system = System(topology)
+    state = State(topology.num_particles)
+    state.set_masses(psf.masses)
+    state.set_charges(psf.charges)
+    state.set_type_indices(psf.particle_type_indices)
+    system = System(topology, state)
 
     system.set_pbc(pbc_matrix)
     system.add_force_term(create_bonded_group(topology, parameter_table))

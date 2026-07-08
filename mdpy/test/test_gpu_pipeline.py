@@ -13,6 +13,7 @@ from mdpy.force.expressions.lennard_jones import lennard_jones
 from mdpy.force.expressions.coulomb import coulomb
 from mdpy.integrator.verlet import VerletIntegrator
 from mdpy.system import System
+from mdpy.core.state import State
 from mdpy import env
 
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
@@ -40,7 +41,11 @@ def _make_system():
     topology = psf.topology
     pt = create_parameter_table(topology, toppar)
     pbc = np.eye(3, dtype=np.float64) * 30.0
-    system = System(topology)
+    state = State(topology.num_particles)
+    state.set_masses(psf.masses)
+    state.set_charges(psf.charges)
+    state.set_type_indices(psf.particle_type_indices)
+    system = System(topology, state)
     system.set_pbc(pbc)
     system.add_force_term(create_bonded_group(topology, pt))
     nb = NonbondedForce(lennard_jones + coulomb, cutoff=12.0)

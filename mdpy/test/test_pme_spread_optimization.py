@@ -14,9 +14,8 @@ REF_PATH = os.path.join(BENCH_DIR, "pme_reference.npz")
 def ion_system():
     from mdpy.io.psf_parser import PSFParser
     from mdpy.io.pdb_parser import PDBParser
-    from mdpy.io.charmm_toppar_parser import CharmmTopparParser, create_parameter_table
-    from mdpy.force.factories.charmm import create_charmm_forces
-    from mdpy.system import System
+    from mdpy.io.charmm_toppar_parser import CharmmTopparParser
+    from mdpy.factories.system_factory import create_system
 
     data_dir = os.path.join(BENCH_DIR, "data")
     psf = PSFParser(os.path.join(data_dir, "ion.psf"))
@@ -25,26 +24,17 @@ def ion_system():
         os.path.join(data_dir, "par_sin.prm"),
         os.path.join(data_dir, "par_water.prm"),
     )
-    topology = psf.topology
-    pt = create_parameter_table(topology, toppar)
     pbc = np.diag([75.450, 77.623, 69.668])
-    forces = create_charmm_forces(topology, pt, pbc, cutoff=12.0)
-    system = System(topology)
-    system.set_pbc(pbc)
-    system.add_force_term(forces["bonded"])
-    system.add_force_term(forces["nonbonded"])
-    system.add_force_term(forces["pme"])
-    n = topology.num_particles
-    system.set_positions(pdb.positions)
-    system.set_velocities(np.zeros((n, 3), dtype=np.float32))
+    system = create_system(psf, pdb, toppar, pbc, cutoff=12.0)
+    system.set_velocities(np.zeros((system.num_particles, 3), dtype=np.float32))
     system.update_neighbor_list(force_rebuild=True)
     system.compute_forces()
-    return system, forces
+    return system
 
 
 def test_pme_energy_matches_reference(ion_system):
     """PME reciprocal energy must match pre-optimization reference within float32 precision."""
-    system, forces = ion_system
+    system = ion_system
     ref = np.load(REF_PATH, allow_pickle=True)
     ref_energy = float(ref["ion_energy"])
     energies = system.dump_energy()
@@ -55,7 +45,7 @@ def test_pme_energy_matches_reference(ion_system):
 
 def test_pme_forces_match_reference(ion_system):
     """PME forces must match pre-optimization reference within float32 precision."""
-    system, forces = ion_system
+    system = ion_system
     ref = np.load(REF_PATH, allow_pickle=True)
     ref_forces = ref["ion_forces"]
     forces_arr = system.dump_forces()

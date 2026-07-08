@@ -10,6 +10,7 @@ from mdpy.io.pdb_parser import PDBParser
 from mdpy.io.charmm_toppar_parser import CharmmTopparParser
 from mdpy.io.charmm_toppar_parser import create_parameter_table
 from mdpy.force.factories.charmm import create_charmm_forces
+from mdpy.core.state import State
 from mdpy.integrator.verlet import VerletIntegrator
 from mdpy.system import System
 from mdpy import env
@@ -50,7 +51,11 @@ def _build_system(pme_stream):
 
     forces = create_charmm_forces(topology, pt, pbc, cutoff=12.0)
 
-    system = System(topology)
+    state = State(topology.num_particles)
+    state.set_masses(psf.masses)
+    state.set_charges(psf.charges)
+    state.set_type_indices(psf.particle_type_indices)
+    system = System(topology, state)
     system.set_pbc(pbc)
     system.add_force_term(forces['bonded'])
     system.add_force_term(forces['nonbonded'])
