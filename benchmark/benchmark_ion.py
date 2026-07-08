@@ -17,6 +17,7 @@ from mdpy.io.charmm_toppar_parser import CharmmTopparParser
 from mdpy.io.charmm_toppar_parser import create_parameter_table
 from mdpy.force.factories.charmm import create_charmm_forces
 from mdpy.integrator.langevin import LangevinBAOABIntegrator
+from mdpy.core.state import State
 from mdpy.system import System
 from mdpy.utils import generate_velocity_from_temperature
 
@@ -36,12 +37,19 @@ toppar = CharmmTopparParser(
     os.path.join(DATA_DIR, "par_water.prm"),
 )
 topology = psf.topology
-parameter_table = create_parameter_table(topology, toppar)
+parameter_table = create_parameter_table(
+    topology, toppar, type_names=psf.particle_type_names)
 pbc_matrix = np.diag(BOX)
 
-forces = create_charmm_forces(topology, parameter_table, pbc_matrix, cutoff=CUTOFF)
+forces = create_charmm_forces(
+    topology, parameter_table, pbc_matrix, cutoff=CUTOFF,
+    particle_type_indices=psf.particle_type_indices)
 
-system = System(topology)
+state = State(topology.num_particles)
+state.set_masses(psf.masses)
+state.set_charges(psf.charges)
+state.set_type_indices(psf.particle_type_indices)
+system = System(topology, state)
 system.set_pbc(pbc_matrix)
 print(forces["bonded"])
 system.add_force_term(forces["bonded"])
@@ -49,7 +57,7 @@ system.add_force_term(forces["nonbonded"])
 system.add_force_term(forces["pme"], stream="pme")
 
 positions = pdb.positions
-velocities = generate_velocity_from_temperature(300.0, topology.masses, seed=42)
+velocities = generate_velocity_from_temperature(300.0, psf.masses, seed=42)
 system.set_positions(positions)
 system.set_velocities(velocities)
 

@@ -44,7 +44,7 @@ When your changes create orphans:
 
 The test: Every changed line should trace directly to the user's request.
 
-> Exception: The "Known CPU Bottlenecks & Tech Debt" section explicitly lists items that ARE approved for removal when touched. Follow its instructions when working in those files.
+> **Exception**: one-off diagnostic/comparison scripts belong in `/tmp/opencode/`, **never** in `benchmark/` or any project directory. If the result is worth keeping permanently, ask before promoting it into the repo.
 
 ### 4. Goal-Driven Execution
 
@@ -55,16 +55,16 @@ Transform tasks into verifiable goals:
 - "Fix the bug" → "Write a test that reproduces it, then make it pass"
 - "Refactor X" → "Ensure tests pass before and after"
 
-For multi-step tasks, state a brief plan:
-```
-1. [Step] → verify: [check]
-2. [Step] → verify: [check]
-3. [Step] → verify: [check]
-```
-
 For mdpy specifically, "verified" usually means `conda run -n md_analysis pytest mdpy/test/ -sv` passes, plus `benchmark/benchmark_1m9z.py` runs clean after force/block-list changes.
 
-Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
+### 5. Source Code First
+
+**Every claim must be backed by source code evidence — not memory, not documentation, not convention.**
+
+- When making a claim about how code works, cite the specific file and line number.
+- Do NOT trust documentation (including this AGENTS.md) without verifying against actual source. Documentation can stale; source code is the ground truth.
+- If uncertain about an API signature, class name, or method existence: read the file. Do not guess from memory.
+- When analyzing a bug, trace the call path in source — do not hypothesize based on the function name.
 
 ---
 
@@ -72,222 +72,159 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 
 ## Environment
 
-- Always use `conda activate md_analysis`
+- Always use `conda run -n md_analysis` (or `conda activate md_analysis`)
 - Python 3.14 / numba 0.64 / numpy 2.4 / cupy 14.0 / openmm 8.4
 - Dev install: `conda develop .` (editable install, source changes take effect immediately)
 
 ## GPU-Only Design Philosophy
 
-mdpy is a GPU-native MD engine. Four hard rules:
+mdpy is a GPU-native MD engine. Three hard rules:
 
 ### 1. Data Stays on GPU
 
 All simulation data (positions, velocities, forces, energies, block list) resides in GPU memory for the entire simulation. CPU touches data only at two points:
 
-- **Input**: loading structure files (PSF/PDB/PRM) → one-time CPU→GPU upload
+- **Input**: loading structure files (PSF/PDB/PRM) → one-time CPU→GPU upload via `State.set_*()` methods
 - **Output**: calling `dump_state()` or `dump_energy()` → on-demand GPU→CPU download
 
 Specifically:
 - `compute_forces()` accumulates forces on GPU via `atomicAdd` — the integrator reads `d_forces` directly on GPU
-- `check_rebuild()` must NOT download all positions — use a GPU reduction kernel that writes to a device flag
-- Energy accumulation happens on GPU via `d_energy_accumulator` — no `float(d_energy[0])` readback during computation
+- `check_rebuild()` must NOT download all positions — uses a GPU reduction kernel that writes to a device flag
+- Energy accumulation happens on GPU via `d_energy_accumulator` — no readback during computation
 - PBC wrapping runs on GPU via `pbc_wrap_kernel`
 
-### 2. Hard Dependencies, No Probing
+### 2. Hard Dependencies, No CPU Path
 
-`cupy` and `numba.cuda` are hard requirements, not optional. mdpy will not run without them.
+`cupy` and `numba.cuda` are hard requirements. Import them unconditionally at module top level. There is no CPU execution path — no probing, no fallback.
 
-- Do NOT write `try: import cupy` / `except ImportError` fallback patterns
-- Do NOT use `_HAS_CUPY` / `_HAS_GPU` / `_use_gpu` runtime probes
-- Do NOT query GPU availability at import time with `cp.zeros(1)`
-- Import `cupy` and `numba.cuda` unconditionally at module top level
-- If the runtime lacks CUDA, let it crash with a clear ImportError — silent degradation is worse than a loud failure
-
-### 3. No CPU Fallback Paths
-
-There is no CPU execution path. mdpy requires a CUDA-capable GPU.
-
-- No `_rebuild_cpu()` method in BlockList
-- No `if self._use_gpu` branches in GPUContext
-- No pure-Python fallbacks for numba/cupy kernels
+- Do NOT write `try: import cupy` / `except ImportError` — let it crash on missing CUDA
+- Do NOT use `_HAS_CUPY` / `_HAS_GPU` / `_use_gpu` runtime probes or `if self._use_gpu` branches
+- No CPU fallback methods (`_rebuild_cpu()`) or pure-Python fallbacks for numba/cupy kernels
 - `environment.py` does not offer `set_platform('CPU')` — platform is always CUDA
 
-### 4. No GPU→CPU Transfers in Hot Path
+### 3. No GPU→CPU Transfers in Hot Path
 
-Simulation data is a GPU-side black box during the run loop. The only way to observe GPU state is through explicit output calls.
+The following functions — and every function they call directly or indirectly — must NOT transfer **bulk data** from GPU to CPU:
 
-The following functions — and every function they call directly or indirectly — must NOT transfer **bulk data** (arrays, reductions) from GPU to CPU:
-
-- Explicit pipeline loop: `update_neighbor_list()`, `compute_forces()`, `integrator.step(system)`, `apply_constraints(time_step)`
+- `update_neighbor_list()`, `compute_forces()`, `integrator.step(system)`, `apply_constraints(time_step)`
 - `minimizer.step(system)` inner loop
 
-**Forbidden operations** inside the hot path:
+**Forbidden**: `cp.asnumpy()`, `array.get()`, GPU reductions followed by CPU readback, debug readback.
 
-- `cp.asnumpy(array)` — full array download
-- `array.get()` — cupy `.get()` download
-- `cp.max()`, `cp.sum()`, `cp.min()` followed by CPU readback — GPU reduction with sync
-- Any array readback masked as "debug" or "logging"
+**Allowed**: Reading a single-element device array (e.g. `int(d_counter[0])`) for kernel launch parameters.
 
-**Allowed scalar read**: Reading a single-element device array (e.g., `int(d_counter[0])`) to determine allocation size or kernel launch parameters. This is a necessary control-flow operation that does not stall the pipeline for bulk data transfer.
-
-**All GPU→CPU bulk data transfers must go through explicit output APIs:**
+**All GPU→CPU bulk transfers must go through explicit output APIs:**
 
 | API | Returns | GPU transfers |
 |-----|---------|---------------|
-| `System.upload_positions(positions)` | — | CPU→GPU upload of `(N,3)` array |
-| `System.upload_velocities(velocities)` | — | CPU→GPU upload of `(N,3)` array |
-| `System.dump_state()` | `(positions, velocities)` as numpy arrays, **PDB order** (no inverse permute) | `download_positions()` + `download_velocities()` |
-| `System.dump_forces()` | `forces` as `(N,3)` numpy array, **PDB order** (no inverse permute) | `download_forces()` |
+| `System.set_positions(positions)` | — | CPU→GPU upload of `(N,3)` array |
+| `System.set_velocities(velocities)` | — | CPU→GPU upload of `(N,3)` array |
+| `System.dump_state()` | `(positions, velocities)` as numpy arrays, **PDB order** | download |
+| `System.dump_forces()` | `forces` as `(N,3)` numpy array, **PDB order** | download |
 | `System.dump_energy()` | `dict[str, float]` of per-term energies | `cp.asnumpy(d_energy_accumulator)` |
 
-There are no `potential_energy` or `energies` properties on System. Energy is not "queryable state" — it is "output you explicitly request". Callers who need state during a loop collect it at explicit checkpoints:
+There are no `potential_energy` or `energies` properties on System. Energy is not "queryable state" — it is "output you explicitly request". Callers who need state during a loop collect it at explicit checkpoints (see **User-Facing Simulation Pattern** below).
 
-```python
-system.upload_positions(positions)       # (N,3) numpy array
-system.upload_velocities(velocities)     # (N,3) numpy array
-for i in range(10000):
-    system.update_neighbor_list(sync_interval=10)
-    system.compute_forces()
-    integrator.step(system)
-    system.apply_constraints(time_step_fs)
-    if i % 1000 == 0:
-        pos, vel = system.dump_state()
-        energies = system.dump_energy()
+## Architecture
+
+```
+PSFParser + PDBParser + CharmmTopparParser
+  → create_parameter_table()
+  → System(topology, state=State(num_particles))
+     → State (pure PDB-order GPU storage: d_positions*, d_velocities*, d_forces*, d_masses*, d_charges*, d_type_indices)
+     → BlockList (spatial sort + block-indexed masks + d_sorted_posq / d_sorted_type_indices buffers)
+     → Topology (particles/bonds/angles/dihedrals/impropers + lazy atom-indexed exclusion state)
+     → ForceTerms: BondedForce + NonbondedForce + PMEReciprocalForce (each owns PDB-order params)
+     → Integrator: Verlet / Langevin BAOAB
+  → GPU-only simulation loop → dump_state() / dump_energy() only when output needed
 ```
 
-**Rationale**: Every GPU→CPU transfer forces the CPU to wait for the entire GPU pipeline to drain. On 95K atoms this costs ~0.5–1 ms per stall — comparable to the actual compute work. Deferring all readback to explicit output points keeps the GPU pipeline saturated.
+### Core Contracts
 
-## Single Responsibility Design
+| File | Contract |
+|------|----------|
+| `mdpy/core/state.py` | Primary arrays in PDB order: `d_positions*`, `d_velocities*`, `d_forces*`, `d_masses`, `d_charges`, `d_type_indices`. PBC wrap, `zero_forces()`. **No sorted buffers. No neighbor lists. No force computation. No exclusion logic.** |
+| `mdpy/core/block_list.py` | Spatial sort + block-indexed masks. Owns sorted gather buffers: `d_sorted_posq` (every step), `d_sorted_type_indices` (rebuild). Reads Topology CSR to build block-indexed exclusion masks. **Never permutes State's primary arrays — those stay in PDB order.** |
+| `mdpy/core/topology.py` | Bonds/angles/dihedrals/impropers + lazy GPU exclusion state (`exclusion_pairs`, `exclusion_csr`, `exclusion_reverse_csr`). **Built once, cached, reused across spatial rebuilds.** |
+| `mdpy/system.py` | Pipeline driver: `update_neighbor_list()` → `compute_forces()` → integrator → `apply_constraints()`. Output via `dump_*()`. |
 
-Each class does exactly one thing. This is the architectural soul of mdpy.
+### Per-step & Rebuild Flow
 
-### BlockList — spatial partitioning + block-ordered data services
+**`System.compute_forces()` every step:**
+1. `state.zero_forces()`
+2. `block_list.refresh_sorted_posq(state)` — gather PDB-order positions+charges into block-ordered SoA
+3. `term.compute(state, block_list, compute_energy=False)` for each force term
 
-BlockList provides **mapping** — it answers "which atoms are near which atoms" — AND owns the derived block-ordered data buffer that force kernels read. It owns:
-
-- Spatial sort indices (`d_raw_order`, `d_pdb_to_sorted`, `d_sorted_to_pdb`)
-- Block structure with `d_block_atoms` (now **pdb_id-keyed**, not sorted_id-keyed), `d_block_center`, `d_block_size`
-- Neighbor pair maps (`d_block_pairs`, exclusion/main classifications)
-- Block-indexed exclusion masks (`d_exclusion_masks`) built by `_build_masks_gpu` from `topology.exclusion_csr` / `topology.exclusion_reverse_csr` (atom-indexed, owned by Topology) — combines the cached CSR with the current block layout
-- Classified block-pair arrays for force kernels (`d_classify_excl_counter`, `d_classify_main_counter`)
-- Block-ordered SoA data buffer (`d_sorted_posq`) refreshed every step via `refresh_sorted_posq(gpu_context)` — gathers PDB-order positions+charges into a padded, warp-aligned float4 `[x,y,z,q]` layout that force kernels read. Also owns `d_sorted_types` refreshed on rebuild via `refresh_sorted_types(gpu_context)`.
-
-What BlockList does NOT do:
-- Sort any state arrays (positions, velocities, forces) — GPUContext holds them permanently in PDB order
-- Sort any force-term parameter data — force terms keep PDB-order params
-- Build or own the atom-indexed exclusion CSR — that is Topology's responsibility (see below)
-- Compute forces or energies
-
-### Topology — atom-indexed exclusion state (single source of truth)
-
-**Exclusion ownership split (decisive rule):** atom-id (PDB order) indexed exclusion data → `Topology`; block/pair/slot indexed masks → `BlockList`.
-
-Topology owns ALL atom-indexed exclusion state as lazy GPU properties — the single source of truth for "which atom pairs are excluded":
-
-- Unique bidirectional exclusion pairs (`exclusion_pairs` → `(d_i, d_j)`)
-- Forward CSR (`exclusion_csr` → `(offset, neighbors)`, atom-indexed)
-- Reverse (transposed) CSR (`exclusion_reverse_csr` → `(rev_offset, rev_neighbors)`)
-
-All three are GPU arrays, derived together by `_derive_exclusion_state()`, cached after first read, and gated by a dirty flag. `invalidate_exclusions()` marks them stale (for future bond break/form); recomputation is deferred to the next `exclusion_*` property read. The CSR + reverse are built ONCE (lazy, cached) and reused across spatial rebuilds — they are NOT rebuilt per block-list rebuild. Exclusion state is derived lazily on first property read; PSF parsing populates only bonds/angles/dihedrals/impropers and no longer eagerly builds an exclusion map.
-
-What Topology does NOT do:
-- Build block/pair/slot-indexed masks — that is BlockList's responsibility (block-indexed, layout-dependent)
-- Compute forces or energies
-
-### GPUContext — pure PDB-order state storage
-
-GPUContext owns all per-particle state arrays (\(x\), \(y\), \(z\) for positions, velocities, forces, prev_positions, masses, charges) — **ALL permanently in PDB order**. There is no sorted-atom-id storage and no permutation machinery.
-
-What GPUContext does NOT do:
-- Build spatial neighbor lists
-- Compute forces
-- Permute state arrays (no `permute_to_sorted` / `permute_state_arrays` / `permute_from_sorted` — all removed)
-- Sort force-term-specific buffers
-
-### Force Terms — keep PDB-order parameters
-
-Each `ForceTerm` owns its own parameter arrays in **PDB order**. They no longer sort/permute their data on rebuild:
-
-- **BondedForce**: atom indices stay PDB order (no `remap_indices_gpu`, no `bind_sorted`); reads PDB-order positions directly from GPUContext
-- **NonbondedForce**: reads block-ordered positions+charges from `block_list.d_sorted_posq` and atom types from `block_list.d_sorted_types`; per-particle props stay PDB order. Force writes go to private slot-indexed buffers (`_d_sorted_fx/y/z`) for coalesced atomicAdd within warps; a one-pass add kernel accumulates these into PDB-order `d_forces_x/y/z` at the end of `compute()`. This is entirely internal — `System` and other force terms are unaware of the buffers.
-
-  > **Note:** `_d_sorted_per_particle` (force-term-specific per-particle props, e.g. LJ epsilon/sigma sorted views) and the associated `post_rebuild_hook()` are **unimplemented stubs** as of this refactor. When a non-charge per-particle prop is needed (e.g. for type-pair LJ), NonbondedForce will own its own sorted prop storage and populate it via `block_list.gather_sorted(self._d_per_particle[base])` in a `post_rebuild_hook` — but that path is not wired today.
-
-This means:
-- A new force term that needs block-ordered data reads from `block_list.d_sorted_posq` (general pos+charge) or calls `block_list.gather_sorted(pdb_array)` for its own per-term params — it does NOT own the block mapping
-- GPUContext has no permutation utilities; BlockList is the sole owner of the block-ordered buffer
-- `System.compute_forces()` calls `block_list.refresh_sorted_posq(gpu)` once before any force term runs
+**Block list rebuild** (triggered by displacement > skin/2):
+1. `block_list.rebuild(topology, state, force=True)` — Morton sort → cell-aligned blocks
+2. `state.wrap_positions_with_prev_correction()`
+3. `block_list.capture_snapshot(state)`
+4. `block_list.build_block_pairs(topology, state)` — neighbor pair maps + block-indexed exclusion masks
+5. `block_list.refresh_sorted_type_indices(state)`
 
 ## Force System: Expressions, Not Subclasses
 
-**The hard rule: do NOT write a new `ForceTerm` subclass to add a force.** mdpy has exactly two force engines — `BondedForce` and `NonbondedForce` — plus the `PMEReciprocalForce` exception (see below). A new interaction is a Python *expression function* fed to one of those engines; the expression transpiler + forward-mode AD generates the CUDA kernel.
-
-### How to add a force
+**Hard rule: do NOT write a new `ForceTerm` subclass to add a force.** mdpy has exactly two force engines — `BondedForce` and `NonbondedForce` — plus the `PMEReciprocalForce` exception. A new interaction is a Python *expression function* fed to one of those engines.
 
 | You want | What to write | Engine |
 |----------|---------------|--------|
-| A bonded term (bond/angle/dihed/improper or any 2–4 atom group) | `@bonded_expression(body=N)` function | `BondedForce(expr)` |
-| A pairwise nonbonded term | `@nonbonded_expression` function | `NonbondedForce(expr, cutoff)` |
-| Combine two nonbonded terms into one kernel | `expr1 + expr2`, or `force1 + force2` | fuses into one block-pair kernel |
-| Reciprocal-space PME (FFT/grid, not pairwise) | — | `PMEReciprocalForce` (the only real subclass) |
+| Bonded term (bond/angle/dihed/improper, 2-4 atoms) | `@bonded_expression(body=N)` function | `BondedForce(expr)` |
+| Pairwise nonbonded term | `@nonbonded_expression` function | `NonbondedForce(expr, cutoff)` |
+| Combine two nonbonded terms into one kernel | `expr1 + expr2`, or `force1 + force2` | Fuses into one block-pair kernel |
+| Reciprocal-space PME (FFT/grid) | — | `PMEReciprocalForce` (only non-expression subclass) |
 
-### Expression signature conventions
+### Expression signatures
 
-The transpiler classifies function parameters by their defaults (`force/primitives.py`, `force/_transpiler_common.py`):
+The transpiler classifies function parameters by their defaults:
 
-- **Positions**: the first `body` args (`body=2` → `pos1, pos2`; `body=3` → `p1, p2, p3`). For nonbonded, `body` is always 2.
-- **Per-term scalar param**: `name=param` or `name=<number>` (e.g. `k`, `r0`, `theta0`). One value per term; passed via `BondedForce.add(indices, **params)` or `NonbondedForce.set_pair_parameter`.
-- **Compile-time scalar**: `name=scalar` (e.g. PME `alpha`). One value per kernel; passed via `set_scalar`.
-- **Per-particle property**: a bare arg name with no default. Trailing digits are stripped to find the base property: `charge1`/`charge2` → base `charge` on particle 1 / particle 2. Nonbonded splits per-particle into i-props (no trailing digit / `...1`) and j-props (`...2`).
+- **Positions**: first `body` args (`body=2` → `pos1, pos2`; `body=3` → `p1, p2, p3`). Nonbonded body is always 2.
+- **Per-term scalar param**: `name=param` or `name=<number>` (e.g. `k`, `r0`). Passed via `BondedForce.add(indices, **params)` or `NonbondedForce.set_pair_parameter`.
+- **Compile-time scalar**: `name=scalar`. One value per kernel; passed via `set_scalar`.
+- **Per-particle property**: bare arg name with no default. Trailing digits stripped to find base: `charge1`/`charge2` → base `charge`. i-props = no digit or `...1`, j-props = `...2`.
 
-### Geometry helpers (`primitives.py`)
+Import markers from `mdpy.force.markers`, geometry helpers from `mdpy.force.expressions.geometry`:
 
-| Helper | Bonded | Nonbonded | Returns |
-|--------|--------|-----------|---------|
-| `distance(a, b)` | yes | yes (must be exactly `distance(pos1, pos2)`, compiles to `r`) | scalar r |
-| `angle(a, b, c)` | yes | no | scalar θ |
-| `dihedral(a, b, c, d)` | yes | no | scalar φ |
+```python
+from mdpy.force.markers import param, scalar
+from mdpy.force.expressions.geometry import distance, angle, dihedral
 
-The body is plain Python arithmetic over these helpers and params. `+ - * / ** %`, unary `-`, and `exp/log/sqrt/sin/cos/erf/erfc/abs/pow` are transpiled to CUDA intrinsics.
-
-### The transpiler pipeline
-
-1. Python AST is walked (`bonded_transpiler.py` / `nonbonded_transpiler.py`), emitting a tape of `TapeEntry(var, op, operands)` plus CUDA forward-evaluation lines.
-2. `ForwardADEngine` (`ad_engine.py`) propagates derivatives forward through the tape. Power chains (e.g. `x → x² → x³ → x⁶ → x¹²`) use the power rule `d(xⁿ)/dr = n·xⁿ⁻¹·dx` with lazy emission — unreferenced intermediates are dropped to cut register pressure.
-3. For bonded, each geometry helper has a hand-written forward+force CUDA template (`HELPER_REGISTRY`); the AD output becomes the scalar gradient `dE/d(geometry)`, and the template applies the chain rule to spread forces across atoms.
-4. For nonbonded, the result is `energy_cuda` (forward) + `radial_force_cuda` (gradient w.r.t. `r`), assembled into self/cross block-pair and exclusion kernels.
+@bonded_expression(body=2)
+def harmonic_bond(p1, p2, k=param, r0=param):
+    return 0.5 * k * (distance(p1, p2) - r0) ** 2
+```
 
 Module-level named constants (e.g. `COULOMB_CONST`) are resolved from the decorated function's `__globals__` and inlined as CUDA float literals.
 
-### Composition with `+`
+### Transpiler pipeline
 
-- **Expressions fuse**: `_NonbondedExpression.__add__` merges two nonbonded expressions into one — locals of the second are suffixed `_2` to avoid collisions, energies/`dEdr` are summed. `force1 + force2` produces a `ForceGroup` that, for nonbonded, compiles a single fused `NonbondedForce` and launches **one** block-pair kernel.
-- **`ForceGroup` requires homogeneous types** (`force_group.py`); you cannot mix `BondedForce` and `NonbondedForce` in one group.
+1. Python AST → `TapeEntry` tape + CUDA forward-evaluation lines
+2. `ForwardADEngine` forward-mode AD: bonded uses `HELPER_REGISTRY` templates, nonbonded outputs `energy_cuda` + `radial_force_cuda`
 
 ### Decorate-then-override escape hatch
 
-When the AD-generated gradient has too much register pressure or needs a faster approximation, overwrite the compiled output after decoration. See `expressions/lennard_jones.py` (closed-form `-24·ε·(2·sr¹²−sr⁶)/r`) and `expressions/screened_coulomb.py` (rational-minimax `erfc`). Pattern:
+Overwrite compiled output after decoration for hand-tuned gradients. See `expressions/lennard_jones.py` and `expressions/screened_coulomb.py` for examples:
 
 ```python
 @nonbonded_expression
 def my_expr(pos1, pos2, ...):
-    ...           # auto-compiled; output discarded
+    ...  # auto-compiled; output discarded
 
 my_expr.energy_cuda = '...hand-written CUDA...'
 my_expr.radial_force_cuda = '_my_force_var'
-my_expr.grad_cuda = None      # no separate gradient block
-my_expr._local_vars = {...}   # all float vars you declared, for renaming during fusion
+my_expr.grad_cuda = None
+my_expr._local_vars = {...}  # for fusion renaming
 ```
 
-Hand-written CUDA injects the file-local Coulomb constant via the `__MDPY_COULOMB__` placeholder (replaced at module import). Always declare `_local_vars` so the `+` fusion renamer can avoid collisions.
+Hand-written CUDA injects Coulomb constant via `__MDPY_COULOMB__` placeholder.
 
-### The one real subclass
+### Composition with `+`
 
-`PMEReciprocalForce` (`force/pme_reciprocal_force.py`) is its own `ForceTerm` subclass because reciprocal-space Ewald needs FFT/grid spread+bilerp, not a pairwise expression. It is the only force that legitimately bypasses the expression system. If a new force needs non-pairwise structure (restraints, CMAP grids), follow this precedent and justify it; otherwise use an expression.
+- Expressions fuse: `expr1 + expr2` merges into one kernel
+- `ForceGroup` requires homogeneous types — no mixing BondedForce and NonbondedForce
 
 ## User-Facing Simulation Pattern
 
-The canonical wiring (see `benchmark/benchmark_1m9z.py`):
+Canonical wiring (see `benchmark/benchmark_1m9z.py`):
 
 ```python
 from mdpy.io.psf_parser import PSFParser
@@ -295,19 +232,26 @@ from mdpy.io.pdb_parser import PDBParser
 from mdpy.io.charmm_toppar_parser import CharmmTopparParser, create_parameter_table
 from mdpy.force.factories.charmm import create_charmm_forces
 from mdpy.integrator.langevin import LangevinBAOABIntegrator
+from mdpy.core.state import State
 from mdpy.system import System
 from mdpy.constraint.constraint_scheme import create_constraints
 from mdpy.utils import generate_velocity_from_temperature
 
 topology = psf.topology
 parameter_table = create_parameter_table(topology, toppar)
-pbc_matrix = np.eye(3, dtype=np.float64) * BOX_SIZE
+
+state = State(topology.num_particles)
+state.set_pbc(pbc_matrix)
+state.set_positions(pdb.positions)
+state.set_charges(psf.charges)
+state.set_masses(psf.masses)
+state.set_type_indices(psf.particle_type_indices)
+
+system = System(topology, state=state)
 
 forces = create_charmm_forces(topology, parameter_table, pbc_matrix, cutoff=12.0)
 # returns {'bonded': ForceGroup, 'nonbonded': NonbondedForce, 'pme': PMEReciprocalForce}
 
-system = System(topology)          # NOT System(topology, pbc, cutoff) — pbc is uploaded separately
-system.upload_pbc(pbc_matrix)
 system.add_force_term(forces["bonded"])
 system.add_force_term(forces["nonbonded"])
 system.add_force_term(forces["pme"])
@@ -316,8 +260,7 @@ constraints = create_constraints(topology, parameter_table, scheme="h-bonds")
 for c in constraints:
     system.add_constraint(c)
 
-system.upload_positions(positions)     # (N,3) numpy array, Å
-system.upload_velocities(velocities)   # (N,3) numpy array
+system.set_velocities(generate_velocity_from_temperature(masses, temperature))
 
 integrator = LangevinBAOABIntegrator(time_step_fs, temperature, friction)
 
@@ -332,28 +275,61 @@ for i in range(n_steps):
 ```
 
 Key contracts:
-- `System(topology)` — no pbc/cutoff in constructor. PBC via `upload_pbc()`; cutoff comes from the first force term's `_cutoff`.
-- Positions **and** velocities must be uploaded before any `compute_forces()` / `update_neighbor_list()` (guarded by `_ensure_uploaded()`).
-- `dump_state()` / `dump_forces()` / `dump_energy()` are the **only** GPU→CPU readback paths. Call them at explicit checkpoints, never inside the step loop (see GPU-Only §4).
-- The per-step order is fixed: neighbor list → forces → integrate → constraints. `apply_constraints` runs after the integrator moves positions.
+- `System(topology, state=None)` — `state` arg is optional; if omitted, System creates an empty State and seeds masses/charges/types from topology (transitional).
+- PBC set via `system.set_pbc(pbc_matrix)` or directly `state.set_pbc(pbc_matrix)`.
+- Positions and velocities must be set before `compute_forces()` / `update_neighbor_list()`.
+- The per-step order is fixed: neighbor list → forces → integrate → constraints.
 
 ## GPU Kernel Strategy
 
-mdpy is a pure-Python MD engine. All GPU kernels are written through Python toolchains; no `.cu` files.
-
 Both `cupy.RawKernel` and `numba.cuda.jit` are acceptable:
 
-- **`cupy.RawKernel`**: CUDA C strings compiled at runtime. Used for nonbonded force (expression transpiler generates CUDA C), block list kernels (including the `refresh_sorted_posq` gather), and PBC wrapping. Prefer when you need fine control over register usage, shared memory, or warp intrinsics.
-- **`numba.cuda.jit`**: Python-to-PTX compilation. Used for integrators (Verlet, Langevin BAOAB). Prefer when readability of Python kernel code matters more than micro-optimization.
+- **`cupy.RawKernel`**: CUDA C strings. Used for force kernels (expression transpiler), block list kernels, PBC wrapping. Prefer for shared memory / warp-level control.
+- **`numba.cuda.jit`**: Python-to-PTX. Used for integrators. Prefer for readability.
 
-No hard rule about which to use. Choose based on the kernel's needs: `cupy.RawKernel` for shared memory / warp-level control, `numba.cuda.jit` for simplicity and readability. The expression transpiler (bonded and nonbonded) targets CUDA C, so those force kernels are inherently `cupy.RawKernel`.
+No `.cu` files. All kernels live in Python strings or numba-jitted Python functions.
 
-## Naming Convention (strict)
+## Naming Convention
 
 No abbreviations. Readability first:
 
-- `position`, `force`, `velocity`, `num_particles`, `cutoff_radius`, `temperature`
-- Exception: widely recognized physics abbreviations are fine (`pbc`, `lj`, `pme`, `rmsd`, `rdf`)
+- `position`, `force`, `velocity`, `cutoff_radius`, `temperature`
+- All quantity/count variables must use the `num_` prefix: `num_particles`, `num_blocks`, `num_cells`, `num_pairs` — not `n_particles`, `count_particles`, `particle_count`
+- Exception: widely recognized physics abbreviations (`pbc`, `lj`, `pme`, `rmsd`, `rdf`)
+
+## Git Workflow
+
+After completing each task, commit changes using this workflow to ensure only YOUR modifications are committed:
+
+```bash
+# Step 1: At task start, record pre-existing modified files (skip if already recorded)
+git diff --name-only > /tmp/mdpy_pre_task_dirty.txt
+
+# Step 2: After completing the task, identify files changed during this session
+comm -13 <(sort /tmp/mdpy_pre_task_dirty.txt) <(git diff --name-only | sort) > /tmp/mdpy_my_changes.txt
+
+# If nothing changed, skip commit.
+# If only new (untracked) files: git ls-files --others --exclude-standard
+
+# Step 3: For non-trivial changes (core files, new files, refactors),
+# dispatch the mdpy-code-reviewer subagent on each changed file.
+# Address Critical and High findings. Skip for typo/comment-only changes.
+
+# Step 4: Stage only the files YOU changed
+xargs git add < /tmp/mdpy_my_changes.txt
+
+# Step 5: Commit with a descriptive message
+git commit -m "Brief description of what was done"
+
+# Step 6: Push — rebase if remote has moved
+git pull --rebase && git push
+```
+
+**Rules:**
+- Never `git add -A` or `git add .` — only stage files identified as yours
+- If `git pull --rebase` has conflicts, resolve them before pushing
+- Use concise, descriptive commit messages (present tense, e.g. "Fix LJ cutoff edge case")
+- Verify with `git diff --cached --stat` before committing
 
 ## Testing
 
@@ -370,45 +346,43 @@ conda run -n md_analysis pytest mdpy/test/test_bonded_force.py -sv -k "test_name
 # OpenMM validation (6PO6, 49 atoms — quick)
 conda run -n md_analysis pytest mdpy/test/test_openmm_validation.py -sv -k "6PO6"
 
-# Performance benchmark (1M9Z, 95567 atoms)
+# Performance benchmark (1M9Z, 95,567 atoms)
 CUDA_VISIBLE_DEVICES=0 conda run -n md_analysis python benchmark/benchmark_1m9z.py
 
 # Ion-box OpenMM validation (small pairwise system)
-CUDA_VISIBLE_DEVICES=0 conda run -n md_analysis python benchmark/validate_ion_openmm.py
+CUDA_VISIBLE_DEVICES=0 conda run -n md_analysis python benchmark/benchmark_ion_openmm.py
 ```
 
 - Test framework: pytest
-- Test execution order is defined in `mdpy/test/conftest.py` via the `test_order` list (collect-phase reordering, not fixtures)
 - Test data directory: `mdpy/test/data/`
+- OpenMM reference values: regenerate with `conda run -n md_analysis python mdpy/test/generate_reference.py`
 
-### OpenMM Correctness Validation
+**Targeted testing:** when making changes, identify and run only the related test file — do NOT run the full suite every time:
 
-`mdpy/test/test_openmm_validation.py` uses the OpenMM Reference platform (deterministic floating-point) as ground truth for force calculations.
+| Modified area | Test to run |
+|--------------|-------------|
+| `mdpy/core/state.py` | `pytest mdpy/test/test_state.py -sv` |
+| `mdpy/core/block_list.py` | `pytest mdpy/test/test_block_list.py -sv` |
+| `mdpy/core/topology.py` | `pytest mdpy/test/test_topology.py -sv` |
+| `mdpy/system.py` | `pytest mdpy/test/test_system.py -sv` |
+| `mdpy/force/bonded_force.py` | `pytest mdpy/test/test_bonded_force.py -sv` |
+| `mdpy/force/nonbonded_force.py` | `pytest mdpy/test/test_nonbonded_force.py -sv` |
+| Force expression changes | `pytest mdpy/test/ -sv -k "bonded or nonbonded"` |
+| OpenMM validation | `pytest mdpy/test/test_openmm_validation.py -sv` |
+| Major refactor / final verification | `pytest mdpy/test/ -sv` (full suite) |
 
-**Reference value generation** (re-run after modifying force computation code):
+### OpenMM Error Tolerances
 
-```bash
-conda run -n md_analysis python mdpy/test/generate_reference.py
-```
-
-Output files: `mdpy/test/data/openmm_reference_6PO6.npz` and `openmm_reference_1M9Z.npz`
-
-**Error tolerances**:
-
-| Force term | Energy relative error | Force component absolute error | Reason |
-|------------|----------------------|-------------------------------|--------|
-| bond | < 1e-6 | < 1e-4 | Analytic formula, should match exactly |
+| Force term | Energy relative error | Force absolute error | Reason |
+|------------|----------------------|---------------------|--------|
+| bond | < 1e-6 | < 1e-4 | Analytic formula |
 | angle | < 1e-6 | < 1e-4 | Analytic formula |
 | dihedral | < 1e-6 | < 1e-4 | Analytic formula |
 | improper | < 1e-6 | < 1e-4 | Analytic formula |
-| nonbonded (LJ) | < 1e-3 | < 1e-2 | Cutoff/switching implementation details may differ |
+| nonbonded (LJ) | < 1e-3 | < 1e-2 | Cutoff/switching differences |
 | electrostatic | < 1e-3 | < 1e-2 | Direct Coulomb comparison |
 
-**Note**: OpenMM is configured with `NoCutoff` or `CutoffNonPeriodic` for the direct-Coulomb comparison; the PME path is validated separately via `test_pme.py` / `test_pme_index_consistency.py`.
-
 ## GPU Kernel Profiling
-
-### Tools
 
 | Tool | Version | Path |
 |------|---------|------|
@@ -416,232 +390,65 @@ Output files: `mdpy/test/data/openmm_reference_6PO6.npz` and `openmm_reference_1
 | Nsight Systems (`nsys`) | 2025.3.2 | `/home/ubuntu/Programs/cuda/13.0/bin/nsys` |
 | `nvtx` Python package | installed | `conda run -n md_analysis pip show nvtx` |
 
-### mdpy Profiling
+### Output Directories & Naming
 
-mdpy kernel types and their visibility in ncu/nsys:
+- **nsys** output to `benchmark/nsys/`, **ncu** output to `benchmark/ncu/`
+- Existing files in each directory show the naming convention — follow it:
 
-| Kernel | Toolchain | nsys/ncu visibility |
-|--------|-----------|-------------------|
-| BondedForce (bond/angle/dihed/improper) | `cupy.RawKernel` | Named in timeline |
-| NonbondedForce (self/cross block pair) | `cupy.RawKernel` | Named in timeline |
-| Verlet / Langevin integrator | `numba.cuda.jit` | Named in timeline |
-| BlockList (Morton/AABB/block-pair-find) | `cupy.RawKernel` | Named in timeline |
+**nsys**: `YYYY-MM-DD-NNN-{engine}-{system}-{description}` (e.g. `2026-07-07-001-mdpy-1m9z-postrefactor`)
+- `NNN`: 3-digit daily sequence, starts at 001 each day. Check `ls benchmark/nsys/` for the next available number.
+- `engine`: `mdpy` or `openmm`
+- `system`: `1m9z`, `ion`, `stmv`
+- `description`: short tag (`postrefactor`, `slot-optimized`, `block-ordered-types`, etc.)
 
-**nsys timeline (find bottleneck kernels):**
+**ncu**: `YYYY-MM-DD-NNN-{system}-{description}` (e.g. `2026-07-07-001-1m9z-exclusion-block-pair`)
+- NNN: same rules as nsys. Check `ls benchmark/ncu/`.
+- Engine defaults to `mdpy` (omit); put `openmm` in description when comparing.
+- ncu `.ncu-rep` is the primary output file.
 
+**nsys timeline:**
 ```bash
 CUDA_VISIBLE_DEVICES=0 /home/ubuntu/Programs/cuda/13.0/bin/nsys profile \
-  --trace=cuda,nvtx,osrt \
-  --sample=cpu \
-  --output=mdpy_timeline \
+  --trace=cuda,nvtx,osrt --sample=cpu \
+  --output=benchmark/nsys/YYYY-MM-DD-NNN-mdpy-1m9z-xxx \
   conda run -n md_analysis python benchmark/benchmark_1m9z.py
 ```
 
 **ncu deep dive on a specific kernel:**
-
 ```bash
 CUDA_VISIBLE_DEVICES=0 /home/ubuntu/Programs/cuda/13.0/bin/ncu \
-  --set full \
-  --launch-skip 10 --launch-count 5 \
+  --set full --launch-skip 10 --launch-count 5 \
   -k "regex:kernel_name_pattern" \
-  -o mdpy_kernel_profile \
+  -o benchmark/ncu/YYYY-MM-DD-NNN-1m9z-xxx \
   conda run -n md_analysis python benchmark/benchmark_1m9z.py
 ```
 
-### OpenMM Profiling
+**NVTX markers** (for Python-side region labeling): `cp.cuda.nvtx.RangePush("name")` / `cp.cuda.nvtx.RangePop()` for CuPy, or `nvtx.range_push("name")` / `nvtx.range_pop()` from the `nvtx` pip package.
 
-OpenMM CUDA platform with **PME + 12Å cutoff** (production configuration).
+### Benchmark Parameters
 
-mdpy also uses PME (`PMEReciprocalForce` for reciprocal space + direct-space Coulomb via a screened-coulomb expression), so total step time IS broadly comparable between the two engines. Nsight profiling focuses on kernel-level metrics (occupancy, memory throughput, warp stall reasons), which are meaningful regardless.
+**Temporary NUM_BLOCKS reduction:** profiling is slow; reduce blocks before running:
+- `benchmark/benchmark_1m9z.py:32`: change `NUM_BLOCKS = 5` to `NUM_BLOCKS = 2` before profiling
+- Restore to `5` immediately after profiling is done
+- Same principle applies to any other benchmark script — use the minimum viable block count
 
-OpenMM uses pre-compiled kernels (`.cubin`/`.ptx`). ncu can report occupancy and throughput but has no source-code association.
+**Notes:**
+- Always set `CUDA_VISIBLE_DEVICES=0` (6-GPU environment)
+- ncu is ~10-100× slower; use `-k` filter and `--launch-count` to limit iterations
+- OpenMM profiling uses `Platform.getPlatformByName('CUDA')` with `PME` + 12Å cutoff
 
-**nsys timeline:**
+## Physical Constants
 
-```bash
-CUDA_VISIBLE_DEVICES=0 /home/ubuntu/Programs/cuda/13.0/bin/nsys profile \
-  --trace=cuda,nvtx,osrt \
-  --output=openmm_pme_timeline \
-  conda run -n md_analysis python -c "
-import openmm as mm, openmm.app as app
-from openmm import unit
-psf = app.CharmmPsfFile('mdpy/test/data/1M9Z.psf')
-pdb = app.PDBFile('mdpy/test/data/1M9Z.pdb')
-params = app.CharmmParameterSet('mdpy/test/data/par_all36_prot.prm',
-                                 'mdpy/test/data/toppar_water_ions.str')
-psf.setBox(10.8, 10.8, 10.8)
-system = psf.createSystem(params, nonbondedMethod=app.PME,
-                           nonbondedCutoff=1.2*unit.nanometer)
-integrator = mm.VerletIntegrator(0.002*unit.picoseconds)
-sim = app.Simulation(psf.topology, system, integrator,
-                      platform=mm.Platform.getPlatformByName('CUDA'),
-                      platformProperties={'Precision': 'single'})
-sim.context.setPositions(pdb.getPositions())
-sim.context.setVelocitiesToTemperature(300*unit.kelvin)
-for _ in range(10): sim.step(1)    # warmup
-for _ in range(50): sim.step(1)    # profiled region
-"
-```
+Internal units: Å / dalton / fs / e / K. The energy unit is `dalton·Å²/fs²` (≈ 9999.93 kJ/mol ≈ 2390 kcal/mol).
 
-**ncu deep dive:**
+Base constants (`EPSILON0`, `KB`, `NA`) live in `mdpy/unit/__init__.py`. All derived constants are defined **file-locally** in each module that uses them — never hardcoded:
 
-```bash
-CUDA_VISIBLE_DEVICES=0 /home/ubuntu/Programs/cuda/13.0/bin/ncu \
-  --set full \
-  --launch-skip 10 --launch-count 3 \
-  -o openmm_kernel_profile \
-  conda run -n md_analysis python -c "
-# (same OpenMM script as above)
-"
-```
+| Constant | Value | File-local definition | Defined in |
+|----------|-------|----------------------|-----------|
+| Coulomb constant (1/4πε₀) | ≈ 0.13893557 | `1/(4π·EPSILON0.value)` | `expressions/coulomb.py`, `screened_coulomb.py`, `pme_reciprocal_force.py` |
+| Boltzmann constant | ≈ 8.31446e-7 | `KB.convert_to(energy_unit/kelvin).value` | `integrator/langevin.py`, `utils/velocity.py` |
+| OpenMM energy → mdpy | × 1e-4 | 1 kJ/mol = 1e-4 internal unit | test/reference generation |
+| OpenMM force → mdpy | × 1e-5 | 1 kJ/(mol·nm) = 1e-5 internal force | test/reference generation |
+| OpenMM position → mdpy | × 10.0 | nm → Å | test/reference generation |
 
-### NVTX Markers
-
-| Package | NVTX support | Usage |
-|---------|-------------|-------|
-| CuPy | Built-in | `cp.cuda.nvtx.RangePush("name")` / `cp.cuda.nvtx.RangePop()` |
-| Numba 0.64 | No `numba.cuda.nvtx` submodule | Use `nvtx` pip package instead |
-| `nvtx` pip package | Installed | `nvtx.range_push("name")` / `nvtx.range_pop()` |
-
-**Adding markers to benchmark scripts:**
-
-```python
-import nvtx
-
-nvtx.range_push("bonded_force")
-bonded_force.compute(gpu_context, block_list)
-nvtx.range_pop()
-
-nvtx.range_push("nonbonded_force")
-nonbonded_force.compute(gpu_context, block_list)
-nvtx.range_pop()
-```
-
-### Notes
-
-- **6-GPU environment**: always set `CUDA_VISIBLE_DEVICES=0` (or target GPU index) to profile the correct device
-- **ncu serializes the GPU**: profiling is ~10-100x slower. Always use `-k` to filter kernels and `--launch-count` to limit iterations
-- **Benchmark scripts**: use existing scripts in `benchmark/` as profiling workloads
-
-## Architecture
-
-```
-Data flow:
-  PSFParser + PDBParser + CharmmTopparParser
-    -> create_parameter_table()
-    -> System(topology)          # pbc uploaded separately via upload_pbc()
-       -> Topology (particles/bonds/angles/...; owns lazy atom-indexed exclusion pairs/CSR/reverse-CSR — single GPU source of truth)
-       -> GPUContext (pure PDB-order storage: d_positions*, d_velocities*, d_forces*, d_masses*, d_charges*)
-       -> BlockList (spatial sort + block structure + block-indexed exclusion masks [from Topology CSR] + d_sorted_posq block-ordered buffer)
-       -> ForceTerms: BondedForce + NonbondedForce + PMEReciprocalForce (each owns PDB-order params)
-       -> Integrator: Verlet / Langevin BAOAB
-    -> GPU-only simulation loop
-       -> dump_state() / dump_energy() only when output needed (PDB order, direct)
-
-Per-step flow inside System.compute_forces():
-  1. zero_forces()
-  2. block_list.refresh_sorted_posq(gpu) — gathers PDB-order positions+charges into block-ordered float4 SoA
-  3. term.compute() for each force term
-
-On block list rebuild (triggered by displacement > skin/2):
-  1. BlockList.rebuild() → Morton sort → produces d_block_atoms (pdb_id-keyed)
-  2. GPUContext.wrap_positions_with_prev_correction()
-  3. BlockList.capture_snapshot()
-  4. BlockList.build_block_pairs() → neighbor pair maps + block-indexed exclusion masks (reads cached `topology.exclusion_csr` / `exclusion_reverse_csr`; the CSR itself is NOT rebuilt here — it is lazy-cached in Topology)
-  5. No per-term rebuild work today (a future `post_rebuild_hook` would slot in here; see note under Force Terms). `BlockList.refresh_sorted_types(gpu)` runs in `System._do_rebuild` to refresh the shared sorted-types buffer.
-```
-
-- **GPUContext**: owns all `d_*` state arrays **permanently in PDB order**; provides PBC wrapping only (no permutation kernels)
-- **BlockList**: spatial sort (Morton code) → pdb_id-keyed blocks → AABB overlap → block pairs → block-indexed exclusion masks (built by `_build_masks_gpu` from `topology.exclusion_csr` / `exclusion_reverse_csr`). Owns `d_sorted_posq` (refreshed every step via `refresh_sorted_posq(gpu)`) and `d_sorted_types` (refreshed on rebuild via `refresh_sorted_types(gpu)`). Never sorts state arrays or force-term params; never builds the atom-indexed exclusion CSR (Topology owns it).
-- **Force terms**: each owns PDB-order parameter arrays. `NonbondedForce`'s `post_rebuild_hook` is currently an unimplemented stub.
-- **Unit system**: internal units only — Å / dalton / fs / e / K; `mdpy.unit` restricted to I/O layer
-- **Precision**: arrays use `env.NUMPY_FLOAT` (float32) / `env.NUMPY_INT` (int32)
-
-## Key Files
-
-| File | Responsibility |
-|------|---------------|
-| `mdpy/environment.py` | Precision config (`env.NUMPY_FLOAT`, `env.NUMPY_INT`); platform always CUDA |
-| `mdpy/system.py` | Simulation driver with public atomic operations: `upload_positions(array)`, `upload_velocities(array)`, `update_neighbor_list()`, `compute_forces()` (calls `block_list.refresh_sorted_posq` first), `dump_state()`/`dump_forces()` (direct PDB-order returns), `dump_energy()` |
-| `mdpy/core/gpu_context.py` | Pure PDB-order GPU memory manager — owns all `d_*` state arrays, PBC wrap; no permutation kernels |
-| `mdpy/core/block_list.py` | Block-based neighbor list + block-ordered data services — GPU kernels (Morton/AABB/block-pair-find/mask build); owns `d_block_atoms` (pdb_id-keyed), `d_sorted_posq` / `d_sorted_types` buffers, `d_exclusion_masks` (block-indexed), `refresh_sorted_posq()` / `refresh_sorted_types()`, `gather_sorted()` primitive; reads `topology.exclusion_csr` / `exclusion_reverse_csr` and builds only spatial masks via `_build_masks_gpu` |
-| `mdpy/core/topology.py` | Molecular topology (particles/bonds/angles/dihedrals/impropers); owns lazy atom-indexed exclusion state (pairs/forward CSR/reverse CSR) as the single GPU source of truth via `exclusion_pairs` / `exclusion_csr` / `exclusion_reverse_csr` + `invalidate_exclusions()` |
-| `mdpy/core/parameter_table.py` | ParameterTable with per-type and per-atom parameter dicts |
-| `mdpy/force/force_term.py` | `ForceTerm` base class — `compute(gpu_context, block_list)` |
-| `mdpy/force/bonded_force.py` | Single CuPy RawKernel (bond/angle/dihedral/improper); PDB-order indices (no remap) |
-| `mdpy/force/nonbonded_force.py` | CuPy RawKernel (self/cross block pair) + expression transpiler; reads block-ordered posq from `block_list.d_sorted_posq` and types from `block_list.d_sorted_types`; PDB-order params (`post_rebuild_hook` currently an unimplemented stub) |
-| `mdpy/force/force_group.py` | Homogeneous force composition; fuses nonbonded expressions into one kernel via `+` |
-| `mdpy/force/primitives.py` | `param`/`scalar` markers + `distance`/`angle`/`dihedral` geometry helpers |
-| `mdpy/force/ad_engine.py` | `ForwardADEngine` — forward-mode AD over a tape for CUDA gradient generation |
-| `mdpy/force/bonded_transpiler.py` | `@bonded_expression(body=N)` → CUDA fragment; `HELPER_REGISTRY` forward+force templates |
-| `mdpy/force/nonbonded_transpiler.py` | `@nonbonded_expression` → `energy_cuda`/`radial_force_cuda`; `__add__` fuses expressions |
-| `mdpy/force/pme_reciprocal_force.py` | PME reciprocal space — the only non-expression `ForceTerm` subclass |
-| `mdpy/force/factories/charmm.py` | PSF+topology+ParameterTable → wired force terms (`create_charmm_forces`) |
-| `mdpy/force/expressions/lennard_jones.py` | LJ expression (decorate-then-override with closed-form gradient) |
-| `mdpy/force/expressions/coulomb.py` | Coulomb expression (uses file-local derived `COULOMB_CONST`) |
-| `mdpy/force/expressions/screened_coulomb.py` | Direct-space Coulomb (rational-minimax `erfc` override, `__MDPY_COULOMB__` placeholder) |
-| `mdpy/integrator/verlet.py` | `@cuda.jit` Verlet integrator (`step(system)`) |
-| `mdpy/integrator/langevin.py` | `@cuda.jit` Langevin BAOAB (`step(system)`, LCG PRNG) |
-| `mdpy/io/` | File parsers (PSF/PDB/CHARMM toppar) |
-| `benchmark/benchmark_1m9z.py` | 1M9Z performance benchmark with per-kernel GPU timing |
-| `benchmark/validate_ion_openmm.py` | Ion-box OpenMM per-term validation (small pairwise system) |
-| `benchmark/profile_openmm_nl.py` | OpenMM neighbor list nsys profiling workload |
-
-## Development Notes
-
-- All arrays default to `env.NUMPY_FLOAT` (float32) / `env.NUMPY_INT` (int32)
-- GPU kernel strategy: both `cupy.RawKernel` and `numba.cuda.jit` are valid; choose based on kernel needs
-- Unit-dependent constants are **derived**, never hardcoded, and defined **file-locally** in each module that uses them (scope = that file): `COULOMB_CONST = 1/(4π·EPSILON0)` ≈ 0.13893557 (in `expressions/coulomb.py`/`nb14.py`/`screened_coulomb.py`/`pme_reciprocal_force.py`) and `BOLTZMANN = KB → default_energy_unit/K` ≈ 8.31446e-7 (in `integrator/langevin.py`/`utils/velocity.py`). Base constants `EPSILON0`/`KB` live in `mdpy/unit`. Values are in the internal energy unit `dalton·Å²/fs²` (≈ 9999.93 kJ/mol) — **not** kcal/mol
-- The expression transpiler (nonbonded + bonded) resolves named module-level constants from a decorated function's `__globals__` and inlines them as CUDA float literals; hand-written CUDA strings (PME, screened_coulomb override) inject the value via the `__MDPY_COULOMB__` placeholder
-- Block list rebuild: triggered when max atom displacement > skin/2; runs fully on GPU (Morton sort + block form + AABB + block-pair find + mask construction + block-pair classification)
-- Expression transpiler: converts Python AST to CUDA C for CuPy RawKernel (used by both bonded and nonbonded forces)
-
-## Known CPU Bottlenecks & Tech Debt
-
-### P1 — Scalar Reads in Hot Path (acceptable, but could be cleaner)
-
-Scalar reads for kernel launch sizing and control flow. These are acceptable per §4 but are noted as targets for future device-side control flow:
-
-| Location | Scalar read | Purpose |
-|----------|------------|---------|
-| `block_list.py:973` | `int(d_num_blocks[0])`, `int(d_total_padded[0])` | Block count / padded size for array sizing |
-| `block_list.py:861` | `int(self.d_num_block_pairs[0])` | Block-pair count for array sizing |
-| `block_list.py:1284-1285` | `int(self._d_classify_excl_counter[0])`, `int(self._d_classify_main_counter[0])` | Exclusion/main block-pair counts |
-| `system.py:193` | `int(self._block_list.d_rebuild_flag[0])` | `_do_rebuild` scalar gate — one sync per sync_interval steps (Option A). Gates all Python-level side effects before any kernel runs. |
-
-### P2 — Dead Code to Remove
-
-| Location | What to delete |
-|----------|----------------|
-| `gpu_context.py` | Any remaining `_HAS_CUPY` / `_HAS_GPU` / `_use_gpu` if present — replace with unconditional `import cupy as cp` |
-| `block_list.py` | Any remaining `_HAS_CUPY` / `_HAS_GPU` if present — replace with unconditional `import cupy as cp` |
-| `block_list.py` | `_rebuild_cpu()`, `_cut_blocks()`, `_compute_block_aabbs()`, `_find_tiles()`, `_morton_encode()`, `_aabb_min_image_dist_sq()`, `_to_device()` — CPU-only fallbacks if still present |
-| `block_list.py` | Pure Python fallbacks for `_build_atom_to_block_slot` / `_build_masks_numba` (`else` branch) if still present |
-| `environment.py` | `set_platform()`, `'CPU'` option, `supported_platforms` — platform is always CUDA |
-
-> Note: the previous P2 item "`nonbonded_force.py:672` `getDeviceProperties` queried every compute call" is resolved — device properties are now cached once in `_lazy_compile()` (`nonbonded_force.py:502`).
->
-> Note: the previous P2 items "`bonded_force.py` `_REMAP_INDICES_KERNEL` / `remap_indices_gpu`" and "`block_list.py` `permute_exclusion_pairs_gpu`" are resolved — both were removed in the PDB-order primary storage refactor. Bonded indices stay PDB order. The atom-indexed exclusion CSR is now owned by `Topology` as lazy GPU properties (`exclusion_csr` / `exclusion_reverse_csr`); `BlockList` builds only block-indexed masks from it via `_build_masks_gpu`. The interim `build_csr_from_pairs_gpu` / `build_exclusion_map_gpu` helpers and the `_excl_get` / `parallel_csr` / `fill_csr_gaps` kernels that briefly lived in `block_list.py` have been removed.
-
-### P3 — Performance Optimizations
-
-| Location | Problem | Fix |
-|----------|---------|-----|
-| `block_list.py` block-pair find | block-pair buffers are overallocated (max-block-pairs heuristic) | Dynamic allocation via two-pass (count then fill) |
-| `nonbonded_force.py` | `_gather_per_particle` re-gathers sorted per-particle arrays every rebuild even if unchanged | Skip when block list hasn't rebuilt |
-
-## Physical Constants (internal units: Å / dalton / fs / e / K)
-
-The internal energy unit is the derived natural unit `dalton·Å²/fs²` (≈ 9999.93 kJ/mol ≈ 2390 kcal/mol) — **not** kcal/mol and **not** kJ/mol.
-
-Base physical constants (`EPSILON0`, `KB`, `NA`) live in `mdpy/unit/__init__.py`. The unit-dependent working constants below are **derived** from those bases and defined **file-locally** in each module that uses them (scope = that file), never hardcoded as magic numbers:
-
-| Constant | Value (internal unit) | Derivation (file-local) | Defined in |
-|----------|-------|--------|-----------|
-| Coulomb constant (1/4πε₀) | ≈ 0.13893557 | `1/(4π·EPSILON0.value)`, dimension `dalton·Å²·Å/(fs²·e²)` | `expressions/coulomb.py`, `expressions/nb14.py`, `expressions/screened_coulomb.py`, `pme_reciprocal_force.py` |
-| Boltzmann constant | ≈ 8.3144626e-7 | `KB.convert_to(default_energy_unit/kelvin).value` | `integrator/langevin.py`, `utils/velocity.py` |
-| Conversion: OpenMM energy → mdpy internal | `× 1e-4` | 1 kJ/mol = 1e-4 internal unit | (test/reference generation) |
-| Conversion: OpenMM force → mdpy internal | `× 1e-5` | 1 kJ/(mol·nm) = 1e-5 internal force unit | (test/reference generation) |
-| Conversion: OpenMM position → mdpy | `× 10.0` | nm → Å | (test/reference generation) |
-
-`dump_energy()` / `dump_forces()` return values in this internal unit. Converting to kJ/mol or any other unit is the caller's responsibility via `mdpy.unit.Quantity(...).convert_to(...)`.
+`dump_energy()` / `dump_forces()` return internal units. Conversion is the caller's responsibility.
