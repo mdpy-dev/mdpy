@@ -29,14 +29,14 @@ def ion_system():
     pbc = np.diag([75.450, 77.623, 69.668])
 
     topology = psf.topology
-    parameter_table = create_parameter_table(topology, toppar)
+    parameter_table = create_parameter_table(topology, toppar, type_names=psf.particle_type_names)
     state = State(topology.num_particles)
     state.set_pbc(pbc)
     state.set_positions(pdb.positions)
     state.set_charges(psf.charges)
     state.set_masses(psf.masses)
     state.set_type_indices(psf.particle_type_indices)
-    forces = create_charmm_forces(topology, parameter_table, pbc, cutoff=12.0)
+    forces = create_charmm_forces(topology, parameter_table, pbc, cutoff=12.0, particle_type_indices=psf.particle_type_indices)
     system = System(topology, state)
     system.add_force_term(forces['bonded'])
     system.add_force_term(forces['nonbonded'])

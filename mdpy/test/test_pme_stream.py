@@ -46,10 +46,10 @@ def _build_system(pme_stream):
     pdb = PDBParser(PDB)
     toppar = CharmmTopparParser(PRM, STR)
     topology = psf.topology
-    pt = create_parameter_table(topology, toppar)
+    pt = create_parameter_table(topology, toppar, type_names=psf.particle_type_names)
     pbc = _pbc_matrix()
 
-    forces = create_charmm_forces(topology, pt, pbc, cutoff=12.0)
+    forces = create_charmm_forces(topology, pt, pbc, cutoff=12.0, particle_type_indices=psf.particle_type_indices)
 
     state = State(topology.num_particles)
     state.set_masses(psf.masses)

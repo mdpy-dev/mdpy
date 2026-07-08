@@ -585,7 +585,7 @@ class TestPMEIntegration6PO6:
 
         self.psf = psf
         self.topology = psf.topology
-        self.parameter_table = create_parameter_table(self.topology, toppar)
+        self.parameter_table = create_parameter_table(self.topology, toppar, type_names=self.psf.particle_type_names)
         self.positions = pdb.positions.astype(np.float32)
         self.N = self.topology.num_particles
         self.box = 100.0

@@ -37,7 +37,7 @@ def _make_system_6po6():
         os.path.join(DATA_DIR, 'par_all36_prot.prm'),
         os.path.join(DATA_DIR, 'toppar_water_ions.str'))
     topology = psf.topology
-    pt = create_parameter_table(topology, toppar)
+    pt = create_parameter_table(topology, toppar, type_names=psf.particle_type_names)
     pbc = np.eye(3, dtype=np.float64) * 30.0
     state = State(topology.num_particles)
     state.set_masses(psf.masses)
@@ -67,7 +67,7 @@ def _make_system_1m9z():
         os.path.join(DATA_DIR, 'par_all36_prot.prm'),
         os.path.join(DATA_DIR, 'toppar_water_ions.str'))
     topology = psf.topology
-    pt = create_parameter_table(topology, toppar)
+    pt = create_parameter_table(topology, toppar, type_names=psf.particle_type_names)
     pbc = np.eye(3, dtype=np.float64) * 108.0
     state = State(topology.num_particles)
     state.set_masses(psf.masses)

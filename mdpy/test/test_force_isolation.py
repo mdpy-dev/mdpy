@@ -42,7 +42,7 @@ def _setup_system(include_bonded, include_nonbonded):
     pdb = PDBParser(PDB_PATH)
     toppar = CharmmTopparParser(PRM_PATH, STR_PATH)
     topology = psf.topology
-    parameter_table = create_parameter_table(topology, toppar)
+    parameter_table = create_parameter_table(topology, toppar, type_names=psf.particle_type_names)
 
     pbc_matrix = np.eye(3, dtype=np.float64) * BOX_SIZE
     pbc_inv = np.linalg.inv(pbc_matrix)

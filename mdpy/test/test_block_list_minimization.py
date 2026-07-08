@@ -27,9 +27,9 @@ def _build_ion_system():
         os.path.join(DATA_DIR, "par_water.prm"),
     )
     topology = psf.topology
-    pt = create_parameter_table(topology, toppar)
+    pt = create_parameter_table(topology, toppar, type_names=psf.particle_type_names)
     pbc = np.diag(BOX)
-    forces = create_charmm_forces(topology, pt, pbc, cutoff=CUTOFF)
+    forces = create_charmm_forces(topology, pt, pbc, cutoff=CUTOFF, particle_type_indices=psf.particle_type_indices)
     state = State(topology.num_particles)
     state.set_masses(psf.masses)
     state.set_charges(psf.charges)

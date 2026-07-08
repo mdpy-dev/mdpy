@@ -28,7 +28,7 @@ def _build_system():
     pdb = PDBParser(PDB)
     toppar = CharmmTopparParser(PRM)
     topology = psf.topology
-    parameter_table = create_parameter_table(topology, toppar)
+    parameter_table = create_parameter_table(topology, toppar, type_names=psf.particle_type_names)
     pbc_matrix = np.eye(3, dtype=np.float32) * BOX
 
     state = State(topology.num_particles)

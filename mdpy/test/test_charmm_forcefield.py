@@ -76,7 +76,7 @@ class TestParameterTable:
         psf = PSFParser(os.path.join(DATA_DIR, '6PO6.psf'))
         toppar = CharmmTopparParser(os.path.join(DATA_DIR, 'par_all36_prot.prm'))
         topology = psf.topology
-        table = create_parameter_table(topology, toppar)
+        table = create_parameter_table(topology, toppar, type_names=psf.particle_type_names)
         assert 'sigma' in table.type_parameters
         assert 'epsilon' in table.type_parameters
 
@@ -84,7 +84,7 @@ class TestParameterTable:
         psf = PSFParser(os.path.join(DATA_DIR, '6PO6.psf'))
         toppar = CharmmTopparParser(os.path.join(DATA_DIR, 'par_all36_prot.prm'))
         topology = psf.topology
-        table = create_parameter_table(topology, toppar)
+        table = create_parameter_table(topology, toppar, type_names=psf.particle_type_names)
         sigma = table.type_parameters['sigma']
         epsilon = table.type_parameters['epsilon']
         assert np.all(sigma > 0)
@@ -94,7 +94,7 @@ class TestParameterTable:
         psf = PSFParser(os.path.join(DATA_DIR, '6PO6.psf'))
         toppar = CharmmTopparParser(os.path.join(DATA_DIR, 'par_all36_prot.prm'))
         topology = psf.topology
-        table = create_parameter_table(topology, toppar)
+        table = create_parameter_table(topology, toppar, type_names=psf.particle_type_names)
         assert 'charge' not in table.particle_parameters
         assert 'charge_14' not in table.particle_parameters
         assert topology.charges.shape == (49,)
@@ -112,7 +112,7 @@ class TestSystem:
         pdb = PDBParser(os.path.join(DATA_DIR, '6PO6.pdb'))
         toppar = CharmmTopparParser(os.path.join(DATA_DIR, 'par_all36_prot.prm'))
         topology = psf.topology
-        parameter_table = create_parameter_table(topology, toppar)
+        parameter_table = create_parameter_table(topology, toppar, type_names=psf.particle_type_names)
         pbc_matrix = np.eye(3, dtype=env.NUMPY_FLOAT) * 100.0
 
         system = System(topology)
@@ -140,7 +140,7 @@ class TestSystem:
         pdb = PDBParser(os.path.join(DATA_DIR, '6PO6.pdb'))
         toppar = CharmmTopparParser(os.path.join(DATA_DIR, 'par_all36_prot.prm'))
         topology = psf.topology
-        parameter_table = create_parameter_table(topology, toppar)
+        parameter_table = create_parameter_table(topology, toppar, type_names=psf.particle_type_names)
         pbc_matrix = np.eye(3, dtype=env.NUMPY_FLOAT) * 100.0
 
         system = System(topology)
@@ -172,7 +172,7 @@ class TestSystem:
         pdb = PDBParser(os.path.join(DATA_DIR, '6PO6.pdb'))
         toppar = CharmmTopparParser(os.path.join(DATA_DIR, 'par_all36_prot.prm'))
         topology = psf.topology
-        parameter_table = create_parameter_table(topology, toppar)
+        parameter_table = create_parameter_table(topology, toppar, type_names=psf.particle_type_names)
         pbc_matrix = np.eye(3, dtype=env.NUMPY_FLOAT) * 100.0
 
         system = System(topology)
@@ -204,7 +204,7 @@ class TestSystem:
         pdb = PDBParser(os.path.join(DATA_DIR, '6PO6.pdb'))
         toppar = CharmmTopparParser(os.path.join(DATA_DIR, 'par_all36_prot.prm'))
         topology = psf.topology
-        parameter_table = create_parameter_table(topology, toppar)
+        parameter_table = create_parameter_table(topology, toppar, type_names=psf.particle_type_names)
         pbc_matrix = np.eye(3, dtype=env.NUMPY_FLOAT) * 100.0
 
         system = System(topology)
@@ -243,7 +243,7 @@ class TestMissingParameters:
         psf = PSFParser(os.path.join(DATA_DIR, '6PO6.psf'))
         toppar = CharmmTopparParser(os.path.join(DATA_DIR, 'par_all36_prot.prm'))
         topology = psf.topology
-        parameter_table = create_parameter_table(topology, toppar)
+        parameter_table = create_parameter_table(topology, toppar, type_names=psf.particle_type_names)
         bond_params = parameter_table.get_term_parameter('bond')
         assert topology.num_bonds > 0
         assert bond_params.shape[0] == topology.num_bonds

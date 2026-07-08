@@ -17,6 +17,7 @@ def _build_test_system():
     charges = np.zeros(n_atoms, dtype=np.float32)
     ptypes = np.zeros(n_atoms, dtype=np.int32)
     mol_ids = np.zeros(n_atoms, dtype=np.int32)
+    molecule_types = [''] * n_atoms
     positions = np.zeros((n_atoms, 3), dtype=np.float32)
 
     dOH = 1.0
@@ -53,11 +54,11 @@ def _build_test_system():
     for name, values in term_params.items():
         pt.add_term_parameter(name, values)
 
-    return topology, pbc_matrix, pt, positions
+    return topology, pbc_matrix, pt, positions, masses, mol_ids, molecule_types
 
 
 def test_constraint_loop():
-    topology, pbc_matrix, parameter_table, positions = _build_test_system()
+    topology, pbc_matrix, parameter_table, positions, masses, mol_ids, molecule_types = _build_test_system()
 
     system = System(topology)
 
@@ -68,7 +69,7 @@ def test_constraint_loop():
     bonded = create_bonded_group(topology, parameter_table)
     system.add_force_term(bonded)
 
-    constraints = create_constraints(topology, parameter_table, scheme='h-bonds')
+    constraints = create_constraints(topology, parameter_table, scheme='h-bonds', masses=masses, molecule_ids=mol_ids, molecule_types=molecule_types)
     for c in constraints:
         system.add_constraint(c)
 
@@ -92,7 +93,7 @@ def test_constraint_loop():
 
 
 def test_constraint_loop_multiple_rebuilds():
-    topology, pbc_matrix, parameter_table, positions = _build_test_system()
+    topology, pbc_matrix, parameter_table, positions, masses, mol_ids, molecule_types = _build_test_system()
 
     system = System(topology)
 
@@ -103,7 +104,7 @@ def test_constraint_loop_multiple_rebuilds():
     bonded = create_bonded_group(topology, parameter_table)
     system.add_force_term(bonded)
 
-    constraints = create_constraints(topology, parameter_table, scheme='h-bonds')
+    constraints = create_constraints(topology, parameter_table, scheme='h-bonds', masses=masses, molecule_ids=mol_ids, molecule_types=molecule_types)
     for c in constraints:
         system.add_constraint(c)
 
@@ -135,6 +136,7 @@ def _build_mixed_system():
     charges = np.zeros(n_atoms, dtype=np.float32)
     ptypes = np.zeros(n_atoms, dtype=np.int32)
     mol_ids = np.zeros(n_atoms, dtype=np.int32)
+    molecule_types = [''] * n_atoms
     positions = np.zeros((n_atoms, 3), dtype=np.float32)
 
     dOH = 1.0
@@ -190,11 +192,11 @@ def _build_mixed_system():
     for name, values in term_params.items():
         pt.add_term_parameter(name, values)
 
-    return topology, pbc_matrix, pt, positions
+    return topology, pbc_matrix, pt, positions, masses, mol_ids, molecule_types
 
 
 def test_settle_lincs_coexistence_bond_lengths():
-    topology, pbc_matrix, parameter_table, positions = _build_mixed_system()
+    topology, pbc_matrix, parameter_table, positions, masses, mol_ids, molecule_types = _build_mixed_system()
 
     system = System(topology)
 
@@ -204,7 +206,7 @@ def test_settle_lincs_coexistence_bond_lengths():
     bonded = create_bonded_group(topology, parameter_table)
     system.add_force_term(bonded)
 
-    constraints = create_constraints(topology, parameter_table, scheme='h-bonds')
+    constraints = create_constraints(topology, parameter_table, scheme='h-bonds', masses=masses, molecule_ids=mol_ids, molecule_types=molecule_types)
     for c in constraints:
         system.add_constraint(c)
 
@@ -244,7 +246,7 @@ def test_settle_lincs_coexistence_bond_lengths():
 
 
 def test_settle_md_loop_rebuilds_bond_lengths():
-    topology, pbc_matrix, parameter_table, positions = _build_test_system()
+    topology, pbc_matrix, parameter_table, positions, masses, mol_ids, molecule_types = _build_test_system()
 
     system = System(topology)
 
@@ -254,7 +256,7 @@ def test_settle_md_loop_rebuilds_bond_lengths():
     bonded = create_bonded_group(topology, parameter_table)
     system.add_force_term(bonded)
 
-    constraints = create_constraints(topology, parameter_table, scheme='h-bonds')
+    constraints = create_constraints(topology, parameter_table, scheme='h-bonds', masses=masses, molecule_ids=mol_ids, molecule_types=molecule_types)
     for c in constraints:
         system.add_constraint(c)
 

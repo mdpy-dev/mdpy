@@ -17,9 +17,9 @@ def _build_ion():
         os.path.join(DATA, "par_sin.prm"), os.path.join(DATA, "par_water.prm")
     )
     topo = psf.topology
-    pt = create_parameter_table(topo, tp)
+    pt = create_parameter_table(topo, tp, type_names=psf.particle_type_names)
     pbc = np.diag([75.450, 77.623, 69.668])
-    forces = create_charmm_forces(topo, pt, pbc, cutoff=12.0)
+    forces = create_charmm_forces(topo, pt, pbc, cutoff=12.0, particle_type_indices=psf.particle_type_indices)
     state = State(topo.num_particles)
     state.set_masses(psf.masses)
     state.set_charges(psf.charges)
