@@ -218,7 +218,7 @@ class LBFGSMinimizer(Minimizer):
             self._y_x[slot], self._y_y[slot], self._y_z[slot],
             num_blocks, threads_per_block, num_particles,
         )
-        if rho <= 0.0:
+        if rho >= 0.0:
             self._direction_x[:] = self._grad_x
             self._direction_y[:] = self._grad_y
             self._direction_z[:] = self._grad_z
