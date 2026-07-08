@@ -10,7 +10,7 @@ from mdpy.core.parameter_table import ParameterTable
 from mdpy.core.state import State
 from mdpy.system import System
 from mdpy.force.bonded_force import BondedForce
-from mdpy.force.factories.charmm import create_bonded_group
+from mdpy.force.factories.charmm import create_bonded_forces
 from mdpy.force.nonbonded_force import NonbondedForce
 from mdpy.force.expressions.lennard_jones import lennard_jones
 from mdpy.force.expressions.coulomb import coulomb
@@ -123,7 +123,8 @@ class TestSystem:
         system = System(topology, state)
 
         system.set_pbc(pbc_matrix)
-        system.add_force_term(create_bonded_group(topology, parameter_table))
+        for f in create_bonded_forces(topology, parameter_table):
+            system.add_force_term(f)
         nb = NonbondedForce(lennard_jones + coulomb, cutoff=12.0)
         lj_pair = parameter_table.type_pair_parameters['lj_pair']
         nb.set_pair_parameter('sigma', lj_pair[0::2].astype(env.NUMPY_FLOAT))
@@ -137,7 +138,7 @@ class TestSystem:
         system.set_positions(positions)
 
         assert system.topology.num_particles == 49
-        assert len(system.force_terms) == 2
+        assert len(system.force_terms) == 5
         assert np.all(np.isfinite(positions))
 
     def test_system_compute_forces(self):
@@ -155,7 +156,8 @@ class TestSystem:
         system = System(topology, state)
 
         system.set_pbc(pbc_matrix)
-        system.add_force_term(create_bonded_group(topology, parameter_table))
+        for f in create_bonded_forces(topology, parameter_table):
+            system.add_force_term(f)
         nb = NonbondedForce(lennard_jones + coulomb, cutoff=12.0)
         lj_pair = parameter_table.type_pair_parameters['lj_pair']
         nb.set_pair_parameter('sigma', lj_pair[0::2].astype(env.NUMPY_FLOAT))
@@ -191,7 +193,8 @@ class TestSystem:
         system = System(topology, state)
 
         system.set_pbc(pbc_matrix)
-        system.add_force_term(create_bonded_group(topology, parameter_table))
+        for f in create_bonded_forces(topology, parameter_table):
+            system.add_force_term(f)
         nb = NonbondedForce(lennard_jones + coulomb, cutoff=12.0)
         lj_pair = parameter_table.type_pair_parameters['lj_pair']
         nb.set_pair_parameter('sigma', lj_pair[0::2].astype(env.NUMPY_FLOAT))
@@ -227,7 +230,8 @@ class TestSystem:
         system = System(topology, state)
 
         system.set_pbc(pbc_matrix)
-        system.add_force_term(create_bonded_group(topology, parameter_table))
+        for f in create_bonded_forces(topology, parameter_table):
+            system.add_force_term(f)
         nb = NonbondedForce(lennard_jones + coulomb, cutoff=12.0)
         lj_pair = parameter_table.type_pair_parameters['lj_pair']
         nb.set_pair_parameter('sigma', lj_pair[0::2].astype(env.NUMPY_FLOAT))
@@ -244,8 +248,8 @@ class TestSystem:
 
         system.compute_forces()
         energies = system.dump_energy()
-        assert 'bonded' in energies
-        assert np.isfinite(energies['bonded'])
+        assert 'bond' in energies
+        assert np.isfinite(energies['bond'])
 
     def test_dihedral_multi_term(self):
         psf = PSFParser(os.path.join(DATA_DIR, '6PO6.psf'))

@@ -9,7 +9,7 @@ from mdpy.core.state import State
 from mdpy.core.block_list import BlockList
 from mdpy.core.parameter_table import ParameterTable
 from mdpy.force.bonded_force import BondedForce
-from mdpy.force.factories.charmm import create_bonded_group, create_charmm_forces
+from mdpy.force.factories.charmm import create_bonded_forces, create_charmm_forces
 from mdpy.system import System
 from mdpy.integrator.verlet import VerletIntegrator
 from mdpy.integrator.langevin import LangevinBAOABIntegrator
@@ -184,9 +184,10 @@ class TestSystem:
         pbc_matrix = _make_large_pbc()
         system = _make_system(topology, pbc_matrix)
 
-        bonded = create_bonded_group(topology, parameter_table)
-        system.add_force_term(bonded)
-        assert len(system.force_terms) == 1
+        bonded = create_bonded_forces(topology, parameter_table)
+        for f in bonded:
+            system.add_force_term(f)
+        assert len(system.force_terms) == len(bonded)
 
     def test_system_compute_forces(self):
         topology, term_params = _build_four_particle()
@@ -194,8 +195,9 @@ class TestSystem:
         pbc_matrix = _make_large_pbc()
         system = _make_system(topology, pbc_matrix)
 
-        bonded = create_bonded_group(topology, parameter_table)
-        system.add_force_term(bonded)
+        bonded = create_bonded_forces(topology, parameter_table)
+        for f in bonded:
+            system.add_force_term(f)
 
         system.set_positions(np.array([
             [0.0, 0.0, 0.0],
@@ -209,7 +211,7 @@ class TestSystem:
 
         assert sum(system.dump_energy().values()) != 0.0
         assert all(np.isfinite(v) for v in system.dump_energy().values())
-        assert 'bonded' in system.dump_energy()
+        assert 'bond' in system.dump_energy()
 
         forces = system.dump_forces()
         assert not np.all(forces == 0)
@@ -295,8 +297,9 @@ class TestSystem:
         pbc_matrix = _make_large_pbc()
         system = _make_system(topology, pbc_matrix)
 
-        bonded = create_bonded_group(topology, parameter_table)
-        system.add_force_term(bonded)
+        bonded = create_bonded_forces(topology, parameter_table)
+        for f in bonded:
+            system.add_force_term(f)
 
         positions = np.array([
             [0.0, 0.0, 0.0],
@@ -321,8 +324,9 @@ class TestSystem:
         pbc_matrix = _make_large_pbc()
         system = _make_system(topology, pbc_matrix)
 
-        bonded = create_bonded_group(topology, parameter_table)
-        system.add_force_term(bonded)
+        bonded = create_bonded_forces(topology, parameter_table)
+        for f in bonded:
+            system.add_force_term(f)
 
         system.set_positions(np.array([
             [0.0, 0.0, 0.0],
@@ -345,8 +349,9 @@ class TestSystem:
         pbc_matrix = _make_large_pbc()
         system = _make_system(topology, pbc_matrix)
 
-        bonded = create_bonded_group(topology, parameter_table)
-        system.add_force_term(bonded)
+        bonded = create_bonded_forces(topology, parameter_table)
+        for f in bonded:
+            system.add_force_term(f)
 
         system.set_positions(np.array([
             [0.0, 0.0, 0.0],
@@ -397,8 +402,9 @@ class TestVerletIntegrator:
         parameter_table = _make_parameter_table(term_params)
         pbc_matrix = _make_large_pbc()
         system = _make_system(topology, pbc_matrix)
-        bonded = create_bonded_group(topology, parameter_table)
-        system.add_force_term(bonded)
+        bonded = create_bonded_forces(topology, parameter_table)
+        for f in bonded:
+            system.add_force_term(f)
 
         system.set_positions(np.array([
             [0.0, 0.0, 0.0],
@@ -497,8 +503,9 @@ class TestLangevinIntegrator:
         parameter_table = _make_parameter_table(term_params)
         pbc_matrix = _make_large_pbc()
         system = _make_system(topology, pbc_matrix)
-        bonded = create_bonded_group(topology, parameter_table)
-        system.add_force_term(bonded)
+        bonded = create_bonded_forces(topology, parameter_table)
+        for f in bonded:
+            system.add_force_term(f)
 
         system.set_positions(np.array([
             [0.0, 0.0, 0.0],
@@ -520,8 +527,9 @@ class TestLangevinIntegrator:
         parameter_table = _make_parameter_table(term_params)
         pbc_matrix = _make_large_pbc()
         system = _make_system(topology, pbc_matrix)
-        bonded = create_bonded_group(topology, parameter_table)
-        system.add_force_term(bonded)
+        bonded = create_bonded_forces(topology, parameter_table)
+        for f in bonded:
+            system.add_force_term(f)
 
         system.set_positions(np.array([
             [0.0, 0.0, 0.0],
@@ -562,8 +570,9 @@ class TestLangevinIntegrator:
         box = 20.0
         pbc_matrix = np.eye(3, dtype=env.NUMPY_FLOAT) * box
         system = _make_system(topology, pbc_matrix)
-        bonded = create_bonded_group(topology, parameter_table)
-        system.add_force_term(bonded)
+        bonded = create_bonded_forces(topology, parameter_table)
+        for f in bonded:
+            system.add_force_term(f)
 
         system.set_positions(np.array([
             [1.0, 10.0, 10.0],
@@ -601,8 +610,9 @@ class TestLangevinIntegrator:
         parameter_table = _make_parameter_table(term_params)
         pbc_matrix = _make_large_pbc()
         system = _make_system(topology, pbc_matrix)
-        bonded = create_bonded_group(topology, parameter_table)
-        system.add_force_term(bonded)
+        bonded = create_bonded_forces(topology, parameter_table)
+        for f in bonded:
+            system.add_force_term(f)
 
         system.set_positions(np.array([
             [0.0, 0.0, 0.0],
@@ -633,8 +643,9 @@ class TestRebuildSortCorrectness:
         parameter_table = _make_parameter_table(term_params)
         pbc_matrix = _make_large_pbc()
         system = _make_system(topology, pbc_matrix, cutoff=12.0, skin=1.0)
-        bonded = create_bonded_group(topology, parameter_table)
-        system.add_force_term(bonded)
+        bonded = create_bonded_forces(topology, parameter_table)
+        for f in bonded:
+            system.add_force_term(f)
 
         positions = np.array([
             [0.0, 0.0, 0.0],
@@ -680,8 +691,9 @@ class TestRebuildSortCorrectness:
         parameter_table = _make_parameter_table(term_params)
         pbc_matrix = _make_large_pbc()
         system = _make_system(topology, pbc_matrix, cutoff=12.0, skin=1.0)
-        bonded = create_bonded_group(topology, parameter_table)
-        system.add_force_term(bonded)
+        bonded = create_bonded_forces(topology, parameter_table)
+        for f in bonded:
+            system.add_force_term(f)
 
         positions = np.array([
             [0.0, 0.0, 0.0],
@@ -737,8 +749,9 @@ class TestRebuildSortCorrectness:
         box = 80.0
         pbc_matrix = np.eye(3, dtype=env.NUMPY_FLOAT) * box
         system = _make_system(topology, pbc_matrix, cutoff=10.0, skin=2.0)
-        bonded = create_bonded_group(topology, parameter_table)
-        system.add_force_term(bonded)
+        bonded = create_bonded_forces(topology, parameter_table)
+        for f in bonded:
+            system.add_force_term(f)
 
         rng = np.random.RandomState(42)
         positions = rng.uniform(10, 70, (n, 3)).astype(env.NUMPY_FLOAT)
@@ -789,8 +802,9 @@ class TestRebuildSortCorrectness:
         box = 80.0
         pbc_matrix = np.eye(3, dtype=env.NUMPY_FLOAT) * box
         system = _make_system(topology, pbc_matrix, cutoff=10.0, skin=1.0)
-        bonded = create_bonded_group(topology, parameter_table)
-        system.add_force_term(bonded)
+        bonded = create_bonded_forces(topology, parameter_table)
+        for f in bonded:
+            system.add_force_term(f)
 
         rng = np.random.RandomState(42)
         positions = rng.uniform(10, 70, (n, 3)).astype(env.NUMPY_FLOAT)
@@ -846,8 +860,9 @@ class TestLazyEnergy:
         parameter_table = _make_parameter_table(term_params)
         pbc_matrix = _make_large_pbc()
         system = _make_system(topology, pbc_matrix)
-        bonded = create_bonded_group(topology, parameter_table)
-        system.add_force_term(bonded)
+        bonded = create_bonded_forces(topology, parameter_table)
+        for f in bonded:
+            system.add_force_term(f)
 
         system.set_positions(np.array([
             [0.0, 0.0, 0.0],
@@ -856,17 +871,18 @@ class TestLazyEnergy:
         system.set_velocities(np.zeros((2, 3), dtype=env.NUMPY_FLOAT))
         system.compute_forces()
         energy = system.dump_energy()
-        assert 'bonded' in energy
-        assert energy['bonded'] != 0.0
-        assert np.isfinite(energy['bonded'])
+        assert 'bond' in energy
+        assert energy['bond'] != 0.0
+        assert np.isfinite(energy['bond'])
 
     def test_step_without_dump_energy_no_accumulator_stall(self):
         topology, term_params = _build_simple_bond()
         parameter_table = _make_parameter_table(term_params)
         pbc_matrix = _make_large_pbc()
         system = _make_system(topology, pbc_matrix)
-        bonded = create_bonded_group(topology, parameter_table)
-        system.add_force_term(bonded)
+        bonded = create_bonded_forces(topology, parameter_table)
+        for f in bonded:
+            system.add_force_term(f)
 
         system.set_positions(np.array([
             [0.0, 0.0, 0.0],
@@ -882,16 +898,17 @@ class TestLazyEnergy:
         assert np.all(np.isfinite(vel))
 
         energy = system.dump_energy()
-        assert 'bonded' in energy
-        assert np.isfinite(energy['bonded'])
+        assert 'bond' in energy
+        assert np.isfinite(energy['bond'])
 
     def test_energy_changes_between_steps(self):
         topology, term_params = _build_simple_bond()
         parameter_table = _make_parameter_table(term_params)
         pbc_matrix = _make_large_pbc()
         system = _make_system(topology, pbc_matrix)
-        bonded = create_bonded_group(topology, parameter_table)
-        system.add_force_term(bonded)
+        bonded = create_bonded_forces(topology, parameter_table)
+        for f in bonded:
+            system.add_force_term(f)
 
         system.set_positions(np.array([
             [0.0, 0.0, 0.0],
@@ -907,9 +924,9 @@ class TestLazyEnergy:
         _run_steps(system, integrator, 5)
         energy_2 = system.dump_energy()
 
-        assert 'bonded' in energy_1
-        assert 'bonded' in energy_2
-        assert energy_1['bonded'] != energy_2['bonded']
+        assert 'bond' in energy_1
+        assert 'bond' in energy_2
+        assert energy_1['bond'] != energy_2['bond']
 
 
 class TestAsyncRebuild:
@@ -919,8 +936,9 @@ class TestAsyncRebuild:
         parameter_table = _make_parameter_table(term_params)
         pbc_matrix = _make_large_pbc()
         system_a = _make_system(topology, pbc_matrix, cutoff=12.0, skin=1.0)
-        bonded = create_bonded_group(topology, parameter_table)
-        system_a.add_force_term(bonded)
+        bonded = create_bonded_forces(topology, parameter_table)
+        for f in bonded:
+            system_a.add_force_term(f)
         shared_positions = np.array([
             [0.0, 0.0, 0.0],
             [1.5, 0.0, 0.0],
@@ -931,8 +949,9 @@ class TestAsyncRebuild:
         system_a.set_velocities(np.zeros((4, 3), dtype=env.NUMPY_FLOAT))
 
         system_b = _make_system(topology, pbc_matrix, cutoff=12.0, skin=1.0)
-        bonded_b = create_bonded_group(topology, parameter_table)
-        system_b.add_force_term(bonded_b)
+        bonded_b = create_bonded_forces(topology, parameter_table)
+        for f in bonded_b:
+            system_b.add_force_term(f)
         system_b.set_positions(shared_positions)
         system_b.set_velocities(np.zeros((4, 3), dtype=env.NUMPY_FLOAT))
 
@@ -957,8 +976,9 @@ class TestAsyncRebuild:
         parameter_table = _make_parameter_table(term_params)
         pbc_matrix = _make_large_pbc()
         system = _make_system(topology, pbc_matrix, cutoff=12.0, skin=1.0)
-        bonded = create_bonded_group(topology, parameter_table)
-        system.add_force_term(bonded)
+        bonded = create_bonded_forces(topology, parameter_table)
+        for f in bonded:
+            system.add_force_term(f)
         system.set_positions(np.array([
             [0.0, 0.0, 0.0],
             [1.5, 0.0, 0.0],
@@ -984,8 +1004,9 @@ class TestAsyncRebuild:
         parameter_table = _make_parameter_table(term_params)
         pbc_matrix = np.eye(3, dtype=env.NUMPY_FLOAT) * 80.0
         system = _make_system(topology, pbc_matrix, cutoff=10.0, skin=1.0)
-        bonded = create_bonded_group(topology, parameter_table)
-        system.add_force_term(bonded)
+        bonded = create_bonded_forces(topology, parameter_table)
+        for f in bonded:
+            system.add_force_term(f)
 
         rng = np.random.RandomState(42)
         system.set_positions(rng.uniform(10, 70, (n, 3)).astype(env.NUMPY_FLOAT))
@@ -1009,8 +1030,9 @@ class TestAsyncRebuild:
         parameter_table = _make_parameter_table(term_params)
         pbc_matrix = _make_large_pbc()
         system = _make_system(topology, pbc_matrix, cutoff=12.0, skin=0.5)
-        bonded = create_bonded_group(topology, parameter_table)
-        system.add_force_term(bonded)
+        bonded = create_bonded_forces(topology, parameter_table)
+        for f in bonded:
+            system.add_force_term(f)
         system.set_positions(np.array([
             [0.0, 0.0, 0.0],
             [1.5, 0.0, 0.0],
@@ -1036,8 +1058,9 @@ class TestAsyncRebuild:
         parameter_table = _make_parameter_table(term_params)
         pbc_matrix = _make_large_pbc()
         system = _make_system(topology, pbc_matrix, cutoff=12.0, skin=1.0)
-        bonded = create_bonded_group(topology, parameter_table)
-        system.add_force_term(bonded)
+        bonded = create_bonded_forces(topology, parameter_table)
+        for f in bonded:
+            system.add_force_term(f)
         system.set_positions(np.array([
             [0.0, 0.0, 0.0],
             [1.6, 0.0, 0.0],
@@ -1062,8 +1085,9 @@ class TestAsyncRebuild:
         pbc_matrix = _make_large_pbc()
         system = _make_system(topology, pbc_matrix, cutoff=12.0, skin=1.0,
                         rebuild_check_interval=3)
-        bonded = create_bonded_group(topology, parameter_table)
-        system.add_force_term(bonded)
+        bonded = create_bonded_forces(topology, parameter_table)
+        for f in bonded:
+            system.add_force_term(f)
         system.set_positions(np.array([
             [0.0, 0.0, 0.0],
             [1.5, 0.0, 0.0],
@@ -1098,7 +1122,8 @@ class TestInlineSystemAssembly:
         state.set_type_indices(psf.particle_type_indices)
         forces = create_charmm_forces(topology, parameter_table, pbc, cutoff=12.0, particle_type_indices=psf.particle_type_indices)
         system = System(topology, state)
-        system.add_force_term(forces['bonded'])
+        for f in forces['bonded']:
+            system.add_force_term(f)
         system.add_force_term(forces['nonbonded'])
         system.add_force_term(forces['pme'], stream='pme')
 

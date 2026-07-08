@@ -57,7 +57,8 @@ def _build_system(pme_stream):
     state.set_type_indices(psf.particle_type_indices)
     system = System(topology, state)
     system.set_pbc(pbc)
-    system.add_force_term(forces['bonded'])
+    for f in forces['bonded']:
+        system.add_force_term(f)
     system.add_force_term(forces['nonbonded'])
     system.add_force_term(forces['pme'], stream='pme' if pme_stream else None)
 
@@ -74,15 +75,15 @@ class TestPmeStreamRouting:
         assert system._pme_stream is not None, "pme stream must be created"
         assert system._pme_stream is not cp.cuda.Stream.null
         assert len(system._pme_force_terms) == 1
-        assert len(system._primary_force_terms) == 2
+        assert len(system._primary_force_terms) == 7
         # all terms still appear in the combined force_terms list
-        assert len(system.force_terms) == 3
+        assert len(system.force_terms) == 8
 
     def test_default_routing_is_primary(self):
         system, _ = _build_system(pme_stream=False)
         assert system._pme_stream is None
         assert len(system._pme_force_terms) == 0
-        assert len(system._primary_force_terms) == 3
+        assert len(system._primary_force_terms) == 8
 
 
 class TestPmeStreamCorrectness:

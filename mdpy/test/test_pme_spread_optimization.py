@@ -38,7 +38,8 @@ def ion_system():
     state.set_type_indices(psf.particle_type_indices)
     forces = create_charmm_forces(topology, parameter_table, pbc, cutoff=12.0, particle_type_indices=psf.particle_type_indices)
     system = System(topology, state)
-    system.add_force_term(forces['bonded'])
+    for f in forces['bonded']:
+        system.add_force_term(f)
     system.add_force_term(forces['nonbonded'])
     system.add_force_term(forces['pme'], stream='pme')
     system.set_velocities(np.zeros((system.num_particles, 3), dtype=np.float32))

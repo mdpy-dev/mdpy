@@ -69,7 +69,7 @@ def _make_rebuild_test_system():
     from mdpy.core.topology import Builder
     from mdpy.core.parameter_table import ParameterTable
     from mdpy.force.bonded_force import BondedForce
-    from mdpy.force.factories.charmm import create_bonded_group
+    from mdpy.force.factories.charmm import create_bonded_forces
     from mdpy.system import System
     from mdpy.integrator.verlet import VerletIntegrator
     from mdpy.constraint.constraint_scheme import create_constraints
@@ -113,7 +113,7 @@ def test_lincs_multiple_rebuilds():
     topology, pbc_matrix, parameter_table, positions, masses = _make_rebuild_test_system()
 
     from mdpy.force.bonded_force import BondedForce
-    from mdpy.force.factories.charmm import create_bonded_group
+    from mdpy.force.factories.charmm import create_bonded_forces
     from mdpy.system import System
     from mdpy.integrator.verlet import VerletIntegrator
     from mdpy.constraint.lincs import LincsConstraint
@@ -127,8 +127,9 @@ def test_lincs_multiple_rebuilds():
     system.set_pbc(pbc_matrix)
 
     system._cutoff = 12.0
-    bonded = create_bonded_group(topology, parameter_table)
-    system.add_force_term(bonded)
+    bonded = create_bonded_forces(topology, parameter_table)
+    for f in bonded:
+        system.add_force_term(f)
 
     constraint_pairs = [
         (0, 1), (0, 2), (0, 3),
@@ -294,7 +295,7 @@ def test_lincs_md_loop_bond_length_statistics():
     topology, pbc_matrix, parameter_table, positions, masses = _make_rebuild_test_system()
 
     from mdpy.force.bonded_force import BondedForce
-    from mdpy.force.factories.charmm import create_bonded_group
+    from mdpy.force.factories.charmm import create_bonded_forces
     from mdpy.system import System
     from mdpy.integrator.verlet import VerletIntegrator
     from mdpy.constraint.lincs import LincsConstraint
@@ -308,8 +309,9 @@ def test_lincs_md_loop_bond_length_statistics():
     system.set_pbc(pbc_matrix)
 
     system._cutoff = 12.0
-    bonded = create_bonded_group(topology, parameter_table)
-    system.add_force_term(bonded)
+    bonded = create_bonded_forces(topology, parameter_table)
+    for f in bonded:
+        system.add_force_term(f)
 
     constraint_pairs = [
         (0, 1), (0, 2), (0, 3),

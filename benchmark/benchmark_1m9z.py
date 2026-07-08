@@ -62,7 +62,8 @@ forces = create_charmm_forces(
     particle_type_indices=psf.particle_type_indices,
 )
 system = System(topology, state)
-system.add_force_term(forces["bonded"])
+for f in forces["bonded"]:
+    system.add_force_term(f)
 system.add_force_term(forces["nonbonded"])
 system.add_force_term(forces["pme"], stream="pme")
 

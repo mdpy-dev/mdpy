@@ -26,7 +26,7 @@ CUTOFF = 12.0
 def _setup_system():
     from mdpy.core.state import State
     from mdpy.force.bonded_force import BondedForce
-    from mdpy.force.factories.charmm import create_bonded_group
+    from mdpy.force.factories.charmm import create_bonded_forces
     from mdpy.force.expressions.coulomb import coulomb
     from mdpy.force.expressions.lennard_jones import lennard_jones
     from mdpy.force.nonbonded_force import NonbondedForce
@@ -51,7 +51,8 @@ def _setup_system():
     system = System(topology, state)
 
     system.set_pbc(pbc_matrix)
-    system.add_force_term(create_bonded_group(topology, parameter_table))
+    for f in create_bonded_forces(topology, parameter_table):
+        system.add_force_term(f)
     nb = NonbondedForce(lennard_jones + coulomb, cutoff=CUTOFF)
     lj_pair = parameter_table.type_pair_parameters['lj_pair']
     nb.set_pair_parameter('sigma', lj_pair[0::2].astype(env.NUMPY_FLOAT))
@@ -115,7 +116,7 @@ class TestRebuildPipeline:
             f"Total force magnitude {force_mag:.2e} exceeds 1e-3"
         )
 
-        bonded_energy = energies.get("bonded", 0.0)
+        bonded_energy = sum(energies.get(k, 0.0) for k in ('bond', 'angle', 'dihedral', 'improper'))
         assert abs(bonded_energy) < 50000, (
             f"Bonded energy {bonded_energy:.1f} out of reasonable range"
         )

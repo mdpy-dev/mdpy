@@ -24,7 +24,7 @@ def _setup_mdpy_system(psf_path, pdb_path, prm_path, cutoff=12.0):
     from mdpy.io.charmm_toppar_parser import CharmmTopparParser
     from mdpy.io.charmm_toppar_parser import create_parameter_table
     from mdpy.force.bonded_force import BondedForce
-    from mdpy.force.factories.charmm import create_bonded_group
+    from mdpy.force.factories.charmm import create_bonded_forces
     from mdpy.force.nonbonded_force import NonbondedForce
     from mdpy.force.expressions.lennard_jones import lennard_jones
     from mdpy.force.expressions.coulomb import coulomb
@@ -45,7 +45,8 @@ def _setup_mdpy_system(psf_path, pdb_path, prm_path, cutoff=12.0):
     system = System(topology, state)
 
     system.set_pbc(pbc_matrix)
-    system.add_force_term(create_bonded_group(topology, parameter_table))
+    for f in create_bonded_forces(topology, parameter_table):
+        system.add_force_term(f)
     nb = NonbondedForce(lennard_jones + coulomb, cutoff=cutoff)
     lj_pair = parameter_table.type_pair_parameters['lj_pair']
     nb.set_pair_parameter('sigma', lj_pair[0::2].astype(np.float32))
@@ -114,7 +115,8 @@ class TestOpenMMValidation6PO6:
         np.testing.assert_allclose(mdpy_pos, wrapped_ref, atol=0.5)
 
     def test_bonded_energy(self, mdpy_6po6, ref_6po6):
-        mdpy_bonded = mdpy_6po6.dump_energy().get('bonded', 0.0)
+        energies = mdpy_6po6.dump_energy()
+        mdpy_bonded = sum(energies.get(k, 0.0) for k in ('bond', 'angle', 'dihedral', 'improper'))
         ref_bonded = float(ref_6po6['ref_bonded_energy'])
         err = _rel_err(mdpy_bonded, ref_bonded)
         assert err < 0.05, (

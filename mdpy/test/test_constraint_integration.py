@@ -4,7 +4,7 @@ from mdpy.core.topology import Builder
 from mdpy.core.state import State
 from mdpy.core.parameter_table import ParameterTable
 from mdpy.force.bonded_force import BondedForce
-from mdpy.force.factories.charmm import create_bonded_group
+from mdpy.force.factories.charmm import create_bonded_forces
 from mdpy.system import System
 from mdpy.integrator.verlet import VerletIntegrator
 from mdpy.constraint.constraint_scheme import create_constraints
@@ -72,8 +72,9 @@ def test_constraint_loop():
 
     system._cutoff = 12.0
 
-    bonded = create_bonded_group(topology, parameter_table)
-    system.add_force_term(bonded)
+    bonded = create_bonded_forces(topology, parameter_table)
+    for f in bonded:
+        system.add_force_term(f)
 
     constraints = create_constraints(topology, parameter_table, scheme='h-bonds', masses=masses, molecule_ids=mol_ids, molecule_types=molecule_types)
     for c in constraints:
@@ -112,8 +113,9 @@ def test_constraint_loop_multiple_rebuilds():
 
     system._cutoff = 12.0
 
-    bonded = create_bonded_group(topology, parameter_table)
-    system.add_force_term(bonded)
+    bonded = create_bonded_forces(topology, parameter_table)
+    for f in bonded:
+        system.add_force_term(f)
 
     constraints = create_constraints(topology, parameter_table, scheme='h-bonds', masses=masses, molecule_ids=mol_ids, molecule_types=molecule_types)
     for c in constraints:
@@ -219,8 +221,9 @@ def test_settle_lincs_coexistence_bond_lengths():
     system.set_pbc(pbc_matrix)
 
     system._cutoff = 12.0
-    bonded = create_bonded_group(topology, parameter_table)
-    system.add_force_term(bonded)
+    bonded = create_bonded_forces(topology, parameter_table)
+    for f in bonded:
+        system.add_force_term(f)
 
     constraints = create_constraints(topology, parameter_table, scheme='h-bonds', masses=masses, molecule_ids=mol_ids, molecule_types=molecule_types)
     for c in constraints:
@@ -274,8 +277,9 @@ def test_settle_md_loop_rebuilds_bond_lengths():
     system.set_pbc(pbc_matrix)
 
     system._cutoff = 4.0
-    bonded = create_bonded_group(topology, parameter_table)
-    system.add_force_term(bonded)
+    bonded = create_bonded_forces(topology, parameter_table)
+    for f in bonded:
+        system.add_force_term(f)
 
     constraints = create_constraints(topology, parameter_table, scheme='h-bonds', masses=masses, molecule_ids=mol_ids, molecule_types=molecule_types)
     for c in constraints:
@@ -347,8 +351,9 @@ def test_lincs_md_loop_rebuilds_bond_lengths():
     system = System(topology, state)
     system.set_pbc(pbc_matrix)
     system._cutoff = 4.0
-    bonded = create_bonded_group(topology, pt)
-    system.add_force_term(bonded)
+    bonded = create_bonded_forces(topology, pt)
+    for f in bonded:
+        system.add_force_term(f)
 
     constraint_pairs = [(0, 1), (0, 2), (0, 3), (4, 5), (4, 6), (4, 7), (0, 4)]
     target_lengths = [1.09, 1.09, 1.09, 1.09, 1.09, 1.09, 1.54]

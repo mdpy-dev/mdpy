@@ -26,7 +26,8 @@ def _build_ion():
     state.set_type_indices(psf.particle_type_indices)
     s = System(topo, state)
     s.set_pbc(pbc)
-    s.add_force_term(forces["bonded"])
+    for f in forces["bonded"]:
+        s.add_force_term(f)
     s.add_force_term(forces["nonbonded"])
     s.add_force_term(forces["pme"], stream="pme")
     s.set_positions(pdb.positions)

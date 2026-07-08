@@ -15,7 +15,7 @@ from mdpy.force.pme_reciprocal_force import (
     get_self_energy_kernel,
     precompute_bk_factors,
 )
-from mdpy.force.factories.charmm import create_bonded_group
+from mdpy.force.factories.charmm import create_bonded_forces
 
 
 class _PBCContext:
@@ -599,7 +599,8 @@ class TestPMEIntegration6PO6:
 
         system.set_pbc(pbc_matrix)
 
-        system.add_force_term(create_bonded_group(self.topology, self.parameter_table))
+        for f in create_bonded_forces(self.topology, self.parameter_table):
+            system.add_force_term(f)
 
         nb = NonbondedForce(lennard_jones + screened_coulomb, cutoff=self.cutoff)
         lj_pair = self.parameter_table.type_pair_parameters['lj_pair']
@@ -657,7 +658,7 @@ class TestPMEIntegration6PO6:
         energies = system.dump_energy()
         print(f"PME energies: {energies}")
 
-        assert 'bonded' in energies
+        assert 'bond' in energies
         assert 'nonbonded' in energies
         assert 'pme_reciprocal' in energies
 
