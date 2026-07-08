@@ -257,7 +257,6 @@ class NonbondedForce(ForceTerm):
         self._grad_cuda = getattr(expression, "grad_cuda", None)
         self._energy_cuda_raw = expression.energy_cuda
 
-        self._i_props, self._j_props = _split_per_particle(self._expr_info.per_particle)
         self._prop_bases = _unique_prop_bases(self._expr_info.per_particle)
 
         self._pair_param_data = {}
