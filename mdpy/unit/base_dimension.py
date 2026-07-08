@@ -38,67 +38,16 @@ class BaseDimension:
         self._temperature_dimension = temperature_dimension
         self._charge_dimension = charge_dimension
         self._mol_dimension = mol_dimension
-        self._dimension_list = [
-            self._length_dimension,
-            self._time_dimension,
-            self._mass_dimension,
-            self._temperature_dimension,
-            self._charge_dimension,
-            self._mol_dimension
-        ]
-        self._dimension_dict = {
-            'm': self._length_dimension, 
-            's': self._time_dimension, 
-            'kg': self._mass_dimension,
-            'K': self._temperature_dimension, 
-            'C': self._charge_dimension, 
-            'mol': self._mol_dimension
-        }
-        # The name of base dimension will be replaced with the name of its corresponding SI Unit
-        # Like m for length and kg for mass
-        self._dimension_name = [
-            'm', 's', 'kg', 'K', 'C', 'mol'
-        ]
-        self._generate_dimension_name()
-
-    def _generate_dimension_name(self):
-        self._name = ''
-        if self._dimension_list.count(0) == len(self._dimension_list):
-            # All dimension is 0
-            return None # self._name = '' 
-        else:
-            zipped = zip(self._dimension_list, self._dimension_name)
-            sort_zipped = sorted(zipped, key=lambda x:(x[0]*-1, x[1]))
-            res = zip(*sort_zipped)
-            dimensions, names = [list(x) for x in res]
- 
-            for i, dimension in enumerate(dimensions):
-                if i > 1 and dimension < 0 and dimensions[i-1] >= 0:
-                    if self._name != '':
-                        self._name = self._name[:-1] + '/' # Change the final * to /
-                    else:
-                        self._name = '1/'
-                if dimension > 1:
-                    self._name += names[i] + '^%d*' %(dimension) if isinstance(dimension, int) else names[i] + '^%.1f*' %(dimension)
-                elif dimension == 1:
-                    self._name += names[i] + '*'
-                elif dimension == 0:
-                    pass
-                elif dimension == -1:
-                    self._name += names[i] + '*'
-                elif dimension < -1:
-                    self._name += names[i] + '^%d*' %(-dimension) if isinstance(dimension, int) else names[i] + '^%.1f*' %(-dimension)
-
-            self._name = self._name[:-1] # Get rid of the last *
 
     def __repr__(self) -> str:
+        dim_str = format_dimension(self)
         return (
-            '<BaseDimension object: %s at 0x%x>' 
-            %(self._name, id(self))
+            '<BaseDimension object: %s at 0x%x>'
+            %(dim_str, id(self))
         )
 
     def __str__(self) -> str:
-        return self._name
+        return format_dimension(self)
 
     def __eq__(self, base_unit):
         if (
@@ -292,21 +241,78 @@ class BaseDimension:
         '''   
         return self._mol_dimension
 
-    @property
-    def dimension_dict(self):
-        return self._dimension_dict
 
-    @property
-    def name(self):
-        '''
-        name gets the name of ``self``
+_SUPERSCRIPTS = {
+    '0': '\u2070', '1': '\u00b9', '2': '\u00b2', '3': '\u00b3',
+    '4': '\u2074', '5': '\u2075', '6': '\u2076', '7': '\u2077',
+    '8': '\u2078', '9': '\u2079', '-': '\u207b',
+}
 
-        The name of ``BaseDimension`` is consist with SI unit. 
-        For example, ``BaseDimension(length_dimension=1, time_dimension=-1)`` has name 'm/s'
+def _superscript_exponent(n):
+    if n == 1 or n == -1:
+        return ''
+    s = ''
+    for ch in str(abs(int(n)) if int(n) == n else abs(n)):
+        s += _SUPERSCRIPTS.get(ch, ch)
+    if n < 0:
+        s = '\u207b' + s
+    return s
 
-        Returns
-        -------
-        str
-            name of BaseDimension
-        '''   
-        return self._name
+def format_dimension(dim, use_unicode=True):
+    if dim.is_dimensionless():
+        return ''
+
+    pairs = [
+        ('m',   dim.length_dimension),
+        ('s',   dim.time_dimension),
+        ('kg',  dim.mass_dimension),
+        ('K',   dim.temperature_dimension),
+        ('C',   dim.charge_dimension),
+        ('mol', dim.mol_dimension),
+    ]
+
+    pos = [(name, exp) for name, exp in pairs if exp > 0]
+    neg = [(name, -exp) for name, exp in pairs if exp < 0]
+
+    if use_unicode:
+        mul = '\u00b7'
+        div = '/'
+        pos_parts = []
+        for name, exp in pos:
+            sup = _superscript_exponent(exp)
+            pos_parts.append(f'{name}{sup}')
+        numerator = mul.join(pos_parts)
+
+        neg_parts = []
+        for name, exp in neg:
+            sup = _superscript_exponent(exp)
+            neg_parts.append(f'{name}{sup}')
+        denominator = mul.join(neg_parts)
+
+        if numerator and denominator:
+            return f'{numerator}{div}{denominator}'
+        elif numerator:
+            return numerator
+        elif denominator:
+            return f'1{div}{denominator}'
+        else:
+            return ''
+    else:
+        def _fmt(items):
+            parts = []
+            for name, exp in items:
+                if exp == 1:
+                    parts.append(name)
+                else:
+                    parts.append(f'{name}^{exp}')
+            return '*'.join(parts)
+        pos_str = _fmt(pos)
+        neg_str = _fmt(neg)
+        if pos_str and neg_str:
+            return f'{pos_str}/{neg_str}'
+        elif pos_str:
+            return pos_str
+        elif neg_str:
+            return f'1/{neg_str}'
+        else:
+            return ''

@@ -10,6 +10,7 @@ copyright : (C)Copyright 2021-present, mdpy organization
 import numpy as np
 from copy import deepcopy
 from . import BaseDimension, UNIT_PRECISION
+from .base_dimension import format_dimension
 from ..error import UnitDimensionMismatchedError
 from .. import env
 
@@ -50,12 +51,12 @@ class Unit:
     def __repr__(self):
         return (
             '<Unit object: %.2e %s at 0x%x>'
-            %(self._relative_value, self._base_dimension.name, id(self))
+            %(self._relative_value, format_dimension(self._base_dimension), id(self))
         )
 
     def __str__(self):
         return (
-            '%.2e %s' %(self._relative_value, self._base_dimension.name)
+            '%.2e %s' %(self._relative_value, format_dimension(self._base_dimension))
         )
 
     def __eq__(self, other) -> bool:
@@ -224,7 +225,7 @@ class Unit:
         str
             the name of unit
         '''        
-        return self.base_dimension.name
+        return format_dimension(self.base_dimension)
 
     @property
     def base_dimension(self):
