@@ -7,7 +7,7 @@ import pytest
 from mdpy.core.state import State
 from mdpy.core.topology import Topology
 from mdpy.system import System
-from mdpy.minimizer import SteepestDescentMinimizer
+from mdpy.minimizer import SteepestDescentMinimizer, ConjugateGradientMinimizer
 
 
 def _make_system(num_particles, positions, forces, masses=None):
@@ -132,3 +132,23 @@ class TestForceReduction:
         rms_f = minimizer.compute_rms_force(system)
         expected_rms = np.sqrt(3.0)
         assert rms_f == pytest.approx(expected_rms)
+
+
+class TestConjugateGradient:
+    def test_step_moves_toward_minimum(self):
+        positions = np.array([[0.0, 0.0, 0.0]], dtype=np.float32)
+        forces = np.array([[-2.0, 0.0, 0.0]], dtype=np.float32)
+        system = _make_system(1, positions, forces)
+        minimizer = ConjugateGradientMinimizer(step_size=0.1)
+        minimizer.step(system)
+        new_pos = system.state.download_positions()
+        assert new_pos[0, 0] < 0.0
+
+    def test_step_size_zero_does_not_move(self):
+        positions = np.array([[0.0, 0.0, 0.0]], dtype=np.float32)
+        forces = np.array([[-2.0, 0.0, 0.0]], dtype=np.float32)
+        system = _make_system(1, positions, forces)
+        minimizer = ConjugateGradientMinimizer(step_size=0.0)
+        minimizer.step(system)
+        new_pos = system.state.download_positions()
+        np.testing.assert_array_equal(new_pos, positions)
