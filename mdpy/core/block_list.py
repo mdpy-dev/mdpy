@@ -7,11 +7,32 @@ import numpy as np
 import cupy as cp
 from mdpy import env
 from mdpy.core.hilbert import HILBERT_ENCODE_KERNEL
-from mdpy.core.pool import pool_get
 
 BLOCK_SIZE = 32
 
 NUM_ATOMS_SENTINEL = 0x7FFFFFFF
+
+_FILL_CONSTANT_INT32_KERNEL_SRC = r"""
+extern "C" __global__
+void fill_constant_int32_kernel(
+    int* __restrict__ out,
+    int number_elements,
+    int value
+) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= number_elements) return;
+    out[i] = value;
+}
+"""
+
+_fill_constant_kernel = cp.RawKernel(_FILL_CONSTANT_INT32_KERNEL_SRC, "fill_constant_int32_kernel")
+
+
+def _fill_constant_int32(arr, value):
+    n = arr.shape[0]
+    threads_per_block = 256
+    grid = ((n + threads_per_block - 1) // threads_per_block,)
+    _fill_constant_kernel(grid, (threads_per_block,), (arr, np.int32(n), np.int32(value)))
 
 # Thread count for the single-block parallel prefix-sum kernels
 # (cell_prefix_sum_kernel, composite_prefix_sum_kernel). Must be a power of
@@ -809,7 +830,20 @@ class BlockList:
         """Return a reusable buffer of the given size. Allocates on first call
         or when size grows; otherwise returns the cached array. If fill is not
         None, fill the buffer (memsetAsync for 0, int32 fill kernel for others)."""
-        return pool_get(self._pool, name, size, dtype, fill)
+        key = (name, dtype)
+        arr = self._pool.get(key)
+        if arr is None or arr.size < size:
+            arr = cp.empty(size, dtype=dtype)
+            self._pool[key] = arr
+        arr = arr[:size]
+        if fill is not None:
+            if fill == 0:
+                cp.cuda.runtime.memsetAsync(
+                    arr.data.ptr, 0, size * arr.itemsize, cp.cuda.Stream.null.ptr
+                )
+            else:
+                _fill_constant_int32(arr, fill)
+        return arr
 
     def set_cutoff(self, cutoff):
         self.cutoff = float(cutoff)

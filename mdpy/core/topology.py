@@ -3,7 +3,6 @@ from __future__ import annotations
 import cupy as cp
 import numpy as np
 from mdpy import env
-from mdpy.core.pool import pool_get
 
 
 
@@ -18,7 +17,7 @@ class Topology:
         'masses', 'charges', 'particle_type_indices', 'molecule_ids',
         'particle_names', 'type_names', 'chain_ids', 'molecule_types',
         '_exclusion_dirty', '_exclusion_pairs', '_exclusion_csr',
-        '_exclusion_reverse_csr', '_exclusion_pool',
+        '_exclusion_reverse_csr',
     ]
 
     def __init__(self, builder: Builder | None = None):
@@ -96,7 +95,6 @@ class Topology:
         self._exclusion_pairs = None       # (d_i, d_j, d_scale) unique pairs
         self._exclusion_csr = None         # (offset, neighbors, scale)
         self._exclusion_reverse_csr = None  # (rev_offset, rev_neighbors, rev_scale)
-        self._exclusion_pool = {}
 
     def _derive_exclusion_state(self):
         """Build unique pairs + forward CSR + reverse CSR from the bond graph.
@@ -169,18 +167,17 @@ class Topology:
 
         self._exclusion_pairs = (d_unique_i, d_unique_j, d_unique_scale)
 
-        # --- forward CSR via pool_get buffers ---
+        # --- forward CSR (fresh allocation: derive runs rarely, no pool needed) ---
         num_pairs = bi_uniq
-        pool = self._exclusion_pool
-        d_count = pool_get(pool, "count", N + 1, env.NUMPY_INT, fill=0)
+        d_count = cp.zeros(N + 1, dtype=env.NUMPY_INT)
         grid_c = ((num_pairs + threads_per_block - 1) // threads_per_block,)
         kernels['count_row'](grid_c, (threads_per_block,),
             (d_unique_i, np.int32(num_pairs), d_count))
-        d_offset = pool_get(pool, "offset", N + 1, env.NUMPY_INT)
+        d_offset = cp.empty(N + 1, dtype=env.NUMPY_INT)
         cp.cumsum(d_count, dtype=cp.int32, out=d_offset)
-        d_neighbors = pool_get(pool, "neighbors", num_pairs, env.NUMPY_INT)
-        d_scale_out = pool_get(pool, "scale_out", num_pairs, env.NUMPY_FLOAT)
-        d_temp = pool_get(pool, "temp", N + 1, env.NUMPY_INT)
+        d_neighbors = cp.empty(num_pairs, dtype=env.NUMPY_INT)
+        d_scale_out = cp.empty(num_pairs, dtype=env.NUMPY_FLOAT)
+        d_temp = cp.empty(N + 1, dtype=env.NUMPY_INT)
         d_temp[:] = d_offset
         kernels['scatter_pairs'](grid_c, (threads_per_block,),
             (d_unique_i, d_unique_j, d_unique_scale, d_offset, np.int32(num_pairs),
