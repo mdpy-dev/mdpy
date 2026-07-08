@@ -21,6 +21,7 @@ from mdpy.io.charmm_toppar_parser import CharmmTopparParser
 from mdpy.io.charmm_toppar_parser import create_parameter_table
 from mdpy.force.factories.charmm import create_charmm_forces
 from mdpy.integrator.langevin import LangevinBAOABIntegrator
+from mdpy.core.state import State
 from mdpy.system import System
 from mdpy.constraint.constraint_scheme import create_constraints
 from mdpy.utils import generate_velocity_from_temperature
@@ -41,9 +42,16 @@ toppar = CharmmTopparParser(
     os.path.join(DATA_DIR, "toppar_water_ions.str"),
 )
 topology = psf.topology
-parameter_table = create_parameter_table(topology, toppar)
+parameter_table = create_parameter_table(
+    topology, toppar, type_names=psf.particle_type_names)
 pbc_matrix = np.eye(3, dtype=np.float64) * BOX_SIZE
 
+state = State(topology.num_particles)
+state.set_pbc(pbc_matrix)
+state.set_positions(pdb.positions)
+state.set_charges(psf.charges)
+state.set_masses(psf.masses)
+state.set_type_indices(psf.particle_type_indices)
 forces = create_charmm_forces(
     topology,
     parameter_table,
@@ -51,22 +59,28 @@ forces = create_charmm_forces(
     cutoff=CUTOFF,
     ewald_rtol=EWALD_RTOL,
     fourier_spacing=FOURIER_SPACING,
+    particle_type_indices=psf.particle_type_indices,
 )
-
-system = System(topology)
-system.set_pbc(pbc_matrix)
+system = System(topology, state)
 system.add_force_term(forces["bonded"])
 system.add_force_term(forces["nonbonded"])
 system.add_force_term(forces["pme"], stream="pme")
 
-constraints = create_constraints(topology, parameter_table, scheme="h-bonds")
+constraints = create_constraints(
+    topology,
+    parameter_table,
+    scheme="h-bonds",
+    masses=psf.masses,
+    molecule_ids=psf.molecule_ids,
+    molecule_types=psf.molecule_types,
+)
 for c in constraints:
     system.add_constraint(c)
 
-positions = pdb.positions
 velocities = generate_velocity_from_temperature(300.0, topology.masses, seed=42)
-system.set_positions(positions)
 system.set_velocities(velocities)
+
+pme = forces["pme"]
 
 integrator = LangevinBAOABIntegrator(TIME_STEP_FS, 300.0, 1.0)
 
@@ -87,9 +101,9 @@ print(f"  time_step:    {TIME_STEP_FS} fs")
 print(f"  Integrator:    Langevin BAOAB")
 print(f"  ewald_rtol:    {EWALD_RTOL}")
 print(f"  fourier_spacing: {FOURIER_SPACING} A")
-print(f"  PME alpha:     {forces['pme'].alpha:.4f}")
+print(f"  PME alpha:     {pme.alpha:.4f}")
 print(
-    f"  PME grid:      {forces['pme'].grid_x} x {forces['pme'].grid_y} x {forces['pme'].grid_z}"
+    f"  PME grid:      {pme.grid_x} x {pme.grid_y} x {pme.grid_z}"
 )
 print()
 

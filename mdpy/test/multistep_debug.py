@@ -43,6 +43,7 @@ def main():
     from mdpy.io.pdb_parser import PDBParser
     from mdpy.io.charmm_toppar_parser import CharmmTopparParser
     from mdpy.io.charmm_toppar_parser import create_parameter_table
+    from mdpy.core.state import State
     from mdpy.force.bonded_force import BondedForce
     from mdpy.force.factories.charmm import create_bonded_group
     from mdpy.force.nonbonded_force import NonbondedForce
@@ -59,7 +60,8 @@ def main():
     pdb = PDBParser(PDB_PATH)
     toppar = CharmmTopparParser(PRM_PATH, STR_PATH)
     topology = psf.topology
-    parameter_table = create_parameter_table(topology, toppar)
+    parameter_table = create_parameter_table(
+        topology, toppar, type_names=psf.particle_type_names)
     N = topology.num_particles
 
     # Save brute-force data BEFORE system mutates topology indices
@@ -97,7 +99,11 @@ def main():
     pbc_matrix = np.eye(3, dtype=np.float64) * BOX_SIZE
     pbc_inv = np.linalg.inv(pbc_matrix)
 
-    system = System(topology)
+    state = State(topology.num_particles)
+    state.set_masses(psf.masses)
+    state.set_charges(psf.charges)
+    state.set_type_indices(psf.particle_type_indices)
+    system = System(topology, state)
 
     system.set_pbc(pbc_matrix)
     system.add_force_term(create_bonded_group(topology, parameter_table))
