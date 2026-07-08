@@ -135,7 +135,7 @@ def _create_pme_exclusion_force(topology, alpha):
         for k in range(total):
             force.add([int(pair_i[k]), int(pair_j[k])], alpha=float(alpha))
 
-    return force if force._count > 0 else None
+    return force if force.num_terms > 0 else None
 
 
 def create_bonded_group(topology, parameter_table):

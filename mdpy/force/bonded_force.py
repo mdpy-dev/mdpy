@@ -153,7 +153,7 @@ class BondedForce(ForceTerm):
         ))
         self._pending_indices = []
         self._pending_parameters = []
-        self._count = 0
+        self._num_terms = 0
         self._capacity = 0
         self._d_indices = None
         self._d_parameters = None
@@ -162,6 +162,10 @@ class BondedForce(ForceTerm):
         self._num_sm = None
         self._dirty = True
 
+    @property
+    def num_terms(self):
+        return self._num_terms
+
     def set_parameter(self, name, array):
         arr = np.asarray(array, dtype=env.NUMPY_FLOAT).ravel()
         self._per_particle_gpu[name] = cp.asarray(arr)
@@ -169,7 +173,7 @@ class BondedForce(ForceTerm):
     def add(self, indices, **params):
         self._pending_indices.append(list(indices))
         self._pending_parameters.append([params.get(name, 0.0) for name in self._parameter_names])
-        self._count += 1
+        self._num_terms += 1
         self._dirty = True
 
     def sync(self):
@@ -229,7 +233,7 @@ class BondedForce(ForceTerm):
             self._num_sm = cp.cuda.runtime.getDeviceProperties(0)['multiProcessorCount']
 
     def compute(self, gpu_context, block_list=None, compute_energy=True):
-        if self._count == 0:
+        if self._num_terms == 0:
             return
         if self._dirty:
             self.sync()
@@ -239,7 +243,7 @@ class BondedForce(ForceTerm):
 
         block_size = 128
         max_blocks = 6 * self._num_sm
-        grid_size = max(min((self._count + block_size - 1) // block_size, max_blocks), 1)
+        grid_size = max(min((self._num_terms + block_size - 1) // block_size, max_blocks), 1)
 
         args = [
             gpu_context.d_positions_x,
@@ -253,7 +257,7 @@ class BondedForce(ForceTerm):
             gpu_context.d_pbc_matrix,
             self._d_indices.ravel(),
             self._d_parameters.ravel(),
-            np.int32(self._count),
+            np.int32(self._num_terms),
         ]
         for prop_name in self._per_particle_properties:
             if prop_name == 'charge' and gpu_context.d_charges is not None:

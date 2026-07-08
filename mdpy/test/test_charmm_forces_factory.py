@@ -65,7 +65,15 @@ class TestBondForce:
         forces = create_charmm_forces(topology, table, np.eye(3)*108.0)
         bonded = forces['bonded']
         bond_force = [f for f in bonded._forces if f.name == 'bond'][0]
-        assert bond_force._count == topology.num_bonds
+        assert bond_force.num_terms == topology.num_bonds
+
+    def test_bond_num_terms_is_public_property(self, topology_and_table):
+        topology, table = topology_and_table
+        forces = create_charmm_forces(topology, table, np.eye(3)*108.0)
+        bonded = forces['bonded']
+        bond_force = [f for f in bonded._forces if f.name == 'bond'][0]
+        assert hasattr(bond_force, 'num_terms')
+        assert bond_force.num_terms == topology.num_bonds
 
     def test_bond_parameters_extracted(self, topology_and_table):
         topology, table = topology_and_table
@@ -73,7 +81,7 @@ class TestBondForce:
         bonded = forces['bonded']
         bond_force = [f for f in bonded._forces if f.name == 'bond'][0]
         bond_params = table.get_term_parameter('bond')
-        assert bond_force._count > 0
+        assert bond_force.num_terms > 0
         assert bond_force._parameters_per_term == 2
 
 
@@ -84,7 +92,7 @@ class TestAngleForce:
         forces = create_charmm_forces(topology, table, np.eye(3)*108.0)
         bonded = forces['bonded']
         angle_force = [f for f in bonded._forces if f.name == 'angle'][0]
-        assert angle_force._count == topology.num_angles
+        assert angle_force.num_terms == topology.num_angles
 
     def test_angle_parameters_extracted(self, topology_and_table):
         topology, table = topology_and_table
@@ -101,7 +109,7 @@ class TestDihedralForce:
         forces = create_charmm_forces(topology, table, np.eye(3)*108.0)
         bonded = forces['bonded']
         dihedral_force = [f for f in bonded._forces if f.name == 'dihedral'][0]
-        assert dihedral_force._count == topology.num_dihedrals
+        assert dihedral_force.num_terms == topology.num_dihedrals
 
     def test_dihedral_parameters_extracted(self, topology_and_table):
         topology, table = topology_and_table
@@ -118,7 +126,7 @@ class TestImproperForce:
         forces = create_charmm_forces(topology, table, np.eye(3)*108.0)
         bonded = forces['bonded']
         improper_force = [f for f in bonded._forces if f.name == 'improper'][0]
-        assert improper_force._count == topology.num_impropers
+        assert improper_force.num_terms == topology.num_impropers
 
 
 class TestNb14Force:
@@ -142,7 +150,7 @@ class TestNb14Force:
         forces = create_charmm_forces(topology, table, np.eye(3)*108.0)
         bonded = forces['bonded']
         nb14_force = [f for f in bonded._forces if f.name == 'nb14'][0]
-        assert nb14_force._count > 0
+        assert nb14_force.num_terms > 0
 
     def test_nb14_has_two_params(self, topology_and_table):
         topology, table = topology_and_table
