@@ -248,66 +248,66 @@ _SUPERSCRIPTS = {
     '8': '\u2078', '9': '\u2079', '-': '\u207b',
 }
 
-def _superscript_exponent(n):
-    if n == 1 or n == -1:
+def _superscript_exponent(exponent):
+    if exponent == 1 or exponent == -1:
         return ''
-    s = ''
-    for ch in str(abs(int(n)) if int(n) == n else abs(n)):
-        s += _SUPERSCRIPTS.get(ch, ch)
-    if n < 0:
-        s = '\u207b' + s
-    return s
+    result = ''
+    for char in str(abs(int(exponent)) if int(exponent) == exponent else abs(exponent)):
+        result += _SUPERSCRIPTS.get(char, char)
+    if exponent < 0:
+        result = '\u207b' + result
+    return result
 
-def format_dimension(dim, use_unicode=True):
-    if dim.is_dimensionless():
+def format_dimension(dimension, use_unicode=True):
+    if dimension.is_dimensionless():
         return ''
 
     pairs = [
-        ('m',   dim.length_dimension),
-        ('s',   dim.time_dimension),
-        ('kg',  dim.mass_dimension),
-        ('K',   dim.temperature_dimension),
-        ('C',   dim.charge_dimension),
-        ('mol', dim.mol_dimension),
+        ('m',   dimension.length_dimension),
+        ('s',   dimension.time_dimension),
+        ('kg',  dimension.mass_dimension),
+        ('K',   dimension.temperature_dimension),
+        ('C',   dimension.charge_dimension),
+        ('mol', dimension.mol_dimension),
     ]
 
-    pos = [(name, exp) for name, exp in pairs if exp > 0]
-    neg = [(name, -exp) for name, exp in pairs if exp < 0]
+    positive_pairs = [(name, exponent) for name, exponent in pairs if exponent > 0]
+    negative_pairs = [(name, -exponent) for name, exponent in pairs if exponent < 0]
 
     if use_unicode:
-        mul = '\u00b7'
-        div = '/'
+        separator = '\u00b7'
+        division_sign = '/'
         pos_parts = []
-        for name, exp in pos:
-            sup = _superscript_exponent(exp)
-            pos_parts.append(f'{name}{sup}')
-        numerator = mul.join(pos_parts)
+        for name, exponent in positive_pairs:
+            superscript_str = _superscript_exponent(exponent)
+            pos_parts.append(f'{name}{superscript_str}')
+        numerator = separator.join(pos_parts)
 
         neg_parts = []
-        for name, exp in neg:
-            sup = _superscript_exponent(exp)
-            neg_parts.append(f'{name}{sup}')
-        denominator = mul.join(neg_parts)
+        for name, exponent in negative_pairs:
+            superscript_str = _superscript_exponent(exponent)
+            neg_parts.append(f'{name}{superscript_str}')
+        denominator = separator.join(neg_parts)
 
         if numerator and denominator:
-            return f'{numerator}{div}{denominator}'
+            return f'{numerator}{division_sign}{denominator}'
         elif numerator:
             return numerator
         elif denominator:
-            return f'1{div}{denominator}'
+            return f'1{division_sign}{denominator}'
         else:
             return ''
     else:
-        def _fmt(items):
+        def _format_ascii(items):
             parts = []
-            for name, exp in items:
-                if exp == 1:
+            for name, exponent in items:
+                if exponent == 1:
                     parts.append(name)
                 else:
-                    parts.append(f'{name}^{exp}')
+                    parts.append(f'{name}^{exponent}')
             return '*'.join(parts)
-        pos_str = _fmt(pos)
-        neg_str = _fmt(neg)
+        pos_str = _format_ascii(positive_pairs)
+        neg_str = _format_ascii(negative_pairs)
         if pos_str and neg_str:
             return f'{pos_str}/{neg_str}'
         elif pos_str:
