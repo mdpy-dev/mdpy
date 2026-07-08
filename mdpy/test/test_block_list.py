@@ -1,7 +1,7 @@
 import numpy as np
 import cupy as cp
 import pytest
-from mdpy.core.topology import Builder
+from mdpy.core.topology import Topology
 from mdpy.core.state import State
 from mdpy.core.block_list import (
     BlockList, BLOCK_SIZE, SCAN_BLOCK,
@@ -10,9 +10,8 @@ from mdpy.core.block_list import (
 
 
 def _make_topology(n):
-    builder = Builder()
-    builder.set_particles(n)
-    topology, _ = builder.build()
+    topology = Topology()
+    topology.num_particles = n
     return topology
 
 
@@ -455,11 +454,10 @@ class TestExclusionMasks:
 
     def test_bond_excluded(self):
         n = 10
-        builder = Builder()
-        builder.set_particles(n)
+        topology = Topology()
+        topology.num_particles = n
         for i in range(n - 1):
-            builder.add_bond(i, i + 1, k=300.0, r0=1.5)
-        topology, _ = builder.build()
+            topology.add_bond(i, i + 1)
         positions = np.zeros((n, 3), dtype=np.float32)
         for i in range(n):
             positions[i] = [i * 1.0, 0, 0]
@@ -492,15 +490,14 @@ class TestExclusionMasks:
 
     def test_dihedral_14_fully_excluded(self):
         n = 10
-        builder = Builder()
-        builder.set_particles(n)
+        topology = Topology()
+        topology.num_particles = n
         for i in range(n - 1):
-            builder.add_bond(i, i + 1, k=300.0, r0=1.5)
+            topology.add_bond(i, i + 1)
         for i in range(n - 2):
-            builder.add_angle(i, i + 1, i + 2, force_constant=50.0, equilibrium_angle=1.9)
+            topology.add_angle(i, i + 1, i + 2)
         for i in range(n - 3):
-            builder.add_dihedral(i, i + 1, i + 2, i + 3, force_constant=0.5, periodicity=3, phase=0.0)
-        topology, _ = builder.build()
+            topology.add_dihedral(i, i + 1, i + 2, i + 3)
         positions = np.zeros((n, 3), dtype=np.float32)
         for i in range(n):
             positions[i] = [i * 1.0, 0, 0]
@@ -539,11 +536,10 @@ class TestBlockPairClassification:
 
     def test_classify_splits_block_pairs(self):
         n = 10
-        builder = Builder()
-        builder.set_particles(n)
+        topology = Topology()
+        topology.num_particles = n
         for i in range(n - 1):
-            builder.add_bond(i, i + 1, k=300.0, r0=1.5)
-        topology, _ = builder.build()
+            topology.add_bond(i, i + 1)
         positions = np.zeros((n, 3), dtype=np.float32)
         for i in range(n):
             positions[i] = [i * 1.0, 0, 0]
@@ -1232,9 +1228,8 @@ class TestSnapshotPostWrapIntegration:
         from mdpy.system import System
 
         n = 4
-        builder = Builder()
-        builder.set_particles(n)
-        topology, _ = builder.build()
+        topology = Topology()
+        topology.num_particles = n
 
         box = 50.0
         pbc_matrix = np.eye(3, dtype=np.float32) * box
@@ -1288,9 +1283,8 @@ class TestSnapshotPostWrapIntegration:
         from mdpy.system import System
 
         n = 4
-        builder = Builder()
-        builder.set_particles(n)
-        topology, _ = builder.build()
+        topology = Topology()
+        topology.num_particles = n
 
         box = 50.0
         pbc_matrix = np.eye(3, dtype=np.float32) * box
@@ -1343,13 +1337,11 @@ class TestSnapshotPostWrapIntegration:
         verifies the positive case — displacement > skin/2 triggers rebuild
         at the next sync_interval boundary.
         """
-        from mdpy.core.topology import Builder
         from mdpy.system import System
 
         n = 4
-        builder = Builder()
-        builder.set_particles(n)
-        topology, _ = builder.build()
+        topology = Topology()
+        topology.num_particles = n
 
         box = 50.0
         pbc_matrix = np.eye(3, dtype=np.float32) * box
