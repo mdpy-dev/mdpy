@@ -6,7 +6,7 @@ import cupy as cp
 import numpy as np
 
 from mdpy.force.force_term import ForceTerm
-from mdpy import env
+from mdpy import precision
 
 
 def _prepare_energy_expression(energy_cuda):
@@ -324,9 +324,9 @@ class NonbondedForce(ForceTerm):
         if total_slots == 0:
             return
         if self._d_sorted_fx is None or self._sorted_force_slots < total_slots:
-            self._d_sorted_fx = cp.empty(total_slots, dtype=env.NUMPY_FLOAT)
-            self._d_sorted_fy = cp.empty(total_slots, dtype=env.NUMPY_FLOAT)
-            self._d_sorted_fz = cp.empty(total_slots, dtype=env.NUMPY_FLOAT)
+            self._d_sorted_fx = cp.empty(total_slots, dtype=precision.FLOAT)
+            self._d_sorted_fy = cp.empty(total_slots, dtype=precision.FLOAT)
+            self._d_sorted_fz = cp.empty(total_slots, dtype=precision.FLOAT)
             self._sorted_force_slots = total_slots
 
     def _zero_sorted_forces(self, total_slots):

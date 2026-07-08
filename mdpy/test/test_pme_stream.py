@@ -13,7 +13,7 @@ from mdpy.force.factories.charmm import create_charmm_forces
 from mdpy.core.state import State
 from mdpy.integrator.verlet import VerletIntegrator
 from mdpy.system import System
-from mdpy import env
+from mdpy import precision
 
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
 PSF = os.path.join(DATA_DIR, '6PO6.psf')
@@ -33,7 +33,7 @@ def _wrapped_positions(pdb, pbc):
     pbc_inv = np.linalg.inv(pbc)
     frac = raw @ pbc_inv
     frac -= np.floor(frac)
-    return (frac @ pbc).astype(env.NUMPY_FLOAT)
+    return (frac @ pbc).astype(precision.FLOAT)
 
 
 def _build_system(pme_stream):
@@ -64,7 +64,7 @@ def _build_system(pme_stream):
 
     pos = _wrapped_positions(pdb, pbc)
     system.set_positions(pos)
-    system.set_velocities(np.zeros((topology.num_particles, 3), dtype=env.NUMPY_FLOAT))
+    system.set_velocities(np.zeros((topology.num_particles, 3), dtype=precision.FLOAT))
     return system, VerletIntegrator(0.5)
 
 

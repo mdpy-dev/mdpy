@@ -59,8 +59,8 @@ def test_build_topology():
 def test_topology_arrays_dtype():
     topology = _simple_topology()
     topology.add_bond(0, 1)
-    from mdpy import env
-    assert topology.bond_indices.dtype == env.NUMPY_INT
+    from mdpy import precision
+    assert topology.bond_indices.dtype == precision.INT
 
 
 def test_topology_empty_terms():

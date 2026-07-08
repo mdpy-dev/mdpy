@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 import cupy as cp
-from mdpy import env
+from mdpy import precision
 
 _PBC_WRAP_INPLACE_KERNEL = r"""
 extern "C" __global__

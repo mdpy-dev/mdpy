@@ -3,7 +3,7 @@ import os
 import numpy as np
 import pytest
 
-from mdpy import env
+from mdpy import precision
 from mdpy.core.topology import Topology
 from mdpy.core.state import State
 from mdpy.core.block_list import BlockList
@@ -26,9 +26,9 @@ def _make_system(topology, pbc_matrix, cutoff=12.0, skin=None,
                  rebuild_check_interval=None):
     n = topology.num_particles
     state = State(n)
-    state.set_masses(np.full(n, 12.0, dtype=env.NUMPY_FLOAT))
-    state.set_charges(np.zeros(n, dtype=env.NUMPY_FLOAT))
-    state.set_type_indices(np.zeros(n, dtype=env.NUMPY_INT))
+    state.set_masses(np.full(n, 12.0, dtype=precision.FLOAT))
+    state.set_charges(np.zeros(n, dtype=precision.FLOAT))
+    state.set_type_indices(np.zeros(n, dtype=precision.INT))
     system = System(topology, state)
     system.set_pbc(pbc_matrix)
     system._cutoff = cutoff
@@ -51,7 +51,7 @@ def _ensure_ready(system):
 
 
 def _make_large_pbc():
-    return np.eye(3, dtype=env.NUMPY_FLOAT) * 100.0
+    return np.eye(3, dtype=precision.FLOAT) * 100.0
 
 
 def _make_parameter_table(term_params):
@@ -71,10 +71,10 @@ def _build_four_particle():
     topology.add_angle(1, 2, 3)
     topology.add_dihedral(0, 1, 2, 3)
     term_params = {
-        'bond': np.array([[100.0, 1.5], [100.0, 1.5], [100.0, 1.5]], dtype=env.NUMPY_FLOAT),
+        'bond': np.array([[100.0, 1.5], [100.0, 1.5], [100.0, 1.5]], dtype=precision.FLOAT),
         'angle': np.array([[50.0, np.pi * 170 / 180, 0.0, 0.0],
-                           [50.0, np.pi * 170 / 180, 0.0, 0.0]], dtype=env.NUMPY_FLOAT),
-        'dihedral': np.array([[20.0, 2.0, np.pi]], dtype=env.NUMPY_FLOAT),
+                           [50.0, np.pi * 170 / 180, 0.0, 0.0]], dtype=precision.FLOAT),
+        'dihedral': np.array([[20.0, 2.0, np.pi]], dtype=precision.FLOAT),
     }
     return topology, term_params
 
@@ -84,7 +84,7 @@ def _build_simple_bond():
     topology.num_particles = 2
     topology.add_bond(0, 1)
     term_params = {
-        'bond': np.array([[200.0, 1.5]], dtype=env.NUMPY_FLOAT),
+        'bond': np.array([[200.0, 1.5]], dtype=precision.FLOAT),
     }
     return topology, term_params
 
@@ -95,7 +95,7 @@ def _four_particle_positions():
         [1.5, 0.0, 0.0],
         [3.0, 0.0, 0.0],
         [4.5, 0.0, 0.0],
-    ], dtype=env.NUMPY_FLOAT)
+    ], dtype=precision.FLOAT)
 
 
 class TestState:
@@ -125,7 +125,7 @@ class TestState:
         ctx.set_pbc(pbc_matrix.flatten())
 
         original_positions = _four_particle_positions()
-        original_velocities = np.random.randn(4, 3).astype(env.NUMPY_FLOAT)
+        original_velocities = np.random.randn(4, 3).astype(precision.FLOAT)
 
         ctx.set_positions(original_positions)
         ctx.set_velocities(original_velocities)
@@ -213,8 +213,8 @@ class TestSystem:
             [1.6, 0.0, 0.0],
             [2.8, 0.5, 0.0],
             [4.5, 0.0, 1.0],
-        ], dtype=env.NUMPY_FLOAT))
-        system.set_velocities(np.zeros((4, 3), dtype=env.NUMPY_FLOAT))
+        ], dtype=precision.FLOAT))
+        system.set_velocities(np.zeros((4, 3), dtype=precision.FLOAT))
 
         system.compute_forces()
 
@@ -244,9 +244,9 @@ class TestSystem:
 
         pbc = np.eye(3, dtype=np.float64) * 20.0
         state = State(8)
-        state.set_masses(np.full(8, 12.0, dtype=env.NUMPY_FLOAT))
-        state.set_charges(np.zeros(8, dtype=env.NUMPY_FLOAT))
-        state.set_type_indices(np.zeros(8, dtype=env.NUMPY_INT))
+        state.set_masses(np.full(8, 12.0, dtype=precision.FLOAT))
+        state.set_charges(np.zeros(8, dtype=precision.FLOAT))
+        state.set_type_indices(np.zeros(8, dtype=precision.INT))
         system = System(topology, state)
         system.set_pbc(pbc)
 
@@ -264,9 +264,9 @@ class TestSystem:
             [2.0, 1.0, 2.0],
             [1.0, 2.0, 2.0],
             [2.0, 2.0, 2.0],
-        ], dtype=env.NUMPY_FLOAT)
+        ], dtype=precision.FLOAT)
         system.set_positions(positions)
-        system.set_velocities(np.zeros((8, 3), dtype=env.NUMPY_FLOAT))
+        system.set_velocities(np.zeros((8, 3), dtype=precision.FLOAT))
 
         system.update_neighbor_list()
         system.compute_forces()
@@ -312,9 +312,9 @@ class TestSystem:
         positions = np.array([
             [0.0, 0.0, 0.0],
             [1.6, 0.0, 0.0],
-        ], dtype=env.NUMPY_FLOAT)
+        ], dtype=precision.FLOAT)
         system.set_positions(positions)
-        system.set_velocities(np.zeros((2, 3), dtype=env.NUMPY_FLOAT))
+        system.set_velocities(np.zeros((2, 3), dtype=precision.FLOAT))
 
         initial_positions = positions.copy()
 
@@ -339,8 +339,8 @@ class TestSystem:
         system.set_positions(np.array([
             [0.0, 0.0, 0.0],
             [1.6, 0.0, 0.0],
-        ], dtype=env.NUMPY_FLOAT))
-        system.set_velocities(np.zeros((2, 3), dtype=env.NUMPY_FLOAT))
+        ], dtype=precision.FLOAT))
+        system.set_velocities(np.zeros((2, 3), dtype=precision.FLOAT))
 
         integrator = VerletIntegrator(time_step=0.1)
         _ensure_ready(system)
@@ -364,8 +364,8 @@ class TestSystem:
         system.set_positions(np.array([
             [0.0, 0.0, 0.0],
             [1.5, 0.0, 0.0],
-        ], dtype=env.NUMPY_FLOAT))
-        system.set_velocities(np.zeros((2, 3), dtype=env.NUMPY_FLOAT))
+        ], dtype=precision.FLOAT))
+        system.set_velocities(np.zeros((2, 3), dtype=precision.FLOAT))
 
         integrator = VerletIntegrator(time_step=0.1)
         _ensure_ready(system)
@@ -386,11 +386,11 @@ class TestVerletIntegrator:
         system.set_positions(np.array([
             [10.0, 10.0, 10.0],
             [11.5, 10.0, 10.0],
-        ], dtype=env.NUMPY_FLOAT))
+        ], dtype=precision.FLOAT))
         system.set_velocities(np.array([
             [0.01, 0.0, 0.0],
             [-0.01, 0.0, 0.0],
-        ], dtype=env.NUMPY_FLOAT))
+        ], dtype=precision.FLOAT))
 
         integrator = VerletIntegrator(time_step=1.0)
         _ensure_ready(system)
@@ -417,8 +417,8 @@ class TestVerletIntegrator:
         system.set_positions(np.array([
             [0.0, 0.0, 0.0],
             [1.6, 0.0, 0.0],
-        ], dtype=env.NUMPY_FLOAT))
-        system.set_velocities(np.zeros((2, 3), dtype=env.NUMPY_FLOAT))
+        ], dtype=precision.FLOAT))
+        system.set_velocities(np.zeros((2, 3), dtype=precision.FLOAT))
 
         integrator = VerletIntegrator(time_step=0.05)
         _ensure_ready(system)
@@ -438,17 +438,17 @@ class TestVerletIntegrator:
     def test_set_positions_near_boundary_verlet(self):
         topology, _ = _build_simple_bond()
         box = 20.0
-        pbc_matrix = np.eye(3, dtype=env.NUMPY_FLOAT) * box
+        pbc_matrix = np.eye(3, dtype=precision.FLOAT) * box
         system = _make_system(topology, pbc_matrix)
 
         system.set_positions(np.array([
             [1.0, 10.0, 10.0],
             [2.5, 10.0, 10.0],
-        ], dtype=env.NUMPY_FLOAT))
+        ], dtype=precision.FLOAT))
         system.set_velocities(np.array([
             [0.5, 0.0, 0.0],
             [-0.5, 0.0, 0.0],
-        ], dtype=env.NUMPY_FLOAT))
+        ], dtype=precision.FLOAT))
 
         integrator = VerletIntegrator(time_step=0.5)
         _ensure_ready(system)
@@ -458,7 +458,7 @@ class TestVerletIntegrator:
         new_positions = np.array([
             [box - 0.5, 10.0, 10.0],
             [box - 0.5 + 1.5, 10.0, 10.0],
-        ], dtype=env.NUMPY_FLOAT)
+        ], dtype=precision.FLOAT)
         system.set_positions(new_positions)
         integrator._initialized = False
 
@@ -474,14 +474,14 @@ class TestVerletIntegrator:
     def test_verlet_velocity_reasonable_after_upload(self):
         topology, _ = _build_simple_bond()
         box = 20.0
-        pbc_matrix = np.eye(3, dtype=env.NUMPY_FLOAT) * box
+        pbc_matrix = np.eye(3, dtype=precision.FLOAT) * box
         system = _make_system(topology, pbc_matrix)
 
         system.set_positions(np.array([
             [1.0, 10.0, 10.0],
             [2.5, 10.0, 10.0],
-        ], dtype=env.NUMPY_FLOAT))
-        system.set_velocities(np.zeros((2, 3), dtype=env.NUMPY_FLOAT))
+        ], dtype=precision.FLOAT))
+        system.set_velocities(np.zeros((2, 3), dtype=precision.FLOAT))
 
         integrator = VerletIntegrator(time_step=0.5)
         _ensure_ready(system)
@@ -491,9 +491,9 @@ class TestVerletIntegrator:
         near_edge = np.array([
             [box - 0.1, 10.0, 10.0],
             [box - 0.1 + 1.5, 10.0, 10.0],
-        ], dtype=env.NUMPY_FLOAT)
+        ], dtype=precision.FLOAT)
         system.set_positions(near_edge)
-        system.set_velocities(np.zeros((2, 3), dtype=env.NUMPY_FLOAT))
+        system.set_velocities(np.zeros((2, 3), dtype=precision.FLOAT))
         integrator._initialized = False
 
         _ensure_ready(system)
@@ -518,8 +518,8 @@ class TestLangevinIntegrator:
         system.set_positions(np.array([
             [0.0, 0.0, 0.0],
             [1.6, 0.0, 0.0],
-        ], dtype=env.NUMPY_FLOAT))
-        system.set_velocities(np.zeros((2, 3), dtype=env.NUMPY_FLOAT))
+        ], dtype=precision.FLOAT))
+        system.set_velocities(np.zeros((2, 3), dtype=precision.FLOAT))
 
         integrator = LangevinBAOABIntegrator(
             time_step=0.1, temperature=300.0, friction=0.1
@@ -542,8 +542,8 @@ class TestLangevinIntegrator:
         system.set_positions(np.array([
             [0.0, 0.0, 0.0],
             [1.5, 0.0, 0.0],
-        ], dtype=env.NUMPY_FLOAT))
-        system.set_velocities(np.zeros((2, 3), dtype=env.NUMPY_FLOAT))
+        ], dtype=precision.FLOAT))
+        system.set_velocities(np.zeros((2, 3), dtype=precision.FLOAT))
 
         target_temperature = 300.0
         integrator = LangevinBAOABIntegrator(
@@ -576,7 +576,7 @@ class TestLangevinIntegrator:
         topology, term_params = _build_simple_bond()
         parameter_table = _make_parameter_table(term_params)
         box = 20.0
-        pbc_matrix = np.eye(3, dtype=env.NUMPY_FLOAT) * box
+        pbc_matrix = np.eye(3, dtype=precision.FLOAT) * box
         system = _make_system(topology, pbc_matrix)
         bonded = create_bonded_forces(topology, parameter_table)
         for f in bonded:
@@ -585,11 +585,11 @@ class TestLangevinIntegrator:
         system.set_positions(np.array([
             [1.0, 10.0, 10.0],
             [2.5, 10.0, 10.0],
-        ], dtype=env.NUMPY_FLOAT))
+        ], dtype=precision.FLOAT))
         system.set_velocities(np.array([
             [0.5, 0.0, 0.0],
             [-0.5, 0.0, 0.0],
-        ], dtype=env.NUMPY_FLOAT))
+        ], dtype=precision.FLOAT))
 
         integrator = LangevinBAOABIntegrator(
             time_step=0.1, temperature=300.0, friction=0.1
@@ -600,7 +600,7 @@ class TestLangevinIntegrator:
         new_positions = np.array([
             [box - 0.5, 10.0, 10.0],
             [0.5, 10.0, 10.0],
-        ], dtype=env.NUMPY_FLOAT)
+        ], dtype=precision.FLOAT)
         system.set_positions(new_positions)
         integrator._initialized = False
 
@@ -625,8 +625,8 @@ class TestLangevinIntegrator:
         system.set_positions(np.array([
             [0.0, 0.0, 0.0],
             [1.6, 0.0, 0.0],
-        ], dtype=env.NUMPY_FLOAT))
-        system.set_velocities(np.zeros((2, 3), dtype=env.NUMPY_FLOAT))
+        ], dtype=precision.FLOAT))
+        system.set_velocities(np.zeros((2, 3), dtype=precision.FLOAT))
 
         integrator = VerletIntegrator(time_step=0.1)
         _ensure_ready(system)
@@ -660,9 +660,9 @@ class TestRebuildSortCorrectness:
             [1.5, 0.0, 0.0],
             [3.0, 0.0, 0.0],
             [4.5, 0.0, 0.0],
-        ], dtype=env.NUMPY_FLOAT)
+        ], dtype=precision.FLOAT)
         system.set_positions(positions)
-        system.set_velocities(np.zeros((4, 3), dtype=env.NUMPY_FLOAT))
+        system.set_velocities(np.zeros((4, 3), dtype=precision.FLOAT))
 
         integrator = VerletIntegrator(time_step=0.1)
         _ensure_ready(system)
@@ -678,7 +678,7 @@ class TestRebuildSortCorrectness:
 
         assert len(np.unique(s2p)) == len(s2p), "sorted_to_pdb is not a permutation"
 
-        identity = np.arange(4, dtype=env.NUMPY_INT)
+        identity = np.arange(4, dtype=precision.INT)
         np.testing.assert_array_equal(s2p[p2s], identity,
             err_msg="sorted_to_pdb[pdb_to_sorted] != identity")
 
@@ -708,13 +708,13 @@ class TestRebuildSortCorrectness:
             [1.5, 0.0, 0.0],
             [3.0, 0.0, 0.0],
             [4.5, 0.0, 0.0],
-        ], dtype=env.NUMPY_FLOAT)
+        ], dtype=precision.FLOAT)
         velocities = np.array([
             [0.01, 0.0, 0.0],
             [-0.01, 0.0, 0.0],
             [0.01, 0.0, 0.0],
             [-0.01, 0.0, 0.0],
-        ], dtype=env.NUMPY_FLOAT)
+        ], dtype=precision.FLOAT)
         system.set_positions(positions)
         system.set_velocities(velocities)
 
@@ -752,20 +752,20 @@ class TestRebuildSortCorrectness:
         for i in range(n - 1):
             topology.add_bond(i, i + 1)
         term_params = {
-            'bond': np.array([[300.0, 1.5]] * (n - 1), dtype=env.NUMPY_FLOAT),
+            'bond': np.array([[300.0, 1.5]] * (n - 1), dtype=precision.FLOAT),
         }
         parameter_table = _make_parameter_table(term_params)
 
         box = 80.0
-        pbc_matrix = np.eye(3, dtype=env.NUMPY_FLOAT) * box
+        pbc_matrix = np.eye(3, dtype=precision.FLOAT) * box
         system = _make_system(topology, pbc_matrix, cutoff=10.0, skin=2.0)
         bonded = create_bonded_forces(topology, parameter_table)
         for f in bonded:
             system.add_force_term(f)
 
         rng = np.random.RandomState(42)
-        positions = rng.uniform(10, 70, (n, 3)).astype(env.NUMPY_FLOAT)
-        velocities = rng.randn(n, 3).astype(env.NUMPY_FLOAT) * 0.01
+        positions = rng.uniform(10, 70, (n, 3)).astype(precision.FLOAT)
+        velocities = rng.randn(n, 3).astype(precision.FLOAT) * 0.01
         system.set_positions(positions)
         system.set_velocities(velocities)
 
@@ -786,16 +786,16 @@ class TestRebuildSortCorrectness:
 
         p2s, s2p = _get_pdb_to_sorted(system)
         assert len(np.unique(p2s)) == len(p2s), "final pdb_to_sorted not a permutation"
-        identity = np.arange(n, dtype=env.NUMPY_INT)
+        identity = np.arange(n, dtype=precision.INT)
         np.testing.assert_array_equal(s2p[p2s], identity,
             err_msg="permutation invariant broken after 100 steps")
 
         max_disp_per_step = np.max(np.abs(pos_final - snapshot_before)) / 100.0
-        pbc_inv = np.diag([1.0 / box] * 3).astype(env.NUMPY_FLOAT)
+        pbc_inv = np.diag([1.0 / box] * 3).astype(precision.FLOAT)
         delta = pos_final - snapshot_before
         frac = delta @ pbc_inv.T
         frac -= np.round(frac)
-        delta_wrapped = frac @ (np.diag([box] * 3).astype(env.NUMPY_FLOAT)).T
+        delta_wrapped = frac @ (np.diag([box] * 3).astype(precision.FLOAT)).T
         max_disp_per_step = np.max(np.abs(delta_wrapped)) / 100.0
         assert max_disp_per_step < 1.0, \
             f"atoms moved {max_disp_per_step:.3f} per step on average, likely wrong PDB mapping"
@@ -807,20 +807,20 @@ class TestRebuildSortCorrectness:
         for i in range(n - 1):
             topology.add_bond(i, i + 1)
         term_params = {
-            'bond': np.array([[300.0, 1.5]] * (n - 1), dtype=env.NUMPY_FLOAT),
+            'bond': np.array([[300.0, 1.5]] * (n - 1), dtype=precision.FLOAT),
         }
         parameter_table = _make_parameter_table(term_params)
 
         box = 80.0
-        pbc_matrix = np.eye(3, dtype=env.NUMPY_FLOAT) * box
+        pbc_matrix = np.eye(3, dtype=precision.FLOAT) * box
         system = _make_system(topology, pbc_matrix, cutoff=10.0, skin=1.0)
         bonded = create_bonded_forces(topology, parameter_table)
         for f in bonded:
             system.add_force_term(f)
 
         rng = np.random.RandomState(42)
-        positions = rng.uniform(10, 70, (n, 3)).astype(env.NUMPY_FLOAT)
-        velocities = rng.randn(n, 3).astype(env.NUMPY_FLOAT) * 0.001
+        positions = rng.uniform(10, 70, (n, 3)).astype(precision.FLOAT)
+        velocities = rng.randn(n, 3).astype(precision.FLOAT) * 0.001
         system.set_positions(positions)
         system.set_velocities(velocities)
 
@@ -834,7 +834,7 @@ class TestRebuildSortCorrectness:
         assert np.all(np.isfinite(pos_after_first))
 
         p2s_first, s2p_first = _get_pdb_to_sorted(system)
-        identity = np.arange(n, dtype=env.NUMPY_INT)
+        identity = np.arange(n, dtype=precision.INT)
         np.testing.assert_array_equal(s2p_first[p2s_first], identity,
             err_msg="First rebuild: permutation invariant broken")
 
@@ -879,8 +879,8 @@ class TestLazyEnergy:
         system.set_positions(np.array([
             [0.0, 0.0, 0.0],
             [1.6, 0.0, 0.0],
-        ], dtype=env.NUMPY_FLOAT))
-        system.set_velocities(np.zeros((2, 3), dtype=env.NUMPY_FLOAT))
+        ], dtype=precision.FLOAT))
+        system.set_velocities(np.zeros((2, 3), dtype=precision.FLOAT))
         system.compute_forces()
         energy = system.dump_energy()
         assert 'bond' in energy
@@ -899,8 +899,8 @@ class TestLazyEnergy:
         system.set_positions(np.array([
             [0.0, 0.0, 0.0],
             [1.6, 0.0, 0.0],
-        ], dtype=env.NUMPY_FLOAT))
-        system.set_velocities(np.zeros((2, 3), dtype=env.NUMPY_FLOAT))
+        ], dtype=precision.FLOAT))
+        system.set_velocities(np.zeros((2, 3), dtype=precision.FLOAT))
 
         integrator = VerletIntegrator(time_step=0.1)
         _ensure_ready(system)
@@ -925,8 +925,8 @@ class TestLazyEnergy:
         system.set_positions(np.array([
             [0.0, 0.0, 0.0],
             [1.6, 0.0, 0.0],
-        ], dtype=env.NUMPY_FLOAT))
-        system.set_velocities(np.zeros((2, 3), dtype=env.NUMPY_FLOAT))
+        ], dtype=precision.FLOAT))
+        system.set_velocities(np.zeros((2, 3), dtype=precision.FLOAT))
 
         integrator = VerletIntegrator(time_step=0.1)
         _ensure_ready(system)
@@ -956,16 +956,16 @@ class TestAsyncRebuild:
             [1.5, 0.0, 0.0],
             [3.0, 0.0, 0.0],
             [4.5, 0.0, 0.0],
-        ], dtype=env.NUMPY_FLOAT)
+        ], dtype=precision.FLOAT)
         system_a.set_positions(shared_positions)
-        system_a.set_velocities(np.zeros((4, 3), dtype=env.NUMPY_FLOAT))
+        system_a.set_velocities(np.zeros((4, 3), dtype=precision.FLOAT))
 
         system_b = _make_system(topology, pbc_matrix, cutoff=12.0, skin=1.0)
         bonded_b = create_bonded_forces(topology, parameter_table)
         for f in bonded_b:
             system_b.add_force_term(f)
         system_b.set_positions(shared_positions)
-        system_b.set_velocities(np.zeros((4, 3), dtype=env.NUMPY_FLOAT))
+        system_b.set_velocities(np.zeros((4, 3), dtype=precision.FLOAT))
 
         integrator_a = VerletIntegrator(time_step=0.1)
         integrator_b = VerletIntegrator(time_step=0.1)
@@ -996,8 +996,8 @@ class TestAsyncRebuild:
             [1.5, 0.0, 0.0],
             [3.0, 0.0, 0.0],
             [4.5, 0.0, 0.0],
-        ], dtype=env.NUMPY_FLOAT))
-        system.set_velocities(np.zeros((4, 3), dtype=env.NUMPY_FLOAT))
+        ], dtype=precision.FLOAT))
+        system.set_velocities(np.zeros((4, 3), dtype=precision.FLOAT))
 
         integrator = VerletIntegrator(time_step=0.1)
         _ensure_ready(system)
@@ -1013,18 +1013,18 @@ class TestAsyncRebuild:
         for i in range(n - 1):
             topology.add_bond(i, i + 1)
         term_params = {
-            'bond': np.array([[300.0, 1.5]] * (n - 1), dtype=env.NUMPY_FLOAT),
+            'bond': np.array([[300.0, 1.5]] * (n - 1), dtype=precision.FLOAT),
         }
         parameter_table = _make_parameter_table(term_params)
-        pbc_matrix = np.eye(3, dtype=env.NUMPY_FLOAT) * 80.0
+        pbc_matrix = np.eye(3, dtype=precision.FLOAT) * 80.0
         system = _make_system(topology, pbc_matrix, cutoff=10.0, skin=1.0)
         bonded = create_bonded_forces(topology, parameter_table)
         for f in bonded:
             system.add_force_term(f)
 
         rng = np.random.RandomState(42)
-        system.set_positions(rng.uniform(10, 70, (n, 3)).astype(env.NUMPY_FLOAT))
-        system.set_velocities(rng.randn(n, 3).astype(env.NUMPY_FLOAT) * 0.001)
+        system.set_positions(rng.uniform(10, 70, (n, 3)).astype(precision.FLOAT))
+        system.set_velocities(rng.randn(n, 3).astype(precision.FLOAT) * 0.001)
 
         integrator = VerletIntegrator(time_step=0.5)
         _ensure_ready(system)
@@ -1035,7 +1035,7 @@ class TestAsyncRebuild:
         assert np.all(np.isfinite(vel))
 
         p2s, s2p = _get_pdb_to_sorted(system)
-        identity = np.arange(n, dtype=env.NUMPY_INT)
+        identity = np.arange(n, dtype=precision.INT)
         np.testing.assert_array_equal(s2p[p2s], identity,
             err_msg="permutation invariant broken with async rebuild")
 
@@ -1052,13 +1052,13 @@ class TestAsyncRebuild:
             [1.5, 0.0, 0.0],
             [3.0, 0.0, 0.0],
             [4.5, 0.0, 0.0],
-        ], dtype=env.NUMPY_FLOAT))
+        ], dtype=precision.FLOAT))
         system.set_velocities(np.array([
             [0.0, 0.0, 0.0],
             [2.0, 0.0, 0.0],
             [0.0, 0.0, 0.0],
             [-2.0, 0.0, 0.0],
-        ], dtype=env.NUMPY_FLOAT))
+        ], dtype=precision.FLOAT))
 
         integrator = VerletIntegrator(time_step=2.0)
         _ensure_ready(system)
@@ -1080,8 +1080,8 @@ class TestAsyncRebuild:
             [1.6, 0.0, 0.0],
             [3.0, 0.5, 0.0],
             [4.5, 0.0, 1.0],
-        ], dtype=env.NUMPY_FLOAT))
-        system.set_velocities(np.zeros((4, 3), dtype=env.NUMPY_FLOAT))
+        ], dtype=precision.FLOAT))
+        system.set_velocities(np.zeros((4, 3), dtype=precision.FLOAT))
 
         integrator = LangevinBAOABIntegrator(
             time_step=0.1, temperature=300.0, friction=0.1
@@ -1107,8 +1107,8 @@ class TestAsyncRebuild:
             [1.5, 0.0, 0.0],
             [3.0, 0.0, 0.0],
             [4.5, 0.0, 0.0],
-        ], dtype=env.NUMPY_FLOAT))
-        system.set_velocities(np.zeros((4, 3), dtype=env.NUMPY_FLOAT))
+        ], dtype=precision.FLOAT))
+        system.set_velocities(np.zeros((4, 3), dtype=precision.FLOAT))
 
         integrator = VerletIntegrator(time_step=0.1)
         _ensure_ready(system)

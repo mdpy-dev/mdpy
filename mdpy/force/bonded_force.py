@@ -4,7 +4,7 @@ import cupy as cp
 import numpy as np
 import re as _re
 
-from mdpy import env
+from mdpy import precision
 from mdpy.force.force_term import ForceTerm
 
 def _extract_trailing_digit(name):
@@ -165,7 +165,7 @@ class BondedForce(ForceTerm):
         return len(self._indices)
 
     def set_parameter(self, name, array):
-        arr = np.asarray(array, dtype=env.NUMPY_FLOAT).ravel()
+        arr = np.asarray(array, dtype=precision.FLOAT).ravel()
         self._per_particle_gpu[name] = cp.asarray(arr)
 
     def add(self, indices, **params):

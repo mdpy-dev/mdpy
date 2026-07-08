@@ -8,7 +8,7 @@ copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
 import numpy as np
-from mdpy import env
+from mdpy import precision
 from mdpy.core.topology import Topology
 from mdpy.error import *
 
@@ -65,8 +65,8 @@ class PSFParser:
         self._molecule_ids = []
         self._molecule_types = []
         self._chain_ids = []
-        self._masses = np.zeros(n_atoms, dtype=env.NUMPY_FLOAT)
-        self._charges = np.zeros(n_atoms, dtype=env.NUMPY_FLOAT)
+        self._masses = np.zeros(n_atoms, dtype=precision.FLOAT)
+        self._charges = np.zeros(n_atoms, dtype=precision.FLOAT)
 
         for i in range(n_atoms):
             parts = lines[idx + i].split()
@@ -118,7 +118,7 @@ class PSFParser:
         unique_types = sorted(set(self._type_names))
         self._type_name_to_index = {name: idx for idx, name in enumerate(unique_types)}
         self._particle_type_indices = np.array(
-            [self._type_name_to_index[t] for t in self._type_names], dtype=env.NUMPY_INT
+            [self._type_name_to_index[t] for t in self._type_names], dtype=precision.INT
         )
         self._unique_type_names = unique_types
 

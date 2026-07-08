@@ -1,7 +1,7 @@
 import os
 import numpy as np
 import pytest
-from mdpy import env
+from mdpy import precision
 from mdpy.io.psf_parser import PSFParser
 from mdpy.io.pdb_parser import PDBParser
 from mdpy.io.charmm_toppar_parser import CharmmTopparParser
@@ -51,8 +51,8 @@ class TestTopology:
     def test_topology_masses_charges_arrays(self):
         psf = PSFParser(os.path.join(DATA_DIR, '6PO6.psf'))
         topology = psf.topology
-        assert psf.masses.dtype == env.NUMPY_FLOAT
-        assert psf.charges.dtype == env.NUMPY_FLOAT
+        assert psf.masses.dtype == precision.FLOAT
+        assert psf.charges.dtype == precision.FLOAT
         assert psf.masses.shape == (49,)
         assert psf.charges.shape == (49,)
         assert np.all(psf.masses > 0)
@@ -114,7 +114,7 @@ class TestSystem:
         toppar = CharmmTopparParser(os.path.join(DATA_DIR, 'par_all36_prot.prm'))
         topology = psf.topology
         parameter_table = create_parameter_table(topology, toppar, type_names=psf.particle_type_names)
-        pbc_matrix = np.eye(3, dtype=env.NUMPY_FLOAT) * 100.0
+        pbc_matrix = np.eye(3, dtype=precision.FLOAT) * 100.0
 
         state = State(topology.num_particles)
         state.set_masses(psf.masses)
@@ -127,8 +127,8 @@ class TestSystem:
             system.add_force_term(f)
         nb = NonbondedForce(lennard_jones + coulomb, cutoff=12.0)
         lj_pair = parameter_table.type_pair_parameters['lj_pair']
-        nb.set_pair_parameter('sigma', lj_pair[0::2].astype(env.NUMPY_FLOAT))
-        nb.set_pair_parameter('epsilon', lj_pair[1::2].astype(env.NUMPY_FLOAT))
+        nb.set_pair_parameter('sigma', lj_pair[0::2].astype(precision.FLOAT))
+        nb.set_pair_parameter('epsilon', lj_pair[1::2].astype(precision.FLOAT))
         system.add_force_term(nb)
         pbc_inv = np.linalg.inv(pbc_matrix)
         raw = pdb.positions.astype(np.float64)
@@ -147,7 +147,7 @@ class TestSystem:
         toppar = CharmmTopparParser(os.path.join(DATA_DIR, 'par_all36_prot.prm'))
         topology = psf.topology
         parameter_table = create_parameter_table(topology, toppar, type_names=psf.particle_type_names)
-        pbc_matrix = np.eye(3, dtype=env.NUMPY_FLOAT) * 100.0
+        pbc_matrix = np.eye(3, dtype=precision.FLOAT) * 100.0
 
         state = State(topology.num_particles)
         state.set_masses(psf.masses)
@@ -160,8 +160,8 @@ class TestSystem:
             system.add_force_term(f)
         nb = NonbondedForce(lennard_jones + coulomb, cutoff=12.0)
         lj_pair = parameter_table.type_pair_parameters['lj_pair']
-        nb.set_pair_parameter('sigma', lj_pair[0::2].astype(env.NUMPY_FLOAT))
-        nb.set_pair_parameter('epsilon', lj_pair[1::2].astype(env.NUMPY_FLOAT))
+        nb.set_pair_parameter('sigma', lj_pair[0::2].astype(precision.FLOAT))
+        nb.set_pair_parameter('epsilon', lj_pair[1::2].astype(precision.FLOAT))
         system.add_force_term(nb)
         pbc_inv = np.linalg.inv(pbc_matrix)
         raw = pdb.positions.astype(np.float64)
@@ -184,7 +184,7 @@ class TestSystem:
         toppar = CharmmTopparParser(os.path.join(DATA_DIR, 'par_all36_prot.prm'))
         topology = psf.topology
         parameter_table = create_parameter_table(topology, toppar, type_names=psf.particle_type_names)
-        pbc_matrix = np.eye(3, dtype=env.NUMPY_FLOAT) * 100.0
+        pbc_matrix = np.eye(3, dtype=precision.FLOAT) * 100.0
 
         state = State(topology.num_particles)
         state.set_masses(psf.masses)
@@ -197,8 +197,8 @@ class TestSystem:
             system.add_force_term(f)
         nb = NonbondedForce(lennard_jones + coulomb, cutoff=12.0)
         lj_pair = parameter_table.type_pair_parameters['lj_pair']
-        nb.set_pair_parameter('sigma', lj_pair[0::2].astype(env.NUMPY_FLOAT))
-        nb.set_pair_parameter('epsilon', lj_pair[1::2].astype(env.NUMPY_FLOAT))
+        nb.set_pair_parameter('sigma', lj_pair[0::2].astype(precision.FLOAT))
+        nb.set_pair_parameter('epsilon', lj_pair[1::2].astype(precision.FLOAT))
         system.add_force_term(nb)
         pbc_inv = np.linalg.inv(pbc_matrix)
         raw = pdb.positions.astype(np.float64)
@@ -221,7 +221,7 @@ class TestSystem:
         toppar = CharmmTopparParser(os.path.join(DATA_DIR, 'par_all36_prot.prm'))
         topology = psf.topology
         parameter_table = create_parameter_table(topology, toppar, type_names=psf.particle_type_names)
-        pbc_matrix = np.eye(3, dtype=env.NUMPY_FLOAT) * 100.0
+        pbc_matrix = np.eye(3, dtype=precision.FLOAT) * 100.0
 
         state = State(topology.num_particles)
         state.set_masses(psf.masses)
@@ -234,8 +234,8 @@ class TestSystem:
             system.add_force_term(f)
         nb = NonbondedForce(lennard_jones + coulomb, cutoff=12.0)
         lj_pair = parameter_table.type_pair_parameters['lj_pair']
-        nb.set_pair_parameter('sigma', lj_pair[0::2].astype(env.NUMPY_FLOAT))
-        nb.set_pair_parameter('epsilon', lj_pair[1::2].astype(env.NUMPY_FLOAT))
+        nb.set_pair_parameter('sigma', lj_pair[0::2].astype(precision.FLOAT))
+        nb.set_pair_parameter('epsilon', lj_pair[1::2].astype(precision.FLOAT))
         system.add_force_term(nb)
         pbc_inv = np.linalg.inv(pbc_matrix)
         raw = pdb.positions.astype(np.float64)

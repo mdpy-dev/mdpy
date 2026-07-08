@@ -1,5 +1,5 @@
 import numpy as np
-from mdpy import env
+from mdpy import precision
 
 
 class ParameterTable:
@@ -35,7 +35,7 @@ class ParameterTable:
         name   : str — parameter name, e.g. ``'sigma'``.
         values : array of shape (num_types,) — one value per type.
         """
-        self.type_parameters[name] = np.asarray(values, dtype=env.NUMPY_FLOAT)
+        self.type_parameters[name] = np.asarray(values, dtype=precision.FLOAT)
 
     def add_particle_parameter(self, name, values):
         """Store a parameter indexed by individual particle.
@@ -43,7 +43,7 @@ class ParameterTable:
         name   : str — parameter name, e.g. ``'mass'``.
         values : array of shape (num_particles,) — one value per particle.
         """
-        self.particle_parameters[name] = np.asarray(values, dtype=env.NUMPY_FLOAT)
+        self.particle_parameters[name] = np.asarray(values, dtype=precision.FLOAT)
 
     def add_term_parameter(self, name, values):
         """Store a parameter indexed by bonded term instance.
@@ -53,7 +53,7 @@ class ParameterTable:
                  Each row holds parameters for one bonded interaction
                  (e.g. [force_constant, equilibrium_distance]).
         """
-        self.term_parameters[name] = np.asarray(values, dtype=env.NUMPY_FLOAT)
+        self.term_parameters[name] = np.asarray(values, dtype=precision.FLOAT)
 
     def add_type_pair_parameter(self, name, values):
         """Store a parameter indexed by type pair (flattened n_type × n_type matrix).
@@ -62,7 +62,7 @@ class ParameterTable:
         values : 1D array of shape (num_types * num_types,).
                  Indexed as ``values[type_i * num_types + type_j]``.
         """
-        self.type_pair_parameters[name] = np.asarray(values, dtype=env.NUMPY_FLOAT)
+        self.type_pair_parameters[name] = np.asarray(values, dtype=precision.FLOAT)
 
     def get_term_parameter(self, name):
         """Retrieve a term parameter array by term type name."""

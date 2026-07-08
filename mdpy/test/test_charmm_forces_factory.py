@@ -2,7 +2,7 @@ import os
 import numpy as np
 import pytest
 
-from mdpy import env
+from mdpy import precision
 from mdpy.io.psf_parser import PSFParser
 from mdpy.io.charmm_toppar_parser import CharmmTopparParser, create_parameter_table
 from mdpy.force.factories.charmm import (
@@ -194,13 +194,13 @@ class TestEnergyComputation:
         topology, table, particle_type_indices = topology_and_table
         from mdpy.io.pdb_parser import PDBParser
         pdb = PDBParser(os.path.join(DATA_DIR, '6PO6.pdb'))
-        pbc_matrix = np.eye(3, dtype=env.NUMPY_FLOAT) * 100.0
+        pbc_matrix = np.eye(3, dtype=precision.FLOAT) * 100.0
 
         forces = create_charmm_forces(topology, table, np.eye(3)*108.0, particle_type_indices=particle_type_indices)
         bonded_group = forces['bonded']
         bond_force = [f for f in bonded_group if f.name == 'bond'][0]
 
-        positions = pdb.positions.astype(env.NUMPY_FLOAT)
+        positions = pdb.positions.astype(precision.FLOAT)
 
         class MockContext:
             def __init__(self, positions, pbc_matrix):

@@ -1,5 +1,5 @@
 import numpy as np
-from mdpy import env
+from mdpy import precision
 from mdpy.unit import KB, default_energy_unit, kelvin
 
 # Boltzmann constant in mdpy internal units (file-local).
@@ -9,9 +9,9 @@ BOLTZMANN = float(KB.convert_to(default_energy_unit / kelvin).value)
 def generate_velocity_from_temperature(temperature, masses, seed=None):
     rng = np.random.default_rng(seed)
     num_particles = len(masses)
-    velocities = rng.standard_normal((num_particles, 3)).astype(env.NUMPY_FLOAT)
+    velocities = rng.standard_normal((num_particles, 3)).astype(precision.FLOAT)
     inv_sqrt_mass = 1.0 / np.sqrt(masses.astype(np.float64))
-    velocities *= (inv_sqrt_mass[:, np.newaxis]).astype(env.NUMPY_FLOAT)
+    velocities *= (inv_sqrt_mass[:, np.newaxis]).astype(precision.FLOAT)
     kinetic_energy_per_dof = (
         0.5
         * np.sum(
@@ -26,5 +26,5 @@ def generate_velocity_from_temperature(temperature, masses, seed=None):
     com_velocity = np.sum(
         masses.astype(np.float64)[:, np.newaxis] * velocities.astype(np.float64), axis=0
     ) / np.sum(masses.astype(np.float64))
-    velocities -= com_velocity.astype(env.NUMPY_FLOAT)
+    velocities -= com_velocity.astype(precision.FLOAT)
     return velocities

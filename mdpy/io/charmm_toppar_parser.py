@@ -9,12 +9,12 @@ copyright : (C)Copyright 2021-present, mdpy organization
 
 import itertools
 import numpy as np
-from mdpy import env
+from mdpy import precision
 from mdpy.error import FileFormatError
 from mdpy.unit import *
 from mdpy.core.parameter_table import ParameterTable
 
-RMIN_TO_SIGMA_FACTOR = env.NUMPY_FLOAT(2 ** (-1 / 6))
+RMIN_TO_SIGMA_FACTOR = precision.FLOAT(2 ** (-1 / 6))
 USED_BLOCK_LABELS = ["ATOMS", "BONDS", "ANGLES", "DIHEDRALS", "IMPROPER", "NONBONDED", "NBFIX"]
 UNUSED_BLOCK_LABELS = ["CMAP", "HBOND", "END"]
 BLOCK_LABELS = USED_BLOCK_LABELS + UNUSED_BLOCK_LABELS
@@ -391,10 +391,10 @@ class CharmmTopparParser:
         for the given sorted list of type names.
         """
         num_types = len(unique_type_names)
-        sigma = np.zeros(num_types, dtype=env.NUMPY_FLOAT)
-        epsilon = np.zeros(num_types, dtype=env.NUMPY_FLOAT)
-        sigma_14 = np.zeros(num_types, dtype=env.NUMPY_FLOAT)
-        epsilon_14 = np.zeros(num_types, dtype=env.NUMPY_FLOAT)
+        sigma = np.zeros(num_types, dtype=precision.FLOAT)
+        epsilon = np.zeros(num_types, dtype=precision.FLOAT)
+        sigma_14 = np.zeros(num_types, dtype=precision.FLOAT)
+        epsilon_14 = np.zeros(num_types, dtype=precision.FLOAT)
         nonbonded = self._parameters.get("nonbonded", {})
         for type_index, type_name in enumerate(unique_type_names):
             entry = nonbonded.get(type_name)
@@ -435,10 +435,10 @@ def create_parameter_table(topology, toppar_parser, *, type_names):
     type_name_to_index = {name: idx for idx, name in enumerate(type_names_sorted)}
     num_types = len(type_names_sorted)
 
-    sigma_array = np.zeros(num_types, dtype=env.NUMPY_FLOAT)
-    epsilon_array = np.zeros(num_types, dtype=env.NUMPY_FLOAT)
-    sigma_14_array = np.zeros(num_types, dtype=env.NUMPY_FLOAT)
-    epsilon_14_array = np.zeros(num_types, dtype=env.NUMPY_FLOAT)
+    sigma_array = np.zeros(num_types, dtype=precision.FLOAT)
+    epsilon_array = np.zeros(num_types, dtype=precision.FLOAT)
+    sigma_14_array = np.zeros(num_types, dtype=precision.FLOAT)
+    epsilon_14_array = np.zeros(num_types, dtype=precision.FLOAT)
 
     nonbonded = parameters.get("nonbonded", {})
     for type_name, type_index in type_name_to_index.items():
@@ -474,16 +474,16 @@ def create_parameter_table(topology, toppar_parser, *, type_names):
         sqrt_eps = np.sqrt(np.maximum(epsilon_arr, 0.0))
         sigma_ij = sigma_half[:, None] + sigma_half[None, :]
         epsilon_ij = sqrt_eps[:, None] * sqrt_eps[None, :]
-        return sigma_ij.ravel().astype(env.NUMPY_FLOAT), epsilon_ij.ravel().astype(env.NUMPY_FLOAT)
+        return sigma_ij.ravel().astype(precision.FLOAT), epsilon_ij.ravel().astype(precision.FLOAT)
 
     sigma_ij, epsilon_ij = _build_pair_matrix(sigma_array, epsilon_array, num_types)
     sigma_ij_14, epsilon_ij_14 = _build_pair_matrix(sigma_14_array, epsilon_14_array, num_types)
 
     n_pair = num_types * num_types
-    lj_pair = np.empty(n_pair * 2, dtype=env.NUMPY_FLOAT)
+    lj_pair = np.empty(n_pair * 2, dtype=precision.FLOAT)
     lj_pair[0::2] = sigma_ij
     lj_pair[1::2] = epsilon_ij
-    lj_pair_14 = np.empty(n_pair * 2, dtype=env.NUMPY_FLOAT)
+    lj_pair_14 = np.empty(n_pair * 2, dtype=precision.FLOAT)
     lj_pair_14[0::2] = sigma_ij_14
     lj_pair_14[1::2] = epsilon_ij_14
 
@@ -532,7 +532,7 @@ def create_parameter_table(topology, toppar_parser, *, type_names):
 
 def _resolve_bonds(topology, type_names, bonded_parameters):
     num_bonds = topology.num_bonds
-    result = np.zeros((num_bonds, 2), dtype=env.NUMPY_FLOAT)
+    result = np.zeros((num_bonds, 2), dtype=precision.FLOAT)
     for idx in range(num_bonds):
         i, j = topology.bond_indices[idx]
         type_name_i = type_names[i]
@@ -549,7 +549,7 @@ def _resolve_bonds(topology, type_names, bonded_parameters):
 
 def _resolve_angles(topology, type_names, angle_parameters):
     num_angles = topology.num_angles
-    result = np.zeros((num_angles, 4), dtype=env.NUMPY_FLOAT)
+    result = np.zeros((num_angles, 4), dtype=precision.FLOAT)
     for idx in range(num_angles):
         i, j, k = topology.angle_indices[idx]
         type_name_i = type_names[i]
@@ -565,7 +565,7 @@ def _resolve_angles(topology, type_names, angle_parameters):
 
 def _resolve_dihedrals(topology, type_names, dihedral_parameters):
     num_dihedrals = topology.num_dihedrals
-    result = np.zeros((num_dihedrals, 3), dtype=env.NUMPY_FLOAT)
+    result = np.zeros((num_dihedrals, 3), dtype=precision.FLOAT)
     for idx in range(num_dihedrals):
         i, j, k, l = topology.dihedral_indices[idx]
         type_name_i = type_names[i]
@@ -594,7 +594,7 @@ def _resolve_dihedrals(topology, type_names, dihedral_parameters):
 
 def _resolve_impropers(topology, type_names, improper_parameters):
     num_impropers = topology.num_impropers
-    result = np.zeros((num_impropers, 2), dtype=env.NUMPY_FLOAT)
+    result = np.zeros((num_impropers, 2), dtype=precision.FLOAT)
     for idx in range(num_impropers):
         i, j, k, l = topology.improper_indices[idx]
         type_name_i = type_names[i]

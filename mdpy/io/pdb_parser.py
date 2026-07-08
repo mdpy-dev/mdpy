@@ -8,7 +8,7 @@ copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
 import numpy as np
-from mdpy import env, SPATIAL_DIM
+from mdpy import precision, SPATIAL_DIM
 from mdpy.error import FileFormatError, ArrayDimensionError, ParserPoorlyDefinedError
 
 
@@ -72,27 +72,27 @@ class PDBParser:
 
             elif record == 'ENDMDL':
                 if current_frame:
-                    frames.append(np.array(current_frame, dtype=env.NUMPY_FLOAT))
+                    frames.append(np.array(current_frame, dtype=precision.FLOAT))
                     current_frame = []
                     first_atom_section = False
 
             elif record == 'END':
                 if current_frame:
-                    frames.append(np.array(current_frame, dtype=env.NUMPY_FLOAT))
+                    frames.append(np.array(current_frame, dtype=precision.FLOAT))
                     current_frame = []
                     first_atom_section = False
 
         if current_frame:
-            frames.append(np.array(current_frame, dtype=env.NUMPY_FLOAT))
+            frames.append(np.array(current_frame, dtype=precision.FLOAT))
 
         self._num_particles = len(self._particle_ids)
         self._num_frames = len(frames)
 
         if self._is_parse_all:
             if self._num_frames == 1:
-                self._positions = frames[0] if frames else np.zeros((0, SPATIAL_DIM), dtype=env.NUMPY_FLOAT)
+                self._positions = frames[0] if frames else np.zeros((0, SPATIAL_DIM), dtype=precision.FLOAT)
             else:
-                self._positions = np.stack(frames) if frames else np.zeros((0, self._num_particles, SPATIAL_DIM), dtype=env.NUMPY_FLOAT)
+                self._positions = np.stack(frames) if frames else np.zeros((0, self._num_particles, SPATIAL_DIM), dtype=precision.FLOAT)
         else:
             self._positions = None
             self._frames = frames

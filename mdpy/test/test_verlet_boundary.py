@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from mdpy import env
+from mdpy import precision
 from mdpy.core.topology import Topology
 from mdpy.core.state import State
 from mdpy.system import System
@@ -16,16 +16,16 @@ def _make_system(n_atoms, box_size, cutoff=None):
         cutoff = box_size / 2.0
     topology = Topology()
     topology.num_particles = n_atoms
-    pbc_matrix = np.eye(3, dtype=env.NUMPY_FLOAT) * box_size
+    pbc_matrix = np.eye(3, dtype=precision.FLOAT) * box_size
     state = State(n_atoms)
-    state.set_masses(np.full(n_atoms, 12.0, dtype=env.NUMPY_FLOAT))
-    state.set_charges(np.zeros(n_atoms, dtype=env.NUMPY_FLOAT))
-    state.set_type_indices(np.zeros(n_atoms, dtype=env.NUMPY_INT))
+    state.set_masses(np.full(n_atoms, 12.0, dtype=precision.FLOAT))
+    state.set_charges(np.zeros(n_atoms, dtype=precision.FLOAT))
+    state.set_type_indices(np.zeros(n_atoms, dtype=precision.INT))
     system = System(topology, state)
     system.set_pbc(pbc_matrix)
     system._cutoff = cutoff
-    positions = np.zeros((n_atoms, 3), dtype=env.NUMPY_FLOAT)
-    velocities = np.zeros((n_atoms, 3), dtype=env.NUMPY_FLOAT)
+    positions = np.zeros((n_atoms, 3), dtype=precision.FLOAT)
+    velocities = np.zeros((n_atoms, 3), dtype=precision.FLOAT)
     system.set_positions(positions)
     system.set_velocities(velocities)
     system.update_neighbor_list(force_rebuild=True)
@@ -37,7 +37,7 @@ def test_atom_near_box_boundary_stays_bounded():
     system = _make_system(2, box)
 
     positions = np.array(
-        [[9.95, 5.0, 5.0], [5.0, 5.0, 5.0]], dtype=env.NUMPY_FLOAT
+        [[9.95, 5.0, 5.0], [5.0, 5.0, 5.0]], dtype=precision.FLOAT
     )
     system.set_positions(positions)
 
@@ -55,10 +55,10 @@ def test_velocity_near_boundary_correct():
     system = _make_system(2, box)
 
     positions = np.array(
-        [[0.01, 5.0, 5.0], [5.0, 5.0, 5.0]], dtype=env.NUMPY_FLOAT
+        [[0.01, 5.0, 5.0], [5.0, 5.0, 5.0]], dtype=precision.FLOAT
     )
     velocities = np.array(
-        [[0.1, 0.0, 0.0], [0.0, 0.0, 0.0]], dtype=env.NUMPY_FLOAT
+        [[0.1, 0.0, 0.0], [0.0, 0.0, 0.0]], dtype=precision.FLOAT
     )
     system.set_positions(positions)
     system.set_velocities(velocities)
@@ -76,8 +76,8 @@ def test_multi_step_no_explosion():
     box = 50.0
     rng = np.random.RandomState(42)
     n = 32
-    positions = rng.uniform(1.0, 49.0, size=(n, 3)).astype(env.NUMPY_FLOAT)
-    velocities = np.zeros((n, 3), dtype=env.NUMPY_FLOAT)
+    positions = rng.uniform(1.0, 49.0, size=(n, 3)).astype(precision.FLOAT)
+    velocities = np.zeros((n, 3), dtype=precision.FLOAT)
 
     system = _make_system(n, box)
     system.set_positions(positions)

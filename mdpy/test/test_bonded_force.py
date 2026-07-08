@@ -1,13 +1,13 @@
 import numpy as np
 import pytest
 
-from mdpy import env
+from mdpy import precision
 from mdpy.force.bonded_force import BondedForce
 from mdpy.force.bonded_transpiler import bonded_expression
 
 
 def _make_large_pbc():
-    return np.eye(3, dtype=env.NUMPY_FLOAT) * 100.0
+    return np.eye(3, dtype=precision.FLOAT) * 100.0
 
 
 class MockState:
@@ -73,7 +73,7 @@ def test_harmonic_bond_energy():
     positions = np.array([
         [0.0, 0.0, 0.0],
         [2.0, 0.0, 0.0],
-    ], dtype=env.NUMPY_FLOAT)
+    ], dtype=precision.FLOAT)
     pbc_matrix = _make_large_pbc()
 
     context = MockState(positions, pbc_matrix)
@@ -93,7 +93,7 @@ def test_harmonic_bond_forces():
     positions = np.array([
         [0.0, 0.0, 0.0],
         [2.0, 0.0, 0.0],
-    ], dtype=env.NUMPY_FLOAT)
+    ], dtype=precision.FLOAT)
     pbc_matrix = _make_large_pbc()
 
     context = MockState(positions, pbc_matrix)
@@ -116,7 +116,7 @@ def test_harmonic_bond_newtons_third_law():
     positions = np.array([
         [1.0, 2.0, 3.0],
         [4.0, 5.0, 6.0],
-    ], dtype=env.NUMPY_FLOAT)
+    ], dtype=precision.FLOAT)
     pbc_matrix = _make_large_pbc()
 
     context = MockState(positions, pbc_matrix)
@@ -139,7 +139,7 @@ def test_multiple_bonds():
         [0.0, 0.0, 0.0],
         [2.0, 0.0, 0.0],
         [4.0, 0.0, 0.0],
-    ], dtype=env.NUMPY_FLOAT)
+    ], dtype=precision.FLOAT)
     pbc_matrix = _make_large_pbc()
 
     context = MockState(positions, pbc_matrix)
@@ -165,7 +165,7 @@ def test_harmonic_angle_energy():
         [0.0, 1.5, 0.0],
         [0.0, 0.0, 0.0],
         [1.5 * np.cos(np.pi / 6), 1.5 * np.sin(np.pi / 6), 0.0],
-    ], dtype=env.NUMPY_FLOAT)
+    ], dtype=precision.FLOAT)
     pbc_matrix = _make_large_pbc()
 
     context = MockState(positions, pbc_matrix)
@@ -186,7 +186,7 @@ def test_harmonic_angle_forces_balanced():
         [0.0, 1.5, 0.0],
         [0.0, 0.0, 0.0],
         [1.5 * np.cos(np.pi / 6), 1.5 * np.sin(np.pi / 6), 0.0],
-    ], dtype=env.NUMPY_FLOAT)
+    ], dtype=precision.FLOAT)
     pbc_matrix = _make_large_pbc()
 
     context = MockState(positions, pbc_matrix)
@@ -210,7 +210,7 @@ def test_periodic_dihedral_energy():
         [0.0, 0.0, 0.0],
         [1.5, 0.0, 0.0],
         [1.5, 0.0, 1.5],
-    ], dtype=env.NUMPY_FLOAT)
+    ], dtype=precision.FLOAT)
     pbc_matrix = _make_large_pbc()
 
     context = MockState(positions, pbc_matrix)
@@ -232,7 +232,7 @@ def test_periodic_dihedral_forces_balanced():
         [0.0, 0.0, 0.0],
         [1.5, 0.0, 0.0],
         [1.5, 0.0, 1.5],
-    ], dtype=env.NUMPY_FLOAT)
+    ], dtype=precision.FLOAT)
     pbc_matrix = _make_large_pbc()
 
     context = MockState(positions, pbc_matrix)
@@ -255,7 +255,7 @@ def test_improper_forces_balanced():
         [0.0, 0.0, 0.0],
         [1.5, 0.0, 0.0],
         [1.5, 0.0, 1.5],
-    ], dtype=env.NUMPY_FLOAT)
+    ], dtype=precision.FLOAT)
     pbc_matrix = _make_large_pbc()
 
     context = MockState(positions, pbc_matrix)
@@ -276,7 +276,7 @@ def test_bond_energy_at_equilibrium():
     positions = np.array([
         [0.0, 0.0, 0.0],
         [1.5, 0.0, 0.0],
-    ], dtype=env.NUMPY_FLOAT)
+    ], dtype=precision.FLOAT)
     pbc_matrix = _make_large_pbc()
 
     context = MockState(positions, pbc_matrix)
@@ -292,7 +292,7 @@ def test_empty_terms():
     positions = np.array([
         [0.0, 0.0, 0.0],
         [2.0, 0.0, 0.0],
-    ], dtype=env.NUMPY_FLOAT)
+    ], dtype=precision.FLOAT)
     pbc_matrix = _make_large_pbc()
 
     context = MockState(positions, pbc_matrix)
@@ -314,7 +314,7 @@ def test_incremental_add_and_sync():
         [0.0, 0.0, 0.0],
         [2.0, 0.0, 0.0],
         [3.5, 0.0, 0.0],
-    ], dtype=env.NUMPY_FLOAT)
+    ], dtype=precision.FLOAT)
     pbc_matrix = _make_large_pbc()
 
     context = MockState(positions, pbc_matrix)
@@ -361,7 +361,7 @@ def test_per_particle_energy():
     positions = np.array([
         [0.0, 0.0, 0.0],
         [3.0, 0.0, 0.0],
-    ], dtype=env.NUMPY_FLOAT)
+    ], dtype=precision.FLOAT)
     pbc_matrix = _make_large_pbc()
 
     context = MockState(positions, pbc_matrix)
@@ -383,7 +383,7 @@ def test_per_particle_forces_balanced():
     positions = np.array([
         [0.0, 0.0, 0.0],
         [3.0, 0.0, 0.0],
-    ], dtype=env.NUMPY_FLOAT)
+    ], dtype=precision.FLOAT)
     pbc_matrix = _make_large_pbc()
 
     context = MockState(positions, pbc_matrix)
@@ -408,7 +408,7 @@ def test_per_particle_multiple_pairs():
         [2.0, 0.0, 0.0],
         [5.0, 0.0, 0.0],
         [7.0, 0.0, 0.0],
-    ], dtype=env.NUMPY_FLOAT)
+    ], dtype=precision.FLOAT)
     pbc_matrix = _make_large_pbc()
 
     context = MockState(positions, pbc_matrix)
@@ -430,7 +430,7 @@ def test_per_particle_no_per_particle_props():
     positions = np.array([
         [0.0, 0.0, 0.0],
         [2.0, 0.0, 0.0],
-    ], dtype=env.NUMPY_FLOAT)
+    ], dtype=precision.FLOAT)
     pbc_matrix = _make_large_pbc()
 
     context = MockState(positions, pbc_matrix)
@@ -470,7 +470,7 @@ def test_nb14_energy_analytical():
     positions = np.array([
         [0.0, 0.0, 0.0],
         [r, 0.0, 0.0],
-    ], dtype=env.NUMPY_FLOAT)
+    ], dtype=precision.FLOAT)
     pbc_matrix = _make_large_pbc()
 
     context = MockState(positions, pbc_matrix)
@@ -491,7 +491,7 @@ def test_nb14_forces_balanced():
     positions = np.array([
         [1.0, 2.0, 3.0],
         [4.0, 5.0, 6.0],
-    ], dtype=env.NUMPY_FLOAT)
+    ], dtype=precision.FLOAT)
     pbc_matrix = _make_large_pbc()
 
     context = MockState(positions, pbc_matrix)
@@ -519,7 +519,7 @@ def test_nb14_multiple_pairs():
         [2.5, 0.0, 0.0],
         [5.0, 0.0, 0.0],
         [7.5, 0.0, 0.0],
-    ], dtype=env.NUMPY_FLOAT)
+    ], dtype=precision.FLOAT)
     pbc_matrix = _make_large_pbc()
 
     context = MockState(positions, pbc_matrix)
@@ -546,7 +546,7 @@ def test_nb14_force_direction():
     positions = np.array([
         [0.0, 0.0, 0.0],
         [5.0, 0.0, 0.0],
-    ], dtype=env.NUMPY_FLOAT)
+    ], dtype=precision.FLOAT)
     pbc_matrix = _make_large_pbc()
 
     context = MockState(positions, pbc_matrix)

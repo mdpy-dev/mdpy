@@ -5,7 +5,7 @@ import math
 
 import numpy as np
 import cupy as cp
-from mdpy import env
+from mdpy import precision
 from mdpy.core.hilbert import HILBERT_ENCODE_KERNEL
 
 BLOCK_SIZE = 32
@@ -786,12 +786,12 @@ class BlockList:
         self._alloc_empty_buffers()
 
         # Persistent internal scratch (grown lazily by build_block_pairs).
-        self._d_block_pair_buf = cp.empty(0, dtype=env.NUMPY_INT)
-        self._d_interacting_buf = cp.empty(0, dtype=env.NUMPY_INT)
-        self._d_block_pair_shift_x_buf = cp.empty(0, dtype=env.NUMPY_FLOAT)
-        self._d_block_pair_shift_y_buf = cp.empty(0, dtype=env.NUMPY_FLOAT)
-        self._d_block_pair_shift_z_buf = cp.empty(0, dtype=env.NUMPY_FLOAT)
-        self.d_num_block_pairs = cp.zeros(1, dtype=env.NUMPY_INT)
+        self._d_block_pair_buf = cp.empty(0, dtype=precision.INT)
+        self._d_interacting_buf = cp.empty(0, dtype=precision.INT)
+        self._d_block_pair_shift_x_buf = cp.empty(0, dtype=precision.FLOAT)
+        self._d_block_pair_shift_y_buf = cp.empty(0, dtype=precision.FLOAT)
+        self._d_block_pair_shift_z_buf = cp.empty(0, dtype=precision.FLOAT)
+        self.d_num_block_pairs = cp.zeros(1, dtype=precision.INT)
 
         self._kernels = None
 
@@ -799,7 +799,7 @@ class BlockList:
 
         self._exclusion_masks_np = None
 
-        self.d_rebuild_flag = cp.zeros(1, dtype=env.NUMPY_INT)
+        self.d_rebuild_flag = cp.zeros(1, dtype=precision.INT)
 
         self._pinned_int_buf = cp.cuda.alloc_pinned_memory(4)
         self._pinned_int_view = (ctypes.c_int32 * 1).from_address(
@@ -972,9 +972,9 @@ class BlockList:
         hilbert_levels = self._hilbert_levels
         composite_buckets = self.num_cells_total * (1 << (3 * hilbert_levels))
         sort_keys = self._acquire_scratch_buffer("sort_keys", N, np.uint64)
-        cell_indices = self._acquire_scratch_buffer("cell_indices", N, env.NUMPY_INT)
-        d_cell_counts = self._acquire_scratch_buffer("cell_counts", self.num_cells_total, env.NUMPY_INT, fill=0)
-        d_composite_counts = self._acquire_scratch_buffer("composite_counts", composite_buckets, env.NUMPY_INT, fill=0)
+        cell_indices = self._acquire_scratch_buffer("cell_indices", N, precision.INT)
+        d_cell_counts = self._acquire_scratch_buffer("cell_counts", self.num_cells_total, precision.INT, fill=0)
+        d_composite_counts = self._acquire_scratch_buffer("composite_counts", composite_buckets, precision.INT, fill=0)
         nm = (N + threads_per_block - 1) // threads_per_block
         self._kernels["cell_assign"](
             (nm,), (threads_per_block,),
@@ -995,15 +995,15 @@ class BlockList:
         # counting_scatter needs cell_offset and cell_offset_padded. prefix_sum
         # consumes only d_cell_counts (not the sorted data), so it is safe to
         # run immediately after cell_assign.
-        cell_offset = self._acquire_scratch_buffer("cell_offset", self.num_cells_total + 1, env.NUMPY_INT)
-        cell_block_offset = self._acquire_scratch_buffer("cell_block_offset", self.num_cells_total + 1, env.NUMPY_INT)
-        cell_block_count = self._acquire_scratch_buffer("cell_block_count", self.num_cells_total, env.NUMPY_INT)
-        cell_offset_padded = self._acquire_scratch_buffer("cell_offset_padded", self.num_cells_total + 1, env.NUMPY_INT)
-        d_num_blocks = self._acquire_scratch_buffer("num_blocks", 1, env.NUMPY_INT)
-        d_total_padded = self._acquire_scratch_buffer("total_padded", 1, env.NUMPY_INT)
+        cell_offset = self._acquire_scratch_buffer("cell_offset", self.num_cells_total + 1, precision.INT)
+        cell_block_offset = self._acquire_scratch_buffer("cell_block_offset", self.num_cells_total + 1, precision.INT)
+        cell_block_count = self._acquire_scratch_buffer("cell_block_count", self.num_cells_total, precision.INT)
+        cell_offset_padded = self._acquire_scratch_buffer("cell_offset_padded", self.num_cells_total + 1, precision.INT)
+        d_num_blocks = self._acquire_scratch_buffer("num_blocks", 1, precision.INT)
+        d_total_padded = self._acquire_scratch_buffer("total_padded", 1, precision.INT)
         # num_blocks is unknown until the prefix sum writes it; num_blocks <= N
         # (each block holds >=1 atom), so N is a safe upper bound. Sliced below.
-        block_to_cell = self._acquire_scratch_buffer("block_to_cell", N, env.NUMPY_INT)
+        block_to_cell = self._acquire_scratch_buffer("block_to_cell", N, precision.INT)
         self._kernels["cell_prefix_sum"](
             (1,), (SCAN_BLOCK,),
             (
@@ -1021,7 +1021,7 @@ class BlockList:
         # counting_scatter scatters atoms in Hilbert order within each cell.
         # The composite buckets for a cell are contiguous (cell c occupies keys
         # [c*2^(3L), (c+1)*2^(3L))), so composite_offset aligns with cell_offset.
-        composite_offset = self._acquire_scratch_buffer("composite_offset", composite_buckets + 1, env.NUMPY_INT)
+        composite_offset = self._acquire_scratch_buffer("composite_offset", composite_buckets + 1, precision.INT)
         self._kernels["composite_prefix_sum"](
             (1,), (SCAN_BLOCK,),
             (d_composite_counts, np.int32(composite_buckets), composite_offset),
@@ -1034,16 +1034,16 @@ class BlockList:
         # preserves the intra-cell
         # Hilbert ordering, keeping blocks Hilbert-compact -> tight AABBs.
         # block_atoms must be pre-filled with -1 (padding) before launch.
-        block_atoms = self._acquire_scratch_buffer("block_atoms", self.max_total_padded, env.NUMPY_INT, fill=-1)
-        composite_cursor = self._acquire_scratch_buffer("composite_cursor", composite_buckets, env.NUMPY_INT, fill=0)
-        raw_order = self._acquire_scratch_buffer("raw_order", N, env.NUMPY_INT)
-        pdb_to_sorted = self._acquire_scratch_buffer("pdb_to_sorted", N, env.NUMPY_INT)
+        block_atoms = self._acquire_scratch_buffer("block_atoms", self.max_total_padded, precision.INT, fill=-1)
+        composite_cursor = self._acquire_scratch_buffer("composite_cursor", composite_buckets, precision.INT, fill=0)
+        raw_order = self._acquire_scratch_buffer("raw_order", N, precision.INT)
+        pdb_to_sorted = self._acquire_scratch_buffer("pdb_to_sorted", N, precision.INT)
         # sorted_to_pdb is NOT pooled: line 808 captures prev_sorted_to_pdb =
         # self.d_sorted_to_pdb, and counting_scatter below overwrites the
         # buffer. If pooled, prev_sorted_to_pdb would alias the same buffer
         # and be corrupted before line 971 uses it.
-        sorted_to_pdb = cp.empty(N, dtype=env.NUMPY_INT)
-        cell_indices_sorted = self._acquire_scratch_buffer("cell_indices_sorted", N, env.NUMPY_INT)
+        sorted_to_pdb = cp.empty(N, dtype=precision.INT)
+        cell_indices_sorted = self._acquire_scratch_buffer("cell_indices_sorted", N, precision.INT)
         self._kernels["counting_scatter"](
             (nm,), (threads_per_block,),
             (
@@ -1063,17 +1063,17 @@ class BlockList:
         self.d_block_to_cell = block_to_cell[:self.max_blocks]
 
         nb = (self.max_blocks + threads_per_block - 1) // threads_per_block
-        self.d_block_center_x = self._acquire_scratch_buffer("block_center_x", self.max_blocks, env.NUMPY_FLOAT)
-        self.d_block_center_y = self._acquire_scratch_buffer("block_center_y", self.max_blocks, env.NUMPY_FLOAT)
-        self.d_block_center_z = self._acquire_scratch_buffer("block_center_z", self.max_blocks, env.NUMPY_FLOAT)
-        self.d_block_size_x = self._acquire_scratch_buffer("block_size_x", self.max_blocks, env.NUMPY_FLOAT)
-        self.d_block_size_y = self._acquire_scratch_buffer("block_size_y", self.max_blocks, env.NUMPY_FLOAT)
-        self.d_block_size_z = self._acquire_scratch_buffer("block_size_z", self.max_blocks, env.NUMPY_FLOAT)
+        self.d_block_center_x = self._acquire_scratch_buffer("block_center_x", self.max_blocks, precision.FLOAT)
+        self.d_block_center_y = self._acquire_scratch_buffer("block_center_y", self.max_blocks, precision.FLOAT)
+        self.d_block_center_z = self._acquire_scratch_buffer("block_center_z", self.max_blocks, precision.FLOAT)
+        self.d_block_size_x = self._acquire_scratch_buffer("block_size_x", self.max_blocks, precision.FLOAT)
+        self.d_block_size_y = self._acquire_scratch_buffer("block_size_y", self.max_blocks, precision.FLOAT)
+        self.d_block_size_z = self._acquire_scratch_buffer("block_size_z", self.max_blocks, precision.FLOAT)
         # K4: compute block AABB bounds and atom_to_block/slot reverse map in a
         # single per-block pass. Every real atom is in exactly one block at one
         # slot, so all N entries are written here -> no -1 pre-fill needed.
-        self.d_atom_to_block = self._acquire_scratch_buffer("atom_to_block", N, env.NUMPY_INT)
-        self.d_atom_to_slot = self._acquire_scratch_buffer("atom_to_slot", N, env.NUMPY_INT)
+        self.d_atom_to_block = self._acquire_scratch_buffer("atom_to_block", N, precision.INT)
+        self.d_atom_to_slot = self._acquire_scratch_buffer("atom_to_slot", N, precision.INT)
         self._kernels["block_meta"](
             (nb,), (threads_per_block,),
             (
@@ -1111,17 +1111,17 @@ class BlockList:
 
         max_block_pairs = max(num_blocks * 100, 10000)
         if self._d_block_pair_buf.size < max_block_pairs:
-            self._d_block_pair_buf = cp.empty(max_block_pairs, dtype=env.NUMPY_INT)
-            self._d_interacting_buf = cp.empty(max_block_pairs * BLOCK_SIZE, dtype=env.NUMPY_INT)
-            self._d_block_pair_shift_x_buf = cp.empty(max_block_pairs, dtype=env.NUMPY_FLOAT)
-            self._d_block_pair_shift_y_buf = cp.empty(max_block_pairs, dtype=env.NUMPY_FLOAT)
-            self._d_block_pair_shift_z_buf = cp.empty(max_block_pairs, dtype=env.NUMPY_FLOAT)
+            self._d_block_pair_buf = cp.empty(max_block_pairs, dtype=precision.INT)
+            self._d_interacting_buf = cp.empty(max_block_pairs * BLOCK_SIZE, dtype=precision.INT)
+            self._d_block_pair_shift_x_buf = cp.empty(max_block_pairs, dtype=precision.FLOAT)
+            self._d_block_pair_shift_y_buf = cp.empty(max_block_pairs, dtype=precision.FLOAT)
+            self._d_block_pair_shift_z_buf = cp.empty(max_block_pairs, dtype=precision.FLOAT)
             self._max_block_pairs = max_block_pairs
         self.d_num_block_pairs[0] = 0
 
         threads_per_block = 256
         grid_blocks = max((self.max_blocks * cell_subsets + 7) // 8, 1)
-        d_num_blocks = self._scratch_pool.get(("num_blocks", env.NUMPY_INT))
+        d_num_blocks = self._scratch_pool.get(("num_blocks", precision.INT))
         self._kernels["find_interacting"](
             (grid_blocks,), (threads_per_block,),
             (
@@ -1228,9 +1228,9 @@ class BlockList:
         pos_y = state.d_positions_y
         pos_z = state.d_positions_z
         N = self.num_particles
-        snap_x = self._acquire_scratch_buffer("snap_x", N, env.NUMPY_FLOAT)
-        snap_y = self._acquire_scratch_buffer("snap_y", N, env.NUMPY_FLOAT)
-        snap_z = self._acquire_scratch_buffer("snap_z", N, env.NUMPY_FLOAT)
+        snap_x = self._acquire_scratch_buffer("snap_x", N, precision.FLOAT)
+        snap_y = self._acquire_scratch_buffer("snap_y", N, precision.FLOAT)
+        snap_z = self._acquire_scratch_buffer("snap_z", N, precision.FLOAT)
         threads_per_block = 256
         grid = ((N + threads_per_block - 1) // threads_per_block,)
         self._kernels["capture_snapshot"](
@@ -1287,7 +1287,7 @@ class BlockList:
         self._ensure_kernels()
         total_slots = self.max_blocks * BLOCK_SIZE
         if self._d_sorted_posq is None or self._d_sorted_posq.size != total_slots * 4:
-            self._d_sorted_posq = cp.empty(total_slots * 4, dtype=env.NUMPY_FLOAT)
+            self._d_sorted_posq = cp.empty(total_slots * 4, dtype=precision.FLOAT)
         threads_per_block = 256
         grid = ((total_slots + threads_per_block - 1) // threads_per_block,)
         self._kernels["pack_sorted_data"](
@@ -1353,30 +1353,30 @@ class BlockList:
         """Allocate (or re-zero, for _init_empty) all per-block / per-pair /
         per-particle result buffers to empty. Single source of truth shared by
         __init__ and _init_empty so the two paths cannot drift."""
-        self.d_block_atoms = cp.empty(0, dtype=env.NUMPY_INT)
-        self.d_block_center_x = cp.empty(0, dtype=env.NUMPY_FLOAT)
-        self.d_block_center_y = cp.empty(0, dtype=env.NUMPY_FLOAT)
-        self.d_block_center_z = cp.empty(0, dtype=env.NUMPY_FLOAT)
-        self.d_block_size_x = cp.empty(0, dtype=env.NUMPY_FLOAT)
-        self.d_block_size_y = cp.empty(0, dtype=env.NUMPY_FLOAT)
-        self.d_block_size_z = cp.empty(0, dtype=env.NUMPY_FLOAT)
-        self.d_atom_to_block = cp.empty(0, dtype=env.NUMPY_INT)
-        self.d_atom_to_slot = cp.empty(0, dtype=env.NUMPY_INT)
-        self.d_block_pairs = cp.empty(0, dtype=env.NUMPY_INT)
-        self.d_interacting_atoms = cp.empty(0, dtype=env.NUMPY_INT)
-        self.d_cell_block_offset = cp.empty(0, dtype=env.NUMPY_INT)
-        self.d_cell_block_count = cp.empty(0, dtype=env.NUMPY_INT)
-        self.d_block_to_cell = cp.empty(0, dtype=env.NUMPY_INT)
-        self.d_raw_order = cp.empty(0, dtype=env.NUMPY_INT)
-        self.d_pdb_to_sorted = cp.empty(0, dtype=env.NUMPY_INT)
-        self.d_sorted_to_pdb = cp.empty(0, dtype=env.NUMPY_INT)
+        self.d_block_atoms = cp.empty(0, dtype=precision.INT)
+        self.d_block_center_x = cp.empty(0, dtype=precision.FLOAT)
+        self.d_block_center_y = cp.empty(0, dtype=precision.FLOAT)
+        self.d_block_center_z = cp.empty(0, dtype=precision.FLOAT)
+        self.d_block_size_x = cp.empty(0, dtype=precision.FLOAT)
+        self.d_block_size_y = cp.empty(0, dtype=precision.FLOAT)
+        self.d_block_size_z = cp.empty(0, dtype=precision.FLOAT)
+        self.d_atom_to_block = cp.empty(0, dtype=precision.INT)
+        self.d_atom_to_slot = cp.empty(0, dtype=precision.INT)
+        self.d_block_pairs = cp.empty(0, dtype=precision.INT)
+        self.d_interacting_atoms = cp.empty(0, dtype=precision.INT)
+        self.d_cell_block_offset = cp.empty(0, dtype=precision.INT)
+        self.d_cell_block_count = cp.empty(0, dtype=precision.INT)
+        self.d_block_to_cell = cp.empty(0, dtype=precision.INT)
+        self.d_raw_order = cp.empty(0, dtype=precision.INT)
+        self.d_pdb_to_sorted = cp.empty(0, dtype=precision.INT)
+        self.d_sorted_to_pdb = cp.empty(0, dtype=precision.INT)
         self.d_exclusion_masks = cp.empty(0, dtype=np.uint32)
-        self.d_block_pair_shift_x = cp.empty(0, dtype=env.NUMPY_FLOAT)
-        self.d_block_pair_shift_y = cp.empty(0, dtype=env.NUMPY_FLOAT)
-        self.d_block_pair_shift_z = cp.empty(0, dtype=env.NUMPY_FLOAT)
-        self.d_positions_at_rebuild_x = cp.empty(0, dtype=env.NUMPY_FLOAT)
-        self.d_positions_at_rebuild_y = cp.empty(0, dtype=env.NUMPY_FLOAT)
-        self.d_positions_at_rebuild_z = cp.empty(0, dtype=env.NUMPY_FLOAT)
+        self.d_block_pair_shift_x = cp.empty(0, dtype=precision.FLOAT)
+        self.d_block_pair_shift_y = cp.empty(0, dtype=precision.FLOAT)
+        self.d_block_pair_shift_z = cp.empty(0, dtype=precision.FLOAT)
+        self.d_positions_at_rebuild_x = cp.empty(0, dtype=precision.FLOAT)
+        self.d_positions_at_rebuild_y = cp.empty(0, dtype=precision.FLOAT)
+        self.d_positions_at_rebuild_z = cp.empty(0, dtype=precision.FLOAT)
 
     def _init_empty(self):
         self.num_particles = 0

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from mdpy import env
+from mdpy import precision
 from mdpy.force.bonded_force import BondedForce
 from mdpy.force.nonbonded_force import NonbondedForce
 
@@ -180,8 +180,8 @@ def create_charmm_forces(topology, parameter_table, pbc_matrix, cutoff=12.0,
 
     nb = NonbondedForce(lennard_jones + screened_coulomb, cutoff)
     lj_pair = parameter_table.type_pair_parameters['lj_pair']
-    nb.set_pair_parameter('sigma', lj_pair[0::2].astype(env.NUMPY_FLOAT))
-    nb.set_pair_parameter('epsilon', lj_pair[1::2].astype(env.NUMPY_FLOAT))
+    nb.set_pair_parameter('sigma', lj_pair[0::2].astype(precision.FLOAT))
+    nb.set_pair_parameter('epsilon', lj_pair[1::2].astype(precision.FLOAT))
     nb.name = 'nonbonded'
     nb.set_scalar('alpha', pme.alpha)
 

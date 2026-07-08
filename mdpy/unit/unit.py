@@ -10,7 +10,7 @@ copyright : (C)Copyright 2021-present, mdpy organization
 import numpy as np
 from . import BaseDimension, UNIT_PRECISION
 from .base_dimension import format_dimension
-from .. import env
+from .. import precision
 
 class Unit:
     def __init__(self, base_dimension:BaseDimension, relative_value) -> None:
@@ -23,7 +23,7 @@ class Unit:
             the relative value of ``self`` to the basic unit of ``base_dimension``
         '''        
         self._base_dimension = base_dimension
-        self._relative_value = env.UNIT_FLOAT(relative_value) # The relative value to the normal unit like angstrom in Length 
+        self._relative_value = precision.UNIT_FLOAT(relative_value) # The relative value to the normal unit like angstrom in Length 
 
     def is_dimensionless(self):
         '''

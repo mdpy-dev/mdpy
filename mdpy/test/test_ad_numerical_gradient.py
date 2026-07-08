@@ -9,7 +9,7 @@ import numpy as np
 import cupy as cp
 import pytest
 
-from mdpy import env
+from mdpy import precision
 from mdpy.force.bonded_force import BondedForce
 from mdpy.force.bonded_transpiler import bonded_expression
 from mdpy.force.markers import param, scalar as scalar_marker
@@ -45,7 +45,7 @@ class MockState:
 
 
 def _large_pbc():
-    return np.eye(3, dtype=env.NUMPY_FLOAT) * 100.0
+    return np.eye(3, dtype=precision.FLOAT) * 100.0
 
 
 @bonded_expression(body=2)

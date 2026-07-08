@@ -7,15 +7,6 @@ author : Zhenyu Wei
 copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
-class EnvironmentVariableError(Exception):
-    '''This error occurs when:
-    - The environment variable is not supported
-
-    Used in:
-    - mdpy.environment
-    '''
-    pass
-
 class PrecisionError(Exception):
     '''This error occurs when:
     - The requested numeric precision is not supported

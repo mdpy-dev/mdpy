@@ -10,7 +10,7 @@ import os
 import numpy as np
 import pytest
 
-from mdpy import env
+from mdpy import precision
 
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
 
@@ -55,8 +55,8 @@ def _setup_system():
         system.add_force_term(f)
     nb = NonbondedForce(lennard_jones + coulomb, cutoff=CUTOFF)
     lj_pair = parameter_table.type_pair_parameters['lj_pair']
-    nb.set_pair_parameter('sigma', lj_pair[0::2].astype(env.NUMPY_FLOAT))
-    nb.set_pair_parameter('epsilon', lj_pair[1::2].astype(env.NUMPY_FLOAT))
+    nb.set_pair_parameter('sigma', lj_pair[0::2].astype(precision.FLOAT))
+    nb.set_pair_parameter('epsilon', lj_pair[1::2].astype(precision.FLOAT))
     system.add_force_term(nb)
 
     raw = pdb.positions.astype(np.float64)
