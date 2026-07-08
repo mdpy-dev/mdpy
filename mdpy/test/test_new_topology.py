@@ -4,13 +4,10 @@ from mdpy.core.topology import Topology, Builder
 
 
 def _get_neighbors(topology, particle_index):
-    offset, neighbors, scale = topology.exclusion_csr
+    offset, neighbors = topology.exclusion_csr
     start = int(offset[particle_index].get())
     end = int(offset[particle_index + 1].get())
-    return (
-        cp.asnumpy(neighbors[start:end]),
-        cp.asnumpy(scale[start:end]),
-    )
+    return cp.asnumpy(neighbors[start:end])
 
 
 def _simple_builder() -> Builder:
@@ -98,17 +95,10 @@ def test_exclusion_map_basic():
     builder.add_dihedral(0, 1, 2, 3, force_constant=0.5, periodicity=3, phase=0.0)
     topology, _ = builder.build()
 
-    neighbors_0, scales_0 = _get_neighbors(topology,0)
+    neighbors_0 = _get_neighbors(topology, 0)
     assert 1 in neighbors_0
     assert 2 in neighbors_0
     assert 3 in neighbors_0
-
-    idx_01 = np.where(neighbors_0 == 1)[0][0]
-    idx_02 = np.where(neighbors_0 == 2)[0][0]
-    idx_03 = np.where(neighbors_0 == 3)[0][0]
-    assert scales_0[idx_01] == 0.0
-    assert scales_0[idx_02] == 0.0
-    assert scales_0[idx_03] == 0.0
 
 
 def test_exclusion_map_symmetry():
@@ -116,8 +106,8 @@ def test_exclusion_map_symmetry():
     builder.add_bond(0, 1, k=305.0, r0=1.5)
     topology, _ = builder.build()
 
-    neighbors_0, _ = _get_neighbors(topology,0)
-    neighbors_1, _ = _get_neighbors(topology,1)
+    neighbors_0 = _get_neighbors(topology, 0)
+    neighbors_1 = _get_neighbors(topology, 1)
     assert 1 in neighbors_0
     assert 0 in neighbors_1
 
@@ -126,7 +116,7 @@ def test_exclusion_map_no_interactions():
     builder = _simple_builder()
     topology, _ = builder.build()
     for particle_index in range(4):
-        neighbors, _ = _get_neighbors(topology,particle_index)
+        neighbors = _get_neighbors(topology, particle_index)
         assert len(neighbors) == 0
 
 

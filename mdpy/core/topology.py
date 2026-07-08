@@ -92,9 +92,9 @@ class Topology:
         """Lazy GPU exclusion state. Built on first read of any exclusion_*
         property, or rebuilt after the bond graph is marked dirty."""
         self._exclusion_dirty = True
-        self._exclusion_pairs = None       # (d_i, d_j, d_scale) unique pairs
-        self._exclusion_csr = None         # (offset, neighbors, scale)
-        self._exclusion_reverse_csr = None  # (rev_offset, rev_neighbors, rev_scale)
+        self._exclusion_pairs = None       # (d_i, d_j) unique pairs
+        self._exclusion_csr = None         # (offset, neighbors)
+        self._exclusion_reverse_csr = None  # (rev_offset, rev_neighbors)
 
     def _derive_exclusion_state(self):
         """Build unique pairs + forward CSR + reverse CSR from the bond graph.
@@ -111,67 +111,56 @@ class Topology:
 
         if total_pairs == 0:
             zi = cp.empty(0, dtype=env.NUMPY_INT)
-            self._exclusion_pairs = (zi, zi, cp.empty(0, dtype=env.NUMPY_FLOAT))
+            self._exclusion_pairs = (zi, zi)
             empty_off = cp.zeros(N + 1, dtype=env.NUMPY_INT)
-            self._exclusion_csr = (empty_off, zi, cp.empty(0, dtype=env.NUMPY_FLOAT))
-            self._exclusion_reverse_csr = (empty_off.copy(), zi, cp.empty(0, dtype=env.NUMPY_FLOAT))
+            self._exclusion_csr = (empty_off, zi)
+            self._exclusion_reverse_csr = (empty_off.copy(), zi)
             self._exclusion_dirty = False
             return
 
         # --- sort + dedup + bidirectional -> unique pairs ---
         d_pair_i = cp.asarray(pair_i_np)
         d_pair_j = cp.asarray(pair_j_np)
-        d_pair_scale = cp.zeros(total_pairs, dtype=env.NUMPY_FLOAT)
 
-        # Encode (i, j) into a single int64 for radix sort: key = i*STRIDE + j.
-        # STRIDE must exceed max(atom_index); 2e9 assumes N < 1e9 atoms (safe
-        # for any real system). int64 is required because max_i * 2e9 ~ 1e14,
-        # far exceeding int32's 2.1e9 ceiling. Sorting groups identical pairs
-        # adjacent (for parallel_dedup) and clusters same-i rows (for CSR build).
         _STRIDE = np.int64(2_000_000_000)
         sort_key = d_pair_i.astype(cp.int64) * _STRIDE + d_pair_j.astype(cp.int64)
         order = cp.argsort(sort_key)
-        d_pair_i, d_pair_j, d_pair_scale = d_pair_i[order], d_pair_j[order], d_pair_scale[order]
+        d_pair_i, d_pair_j = d_pair_i[order], d_pair_j[order]
 
         d_flags = cp.zeros(total_pairs, dtype=env.NUMPY_INT)
         grid_p = ((total_pairs + threads_per_block - 1) // threads_per_block,)
         kernels['parallel_dedup'](grid_p, (threads_per_block,),
-            (d_pair_i, d_pair_j, d_pair_scale, np.int32(total_pairs), d_flags))
+            (d_pair_i, d_pair_j, np.int32(total_pairs), d_flags))
         scatter_idx = cp.cumsum(d_flags) - 1
         uniq_count = int(scatter_idx[total_pairs - 1]) + 1
 
         d_u_i = cp.full(uniq_count, -1, dtype=env.NUMPY_INT)
         d_u_j = cp.full(uniq_count, -1, dtype=env.NUMPY_INT)
-        d_u_scale = cp.zeros(uniq_count, dtype=env.NUMPY_FLOAT)
         d_u_i[scatter_idx] = d_pair_i
         d_u_j[scatter_idx] = d_pair_j
-        d_u_scale[scatter_idx] = d_pair_scale
 
         # bidirectional
         d_bi_i = cp.concatenate([d_u_i, d_u_j])
         d_bi_j = cp.concatenate([d_u_j, d_u_i])
-        d_bi_scale = cp.concatenate([d_u_scale, d_u_scale])
         bi_count = d_bi_i.shape[0]
         bi_key = d_bi_i.astype(cp.int64) * _STRIDE + d_bi_j.astype(cp.int64)
         bi_order = cp.argsort(bi_key)
-        d_bi_i, d_bi_j, d_bi_scale = d_bi_i[bi_order], d_bi_j[bi_order], d_bi_scale[bi_order]
+        d_bi_i, d_bi_j = d_bi_i[bi_order], d_bi_j[bi_order]
 
         d_bi_flags = cp.zeros(bi_count, dtype=env.NUMPY_INT)
         grid_b = ((bi_count + threads_per_block - 1) // threads_per_block,)
         kernels['parallel_dedup'](grid_b, (threads_per_block,),
-            (d_bi_i, d_bi_j, d_bi_scale, np.int32(bi_count), d_bi_flags))
+            (d_bi_i, d_bi_j, np.int32(bi_count), d_bi_flags))
         bi_scatter = cp.cumsum(d_bi_flags) - 1
         bi_uniq = int(bi_scatter[bi_count - 1]) + 1
         d_unique_i = cp.full(bi_uniq, -1, dtype=env.NUMPY_INT)
         d_unique_j = cp.full(bi_uniq, -1, dtype=env.NUMPY_INT)
-        d_unique_scale = cp.zeros(bi_uniq, dtype=env.NUMPY_FLOAT)
         d_unique_i[bi_scatter] = d_bi_i
         d_unique_j[bi_scatter] = d_bi_j
-        d_unique_scale[bi_scatter] = d_bi_scale
 
-        self._exclusion_pairs = (d_unique_i, d_unique_j, d_unique_scale)
+        self._exclusion_pairs = (d_unique_i, d_unique_j)
 
-        # --- forward CSR (fresh allocation: derive runs rarely, no pool needed) ---
+        # --- forward CSR ---
         num_pairs = bi_uniq
         d_count = cp.zeros(N + 1, dtype=env.NUMPY_INT)
         grid_c = ((num_pairs + threads_per_block - 1) // threads_per_block,)
@@ -180,48 +169,46 @@ class Topology:
         d_offset = cp.empty(N + 1, dtype=env.NUMPY_INT)
         cp.cumsum(d_count, dtype=cp.int32, out=d_offset)
         d_neighbors = cp.empty(num_pairs, dtype=env.NUMPY_INT)
-        d_scale_out = cp.empty(num_pairs, dtype=env.NUMPY_FLOAT)
         d_temp = cp.empty(N + 1, dtype=env.NUMPY_INT)
         d_temp[:] = d_offset
         kernels['scatter_pairs'](grid_c, (threads_per_block,),
-            (d_unique_i, d_unique_j, d_unique_scale, d_offset, np.int32(num_pairs),
-             d_neighbors, d_scale_out, d_temp))
-        self._exclusion_csr = (d_offset, d_neighbors, d_scale_out)
+            (d_unique_i, d_unique_j, d_offset, np.int32(num_pairs),
+             d_neighbors, d_temp))
+        self._exclusion_csr = (d_offset, d_neighbors)
 
         # --- reverse CSR ---
         n1 = (N + threads_per_block - 1) // threads_per_block
         d_rev_offset = cp.zeros(N + 1, dtype=env.NUMPY_INT)
         kernels['rev_count']((n1,), (threads_per_block,),
             (d_offset, d_neighbors, np.int32(N), d_rev_offset))
-        d_rev_offset = cp.cumsum(d_rev_offset, dtype=env.NUMPY_INT).astype(env.NUMPY_INT)
+        d_rev_offset = cp.cumsum(d_rev_offset, dtype=cp.int32).astype(env.NUMPY_INT)
         max_rev = num_pairs if num_pairs > 0 else int(d_rev_offset[-1])
         d_rev_neighbors = cp.empty(max_rev, dtype=env.NUMPY_INT)
-        d_rev_scale = cp.empty(max_rev, dtype=env.NUMPY_FLOAT)
         d_temp2 = d_rev_offset.copy()
         kernels['rev_fill']((n1,), (threads_per_block,),
-            (d_offset, d_neighbors, d_scale_out, d_rev_offset, np.int32(N),
-             d_rev_neighbors, d_rev_scale, d_temp2))
-        self._exclusion_reverse_csr = (d_rev_offset, d_rev_neighbors, d_rev_scale)
+            (d_offset, d_neighbors, d_rev_offset, np.int32(N),
+             d_rev_neighbors, d_temp2))
+        self._exclusion_reverse_csr = (d_rev_offset, d_rev_neighbors)
 
         self._exclusion_dirty = False
 
     @property
     def exclusion_pairs(self):
-        """Unique bidirectional exclusion pairs (d_i, d_j, d_scale), GPU."""
+        """Unique bidirectional exclusion pairs (d_i, d_j), GPU."""
         if self._exclusion_dirty:
             self._derive_exclusion_state()
         return self._exclusion_pairs
 
     @property
     def exclusion_csr(self):
-        """Forward CSR (offset, neighbors, scale), atom-indexed, GPU."""
+        """Forward CSR (offset, neighbors), atom-indexed, GPU."""
         if self._exclusion_dirty:
             self._derive_exclusion_state()
         return self._exclusion_csr
 
     @property
     def exclusion_reverse_csr(self):
-        """Reverse (transposed) CSR (rev_offset, rev_neighbors, rev_scale), GPU."""
+        """Reverse (transposed) CSR (rev_offset, rev_neighbors), GPU."""
         if self._exclusion_dirty:
             self._derive_exclusion_state()
         return self._exclusion_reverse_csr
@@ -247,7 +234,6 @@ extern "C" __global__
 void parallel_dedup_kernel(
     const int* __restrict__ sorted_i,
     const int* __restrict__ sorted_j,
-    const float* __restrict__ sorted_scale,
     const int total_pairs,
     int* __restrict__ flags
 ) {
@@ -279,11 +265,9 @@ extern "C" __global__
 void scatter_pairs_kernel(
     const int* __restrict__ pair_i,
     const int* __restrict__ pair_j,
-    const float* __restrict__ pair_scale,
     const int* __restrict__ offset,
     int num_pairs,
     int* __restrict__ neighbors_out,
-    float* __restrict__ scale_out,
     int* __restrict__ temp_offset
 ) {
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
@@ -291,7 +275,6 @@ void scatter_pairs_kernel(
     int i = pair_i[tid];
     int pos = atomicAdd(&temp_offset[i], 1);
     neighbors_out[pos] = pair_j[tid];
-    scale_out[pos] = pair_scale[tid];
 }
 """
 
@@ -319,11 +302,9 @@ extern "C" __global__
 void fill_reverse_kernel(
     const int* __restrict__ exclusion_offset,
     const int* __restrict__ exclusion_neighbors,
-    const float* __restrict__ exclusion_scale,
     const int* __restrict__ reverse_offset,
     const int num_particles,
     int* __restrict__ reverse_neighbors,
-    float* __restrict__ reverse_scale,
     int* __restrict__ temp_offset
 ) {
     int atom_a = blockIdx.x * blockDim.x + threadIdx.x;
@@ -332,10 +313,8 @@ void fill_reverse_kernel(
     int end = exclusion_offset[atom_a + 1];
     for (int k = start; k < end; k++) {
         int neighbor = exclusion_neighbors[k];
-        float scale = exclusion_scale[k];
         int pos = atomicAdd(&temp_offset[neighbor], 1);
         reverse_neighbors[pos] = atom_a;
-        reverse_scale[pos] = scale;
     }
 }
 """

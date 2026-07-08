@@ -26,20 +26,20 @@ def test_lazy_not_built_until_read():
 
 def test_first_read_builds_and_caches():
     topo = _topo_with_bonds()
-    offset, neighbors, scale = topo.exclusion_csr
+    offset, neighbors = topo.exclusion_csr
     assert topo._exclusion_dirty is False
     assert offset.shape[0] == topo.num_particles + 1
     # cached: reading again returns the SAME arrays (no recompute)
-    offset2, _, _ = topo.exclusion_csr
+    offset2, _ = topo.exclusion_csr
     assert offset2 is offset
 
 
 def test_invalidate_forces_rebuild():
     topo = _topo_with_bonds()
-    offset, _, _ = topo.exclusion_csr
+    offset, _ = topo.exclusion_csr
     topo.invalidate_exclusions()
     assert topo._exclusion_dirty is True
-    offset2, _, _ = topo.exclusion_csr      # rebuilds
+    offset2, _ = topo.exclusion_csr      # rebuilds
     assert topo._exclusion_dirty is False
     # values identical (bond graph unchanged)
     np.testing.assert_array_equal(cp.asnumpy(offset), cp.asnumpy(offset2))
@@ -47,5 +47,5 @@ def test_invalidate_forces_rebuild():
 
 def test_reverse_csr_available():
     topo = _topo_with_bonds()
-    rev_offset, rev_neighbors, rev_scale = topo.exclusion_reverse_csr
+    rev_offset, rev_neighbors = topo.exclusion_reverse_csr
     assert rev_offset.shape[0] == topo.num_particles + 1

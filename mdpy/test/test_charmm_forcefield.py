@@ -65,7 +65,7 @@ class TestTopology:
     def test_exclusion_map_built(self):
         psf = PSFParser(os.path.join(DATA_DIR, '6PO6.psf'))
         topology = psf.topology
-        offset, neighbors, scale = topology.exclusion_csr
+        offset, neighbors = topology.exclusion_csr
         assert offset.shape[0] == topology.num_particles + 1
         assert int(neighbors.shape[0]) > 0
 

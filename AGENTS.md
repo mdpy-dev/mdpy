@@ -184,9 +184,9 @@ What BlockList does NOT do:
 
 Topology owns ALL atom-indexed exclusion state as lazy GPU properties — the single source of truth for "which atom pairs are excluded":
 
-- Unique bidirectional exclusion pairs (`exclusion_pairs` → `(d_i, d_j, d_scale)`)
-- Forward CSR (`exclusion_csr` → `(offset, neighbors, scale)`, atom-indexed)
-- Reverse (transposed) CSR (`exclusion_reverse_csr` → `(rev_offset, rev_neighbors, rev_scale)`)
+- Unique bidirectional exclusion pairs (`exclusion_pairs` → `(d_i, d_j)`)
+- Forward CSR (`exclusion_csr` → `(offset, neighbors)`, atom-indexed)
+- Reverse (transposed) CSR (`exclusion_reverse_csr` → `(rev_offset, rev_neighbors)`)
 
 All three are GPU arrays, derived together by `_derive_exclusion_state()`, cached after first read, and gated by a dirty flag. `invalidate_exclusions()` marks them stale (for future bond break/form); recomputation is deferred to the next `exclusion_*` property read. The CSR + reverse are built ONCE (lazy, cached) and reused across spatial rebuilds — they are NOT rebuilt per block-list rebuild. Exclusion state is derived lazily on first property read; PSF parsing populates only bonds/angles/dihedrals/impropers and no longer eagerly builds an exclusion map.
 

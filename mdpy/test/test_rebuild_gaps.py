@@ -67,7 +67,6 @@ def test_exclusion_data_preserved_across_rebuild():
     csr2 = system.topology.exclusion_csr
     assert csr1[0] is csr2[0]
     assert csr1[1] is csr2[1]
-    assert csr1[2] is csr2[2]
 
     _run_steps(system, integrator, 5)
     pos, vel = system.dump_state()
@@ -87,7 +86,6 @@ def test_exclusion_csr_matches_brute_force():
     if total == 0:
         ref_offset = np.zeros(N + 1, dtype=np.int32)
         ref_neighbors = np.empty(0, dtype=np.int32)
-        ref_scale = np.empty(0, dtype=np.float32)
     else:
         bi_i = np.concatenate([pair_i, pair_j])
         bi_j = np.concatenate([pair_j, pair_i])
@@ -100,17 +98,14 @@ def test_exclusion_csr_matches_brute_force():
         np.add.at(count, bi_i + 1, 1)
         ref_offset = np.cumsum(count, dtype=np.int32)
         ref_neighbors = bi_j.astype(np.int32)
-        ref_scale = np.zeros(len(ref_neighbors), dtype=np.float32)
 
-    offset, neighbors, scale = topology.exclusion_csr
+    offset, neighbors = topology.exclusion_csr
     np.testing.assert_array_equal(cp.asnumpy(offset), ref_offset)
     # The GPU scatter kernel uses atomicAdd, so within-row neighbor order is
     # non-deterministic. Compare per-row sorted sets instead of exact arrays.
     gpu_neighbors = cp.asnumpy(neighbors)
-    gpu_scale = cp.asnumpy(scale)
     for a in range(N):
         s, e = ref_offset[a], ref_offset[a + 1]
         g = np.sort(gpu_neighbors[s:e])
         r = np.sort(ref_neighbors[s:e])
         np.testing.assert_array_equal(g, r)
-        np.testing.assert_allclose(np.sort(gpu_scale[s:e]), ref_scale[s:e], atol=1e-7)

@@ -1160,8 +1160,8 @@ class BlockList:
             self.d_exclusion_masks = cp.empty(0, dtype=np.uint32)
             return
 
-        d_excl_offset, d_excl_neighbors, d_excl_scale = topology.exclusion_csr
-        d_rev_offset, d_rev_neighbors, d_rev_scale = topology.exclusion_reverse_csr
+        d_excl_offset, d_excl_neighbors = topology.exclusion_csr
+        d_rev_offset, d_rev_neighbors = topology.exclusion_reverse_csr
         N = self.num_particles
         threads_per_block = 256
 

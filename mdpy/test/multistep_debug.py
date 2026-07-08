@@ -84,12 +84,11 @@ def main():
     bf_n_types = int(np.sqrt(len(bf_lj_pair) // 2))
     bf_particle_type_indices = topology.particle_type_indices.copy()
 
-    _offset, _neighbors, _scale = topology.exclusion_csr
+    _offset, _neighbors = topology.exclusion_csr
     bf_topology = SimpleNamespace(
         num_particles=N,
         exclusion_offset=cp.asnumpy(_offset),
         exclusion_neighbors=cp.asnumpy(_neighbors),
-        exclusion_scale=cp.asnumpy(_scale),
     )
 
     print(f"System: {N} atoms, box={BOX_SIZE} A, cutoff={CUTOFF} A")
