@@ -10,84 +10,110 @@ class Topology:
 
     __slots__ = [
         'num_particles',
-        'bond_indices', 'num_bonds',
-        'angle_indices', 'num_angles',
-        'dihedral_indices', 'num_dihedrals',
-        'improper_indices', 'num_impropers',
+        '_bond_list', '_angle_list', '_dihedral_list', '_improper_list',
+        '_bond_np', '_angle_np', '_dihedral_np', '_improper_np',
         '_exclusion_dirty', '_exclusion_pairs', '_exclusion_csr',
         '_exclusion_reverse_csr',
     ]
 
-    def __init__(self, builder: Builder | None = None):
-        if builder is None:
-            self._init_legacy()
-            return
-        self.num_particles = builder._num_particles
-
-        if builder._bonds:
-            self.bond_indices = np.array(
-                [b[:2] for b in builder._bonds], dtype=env.NUMPY_INT
-            )
-        else:
-            self.bond_indices = np.empty((0, 2), dtype=env.NUMPY_INT)
-        self.num_bonds = self.bond_indices.shape[0]
-
-        if builder._angles:
-            self.angle_indices = np.array(
-                [a[:3] for a in builder._angles], dtype=env.NUMPY_INT
-            )
-        else:
-            self.angle_indices = np.empty((0, 3), dtype=env.NUMPY_INT)
-        self.num_angles = self.angle_indices.shape[0]
-
-        if builder._dihedrals:
-            self.dihedral_indices = np.array(
-                [d[:4] for d in builder._dihedrals], dtype=env.NUMPY_INT
-            )
-        else:
-            self.dihedral_indices = np.empty((0, 4), dtype=env.NUMPY_INT)
-        self.num_dihedrals = self.dihedral_indices.shape[0]
-
-        if builder._impropers:
-            self.improper_indices = np.array(
-                [im[:4] for im in builder._impropers], dtype=env.NUMPY_INT
-            )
-        else:
-            self.improper_indices = np.empty((0, 4), dtype=env.NUMPY_INT)
-        self.num_impropers = self.improper_indices.shape[0]
-
-        self._init_exclusion_cache()
-
-    def _init_legacy(self):
+    def __init__(self):
         self.num_particles = 0
-        self.bond_indices = np.empty((0, 2), dtype=env.NUMPY_INT)
-        self.num_bonds = 0
-        self.angle_indices = np.empty((0, 3), dtype=env.NUMPY_INT)
-        self.num_angles = 0
-        self.dihedral_indices = np.empty((0, 4), dtype=env.NUMPY_INT)
-        self.num_dihedrals = 0
-        self.improper_indices = np.empty((0, 4), dtype=env.NUMPY_INT)
-        self.num_impropers = 0
+        self._bond_list: list[tuple[int, int]] = []
+        self._angle_list: list[tuple[int, int, int]] = []
+        self._dihedral_list: list[tuple[int, int, int, int]] = []
+        self._improper_list: list[tuple[int, int, int, int]] = []
+        self._bond_np = None
+        self._angle_np = None
+        self._dihedral_np = None
+        self._improper_np = None
         self._init_exclusion_cache()
+
+    def _invalidate_numpy_caches(self):
+        self._bond_np = None
+        self._angle_np = None
+        self._dihedral_np = None
+        self._improper_np = None
+
+    def add_bond(self, i: int, j: int):
+        self._bond_list.append((int(i), int(j)))
+        self._invalidate_numpy_caches()
+        self._exclusion_dirty = True
+
+    def add_angle(self, i: int, j: int, k: int):
+        self._angle_list.append((int(i), int(j), int(k)))
+        self._invalidate_numpy_caches()
+
+    def add_dihedral(self, i: int, j: int, k: int, l: int):
+        self._dihedral_list.append((int(i), int(j), int(k), int(l)))
+        self._invalidate_numpy_caches()
+
+    def add_improper(self, i: int, j: int, k: int, l: int):
+        self._improper_list.append((int(i), int(j), int(k), int(l)))
+        self._invalidate_numpy_caches()
+
+    @property
+    def bond_indices(self):
+        if self._bond_np is None:
+            if self._bond_list:
+                self._bond_np = np.array(self._bond_list, dtype=env.NUMPY_INT)
+            else:
+                self._bond_np = np.empty((0, 2), dtype=env.NUMPY_INT)
+        return self._bond_np
+
+    @property
+    def num_bonds(self):
+        return len(self._bond_list)
+
+    @property
+    def angle_indices(self):
+        if self._angle_np is None:
+            if self._angle_list:
+                self._angle_np = np.array(self._angle_list, dtype=env.NUMPY_INT)
+            else:
+                self._angle_np = np.empty((0, 3), dtype=env.NUMPY_INT)
+        return self._angle_np
+
+    @property
+    def num_angles(self):
+        return len(self._angle_list)
+
+    @property
+    def dihedral_indices(self):
+        if self._dihedral_np is None:
+            if self._dihedral_list:
+                self._dihedral_np = np.array(self._dihedral_list, dtype=env.NUMPY_INT)
+            else:
+                self._dihedral_np = np.empty((0, 4), dtype=env.NUMPY_INT)
+        return self._dihedral_np
+
+    @property
+    def num_dihedrals(self):
+        return len(self._dihedral_list)
+
+    @property
+    def improper_indices(self):
+        if self._improper_np is None:
+            if self._improper_list:
+                self._improper_np = np.array(self._improper_list, dtype=env.NUMPY_INT)
+            else:
+                self._improper_np = np.empty((0, 4), dtype=env.NUMPY_INT)
+        return self._improper_np
+
+    @property
+    def num_impropers(self):
+        return len(self._improper_list)
 
     def _init_exclusion_cache(self):
-        """Lazy GPU exclusion state. Built on first read of any exclusion_*
-        property, or rebuilt after the bond graph is marked dirty."""
         self._exclusion_dirty = True
-        self._exclusion_pairs = None       # (d_i, d_j) unique pairs
-        self._exclusion_csr = None         # (offset, neighbors)
-        self._exclusion_reverse_csr = None  # (rev_offset, rev_neighbors)
+        self._exclusion_pairs = None
+        self._exclusion_csr = None
+        self._exclusion_reverse_csr = None
 
     def _derive_exclusion_state(self):
-        """Build unique pairs + forward CSR + reverse CSR from the bond graph.
-
-        All atom-indexed (PDB order), independent of any spatial block layout.
-        """
         N = self.num_particles
         kernels = _get_gpu_kernels()
         threads_per_block = 256
 
-        # --- raw bond-graph exclusion pairs (CPU walk) ---
         pair_i_np, pair_j_np, total_pairs, _, _, _ = \
             _build_bond_graph_exclusion_pairs(self.bond_indices, N)
 
@@ -100,7 +126,6 @@ class Topology:
             self._exclusion_dirty = False
             return
 
-        # --- sort + dedup + bidirectional -> unique pairs ---
         d_pair_i = cp.asarray(pair_i_np)
         d_pair_j = cp.asarray(pair_j_np)
 
@@ -121,7 +146,6 @@ class Topology:
         d_u_i[scatter_idx] = d_pair_i
         d_u_j[scatter_idx] = d_pair_j
 
-        # bidirectional
         d_bi_i = cp.concatenate([d_u_i, d_u_j])
         d_bi_j = cp.concatenate([d_u_j, d_u_i])
         bi_count = d_bi_i.shape[0]
@@ -142,7 +166,6 @@ class Topology:
 
         self._exclusion_pairs = (d_unique_i, d_unique_j)
 
-        # --- forward CSR ---
         num_pairs = bi_uniq
         d_count = cp.zeros(N + 1, dtype=env.NUMPY_INT)
         grid_c = ((num_pairs + threads_per_block - 1) // threads_per_block,)
@@ -158,7 +181,6 @@ class Topology:
              d_neighbors, d_fwd_write_cursor))
         self._exclusion_csr = (d_offset, d_neighbors)
 
-        # --- reverse CSR ---
         n1 = (N + threads_per_block - 1) // threads_per_block
         d_rev_offset = cp.zeros(N + 1, dtype=env.NUMPY_INT)
         kernels['rev_count']((n1,), (threads_per_block,),
@@ -176,28 +198,23 @@ class Topology:
 
     @property
     def exclusion_pairs(self):
-        """Unique bidirectional exclusion pairs (d_i, d_j), GPU."""
         if self._exclusion_dirty:
             self._derive_exclusion_state()
         return self._exclusion_pairs
 
     @property
     def exclusion_csr(self):
-        """Forward CSR (offset, neighbors), atom-indexed, GPU."""
         if self._exclusion_dirty:
             self._derive_exclusion_state()
         return self._exclusion_csr
 
     @property
     def exclusion_reverse_csr(self):
-        """Reverse (transposed) CSR (rev_offset, rev_neighbors), GPU."""
         if self._exclusion_dirty:
             self._derive_exclusion_state()
         return self._exclusion_reverse_csr
 
     def invalidate_exclusions(self):
-        """Mark the cached exclusion state stale. Call after mutating bonds.
-        Recomputation is deferred to the next exclusion_* property read."""
         self._exclusion_dirty = True
 
     def __repr__(self) -> str:
@@ -210,6 +227,8 @@ class Topology:
             )
         )
 
+
+# --- CUDA kernels (unchanged) ---
 
 _PARALLEL_DEDUP_KERNEL = r'''
 extern "C" __global__
@@ -368,73 +387,3 @@ def _build_bond_graph_exclusion_pairs(bond_indices, num_particles):
     return (np.array(all_i, dtype=np.int32),
             np.array(all_j, dtype=np.int32),
             len(all_i), n12, n13, n14)
-
-
-class Builder:
-
-    def __init__(self):
-        self._num_particles = 0
-        self._particles_set = False
-        self._bonds: list[list] = []
-        self._angles: list[list] = []
-        self._dihedrals: list[list] = []
-        self._impropers: list[list] = []
-
-    def set_particles(self, num_particles: int) -> 'Builder':
-        self._num_particles = num_particles
-        self._particles_set = True
-        return self
-
-    def add_bond(self, i: int, j: int, k: float, r0: float) -> Builder:
-        self._bonds.append([i, j, k, r0])
-        return self
-
-    def add_angle(
-        self, i: int, j: int, k: int, force_constant: float,
-        equilibrium_angle: float, k_ub: float = 0.0, r_ub: float = 0.0,
-    ) -> Builder:
-        self._angles.append([i, j, k, force_constant, equilibrium_angle, k_ub, r_ub])
-        return self
-
-    def add_dihedral(
-        self, i: int, j: int, k: int, l: int,
-        force_constant: float, periodicity: float, phase: float,
-    ) -> Builder:
-        self._dihedrals.append([i, j, k, l, force_constant, periodicity, phase])
-        return self
-
-    def add_improper(
-        self, i: int, j: int, k: int, l: int,
-        force_constant: float, equilibrium_angle: float,
-    ) -> Builder:
-        self._impropers.append([i, j, k, l, force_constant, equilibrium_angle])
-        return self
-
-    def add_bond_indices(
-        self, indices: np.ndarray, parameters: np.ndarray,
-    ) -> Builder:
-        for row in range(indices.shape[0]):
-            self._bonds.append(
-                [indices[row, 0], indices[row, 1],
-                 parameters[row, 0], parameters[row, 1]]
-            )
-        return self
-
-    def build(self) -> tuple:
-        if not self._particles_set:
-            raise ValueError('set_particles() must be called before build()')
-        topology = Topology(self)
-        term_params = {}
-        if self._bonds:
-            bond_data = np.array(self._bonds, dtype=env.NUMPY_FLOAT)
-            term_params['bond'] = bond_data[:, 2:].astype(env.NUMPY_FLOAT)
-        if self._angles:
-            angle_data = np.array(self._angles, dtype=env.NUMPY_FLOAT)
-            term_params['angle'] = angle_data[:, 3:].astype(env.NUMPY_FLOAT)
-        if self._dihedrals:
-            dihed_data = np.array(self._dihedrals, dtype=env.NUMPY_FLOAT)
-            term_params['dihedral'] = dihed_data[:, 4:].astype(env.NUMPY_FLOAT)
-        if self._impropers:
-            improd_data = np.array(self._impropers, dtype=env.NUMPY_FLOAT)
-            term_params['improper'] = improd_data[:, 4:].astype(env.NUMPY_FLOAT)
-        return topology, term_params

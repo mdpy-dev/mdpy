@@ -9,7 +9,7 @@ copyright : (C)Copyright 2021-present, mdpy organization
 
 import numpy as np
 from mdpy import env
-from mdpy.core.topology import Topology, Builder
+from mdpy.core.topology import Topology
 from mdpy.error import *
 
 
@@ -123,17 +123,16 @@ class PSFParser:
         self._unique_type_names = unique_types
 
     def _create_topology(self):
-        builder = Builder()
-        builder.set_particles(self._num_particles)
+        topology = Topology()
+        topology.num_particles = self._num_particles
         for i, j in self._bonds:
-            builder.add_bond(i, j, 0.0, 0.0)
+            topology.add_bond(i, j)
         for i, j, k in self._angles:
-            builder.add_angle(i, j, k, 0.0, 0.0)
+            topology.add_angle(i, j, k)
         for i, j, k, l in self._dihedrals:
-            builder.add_dihedral(i, j, k, l, 0.0, 0.0, 0.0)
+            topology.add_dihedral(i, j, k, l)
         for i, j, k, l in self._impropers:
-            builder.add_improper(i, j, k, l, 0.0, 0.0)
-        topology, _ = builder.build()
+            topology.add_improper(i, j, k, l)
         return topology
 
     def get_matrix_id(self, particle_id):
