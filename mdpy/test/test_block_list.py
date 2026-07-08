@@ -30,11 +30,11 @@ def _make_pbc(box):
 
 class _PBCContext:
     """Minimal stand-in exposing d_pbc_matrix/d_pbc_inv for BlockList.rebuild
-    and build_block_pairs, which now read PBC from a GPUContext.
+    and build_block_pairs, which now read PBC from a State.
 
     Also exposes d_positions_x/y/z, d_charges, d_types so that
     BlockList.refresh_sorted_posq / refresh_sorted_types can be tested
-    without constructing a full GPUContext."""
+    without constructing a full State."""
 
     def __init__(self, pbc_matrix, pbc_inv, positions=None, charges=None, types=None):
         self.d_pbc_matrix = cp.asarray(
@@ -1259,7 +1259,7 @@ class TestSnapshotPostWrapIntegration:
         pbc_matrix = np.eye(3, dtype=np.float32) * box
 
         system = System(topology)
-        system.upload_pbc(pbc_matrix)
+        system.set_pbc(pbc_matrix)
         system._cutoff = 10.0
         system._skin = 2.0
 
@@ -1270,13 +1270,13 @@ class TestSnapshotPostWrapIntegration:
             [3.0, 0.0, 0.0],
         ], dtype=np.float32)
         velocities = np.zeros((n, 3), dtype=np.float32)
-        system.upload_positions(positions)
-        system.upload_velocities(velocities)
+        system.set_positions(positions)
+        system.set_velocities(velocities)
 
         system.update_neighbor_list(force_rebuild=True)
 
         snap_x = cp.asnumpy(system._block_list.d_positions_at_rebuild_x)
-        gpu_x = cp.asnumpy(system.gpu.d_positions_x)
+        gpu_x = cp.asnumpy(system.state.d_positions_x)
 
         # Snapshot must be populated (not empty/stale)
         assert system._block_list.d_positions_at_rebuild_x.size == n
@@ -1314,7 +1314,7 @@ class TestSnapshotPostWrapIntegration:
         box = 50.0
         pbc_matrix = np.eye(3, dtype=np.float32) * box
         system = System(topology)
-        system.upload_pbc(pbc_matrix)
+        system.set_pbc(pbc_matrix)
         system._cutoff = 10.0
         system._skin = 2.0
 
@@ -1325,8 +1325,8 @@ class TestSnapshotPostWrapIntegration:
             [4.0, 1.0, 1.0],
         ], dtype=np.float32)
         velocities = np.zeros((n, 3), dtype=np.float32)
-        system.upload_positions(positions)
-        system.upload_velocities(velocities)
+        system.set_positions(positions)
+        system.set_velocities(velocities)
 
         system.update_neighbor_list(force_rebuild=True)
 
@@ -1373,7 +1373,7 @@ class TestSnapshotPostWrapIntegration:
         box = 50.0
         pbc_matrix = np.eye(3, dtype=np.float32) * box
         system = System(topology)
-        system.upload_pbc(pbc_matrix)
+        system.set_pbc(pbc_matrix)
         system._cutoff = 10.0
         system._skin = 2.0
 
@@ -1384,8 +1384,8 @@ class TestSnapshotPostWrapIntegration:
             [4.0, 1.0, 1.0],
         ], dtype=np.float32)
         velocities = np.zeros((n, 3), dtype=np.float32)
-        system.upload_positions(positions)
-        system.upload_velocities(velocities)
+        system.set_positions(positions)
+        system.set_velocities(velocities)
 
         system.update_neighbor_list(force_rebuild=True)
 
@@ -1402,7 +1402,7 @@ class TestSnapshotPostWrapIntegration:
         # Move particle 0 by 1.5 Angstrom — exceeds skin/2 = 1.0
         moved = positions.copy()
         moved[0, 0] += 1.5
-        system.upload_positions(moved)
+        system.set_positions(moved)
 
         sync_interval = 3
         for _ in range(sync_interval):
@@ -1415,7 +1415,7 @@ class TestSnapshotPostWrapIntegration:
 
 
 class TestRefreshSortedPosq:
-    """Verify refresh_sorted_posq gathers pos+charge from gpu_context into
+    """Verify refresh_sorted_posq gathers pos+charge from state into
     block-ordered float4 buffer owned by BlockList."""
 
     def test_refresh_matches_block_atoms_indexing(self):

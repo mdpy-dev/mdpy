@@ -61,7 +61,7 @@ def test_constraint_loop():
 
     system = System(topology)
 
-    system.upload_pbc(pbc_matrix)
+    system.set_pbc(pbc_matrix)
 
     system._cutoff = 12.0
 
@@ -72,11 +72,11 @@ def test_constraint_loop():
     for c in constraints:
         system.add_constraint(c)
 
-    system.upload_positions(positions)
+    system.set_positions(positions)
 
     time_step = 0.002
     velocities = np.random.RandomState(42).randn(*positions.shape).astype(np.float32) * 0.001
-    system.upload_velocities(velocities)
+    system.set_velocities(velocities)
 
     integrator = VerletIntegrator(time_step)
 
@@ -96,7 +96,7 @@ def test_constraint_loop_multiple_rebuilds():
 
     system = System(topology)
 
-    system.upload_pbc(pbc_matrix)
+    system.set_pbc(pbc_matrix)
 
     system._cutoff = 12.0
 
@@ -107,9 +107,9 @@ def test_constraint_loop_multiple_rebuilds():
     for c in constraints:
         system.add_constraint(c)
 
-    system.upload_positions(positions)
+    system.set_positions(positions)
     velocities = np.random.RandomState(123).randn(*positions.shape).astype(np.float32) * 0.001
-    system.upload_velocities(velocities)
+    system.set_velocities(velocities)
 
     integrator = VerletIntegrator(0.002)
 
@@ -198,7 +198,7 @@ def test_settle_lincs_coexistence_bond_lengths():
 
     system = System(topology)
 
-    system.upload_pbc(pbc_matrix)
+    system.set_pbc(pbc_matrix)
 
     system._cutoff = 12.0
     bonded = create_bonded_group(topology, parameter_table)
@@ -208,8 +208,8 @@ def test_settle_lincs_coexistence_bond_lengths():
     for c in constraints:
         system.add_constraint(c)
 
-    system.upload_positions(positions)
-    system.upload_velocities(np.random.RandomState(42).randn(*positions.shape).astype(np.float32) * 0.001)
+    system.set_positions(positions)
+    system.set_velocities(np.random.RandomState(42).randn(*positions.shape).astype(np.float32) * 0.001)
 
     integrator = VerletIntegrator(0.002)
     for step in range(100):
@@ -248,7 +248,7 @@ def test_settle_md_loop_rebuilds_bond_lengths():
 
     system = System(topology)
 
-    system.upload_pbc(pbc_matrix)
+    system.set_pbc(pbc_matrix)
 
     system._cutoff = 4.0
     bonded = create_bonded_group(topology, parameter_table)
@@ -258,8 +258,8 @@ def test_settle_md_loop_rebuilds_bond_lengths():
     for c in constraints:
         system.add_constraint(c)
 
-    system.upload_positions(positions)
-    system.upload_velocities(np.random.RandomState(99).randn(*positions.shape).astype(np.float32) * 0.01)
+    system.set_positions(positions)
+    system.set_velocities(np.random.RandomState(99).randn(*positions.shape).astype(np.float32) * 0.01)
 
     integrator = VerletIntegrator(0.002)
     dOH = 1.0
@@ -317,7 +317,7 @@ def test_lincs_md_loop_rebuilds_bond_lengths():
 
     pbc_matrix = np.diag([15.0, 15.0, 15.0]).astype(np.float32)
     system = System(topology)
-    system.upload_pbc(pbc_matrix)
+    system.set_pbc(pbc_matrix)
     system._cutoff = 4.0
     bonded = create_bonded_group(topology, pt)
     system.add_force_term(bonded)
@@ -327,8 +327,8 @@ def test_lincs_md_loop_rebuilds_bond_lengths():
     lincs = LincsConstraint(constraint_pairs, target_lengths, topology.masses)
     system.add_constraint(lincs)
 
-    system.upload_positions(positions)
-    system.upload_velocities(np.random.RandomState(77).randn(*positions.shape).astype(np.float32) * 0.01)
+    system.set_positions(positions)
+    system.set_velocities(np.random.RandomState(77).randn(*positions.shape).astype(np.float32) * 0.01)
 
     integrator = VerletIntegrator(0.002)
     for step in range(100):

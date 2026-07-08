@@ -39,7 +39,7 @@ def _make_system(box=30.0, cutoff=12.0):
     pt = create_parameter_table(topology, toppar)
     pbc = np.eye(3, dtype=np.float64) * box
     system = System(topology)
-    system.upload_pbc(pbc)
+    system.set_pbc(pbc)
     system.add_force_term(create_bonded_group(topology, pt))
     nb = NonbondedForce(lennard_jones + coulomb, cutoff=cutoff)
     lj_pair = pt.type_pair_parameters['lj_pair']
@@ -50,8 +50,8 @@ def _make_system(box=30.0, cutoff=12.0):
     pbc_inv = np.linalg.inv(pbc)
     frac = raw @ pbc_inv
     frac -= np.floor(frac)
-    system.upload_positions((frac @ pbc).astype(env.NUMPY_FLOAT))
-    system.upload_velocities(np.zeros((topology.num_particles, 3), dtype=env.NUMPY_FLOAT))
+    system.set_positions((frac @ pbc).astype(env.NUMPY_FLOAT))
+    system.set_velocities(np.zeros((topology.num_particles, 3), dtype=env.NUMPY_FLOAT))
     return system, VerletIntegrator(0.5)
 
 

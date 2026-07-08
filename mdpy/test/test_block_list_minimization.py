@@ -30,12 +30,12 @@ def _build_ion_system():
     pbc = np.diag(BOX)
     forces = create_charmm_forces(topology, pt, pbc, cutoff=CUTOFF)
     s = System(topology)
-    s.upload_pbc(pbc)
+    s.set_pbc(pbc)
     s.add_force_term(forces["bonded"])
     s.add_force_term(forces["nonbonded"])
     s.add_force_term(forces["pme"], stream="pme")
-    s.upload_positions(pdb.positions)
-    s.upload_velocities(generate_velocity_from_temperature(300.0, topology.masses, seed=42))
+    s.set_positions(pdb.positions)
+    s.set_velocities(generate_velocity_from_temperature(300.0, topology.masses, seed=42))
     return s
 
 

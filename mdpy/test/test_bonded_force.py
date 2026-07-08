@@ -10,7 +10,7 @@ def _make_large_pbc():
     return np.eye(3, dtype=env.NUMPY_FLOAT) * 100.0
 
 
-class MockGPUContext:
+class MockState:
     def __init__(self, positions, pbc_matrix):
         import cupy as cp
         pos = positions.astype(np.float32)
@@ -76,7 +76,7 @@ def test_harmonic_bond_energy():
     ], dtype=env.NUMPY_FLOAT)
     pbc_matrix = _make_large_pbc()
 
-    context = MockGPUContext(positions, pbc_matrix)
+    context = MockState(positions, pbc_matrix)
     force.compute(context)
 
     energy = float(context.d_energy[0])
@@ -96,7 +96,7 @@ def test_harmonic_bond_forces():
     ], dtype=env.NUMPY_FLOAT)
     pbc_matrix = _make_large_pbc()
 
-    context = MockGPUContext(positions, pbc_matrix)
+    context = MockState(positions, pbc_matrix)
     force.compute(context)
 
     gpu_forces = context.d_forces.get().reshape(-1, 3)
@@ -119,7 +119,7 @@ def test_harmonic_bond_newtons_third_law():
     ], dtype=env.NUMPY_FLOAT)
     pbc_matrix = _make_large_pbc()
 
-    context = MockGPUContext(positions, pbc_matrix)
+    context = MockState(positions, pbc_matrix)
     force.compute(context)
 
     gpu_forces = context.d_forces.get().reshape(-1, 3)
@@ -142,7 +142,7 @@ def test_multiple_bonds():
     ], dtype=env.NUMPY_FLOAT)
     pbc_matrix = _make_large_pbc()
 
-    context = MockGPUContext(positions, pbc_matrix)
+    context = MockState(positions, pbc_matrix)
     force.compute(context)
 
     energy = float(context.d_energy[0])
@@ -168,7 +168,7 @@ def test_harmonic_angle_energy():
     ], dtype=env.NUMPY_FLOAT)
     pbc_matrix = _make_large_pbc()
 
-    context = MockGPUContext(positions, pbc_matrix)
+    context = MockState(positions, pbc_matrix)
     force.compute(context)
 
     energy = float(context.d_energy[0])
@@ -189,7 +189,7 @@ def test_harmonic_angle_forces_balanced():
     ], dtype=env.NUMPY_FLOAT)
     pbc_matrix = _make_large_pbc()
 
-    context = MockGPUContext(positions, pbc_matrix)
+    context = MockState(positions, pbc_matrix)
     force.compute(context)
 
     gpu_forces = context.d_forces.get().reshape(-1, 3)
@@ -213,7 +213,7 @@ def test_periodic_dihedral_energy():
     ], dtype=env.NUMPY_FLOAT)
     pbc_matrix = _make_large_pbc()
 
-    context = MockGPUContext(positions, pbc_matrix)
+    context = MockState(positions, pbc_matrix)
     force.compute(context)
 
     energy = float(context.d_energy[0])
@@ -235,7 +235,7 @@ def test_periodic_dihedral_forces_balanced():
     ], dtype=env.NUMPY_FLOAT)
     pbc_matrix = _make_large_pbc()
 
-    context = MockGPUContext(positions, pbc_matrix)
+    context = MockState(positions, pbc_matrix)
     force.compute(context)
 
     gpu_forces = context.d_forces.get().reshape(-1, 3)
@@ -258,7 +258,7 @@ def test_improper_forces_balanced():
     ], dtype=env.NUMPY_FLOAT)
     pbc_matrix = _make_large_pbc()
 
-    context = MockGPUContext(positions, pbc_matrix)
+    context = MockState(positions, pbc_matrix)
     force.compute(context)
 
     gpu_forces = context.d_forces.get().reshape(-1, 3)
@@ -279,7 +279,7 @@ def test_bond_energy_at_equilibrium():
     ], dtype=env.NUMPY_FLOAT)
     pbc_matrix = _make_large_pbc()
 
-    context = MockGPUContext(positions, pbc_matrix)
+    context = MockState(positions, pbc_matrix)
     force.compute(context)
 
     energy = float(context.d_energy[0])
@@ -295,7 +295,7 @@ def test_empty_terms():
     ], dtype=env.NUMPY_FLOAT)
     pbc_matrix = _make_large_pbc()
 
-    context = MockGPUContext(positions, pbc_matrix)
+    context = MockState(positions, pbc_matrix)
     force.compute(context)
 
     energy = float(context.d_energy[0])
@@ -317,14 +317,14 @@ def test_incremental_add_and_sync():
     ], dtype=env.NUMPY_FLOAT)
     pbc_matrix = _make_large_pbc()
 
-    context = MockGPUContext(positions, pbc_matrix)
+    context = MockState(positions, pbc_matrix)
     force.compute(context)
 
     energy_before = float(context.d_energy[0])
     assert energy_before > 0.0
 
     force.add([0, 2], k=k, r0=r0)
-    context2 = MockGPUContext(positions, pbc_matrix)
+    context2 = MockState(positions, pbc_matrix)
     force.sync()
     force.compute(context2)
 
@@ -365,7 +365,7 @@ def test_per_particle_energy():
     ], dtype=env.NUMPY_FLOAT)
     pbc_matrix = _make_large_pbc()
 
-    context = MockGPUContext(positions, pbc_matrix)
+    context = MockState(positions, pbc_matrix)
     force.compute(context)
 
     energy = float(context.d_energy[0])
@@ -387,7 +387,7 @@ def test_per_particle_forces_balanced():
     ], dtype=env.NUMPY_FLOAT)
     pbc_matrix = _make_large_pbc()
 
-    context = MockGPUContext(positions, pbc_matrix)
+    context = MockState(positions, pbc_matrix)
     force.compute(context)
 
     gpu_forces = context.d_forces.get().reshape(-1, 3)
@@ -412,7 +412,7 @@ def test_per_particle_multiple_pairs():
     ], dtype=env.NUMPY_FLOAT)
     pbc_matrix = _make_large_pbc()
 
-    context = MockGPUContext(positions, pbc_matrix)
+    context = MockState(positions, pbc_matrix)
     force.compute(context)
 
     energy = float(context.d_energy[0])
@@ -434,7 +434,7 @@ def test_per_particle_no_per_particle_props():
     ], dtype=env.NUMPY_FLOAT)
     pbc_matrix = _make_large_pbc()
 
-    context = MockGPUContext(positions, pbc_matrix)
+    context = MockState(positions, pbc_matrix)
     force.compute(context)
 
     energy = float(context.d_energy[0])
@@ -474,7 +474,7 @@ def test_nb14_energy_analytical():
     ], dtype=env.NUMPY_FLOAT)
     pbc_matrix = _make_large_pbc()
 
-    context = MockGPUContext(positions, pbc_matrix)
+    context = MockState(positions, pbc_matrix)
     force.compute(context)
 
     energy = float(context.d_energy[0])
@@ -495,7 +495,7 @@ def test_nb14_forces_balanced():
     ], dtype=env.NUMPY_FLOAT)
     pbc_matrix = _make_large_pbc()
 
-    context = MockGPUContext(positions, pbc_matrix)
+    context = MockState(positions, pbc_matrix)
     force.compute(context)
 
     gpu_forces = context.d_forces.get().reshape(-1, 3)
@@ -523,7 +523,7 @@ def test_nb14_multiple_pairs():
     ], dtype=env.NUMPY_FLOAT)
     pbc_matrix = _make_large_pbc()
 
-    context = MockGPUContext(positions, pbc_matrix)
+    context = MockState(positions, pbc_matrix)
     force.compute(context)
 
     energy = float(context.d_energy[0])
@@ -550,7 +550,7 @@ def test_nb14_force_direction():
     ], dtype=env.NUMPY_FLOAT)
     pbc_matrix = _make_large_pbc()
 
-    context = MockGPUContext(positions, pbc_matrix)
+    context = MockState(positions, pbc_matrix)
     force.compute(context)
 
     gpu_forces = context.d_forces.get().reshape(-1, 3)

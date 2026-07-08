@@ -3,7 +3,7 @@ from __future__ import annotations
 import cupy as cp
 import numpy as np
 from mdpy.core.block_list import BlockList
-from mdpy.core.gpu_context import GPUContext
+from mdpy.core.state import State
 
 
 class System:
@@ -11,7 +11,7 @@ class System:
     def __init__(self, topology):
         self.topology = topology
         self.num_particles = topology.num_particles
-        self.gpu = GPUContext(topology)
+        self.state = State(topology)
 
         self._cutoff = None
         self._skin = 1.0
@@ -36,8 +36,8 @@ class System:
             self._ev_zero_forces = cp.cuda.Event(disable_timing=True)
             self._ev_pme_done = cp.cuda.Event(disable_timing=True)
 
-    def upload_pbc(self, pbc_matrix):
-        self.gpu.upload_pbc(pbc_matrix)
+    def set_pbc(self, pbc_matrix):
+        self.state.set_pbc(pbc_matrix)
 
     @property
     def block_list(self):
@@ -62,7 +62,7 @@ class System:
             self._pme_force_terms.append(term)
         else:
             self._primary_force_terms.append(term)
-        self.gpu.allocate_energy_accumulator(len(self.force_terms))
+        self.state.allocate_energy_accumulator(len(self.force_terms))
         term_cutoff = getattr(term, '_cutoff', None)
         if term_cutoff is not None:
             if self._cutoff is None:
@@ -77,30 +77,30 @@ class System:
 
     def apply_constraints(self, time_step):
         for constraint in self.constraints:
-            constraint.apply(self.gpu, time_step)
+            constraint.apply(self.state, time_step)
 
-    def upload_positions(self, positions):
-        self.gpu.upload_positions(positions)
+    def set_positions(self, positions):
+        self.state.set_positions(positions)
 
-    def upload_velocities(self, velocities):
-        self.gpu.upload_velocities(velocities)
+    def set_velocities(self, velocities):
+        self.state.set_velocities(velocities)
 
     def _ensure_uploaded(self):
-        if not self.gpu.has_positions or not self.gpu.has_velocities:
+        if not self.state.has_positions or not self.state.has_velocities:
             raise RuntimeError(
                 "Positions and/or velocities not uploaded to GPU. "
-                "Call system.upload_positions() and system.upload_velocities() first."
+                "Call system.set_positions() and system.set_velocities() first."
             )
 
     def compute_forces(self):
         self._ensure_uploaded()
-        self.gpu.zero_forces()
+        self.state.zero_forces()
         if self._block_list is not None:
-            self._block_list.refresh_sorted_posq(self.gpu)
+            self._block_list.refresh_sorted_posq(self.state)
 
         if not self._pme_force_terms:
             for term in self._primary_force_terms:
-                term.compute(self.gpu, self._block_list, compute_energy=False)
+                term.compute(self.state, self._block_list, compute_energy=False)
             return
 
         # PME runs on a non-blocking stream concurrent with primary terms.
@@ -112,14 +112,14 @@ class System:
         self._pme_stream.wait_event(self._ev_zero_forces)
         with self._pme_stream:
             for term in self._pme_force_terms:
-                term.compute(self.gpu, self._block_list, compute_energy=False)
+                term.compute(self.state, self._block_list, compute_energy=False)
             # Record INSIDE the with-block so the event is recorded on the
             # pme stream, not the null stream (record() uses the current stream).
             self._ev_pme_done.record()
 
         # Primary terms run on the null stream, overlapping with PME.
         for term in self._primary_force_terms:
-            term.compute(self.gpu, self._block_list, compute_energy=False)
+            term.compute(self.state, self._block_list, compute_energy=False)
 
         # Make the null stream wait for PME to finish writing forces before
         # compute_forces returns, so the next null-stream op (integrator) sees
@@ -128,8 +128,8 @@ class System:
 
     def update_neighbor_list(self, sync_interval=10, force_rebuild=False):
         self._ensure_uploaded()
-        if not self.gpu.has_pbc:
-            raise RuntimeError("PBC not set. Call upload_pbc() first.")
+        if not self.state.has_pbc:
+            raise RuntimeError("PBC not set. Call set_pbc() first.")
 
         if self._block_list is None:
             if self._cutoff is None:
@@ -148,7 +148,7 @@ class System:
             self._step_counter = 0
             return
 
-        self._block_list.check_rebuild_async(self.gpu)
+        self._block_list.check_rebuild_async(self.state)
         self._step_counter += 1
         if self._step_counter < sync_interval:
             return
@@ -161,24 +161,24 @@ class System:
             flag_val = int(self._block_list.d_rebuild_flag[0])
             if flag_val == 0:
                 return
-        self._block_list.rebuild(self.topology, self.gpu, force=force)
-        self.gpu.wrap_positions_with_prev_correction()
-        self._block_list.capture_snapshot(self.gpu)
-        self._block_list.build_block_pairs(self.topology, self.gpu)
-        self._block_list.refresh_sorted_types(self.gpu)
+        self._block_list.rebuild(self.topology, self.state, force=force)
+        self.state.wrap_positions_with_prev_correction()
+        self._block_list.capture_snapshot(self.state)
+        self._block_list.build_block_pairs(self.topology, self.state)
+        self._block_list.refresh_sorted_types(self.state)
         self._block_list.reset_flag()
 
     def dump_energy(self):
-        if self.gpu.d_energy_accumulator is None:
+        if self.state.d_energy_accumulator is None:
             return {}
-        self.gpu.zero_forces()
+        self.state.zero_forces()
         if self._block_list is not None:
-            self._block_list.refresh_sorted_posq(self.gpu)
+            self._block_list.refresh_sorted_posq(self.state)
         for term_index, term in enumerate(self.force_terms):
-            self.gpu.zero_energy()
-            term.compute(self.gpu, self._block_list, compute_energy=True)
-            self.gpu.set_energy_slot(term_index)
-        raw = cp.asnumpy(self.gpu.d_energy_accumulator)
+            self.state.zero_energy()
+            term.compute(self.state, self._block_list, compute_energy=True)
+            self.state.set_energy_slot(term_index)
+        raw = cp.asnumpy(self.state.d_energy_accumulator)
         result = {}
         for term_index, term in enumerate(self.force_terms):
             value = float(raw[term_index])
@@ -187,24 +187,24 @@ class System:
         return result
 
     def dump_state(self):
-        gpu = self.gpu
+        state = self.state
         pos = np.stack([
-            gpu.d_positions_x.get(),
-            gpu.d_positions_y.get(),
-            gpu.d_positions_z.get(),
+            state.d_positions_x.get(),
+            state.d_positions_y.get(),
+            state.d_positions_z.get(),
         ], axis=1)
         vel = np.stack([
-            gpu.d_velocities_x.get(),
-            gpu.d_velocities_y.get(),
-            gpu.d_velocities_z.get(),
+            state.d_velocities_x.get(),
+            state.d_velocities_y.get(),
+            state.d_velocities_z.get(),
         ], axis=1)
         return pos, vel
 
     def dump_forces(self):
-        gpu = self.gpu
+        state = self.state
         return np.stack([
-            gpu.d_forces_x.get(),
-            gpu.d_forces_y.get(),
-            gpu.d_forces_z.get(),
+            state.d_forces_x.get(),
+            state.d_forces_y.get(),
+            state.d_forces_z.get(),
         ], axis=1)
 

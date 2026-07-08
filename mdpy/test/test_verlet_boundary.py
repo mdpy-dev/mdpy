@@ -22,12 +22,12 @@ def _make_system(n_atoms, box_size, cutoff=None):
     topology, _ = builder.build()
     pbc_matrix = np.eye(3, dtype=env.NUMPY_FLOAT) * box_size
     system = System(topology)
-    system.upload_pbc(pbc_matrix)
+    system.set_pbc(pbc_matrix)
     system._cutoff = cutoff
     positions = np.zeros((n_atoms, 3), dtype=env.NUMPY_FLOAT)
     velocities = np.zeros((n_atoms, 3), dtype=env.NUMPY_FLOAT)
-    system.upload_positions(positions)
-    system.upload_velocities(velocities)
+    system.set_positions(positions)
+    system.set_velocities(velocities)
     system.update_neighbor_list(force_rebuild=True)
     return system
 
@@ -39,7 +39,7 @@ def test_atom_near_box_boundary_stays_bounded():
     positions = np.array(
         [[9.95, 5.0, 5.0], [5.0, 5.0, 5.0]], dtype=env.NUMPY_FLOAT
     )
-    system.upload_positions(positions)
+    system.set_positions(positions)
 
     integrator = VerletIntegrator(DT)
     integrator.step(system)
@@ -60,8 +60,8 @@ def test_velocity_near_boundary_correct():
     velocities = np.array(
         [[0.1, 0.0, 0.0], [0.0, 0.0, 0.0]], dtype=env.NUMPY_FLOAT
     )
-    system.upload_positions(positions)
-    system.upload_velocities(velocities)
+    system.set_positions(positions)
+    system.set_velocities(velocities)
 
     integrator = VerletIntegrator(DT)
     integrator.step(system)
@@ -80,8 +80,8 @@ def test_multi_step_no_explosion():
     velocities = np.zeros((n, 3), dtype=env.NUMPY_FLOAT)
 
     system = _make_system(n, box)
-    system.upload_positions(positions)
-    system.upload_velocities(velocities)
+    system.set_positions(positions)
+    system.set_velocities(velocities)
 
     integrator = VerletIntegrator(DT)
     for _ in range(100):

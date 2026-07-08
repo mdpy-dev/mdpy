@@ -42,7 +42,7 @@ pbc_matrix = np.diag(BOX)
 forces = create_charmm_forces(topology, parameter_table, pbc_matrix, cutoff=CUTOFF)
 
 system = System(topology)
-system.upload_pbc(pbc_matrix)
+system.set_pbc(pbc_matrix)
 print(forces["bonded"])
 system.add_force_term(forces["bonded"])
 system.add_force_term(forces["nonbonded"])
@@ -50,8 +50,8 @@ system.add_force_term(forces["pme"], stream="pme")
 
 positions = pdb.positions
 velocities = generate_velocity_from_temperature(300.0, topology.masses, seed=42)
-system.upload_positions(positions)
-system.upload_velocities(velocities)
+system.set_positions(positions)
+system.set_velocities(velocities)
 
 integrator = LangevinBAOABIntegrator(TIME_STEP_FS, 300.0, 1.0)
 

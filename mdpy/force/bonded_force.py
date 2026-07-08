@@ -232,7 +232,7 @@ class BondedForce(ForceTerm):
         if self._num_sm is None:
             self._num_sm = cp.cuda.runtime.getDeviceProperties(0)['multiProcessorCount']
 
-    def compute(self, gpu_context, block_list=None, compute_energy=True):
+    def compute(self, state, block_list=None, compute_energy=True):
         if self._num_terms == 0:
             return
         if self._dirty:
@@ -246,22 +246,22 @@ class BondedForce(ForceTerm):
         grid_size = max(min((self._num_terms + block_size - 1) // block_size, max_blocks), 1)
 
         args = [
-            gpu_context.d_positions_x,
-            gpu_context.d_positions_y,
-            gpu_context.d_positions_z,
-            gpu_context.d_forces_x,
-            gpu_context.d_forces_y,
-            gpu_context.d_forces_z,
-            gpu_context.d_energy,
-            gpu_context.d_pbc_inv,
-            gpu_context.d_pbc_matrix,
+            state.d_positions_x,
+            state.d_positions_y,
+            state.d_positions_z,
+            state.d_forces_x,
+            state.d_forces_y,
+            state.d_forces_z,
+            state.d_energy,
+            state.d_pbc_inv,
+            state.d_pbc_matrix,
             self._d_indices.ravel(),
             self._d_parameters.ravel(),
             np.int32(self._num_terms),
         ]
         for prop_name in self._per_particle_properties:
-            if prop_name == 'charge' and gpu_context.d_charges is not None:
-                args.append(gpu_context.d_charges)
+            if prop_name == 'charge' and state.d_charges is not None:
+                args.append(state.d_charges)
             elif prop_name in self._per_particle_gpu:
                 args.append(self._per_particle_gpu[prop_name])
         self._kernel((grid_size,), (block_size,), tuple(args))

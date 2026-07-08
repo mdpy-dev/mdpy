@@ -27,17 +27,17 @@ top = psf.topology
 pt = create_parameter_table(top, tp)
 
 system = System(top)
-system.upload_pbc(np.eye(3, dtype=np.float64) * BOX)
+system.set_pbc(np.eye(3, dtype=np.float64) * BOX)
 bonded = create_bonded_group(top, pt)
 system.add_force_term(bonded)
 
-system.upload_positions(pdb.positions)
-system.upload_velocities(np.zeros((top.num_particles, 3), dtype=np.float32))
+system.set_positions(pdb.positions)
+system.set_velocities(np.zeros((top.num_particles, 3), dtype=np.float32))
 
 # warmup
 for _ in range(20):
     cp.cuda.Stream.null.synchronize()
-    bonded.compute(system.gpu, None, compute_energy=True)
+    bonded.compute(system.state, None, compute_energy=True)
 cp.cuda.Stream.null.synchronize()
 
 # time
@@ -45,7 +45,7 @@ N = 200
 cp.cuda.Stream.null.synchronize()
 t0 = time.perf_counter()
 for _ in range(N):
-    bonded.compute(system.gpu, None, compute_energy=True)
+    bonded.compute(system.state, None, compute_energy=True)
 cp.cuda.Stream.null.synchronize()
 elapsed = time.perf_counter() - t0
 print(f"bonded compute: {elapsed/N*1000:.4f} ms/call over {N} calls")

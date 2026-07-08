@@ -2,7 +2,7 @@ import numpy as np
 import cupy as cp
 import pytest
 from mdpy.core.topology import Builder
-from mdpy.core.gpu_context import GPUContext
+from mdpy.core.state import State
 from mdpy.constraint.settle import SettleConstraint
 
 
@@ -48,16 +48,16 @@ def test_settle_preserves_bond_lengths():
         np.zeros(len(masses), dtype=np.int32),
         mol_ids,
     ).build()[0]
-    gpu = GPUContext(topology)
-    gpu.upload_pbc(pbc_matrix.flatten())
-    gpu.upload_positions(positions)
-    gpu.upload_prev_positions(positions.copy())
+    state = State(topology)
+    state.set_pbc(pbc_matrix.flatten())
+    state.set_positions(positions)
+    state.set_prev_positions(positions.copy())
     perturbed = positions + np.random.randn(*positions.shape).astype(np.float32) * 0.01
-    gpu.d_positions_x[:] = cp.asarray(perturbed[:, 0])
-    gpu.d_positions_y[:] = cp.asarray(perturbed[:, 1])
-    gpu.d_positions_z[:] = cp.asarray(perturbed[:, 2])
-    settle.apply(gpu, 0.002)
-    corrected = gpu.download_positions()
+    state.d_positions_x[:] = cp.asarray(perturbed[:, 0])
+    state.d_positions_y[:] = cp.asarray(perturbed[:, 1])
+    state.d_positions_z[:] = cp.asarray(perturbed[:, 2])
+    settle.apply(state, 0.002)
+    corrected = state.download_positions()
     for ow, hw1, hw2 in water_triplets:
         d_oh1 = np.linalg.norm(corrected[ow] - corrected[hw1])
         d_oh2 = np.linalg.norm(corrected[ow] - corrected[hw2])
@@ -78,12 +78,12 @@ def test_settle_no_change_if_already_correct():
         np.zeros(len(masses), dtype=np.int32),
         mol_ids,
     ).build()[0]
-    gpu = GPUContext(topology)
-    gpu.upload_pbc(pbc_matrix.flatten())
-    gpu.upload_positions(positions)
-    gpu.upload_prev_positions(positions.copy())
-    settle.apply(gpu, 0.002)
-    corrected = gpu.download_positions()
+    state = State(topology)
+    state.set_pbc(pbc_matrix.flatten())
+    state.set_positions(positions)
+    state.set_prev_positions(positions.copy())
+    settle.apply(state, 0.002)
+    corrected = state.download_positions()
     np.testing.assert_allclose(corrected, positions, atol=1e-4)
 
 
@@ -102,8 +102,8 @@ def test_settle_pbc_boundary_crossing():
         np.zeros(3, dtype=np.int32),
         mol_ids,
     ).build()[0]
-    gpu = GPUContext(topology)
-    gpu.upload_pbc(pbc_matrix.flatten())
+    state = State(topology)
+    state.set_pbc(pbc_matrix.flatten())
     settle = SettleConstraint([(0, 1, 2)], masses, dOH, dHH)
     n_cases = 0
     for ow_pos in [[0.2, 5.0, 5.0], [9.8, 5.0, 5.0], [5.0, 0.1, 0.1], [9.9, 9.9, 9.9]]:
@@ -111,16 +111,16 @@ def test_settle_pbc_boundary_crossing():
         positions[0] = ow_pos
         positions[1] = [ow_pos[0] + half_hh, ow_pos[1] + height, ow_pos[2]]
         positions[2] = [ow_pos[0] - half_hh, ow_pos[1] + height, ow_pos[2]]
-        gpu.upload_positions(positions)
-        gpu.upload_prev_positions(positions.copy())
+        state.set_positions(positions)
+        state.set_prev_positions(positions.copy())
         perturbed = positions.copy()
         perturbed[1, 0] += 0.05
         perturbed[2, 2] -= 0.05
-        gpu.d_positions_x[:] = cp.asarray(perturbed[:, 0])
-        gpu.d_positions_y[:] = cp.asarray(perturbed[:, 1])
-        gpu.d_positions_z[:] = cp.asarray(perturbed[:, 2])
-        settle.apply(gpu, 0.002)
-        corrected = gpu.download_positions()
+        state.d_positions_x[:] = cp.asarray(perturbed[:, 0])
+        state.d_positions_y[:] = cp.asarray(perturbed[:, 1])
+        state.d_positions_z[:] = cp.asarray(perturbed[:, 2])
+        settle.apply(state, 0.002)
+        corrected = state.download_positions()
         d_oh1 = np.linalg.norm(corrected[0] - corrected[1])
         d_oh2 = np.linalg.norm(corrected[0] - corrected[2])
         d_hh = np.linalg.norm(corrected[1] - corrected[2])
@@ -142,16 +142,16 @@ def test_settle_large_perturbation():
         np.zeros(len(masses), dtype=np.int32),
         mol_ids,
     ).build()[0]
-    gpu = GPUContext(topology)
-    gpu.upload_pbc(pbc_matrix.flatten())
-    gpu.upload_positions(positions)
-    gpu.upload_prev_positions(positions.copy())
+    state = State(topology)
+    state.set_pbc(pbc_matrix.flatten())
+    state.set_positions(positions)
+    state.set_prev_positions(positions.copy())
     perturbed = positions + np.random.randn(*positions.shape).astype(np.float32) * 0.1
-    gpu.d_positions_x[:] = cp.asarray(perturbed[:, 0])
-    gpu.d_positions_y[:] = cp.asarray(perturbed[:, 1])
-    gpu.d_positions_z[:] = cp.asarray(perturbed[:, 2])
-    settle.apply(gpu, 0.002)
-    corrected = gpu.download_positions()
+    state.d_positions_x[:] = cp.asarray(perturbed[:, 0])
+    state.d_positions_y[:] = cp.asarray(perturbed[:, 1])
+    state.d_positions_z[:] = cp.asarray(perturbed[:, 2])
+    settle.apply(state, 0.002)
+    corrected = state.download_positions()
     for ow, hw1, hw2 in water_triplets:
         d_oh1 = np.linalg.norm(corrected[ow] - corrected[hw1])
         d_oh2 = np.linalg.norm(corrected[ow] - corrected[hw2])
@@ -172,18 +172,18 @@ def test_settle_center_of_mass_conservation():
         np.zeros(len(masses), dtype=np.int32),
         mol_ids,
     ).build()[0]
-    gpu = GPUContext(topology)
-    gpu.upload_pbc(pbc_matrix.flatten())
-    gpu.upload_positions(positions)
-    gpu.upload_prev_positions(positions.copy())
+    state = State(topology)
+    state.set_pbc(pbc_matrix.flatten())
+    state.set_positions(positions)
+    state.set_prev_positions(positions.copy())
     perturbed = positions + np.random.randn(*positions.shape).astype(np.float32) * 0.05
-    gpu.d_positions_x[:] = cp.asarray(perturbed[:, 0])
-    gpu.d_positions_y[:] = cp.asarray(perturbed[:, 1])
-    gpu.d_positions_z[:] = cp.asarray(perturbed[:, 2])
+    state.d_positions_x[:] = cp.asarray(perturbed[:, 0])
+    state.d_positions_y[:] = cp.asarray(perturbed[:, 1])
+    state.d_positions_z[:] = cp.asarray(perturbed[:, 2])
     mO = 15.999
     mH = 1.008
-    settle.apply(gpu, 0.002)
-    corrected = gpu.download_positions()
+    settle.apply(state, 0.002)
+    corrected = state.download_positions()
     for ow, hw1, hw2 in water_triplets:
         m_total = mO + 2.0 * mH
         com_before = (mO * perturbed[ow] + mH * perturbed[hw1] + mH * perturbed[hw2]) / m_total
@@ -204,16 +204,16 @@ def test_settle_tip3p_real_parameters():
         np.zeros(len(masses), dtype=np.int32),
         mol_ids,
     ).build()[0]
-    gpu = GPUContext(topology)
-    gpu.upload_pbc(pbc_matrix.flatten())
-    gpu.upload_positions(positions)
-    gpu.upload_prev_positions(positions.copy())
+    state = State(topology)
+    state.set_pbc(pbc_matrix.flatten())
+    state.set_positions(positions)
+    state.set_prev_positions(positions.copy())
     perturbed = positions + np.random.randn(*positions.shape).astype(np.float32) * 0.01
-    gpu.d_positions_x[:] = cp.asarray(perturbed[:, 0])
-    gpu.d_positions_y[:] = cp.asarray(perturbed[:, 1])
-    gpu.d_positions_z[:] = cp.asarray(perturbed[:, 2])
-    settle.apply(gpu, 0.002)
-    corrected = gpu.download_positions()
+    state.d_positions_x[:] = cp.asarray(perturbed[:, 0])
+    state.d_positions_y[:] = cp.asarray(perturbed[:, 1])
+    state.d_positions_z[:] = cp.asarray(perturbed[:, 2])
+    settle.apply(state, 0.002)
+    corrected = state.download_positions()
     for ow, hw1, hw2 in water_triplets:
         d_oh1 = np.linalg.norm(corrected[ow] - corrected[hw1])
         d_oh2 = np.linalg.norm(corrected[ow] - corrected[hw2])

@@ -49,7 +49,7 @@ def _build_system(include_restraint):
     forces = create_charmm_forces(topology, parameter_table, pbc_matrix, cutoff=CUTOFF)
 
     system = System(topology)
-    system.upload_pbc(pbc_matrix)
+    system.set_pbc(pbc_matrix)
     system.add_force_term(forces["bonded"])
     system.add_force_term(forces["nonbonded"])
     system.add_force_term(forces["pme"])
@@ -75,8 +75,8 @@ def _build_system(include_restraint):
         system.add_constraint(c)
 
     n = topology.num_particles
-    system.upload_positions(pdb.positions)
-    system.upload_velocities(np.zeros((n, 3), dtype=np.float32))
+    system.set_positions(pdb.positions)
+    system.set_velocities(np.zeros((n, 3), dtype=np.float32))
     system.update_neighbor_list(force_rebuild=True)
     return system
 

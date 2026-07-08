@@ -30,13 +30,13 @@ def ion_system():
     pbc = np.diag([75.450, 77.623, 69.668])
     forces = create_charmm_forces(topology, pt, pbc, cutoff=12.0)
     system = System(topology)
-    system.upload_pbc(pbc)
+    system.set_pbc(pbc)
     system.add_force_term(forces["bonded"])
     system.add_force_term(forces["nonbonded"])
     system.add_force_term(forces["pme"])
     n = topology.num_particles
-    system.upload_positions(pdb.positions)
-    system.upload_velocities(np.zeros((n, 3), dtype=np.float32))
+    system.set_positions(pdb.positions)
+    system.set_velocities(np.zeros((n, 3), dtype=np.float32))
     system.update_neighbor_list(force_rebuild=True)
     system.compute_forces()
     return system, forces

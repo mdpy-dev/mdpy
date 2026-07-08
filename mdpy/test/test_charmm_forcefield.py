@@ -117,7 +117,7 @@ class TestSystem:
 
         system = System(topology)
 
-        system.upload_pbc(pbc_matrix)
+        system.set_pbc(pbc_matrix)
         system.add_force_term(create_bonded_group(topology, parameter_table))
         nb = NonbondedForce(lennard_jones + coulomb, cutoff=12.0)
         lj_pair = parameter_table.type_pair_parameters['lj_pair']
@@ -129,7 +129,7 @@ class TestSystem:
         frac = raw @ pbc_inv
         frac -= np.floor(frac)
         positions = (frac @ pbc_matrix).astype(np.float32)
-        system.upload_positions(positions)
+        system.set_positions(positions)
 
         assert system.topology.num_particles == 49
         assert len(system.force_terms) == 2
@@ -145,7 +145,7 @@ class TestSystem:
 
         system = System(topology)
 
-        system.upload_pbc(pbc_matrix)
+        system.set_pbc(pbc_matrix)
         system.add_force_term(create_bonded_group(topology, parameter_table))
         nb = NonbondedForce(lennard_jones + coulomb, cutoff=12.0)
         lj_pair = parameter_table.type_pair_parameters['lj_pair']
@@ -157,9 +157,9 @@ class TestSystem:
         frac = raw @ pbc_inv
         frac -= np.floor(frac)
         positions = (frac @ pbc_matrix).astype(np.float32)
-        system.upload_positions(positions)
+        system.set_positions(positions)
         velocities = np.zeros_like(positions)
-        system.upload_velocities(velocities)
+        system.set_velocities(velocities)
 
         system.compute_forces()
         assert all(np.isfinite(v) for v in system.dump_energy().values())
@@ -177,7 +177,7 @@ class TestSystem:
 
         system = System(topology)
 
-        system.upload_pbc(pbc_matrix)
+        system.set_pbc(pbc_matrix)
         system.add_force_term(create_bonded_group(topology, parameter_table))
         nb = NonbondedForce(lennard_jones + coulomb, cutoff=12.0)
         lj_pair = parameter_table.type_pair_parameters['lj_pair']
@@ -189,9 +189,9 @@ class TestSystem:
         frac = raw @ pbc_inv
         frac -= np.floor(frac)
         positions = (frac @ pbc_matrix).astype(np.float32)
-        system.upload_positions(positions)
+        system.set_positions(positions)
         velocities = np.zeros_like(positions)
-        system.upload_velocities(velocities)
+        system.set_velocities(velocities)
         integrator = VerletIntegrator(time_step=0.5)
         energies = []
         for step in range(100):
@@ -209,7 +209,7 @@ class TestSystem:
 
         system = System(topology)
 
-        system.upload_pbc(pbc_matrix)
+        system.set_pbc(pbc_matrix)
         system.add_force_term(create_bonded_group(topology, parameter_table))
         nb = NonbondedForce(lennard_jones + coulomb, cutoff=12.0)
         lj_pair = parameter_table.type_pair_parameters['lj_pair']
@@ -221,9 +221,9 @@ class TestSystem:
         frac = raw @ pbc_inv
         frac -= np.floor(frac)
         positions = (frac @ pbc_matrix).astype(np.float32)
-        system.upload_positions(positions)
+        system.set_positions(positions)
         velocities = np.zeros_like(positions)
-        system.upload_velocities(velocities)
+        system.set_velocities(velocities)
 
         system.compute_forces()
         energies = system.dump_energy()

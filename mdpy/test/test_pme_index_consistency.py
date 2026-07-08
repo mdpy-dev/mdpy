@@ -32,7 +32,7 @@ def _build_system():
 
     system = System(topology)
 
-    system.upload_pbc(pbc_matrix)
+    system.set_pbc(pbc_matrix)
     system.add_force_term(create_bonded_group(topology, parameter_table))
 
     nb = NonbondedForce(lennard_jones + screened_coulomb, cutoff=CUTOFF)
@@ -51,15 +51,15 @@ def _build_system():
     frac -= np.floor(frac)
     wrapped = (frac @ pbc_matrix).astype(np.float32)
 
-    system.upload_positions(wrapped)
-    system.upload_velocities(np.zeros((topology.num_particles, 3), dtype=np.float32))
+    system.set_positions(wrapped)
+    system.set_velocities(np.zeros((topology.num_particles, 3), dtype=np.float32))
     return system, pme
 
 
 def test_pme_charges_unchanged_after_rebuild():
     system, pme = _build_system()
 
-    charges_before = cp.asnumpy(system.gpu.d_charges).copy()
+    charges_before = cp.asnumpy(system.state.d_charges).copy()
 
     system.update_neighbor_list(sync_interval=10)
     system.compute_forces()
@@ -67,7 +67,7 @@ def test_pme_charges_unchanged_after_rebuild():
     bl = system.block_list
     assert bl.d_raw_order.size > 0, "Rebuild did not produce sort order"
 
-    charges_after = cp.asnumpy(system.gpu.d_charges)
+    charges_after = cp.asnumpy(system.state.d_charges)
 
     np.testing.assert_array_almost_equal(
         charges_after, charges_before, decimal=5,

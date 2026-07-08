@@ -51,14 +51,14 @@ def _build_system(pme_stream):
     forces = create_charmm_forces(topology, pt, pbc, cutoff=12.0)
 
     system = System(topology)
-    system.upload_pbc(pbc)
+    system.set_pbc(pbc)
     system.add_force_term(forces['bonded'])
     system.add_force_term(forces['nonbonded'])
     system.add_force_term(forces['pme'], stream='pme' if pme_stream else None)
 
     pos = _wrapped_positions(pdb, pbc)
-    system.upload_positions(pos)
-    system.upload_velocities(np.zeros((topology.num_particles, 3), dtype=env.NUMPY_FLOAT))
+    system.set_positions(pos)
+    system.set_velocities(np.zeros((topology.num_particles, 3), dtype=env.NUMPY_FLOAT))
     return system, VerletIntegrator(0.5)
 
 

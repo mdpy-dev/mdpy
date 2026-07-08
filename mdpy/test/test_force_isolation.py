@@ -49,7 +49,7 @@ def _setup_system(include_bonded, include_nonbonded):
 
     system = System(topology)
 
-    system.upload_pbc(pbc_matrix)
+    system.set_pbc(pbc_matrix)
     system._cutoff = CUTOFF
 
     if include_bonded:
@@ -66,8 +66,8 @@ def _setup_system(include_bonded, include_nonbonded):
     frac = raw @ pbc_inv
     frac -= np.floor(frac)
     wrapped = frac @ pbc_matrix
-    system.upload_positions(wrapped.astype(np.float32))
-    system.upload_velocities(
+    system.set_positions(wrapped.astype(np.float32))
+    system.set_velocities(
         np.zeros((topology.num_particles, 3), dtype=np.float32),
     )
 

@@ -20,12 +20,12 @@ def _build_ion():
     pbc = np.diag([75.450, 77.623, 69.668])
     forces = create_charmm_forces(topo, pt, pbc, cutoff=12.0)
     s = System(topo)
-    s.upload_pbc(pbc)
+    s.set_pbc(pbc)
     s.add_force_term(forces["bonded"])
     s.add_force_term(forces["nonbonded"])
     s.add_force_term(forces["pme"], stream="pme")
-    s.upload_positions(pdb.positions)
-    s.upload_velocities(
+    s.set_positions(pdb.positions)
+    s.set_velocities(
         generate_velocity_from_temperature(300.0, topo.masses, seed=42)
     )
     return s
@@ -48,7 +48,7 @@ def test_rebuild_no_cudamalloc_on_second_rebuild():
 
     bl = s._block_list
     # one extra rebuild to warm the pool (first call allocates all buffers)
-    bl.rebuild(s.topology, s.gpu)
+    bl.rebuild(s.topology, s.state)
 
     call_count = [0]
     orig_empty = cp.empty
@@ -65,7 +65,7 @@ def test_rebuild_no_cudamalloc_on_second_rebuild():
     cp.empty = counting_empty
     cp.zeros = counting_zeros
     try:
-        bl.rebuild(s.topology, s.gpu)
+        bl.rebuild(s.topology, s.state)
     finally:
         cp.empty = orig_empty
         cp.zeros = orig_zeros

@@ -104,18 +104,18 @@ class VerletIntegrator:
         self._initialized = False
 
     def step(self, system):
-        gpu = system.gpu
-        number = gpu.num_particles
+        state = system.state
+        number = state.num_particles
         threads_per_block = 256
         grid = (number + threads_per_block - 1) // threads_per_block
 
         if not self._initialized:
             _kernels['init']((grid,), (threads_per_block,), (
-                gpu.d_positions_x, gpu.d_positions_y, gpu.d_positions_z,
-                gpu.d_velocities_x, gpu.d_velocities_y, gpu.d_velocities_z,
-                gpu.d_forces_x, gpu.d_forces_y, gpu.d_forces_z,
-                gpu.d_masses,
-                gpu.d_prev_positions_x, gpu.d_prev_positions_y, gpu.d_prev_positions_z,
+                state.d_positions_x, state.d_positions_y, state.d_positions_z,
+                state.d_velocities_x, state.d_velocities_y, state.d_velocities_z,
+                state.d_forces_x, state.d_forces_y, state.d_forces_z,
+                state.d_masses,
+                state.d_prev_positions_x, state.d_prev_positions_y, state.d_prev_positions_z,
                 np.float32(self.time_step),
                 np.float32(self.time_step_squared),
                 np.int32(number),
@@ -123,11 +123,11 @@ class VerletIntegrator:
             self._initialized = True
 
         _kernels['step']((grid,), (threads_per_block,), (
-            gpu.d_positions_x, gpu.d_positions_y, gpu.d_positions_z,
-            gpu.d_prev_positions_x, gpu.d_prev_positions_y, gpu.d_prev_positions_z,
-            gpu.d_forces_x, gpu.d_forces_y, gpu.d_forces_z,
-            gpu.d_masses,
-            gpu.d_velocities_x, gpu.d_velocities_y, gpu.d_velocities_z,
+            state.d_positions_x, state.d_positions_y, state.d_positions_z,
+            state.d_prev_positions_x, state.d_prev_positions_y, state.d_prev_positions_z,
+            state.d_forces_x, state.d_forces_y, state.d_forces_z,
+            state.d_masses,
+            state.d_velocities_x, state.d_velocities_y, state.d_velocities_z,
             np.float32(self.time_step),
             np.float32(self.time_step_squared),
             np.int32(number),

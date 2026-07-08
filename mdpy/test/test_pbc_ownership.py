@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from mdpy.core.gpu_context import GPUContext
+from mdpy.core.state import State
 from mdpy.core.topology import Builder
 
 
@@ -13,10 +13,10 @@ def _make_topology(n=4):
     ).build()[0]
 
 
-def test_gpu_context_exposes_public_pbc_properties():
+def test_state_exposes_public_pbc_properties():
     topo = _make_topology(4)
-    ctx = GPUContext(topo)
-    ctx.upload_pbc(np.diag(np.array([10.0, 20.0, 30.0], dtype=np.float32)).flatten())
+    ctx = State(topo)
+    ctx.set_pbc(np.diag(np.array([10.0, 20.0, 30.0], dtype=np.float32)).flatten())
 
     assert ctx.box_x == pytest.approx(10.0)
     assert ctx.box_y == pytest.approx(20.0)
@@ -26,11 +26,11 @@ def test_gpu_context_exposes_public_pbc_properties():
     assert ctx.inv_box_z == pytest.approx(1.0 / 30.0)
 
 
-def test_gpu_context_pbc_properties_update_after_upload_pbc():
+def test_state_pbc_properties_update_after_set_pbc():
     topo = _make_topology(4)
-    ctx = GPUContext(topo)
-    ctx.upload_pbc(np.diag(np.array([10.0, 20.0, 30.0], dtype=np.float32)).flatten())
-    ctx.upload_pbc(np.diag(np.array([40.0, 50.0, 60.0], dtype=np.float32)).flatten())
+    ctx = State(topo)
+    ctx.set_pbc(np.diag(np.array([10.0, 20.0, 30.0], dtype=np.float32)).flatten())
+    ctx.set_pbc(np.diag(np.array([40.0, 50.0, 60.0], dtype=np.float32)).flatten())
 
     assert ctx.box_x == pytest.approx(40.0)
     assert ctx.box_y == pytest.approx(50.0)
@@ -42,7 +42,7 @@ def test_block_list_uses_current_pbc_after_box_change():
     reflect the new box (cutoff fixed).
 
     Regression guard for the PBC ownership refactor (Task 5): BlockList will
-    stop owning PBC and read d_pbc_matrix from GPUContext. This test must keep
+    stop owning PBC and read d_pbc_matrix from State. This test must keep
     passing after the signature change.
     """
     from mdpy.core.block_list import BlockList
@@ -51,10 +51,10 @@ def test_block_list_uses_current_pbc_after_box_change():
     rng = np.random.default_rng(42)
     positions = rng.uniform(0, 10, (64, 3)).astype(np.float32)
 
-    ctx = GPUContext(topo)
-    ctx.upload_pbc((np.eye(3, dtype=np.float32) * 10.0).flatten())
-    ctx.upload_positions(positions)
-    ctx.upload_velocities(np.zeros((64, 3), dtype=np.float32))
+    ctx = State(topo)
+    ctx.set_pbc((np.eye(3, dtype=np.float32) * 10.0).flatten())
+    ctx.set_positions(positions)
+    ctx.set_velocities(np.zeros((64, 3), dtype=np.float32))
 
     bl = BlockList(cutoff=4.0, skin=1.0, rebuild_check_interval=1)
     bl.rebuild(
@@ -65,9 +65,9 @@ def test_block_list_uses_current_pbc_after_box_change():
     nc_x_before = bl.num_cells_x
 
     # Now upload a new box that is 2x larger in each dimension.
-    ctx.upload_pbc((np.eye(3, dtype=np.float32) * 20.0).flatten())
+    ctx.set_pbc((np.eye(3, dtype=np.float32) * 20.0).flatten())
 
-    # Re-rebuild reading PBC from GPUContext. The signature change must not
+    # Re-rebuild reading PBC from State. The signature change must not
     # break the physical behavior: BlockList reads the current box.
     bl.rebuild(
         topo,
@@ -84,11 +84,11 @@ def test_block_list_uses_current_pbc_after_box_change():
     )
 
 
-def test_system_update_neighbor_list_raises_if_upload_pbc_not_called():
-    """Regression: System must raise if upload_pbc() was never called.
+def test_system_update_neighbor_list_raises_if_set_pbc_not_called():
+    """Regression: System must raise if set_pbc() was never called.
 
     Before the PBC ownership refactor, the gate checked a host-side cache
-    that was only set inside upload_pbc. After the refactor, GPUContext
+    that was only set inside set_pbc. After the refactor, State
     initializes d_pbc_matrix to a non-None identity placeholder, so the
     gate must use an explicit flag.
     """
@@ -97,12 +97,12 @@ def test_system_update_neighbor_list_raises_if_upload_pbc_not_called():
     topo = _make_topology(8)
 
     system = System(topo)
-    # Note: do NOT call system.upload_pbc(...)
+    # Note: do NOT call system.set_pbc(...)
 
     # Upload positions+velocities so the _ensure_uploaded gate passes.
     rng = np.random.default_rng(0)
-    system.upload_positions(rng.uniform(0, 5, (8, 3)).astype(np.float32))
-    system.upload_velocities(np.zeros((8, 3), dtype=np.float32))
+    system.set_positions(rng.uniform(0, 5, (8, 3)).astype(np.float32))
+    system.set_velocities(np.zeros((8, 3), dtype=np.float32))
 
     # Need a force term with a cutoff so block_list can be constructed.
     # Build a minimal stand-in force term that has a _cutoff attribute.
@@ -116,16 +116,16 @@ def test_system_update_neighbor_list_raises_if_upload_pbc_not_called():
         system.update_neighbor_list()
 
 
-def test_gpu_context_lazy_pbc():
-    """GPUContext constructed without PBC; has_pbc False until upload_pbc."""
+def test_state_lazy_pbc():
+    """State constructed without PBC; has_pbc False until set_pbc."""
     topo = _make_topology(4)
-    ctx = GPUContext(topo)
+    ctx = State(topo)
     assert ctx.has_pbc is False
     assert ctx.d_pbc_matrix is None
     assert ctx.d_pbc_inv is None
-    ctx.upload_pbc(np.diag([10.0, 10.0, 10.0]).astype(np.float32))
+    ctx.set_pbc(np.diag([10.0, 10.0, 10.0]).astype(np.float32))
     assert ctx.has_pbc is True
     assert ctx.d_pbc_matrix is not None
     buf_ptr = ctx.d_pbc_matrix.data.ptr
-    ctx.upload_pbc(np.diag([20.0, 20.0, 20.0]).astype(np.float32))
+    ctx.set_pbc(np.diag([20.0, 20.0, 20.0]).astype(np.float32))
     assert ctx.d_pbc_matrix.data.ptr == buf_ptr  # in-place overwrite

@@ -27,13 +27,13 @@ def setup_system(data_dir, psf_name, pdb_name, prm_names, box):
     pbc = np.diag(box)
     forces = create_charmm_forces(topology, pt, pbc, cutoff=12.0)
     system = System(topology)
-    system.upload_pbc(pbc)
+    system.set_pbc(pbc)
     system.add_force_term(forces["bonded"])
     system.add_force_term(forces["nonbonded"])
     system.add_force_term(forces["pme"])
     n = topology.num_particles
-    system.upload_positions(pdb.positions)
-    system.upload_velocities(np.zeros((n, 3), dtype=np.float32))
+    system.set_positions(pdb.positions)
+    system.set_velocities(np.zeros((n, 3), dtype=np.float32))
     system.update_neighbor_list(force_rebuild=True)
     system.compute_forces()
     return system, forces
@@ -42,23 +42,23 @@ def setup_system(data_dir, psf_name, pdb_name, prm_names, box):
 def time_pme(system, forces, n_iter=500):
     """Time the PME compute() call in isolation."""
     pme = forces["pme"]
-    gpu = system.gpu
+    state = system.state
     bl = system._block_list
 
     # Warmup
     for _ in range(20):
-        gpu.d_forces_x[:] = 0; gpu.d_forces_y[:] = 0; gpu.d_forces_z[:] = 0
-        if gpu.d_energy is not None:
-            gpu.d_energy[:] = 0
-        pme.compute(gpu, bl)
+        state.d_forces_x[:] = 0; state.d_forces_y[:] = 0; state.d_forces_z[:] = 0
+        if state.d_energy is not None:
+            state.d_energy[:] = 0
+        pme.compute(state, bl)
 
     cp.cuda.Device().synchronize()
     t0 = time.perf_counter()
     for _ in range(n_iter):
-        gpu.d_forces_x[:] = 0; gpu.d_forces_y[:] = 0; gpu.d_forces_z[:] = 0
-        if gpu.d_energy is not None:
-            gpu.d_energy[:] = 0
-        pme.compute(gpu, bl)
+        state.d_forces_x[:] = 0; state.d_forces_y[:] = 0; state.d_forces_z[:] = 0
+        if state.d_energy is not None:
+            state.d_energy[:] = 0
+        pme.compute(state, bl)
     cp.cuda.Device().synchronize()
     return (time.perf_counter() - t0) / n_iter * 1000
 

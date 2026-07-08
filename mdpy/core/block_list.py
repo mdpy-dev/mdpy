@@ -927,7 +927,7 @@ class BlockList:
         self._hilbert_levels = L
         self._hilbert_bits = 3 * L
 
-    def rebuild(self, topology, gpu_context, *, force=False):
+    def rebuild(self, topology, state, *, force=False):
         """Sort particles into cell-aligned blocks. Returns (pdb_to_sorted, None).
 
         When force=False (default), d_rebuild_flag is left untouched — the
@@ -955,15 +955,15 @@ class BlockList:
         # 36-byte D→H transfer for cell-grid sizing; rebuild is not the
         # hot path (AGENTS.md P1). cell_assign below reads d_pbc_matrix
         # on-device, so this is the only host-side PBC read in rebuild.
-        pbc_matrix_host = gpu_context.d_pbc_matrix.get().reshape(3, 3)
+        pbc_matrix_host = state.d_pbc_matrix.get().reshape(3, 3)
         self._compute_cell_grid(pbc_matrix_host, N)
 
         if force:
             self.d_rebuild_flag[0] = 1
 
-        pos_x = gpu_context.d_positions_x
-        pos_y = gpu_context.d_positions_y
-        pos_z = gpu_context.d_positions_z
+        pos_x = state.d_positions_x
+        pos_y = state.d_positions_y
+        pos_z = state.d_positions_z
 
         # K1: Fused cell-assign (cell_index + Hilbert key + atomic cell_counts
         # and composite_counts). The composite key (cell << (3*L)) | hilbert
@@ -980,7 +980,7 @@ class BlockList:
             (nm,), (threads_per_block,),
             (
                 pos_x, pos_y, pos_z,
-                gpu_context.d_pbc_matrix, gpu_context.d_pbc_inv,
+                state.d_pbc_matrix, state.d_pbc_inv,
                 np.int32(N),
                 np.int32(self.num_cells_x), np.int32(self.num_cells_y), np.int32(self.num_cells_z),
                 np.int32(hilbert_levels),
@@ -1093,15 +1093,15 @@ class BlockList:
 
         return self.d_pdb_to_sorted, None
 
-    def build_block_pairs(self, topology, gpu_context):
+    def build_block_pairs(self, topology, state):
         """Find interacting block pairs using cell-based neighbor search."""
         if self.num_particles == 0 or not self._is_initialized:
             return
         self._invalidate_caches()
 
-        pos_x = gpu_context.d_positions_x
-        pos_y = gpu_context.d_positions_y
-        pos_z = gpu_context.d_positions_z
+        pos_x = state.d_positions_x
+        pos_y = state.d_positions_y
+        pos_z = state.d_positions_z
         num_blocks = self.max_blocks
         # Cell-subset decomposition: split the 27-cell scan into cell_subsets subsets
         # to fill the GPU. Target ~2 full waves (80 SMs x 4 blocks/SM = 320/wave).
@@ -1135,7 +1135,7 @@ class BlockList:
                 d_num_blocks, np.int32(self.num_particles),
                 np.int32(cell_subsets),
                 np.float32(build_radius_sq),
-                gpu_context.d_pbc_matrix,
+                state.d_pbc_matrix,
                 self._d_block_pair_buf, self._d_interacting_buf,
                 self._d_block_pair_shift_x_buf, self._d_block_pair_shift_y_buf, self._d_block_pair_shift_z_buf,
                 self.d_num_block_pairs, np.int32(max_block_pairs),
@@ -1185,7 +1185,7 @@ class BlockList:
             ),
         )
 
-    def _launch_check_rebuild(self, gpu_context):
+    def _launch_check_rebuild(self, state):
         """Launch the displacement-check kernel over all particles. Writes 1
         to d_rebuild_flag if any atom moved past skin/2 since capture_snapshot.
         Does not read the flag back — caller does that via read_flag_sync()."""
@@ -1197,9 +1197,9 @@ class BlockList:
             grid,
             (threads_per_block,),
             (
-                gpu_context.d_positions_x,
-                gpu_context.d_positions_y,
-                gpu_context.d_positions_z,
+                state.d_positions_x,
+                state.d_positions_y,
+                state.d_positions_z,
                 self.d_positions_at_rebuild_x,
                 self.d_positions_at_rebuild_y,
                 self.d_positions_at_rebuild_z,
@@ -1209,24 +1209,24 @@ class BlockList:
             ),
         )
 
-    def check_rebuild_async(self, gpu_context) -> bool:
+    def check_rebuild_async(self, state) -> bool:
         if not self._is_initialized:
             return True
         if self.d_positions_at_rebuild_x.size == 0:
             return True
-        self._launch_check_rebuild(gpu_context)
+        self._launch_check_rebuild(state)
         return False
 
-    def capture_snapshot(self, gpu_context):
+    def capture_snapshot(self, state):
         """Capture current positions as the rebuild-baseline snapshot.
 
         Must be called AFTER pbc wrapping so the snapshot is in the same
         PBC image as subsequent positions. This ensures check_rebuild
         measures true cumulative drift, not wrap-artifact coordinate jumps.
         """
-        pos_x = gpu_context.d_positions_x
-        pos_y = gpu_context.d_positions_y
-        pos_z = gpu_context.d_positions_z
+        pos_x = state.d_positions_x
+        pos_y = state.d_positions_y
+        pos_z = state.d_positions_z
         N = self.num_particles
         snap_x = self._acquire_scratch_buffer("snap_x", N, env.NUMPY_FLOAT)
         snap_y = self._acquire_scratch_buffer("snap_y", N, env.NUMPY_FLOAT)
@@ -1272,8 +1272,8 @@ class BlockList:
         )
         return dst
 
-    def refresh_sorted_posq(self, gpu_context):
-        """Refresh self._d_sorted_posq from gpu_context's PDB-order positions+charges.
+    def refresh_sorted_posq(self, state):
+        """Refresh self._d_sorted_posq from state's PDB-order positions+charges.
 
         Per-step refresh: called by System.compute_forces() every step
         because positions change every integrator step. Gathers PDB-order
@@ -1293,25 +1293,25 @@ class BlockList:
         self._kernels["pack_sorted_data"](
             grid, (threads_per_block,),
             (
-                gpu_context.d_positions_x,
-                gpu_context.d_positions_y,
-                gpu_context.d_positions_z,
-                gpu_context.d_charges,
+                state.d_positions_x,
+                state.d_positions_y,
+                state.d_positions_z,
+                state.d_charges,
                 self.d_block_atoms,
-                np.int32(gpu_context.d_positions_x.size),
+                np.int32(state.d_positions_x.size),
                 np.int32(total_slots),
                 self._d_sorted_posq,
             ),
         )
 
-    def refresh_sorted_types(self, gpu_context):
-        """Refresh self._d_sorted_types from gpu_context's PDB-order atom types.
+    def refresh_sorted_types(self, state):
+        """Refresh self._d_sorted_types from state's PDB-order atom types.
 
         Per-rebuild refresh: called by System._do_rebuild() because types
         are static but block membership changes when the block list
         rebuilds. Thin wrapper around the generic gather_sorted primitive.
         """
-        self._d_sorted_types = self.gather_sorted(gpu_context.d_types)
+        self._d_sorted_types = self.gather_sorted(state.d_types)
 
     @property
     def d_sorted_posq(self):

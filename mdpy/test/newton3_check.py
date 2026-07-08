@@ -50,7 +50,7 @@ def setup_mdpy_system():
 
     system = System(topology)
 
-    system.upload_pbc(pbc_matrix)
+    system.set_pbc(pbc_matrix)
     system.add_force_term(create_bonded_group(topology, parameter_table))
     nb = NonbondedForce(lennard_jones + coulomb, cutoff=CUTOFF)
     lj_pair = parameter_table.type_pair_parameters['lj_pair']
@@ -62,8 +62,8 @@ def setup_mdpy_system():
     frac = raw @ pbc_inv
     frac -= np.floor(frac)
     wrapped = frac @ pbc_matrix
-    system.upload_positions(wrapped.astype(np.float32))
-    system.upload_velocities(
+    system.set_positions(wrapped.astype(np.float32))
+    system.set_velocities(
         np.zeros((topology.num_particles, 3), dtype=np.float32)
     )
     system.update_neighbor_list(force_rebuild=True)
@@ -73,11 +73,11 @@ def setup_mdpy_system():
 def get_pdb_forces(system):
     import cupy as cp
     bl = system.block_list
-    gpu = system.gpu
+    state = system.state
     sorted_to_pdb = bl.d_sorted_to_pdb
-    pdb_fx = gpu.permute_from_sorted(sorted_to_pdb, gpu.d_forces_x).get()
-    pdb_fy = gpu.permute_from_sorted(sorted_to_pdb, gpu.d_forces_y).get()
-    pdb_fz = gpu.permute_from_sorted(sorted_to_pdb, gpu.d_forces_z).get()
+    pdb_fx = state.permute_from_sorted(sorted_to_pdb, state.d_forces_x).get()
+    pdb_fy = state.permute_from_sorted(sorted_to_pdb, state.d_forces_y).get()
+    pdb_fz = state.permute_from_sorted(sorted_to_pdb, state.d_forces_z).get()
     return np.stack([pdb_fx, pdb_fy, pdb_fz], axis=1).astype(np.float64)
 
 

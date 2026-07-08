@@ -340,21 +340,21 @@ class LincsConstraint(ConstraintBase):
         self._num_constraint_indices = constraint_indices.size
         self._kernel = cp.RawKernel(_LINCS_KERNEL, "lincs_kernel")
 
-    def apply(self, gpu_context, time_step, **kwargs):
+    def apply(self, state, time_step, **kwargs):
         if self.num_constraints == 0:
             return
         threads_per_block = 256
         grid = (self.num_constraint_threads + threads_per_block - 1) // threads_per_block
         shared_mem = 3 * threads_per_block * 4
         self._kernel((grid,), (threads_per_block,), (
-            gpu_context.d_prev_positions_x,
-            gpu_context.d_prev_positions_y,
-            gpu_context.d_prev_positions_z,
-            gpu_context.d_positions_x,
-            gpu_context.d_positions_y,
-            gpu_context.d_positions_z,
-            gpu_context.d_pbc_matrix,
-            gpu_context.d_pbc_inv,
+            state.d_prev_positions_x,
+            state.d_prev_positions_y,
+            state.d_prev_positions_z,
+            state.d_positions_x,
+            state.d_positions_y,
+            state.d_positions_z,
+            state.d_pbc_matrix,
+            state.d_pbc_inv,
             self.d_constraint_indices,
             self.d_target_lengths,
             self.d_inverse_mass_i,

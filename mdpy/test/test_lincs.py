@@ -2,7 +2,7 @@ import numpy as np
 import cupy as cp
 import pytest
 from mdpy.core.topology import Builder
-from mdpy.core.gpu_context import GPUContext
+from mdpy.core.state import State
 from mdpy.constraint.lincs import LincsConstraint
 
 
@@ -39,17 +39,17 @@ def test_lincs_preserves_bond_lengths():
         np.zeros(len(masses), dtype=np.int32),
         mol_ids,
     ).build()[0]
-    gpu = GPUContext(topology)
-    gpu.upload_pbc(pbc.flatten())
-    gpu.upload_positions(positions)
-    gpu.upload_prev_positions(positions.copy())
+    state = State(topology)
+    state.set_pbc(pbc.flatten())
+    state.set_positions(positions)
+    state.set_prev_positions(positions.copy())
     perturbed = positions + np.random.randn(*positions.shape).astype(np.float32) * 0.005
-    gpu.d_positions_x[:] = cp.asarray(perturbed[:, 0])
-    gpu.d_positions_y[:] = cp.asarray(perturbed[:, 1])
-    gpu.d_positions_z[:] = cp.asarray(perturbed[:, 2])
+    state.d_positions_x[:] = cp.asarray(perturbed[:, 0])
+    state.d_positions_y[:] = cp.asarray(perturbed[:, 1])
+    state.d_positions_z[:] = cp.asarray(perturbed[:, 2])
     identity_map = cp.arange(len(masses), dtype=np.int32)
-    lincs.apply(gpu, 0.002, d_pdb_to_sorted=identity_map)
-    corrected = gpu.download_positions()
+    lincs.apply(state, 0.002, d_pdb_to_sorted=identity_map)
+    corrected = state.download_positions()
     for c, (i, j) in enumerate(pairs):
         d = np.linalg.norm(corrected[i] - corrected[j])
         assert abs(d - lengths[c]) < 0.02, f"Bond {c} ({i}-{j}): {d} != {lengths[c]}"
@@ -65,13 +65,13 @@ def test_lincs_no_change_if_already_correct():
         np.zeros(len(masses), dtype=np.int32),
         mol_ids,
     ).build()[0]
-    gpu = GPUContext(topology)
-    gpu.upload_pbc(pbc.flatten())
-    gpu.upload_positions(positions)
-    gpu.upload_prev_positions(positions.copy())
+    state = State(topology)
+    state.set_pbc(pbc.flatten())
+    state.set_positions(positions)
+    state.set_prev_positions(positions.copy())
     identity_map = cp.arange(len(masses), dtype=np.int32)
-    lincs.apply(gpu, 0.002, d_pdb_to_sorted=identity_map)
-    corrected = gpu.download_positions()
+    lincs.apply(state, 0.002, d_pdb_to_sorted=identity_map)
+    corrected = state.download_positions()
     np.testing.assert_allclose(corrected, positions, atol=1e-3)
 
 
@@ -130,7 +130,7 @@ def test_lincs_multiple_rebuilds():
 
     system = System(topology)
 
-    system.upload_pbc(pbc_matrix)
+    system.set_pbc(pbc_matrix)
 
     system._cutoff = 12.0
     bonded = create_bonded_group(topology, parameter_table)
@@ -145,8 +145,8 @@ def test_lincs_multiple_rebuilds():
     lincs = LincsConstraint(constraint_pairs, target_lengths, topology.masses)
     system.add_constraint(lincs)
 
-    system.upload_positions(positions)
-    system.upload_velocities(np.random.RandomState(42).randn(*positions.shape).astype(np.float32) * 0.001)
+    system.set_positions(positions)
+    system.set_velocities(np.random.RandomState(42).randn(*positions.shape).astype(np.float32) * 0.001)
 
     integrator = VerletIntegrator(0.002)
 
@@ -193,22 +193,22 @@ def test_lincs_many_groups_multi_block():
         np.zeros(n_atoms, dtype=np.int32),
         mol_ids,
     ).build()[0]
-    gpu = GPUContext(topology)
-    gpu.upload_pbc(pbc_matrix.flatten())
-    gpu.upload_positions(positions)
-    gpu.upload_prev_positions(positions.copy())
+    state = State(topology)
+    state.set_pbc(pbc_matrix.flatten())
+    state.set_positions(positions)
+    state.set_prev_positions(positions.copy())
 
     perturbed = positions + np.random.randn(*positions.shape).astype(np.float32) * 0.005
-    gpu.d_positions_x[:] = cp.asarray(perturbed[:, 0])
-    gpu.d_positions_y[:] = cp.asarray(perturbed[:, 1])
-    gpu.d_positions_z[:] = cp.asarray(perturbed[:, 2])
+    state.d_positions_x[:] = cp.asarray(perturbed[:, 0])
+    state.d_positions_y[:] = cp.asarray(perturbed[:, 1])
+    state.d_positions_z[:] = cp.asarray(perturbed[:, 2])
 
     identity_map = cp.arange(n_atoms, dtype=np.int32)
-    lincs.apply(gpu, 0.002, d_pdb_to_sorted=identity_map)
+    lincs.apply(state, 0.002, d_pdb_to_sorted=identity_map)
 
     cp.cuda.Stream.null.synchronize()
 
-    corrected = gpu.download_positions()
+    corrected = state.download_positions()
     assert not np.any(np.isnan(corrected)), "Positions became NaN — likely illegal memory access in LINCS kernel"
 
     for c, (i, j) in enumerate(constraint_pairs):
@@ -258,17 +258,17 @@ def test_lincs_shared_atom_atomicAdd():
         np.zeros(5, dtype=np.int32),
         mol_ids,
     ).build()[0]
-    gpu = GPUContext(topology)
-    gpu.upload_pbc(pbc_matrix.flatten())
-    gpu.upload_positions(positions)
-    gpu.upload_prev_positions(positions.copy())
+    state = State(topology)
+    state.set_pbc(pbc_matrix.flatten())
+    state.set_positions(positions)
+    state.set_prev_positions(positions.copy())
     perturbed = positions + np.random.randn(*positions.shape).astype(np.float32) * 0.01
-    gpu.d_positions_x[:] = cp.asarray(perturbed[:, 0])
-    gpu.d_positions_y[:] = cp.asarray(perturbed[:, 1])
-    gpu.d_positions_z[:] = cp.asarray(perturbed[:, 2])
+    state.d_positions_x[:] = cp.asarray(perturbed[:, 0])
+    state.d_positions_y[:] = cp.asarray(perturbed[:, 1])
+    state.d_positions_z[:] = cp.asarray(perturbed[:, 2])
     identity_map = cp.arange(5, dtype=np.int32)
-    lincs.apply(gpu, 0.002, d_pdb_to_sorted=identity_map)
-    corrected = gpu.download_positions()
+    lincs.apply(state, 0.002, d_pdb_to_sorted=identity_map)
+    corrected = state.download_positions()
     for c, (i, j) in enumerate(constraint_pairs):
         d = np.linalg.norm(corrected[i] - corrected[j])
         assert abs(d - target_lengths[c]) < 0.02, f"Bond {c} ({i}-{j}): {d:.4f} != {target_lengths[c]}"
@@ -295,17 +295,17 @@ def test_lincs_ring_topology():
         np.zeros(n_atoms, dtype=np.int32),
         mol_ids,
     ).build()[0]
-    gpu = GPUContext(topology)
-    gpu.upload_pbc(pbc_matrix.flatten())
-    gpu.upload_positions(positions)
-    gpu.upload_prev_positions(positions.copy())
+    state = State(topology)
+    state.set_pbc(pbc_matrix.flatten())
+    state.set_positions(positions)
+    state.set_prev_positions(positions.copy())
     perturbed = positions + np.random.randn(*positions.shape).astype(np.float32) * 0.01
-    gpu.d_positions_x[:] = cp.asarray(perturbed[:, 0])
-    gpu.d_positions_y[:] = cp.asarray(perturbed[:, 1])
-    gpu.d_positions_z[:] = cp.asarray(perturbed[:, 2])
+    state.d_positions_x[:] = cp.asarray(perturbed[:, 0])
+    state.d_positions_y[:] = cp.asarray(perturbed[:, 1])
+    state.d_positions_z[:] = cp.asarray(perturbed[:, 2])
     identity_map = cp.arange(n_atoms, dtype=np.int32)
-    lincs.apply(gpu, 0.002, d_pdb_to_sorted=identity_map)
-    corrected = gpu.download_positions()
+    lincs.apply(state, 0.002, d_pdb_to_sorted=identity_map)
+    corrected = state.download_positions()
     for c, (i, j) in enumerate(constraint_pairs):
         d = np.linalg.norm(corrected[i] - corrected[j])
         assert abs(d - target_lengths[c]) < 0.03, f"Ring bond {c} ({i}-{j}): {d:.4f} != {target_lengths[c]}"
@@ -322,7 +322,7 @@ def test_lincs_md_loop_bond_length_statistics():
 
     system = System(topology)
 
-    system.upload_pbc(pbc_matrix)
+    system.set_pbc(pbc_matrix)
 
     system._cutoff = 12.0
     bonded = create_bonded_group(topology, parameter_table)
@@ -337,8 +337,8 @@ def test_lincs_md_loop_bond_length_statistics():
     lincs = LincsConstraint(constraint_pairs, target_lengths, topology.masses)
     system.add_constraint(lincs)
 
-    system.upload_positions(positions)
-    system.upload_velocities(np.random.RandomState(42).randn(*positions.shape).astype(np.float32) * 0.001)
+    system.set_positions(positions)
+    system.set_velocities(np.random.RandomState(42).randn(*positions.shape).astype(np.float32) * 0.001)
 
     integrator = VerletIntegrator(0.002)
 

@@ -559,7 +559,7 @@ class PMEReciprocalForce(ForceTerm):
         cp.fft.irfftn(fft, s=(self.grid_x, self.grid_y, self.grid_z))
         self._fft_warmed = True
 
-    def compute(self, gpu_context, block_list=None, compute_energy=True):
+    def compute(self, state, block_list=None, compute_energy=True):
         N = self._N
         order = self.order
         gx, gy, gz = self.grid_x, self.grid_y, self.grid_z
@@ -579,10 +579,10 @@ class PMEReciprocalForce(ForceTerm):
             )
             self._subgrid_initialized = True
 
-        sorted_pos_x = gpu_context.d_positions_x
-        sorted_pos_y = gpu_context.d_positions_y
-        sorted_pos_z = gpu_context.d_positions_z
-        sorted_charges = gpu_context.d_charges
+        sorted_pos_x = state.d_positions_x
+        sorted_pos_y = state.d_positions_y
+        sorted_pos_z = state.d_positions_z
+        sorted_charges = state.d_charges
 
         cell_spread_k = get_cell_spread_kernel()
         shmem = self._subgrid_total * 4
@@ -598,9 +598,9 @@ class PMEReciprocalForce(ForceTerm):
                 block_list.d_cell_block_count,
                 block_list.d_block_atoms,
                 np.int32(N),
-                np.float32(gpu_context.inv_box_x),
-                np.float32(gpu_context.inv_box_y),
-                np.float32(gpu_context.inv_box_z),
+                np.float32(state.inv_box_x),
+                np.float32(state.inv_box_y),
+                np.float32(state.inv_box_z),
                 np.int32(gx),
                 np.int32(gy),
                 np.int32(gz),
@@ -630,28 +630,28 @@ class PMEReciprocalForce(ForceTerm):
             grid_1d,
             (threads_per_block,),
             (
-                gpu_context.d_positions_x,
-                gpu_context.d_positions_y,
-                gpu_context.d_positions_z,
-                gpu_context.d_charges,
+                state.d_positions_x,
+                state.d_positions_y,
+                state.d_positions_z,
+                state.d_charges,
                 np.int32(N),
                 block_list.d_block_atoms,
                 np.int32(total_slots),
-                np.float32(gpu_context.inv_box_x),
-                np.float32(gpu_context.inv_box_y),
-                np.float32(gpu_context.inv_box_z),
+                np.float32(state.inv_box_x),
+                np.float32(state.inv_box_y),
+                np.float32(state.inv_box_z),
                 np.int32(gx),
                 np.int32(gy),
                 np.int32(gz),
                 np.int32(order),
                 self._d_charge_grid,
-                gpu_context.d_forces_x,
-                gpu_context.d_forces_y,
-                gpu_context.d_forces_z,
-                gpu_context.d_energy,
+                state.d_forces_x,
+                state.d_forces_y,
+                state.d_forces_z,
+                state.d_energy,
             ),
         )
 
         self_k = get_self_energy_kernel()
-        self_k((1,), (1,), (np.float32(self._self_energy_factor), gpu_context.d_energy))
+        self_k((1,), (1,), (np.float32(self._self_energy_factor), state.d_energy))
 

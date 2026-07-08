@@ -2,7 +2,7 @@ class ForceTerm:
 
     name: str = ''
 
-    def compute(self, gpu_context, block_list=None, compute_energy=True):
+    def compute(self, state, block_list=None, compute_energy=True):
         raise NotImplementedError
 
     def __add__(self, other):

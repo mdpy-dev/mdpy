@@ -16,7 +16,7 @@ from mdpy.force.markers import param, scalar as scalar_marker
 from mdpy.force.expressions.geometry import distance_to_point, distance, angle, dihedral
 
 
-class MockGPUContext:
+class MockState:
     def __init__(self, positions, pbc_matrix):
         pos = positions.astype(np.float32)
         self.d_positions_x = cp.asarray(pos[:, 0])
@@ -104,7 +104,7 @@ def _compute_bonded_energy(expression, positions, params_list, per_particle_data
             force.set_parameter(name, arr)
     for indices, params in params_list:
         force.add(indices, **params)
-    ctx = MockGPUContext(positions, pbc)
+    ctx = MockState(positions, pbc)
     force.compute(ctx)
     return float(ctx.d_energy[0])
 
@@ -137,7 +137,7 @@ def _compare_forces(expression, positions, params_list, per_particle_data=None, 
             force.set_parameter(name, arr)
     for indices, params in params_list:
         force.add(indices, **params)
-    ctx = MockGPUContext(positions, pbc)
+    ctx = MockState(positions, pbc)
     force.compute(ctx)
     anal_forces = ctx.get_forces()
 

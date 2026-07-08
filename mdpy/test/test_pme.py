@@ -20,7 +20,7 @@ from mdpy.force.factories.charmm import create_bonded_group
 
 class _PBCContext:
     """Minimal stand-in exposing d_pbc_matrix/d_pbc_inv for BlockList.rebuild,
-    which now reads PBC from a GPUContext."""
+    which now reads PBC from a State."""
 
     def __init__(self, pbc_matrix, pbc_inv, positions=None):
         self.d_pbc_matrix = cp.asarray(
@@ -336,7 +336,7 @@ class TestPMEReciprocalForce:
 
     def test_nonzero_energy_and_forces(self):
         from mdpy.force.pme_reciprocal_force import PMEReciprocalForce
-        from mdpy.core.gpu_context import GPUContext
+        from mdpy.core.state import State
         from mdpy.core.topology import Topology
         from mdpy.core.parameter_table import ParameterTable
 
@@ -355,27 +355,27 @@ class TestPMEReciprocalForce:
         pt.particle_parameters['charge'] = np.random.randn(N).astype(np.float32)
         topo.charges = pt.particle_parameters['charge'].copy()
 
-        gpu = GPUContext(topo)
-        gpu.upload_pbc(pbc.flatten())
+        state = State(topo)
+        state.set_pbc(pbc.flatten())
 
         pos = np.random.uniform(2, box - 2, (N, 3)).astype(np.float32)
-        gpu.d_positions_x[:] = cp.asarray(pos[:, 0])
-        gpu.d_positions_y[:] = cp.asarray(pos[:, 1])
-        gpu.d_positions_z[:] = cp.asarray(pos[:, 2])
+        state.d_positions_x[:] = cp.asarray(pos[:, 0])
+        state.d_positions_y[:] = cp.asarray(pos[:, 1])
+        state.d_positions_z[:] = cp.asarray(pos[:, 2])
 
         pme = PMEReciprocalForce(cutoff)
         pme.initialize_grid(topo, pt, pbc_matrix=pbc)
 
         bl = self._build_block_list(pos, pbc, topo, cutoff)
 
-        gpu.zero_forces()
-        gpu.zero_energy()
-        pme.compute(gpu, block_list=bl)
+        state.zero_forces()
+        state.zero_energy()
+        pme.compute(state, block_list=bl)
 
-        fx = cp.asnumpy(gpu.d_forces_x)
-        fy = cp.asnumpy(gpu.d_forces_y)
-        fz = cp.asnumpy(gpu.d_forces_z)
-        energy = float(gpu.d_energy[0])
+        fx = cp.asnumpy(state.d_forces_x)
+        fy = cp.asnumpy(state.d_forces_y)
+        fz = cp.asnumpy(state.d_forces_z)
+        energy = float(state.d_energy[0])
 
         print(f"PME reciprocal energy: {energy:.6f}")
         print(f"Max force: {max(np.max(np.abs(fx)), np.max(np.abs(fy)), np.max(np.abs(fz))):.6f}")
@@ -386,7 +386,7 @@ class TestPMEReciprocalForce:
 
     def test_reproducibility(self):
         from mdpy.force.pme_reciprocal_force import PMEReciprocalForce
-        from mdpy.core.gpu_context import GPUContext
+        from mdpy.core.state import State
         from mdpy.core.topology import Topology
         from mdpy.core.parameter_table import ParameterTable
 
@@ -405,30 +405,30 @@ class TestPMEReciprocalForce:
         pt.particle_parameters['charge'] = np.random.randn(N).astype(np.float32)
         topo.charges = pt.particle_parameters['charge'].copy()
 
-        gpu = GPUContext(topo)
-        gpu.upload_pbc(pbc.flatten())
+        state = State(topo)
+        state.set_pbc(pbc.flatten())
 
         pos = np.random.uniform(2, box - 2, (N, 3)).astype(np.float32)
-        gpu.d_positions_x[:] = cp.asarray(pos[:, 0])
-        gpu.d_positions_y[:] = cp.asarray(pos[:, 1])
-        gpu.d_positions_z[:] = cp.asarray(pos[:, 2])
+        state.d_positions_x[:] = cp.asarray(pos[:, 0])
+        state.d_positions_y[:] = cp.asarray(pos[:, 1])
+        state.d_positions_z[:] = cp.asarray(pos[:, 2])
 
         pme = PMEReciprocalForce(cutoff)
         pme.initialize_grid(topo, pt, pbc_matrix=pbc)
 
         bl = self._build_block_list(pos, pbc, topo, cutoff)
 
-        gpu.zero_forces()
-        gpu.zero_energy()
-        pme.compute(gpu, block_list=bl)
-        energy1 = float(gpu.d_energy[0])
-        fx1 = cp.asnumpy(gpu.d_forces_x).copy()
+        state.zero_forces()
+        state.zero_energy()
+        pme.compute(state, block_list=bl)
+        energy1 = float(state.d_energy[0])
+        fx1 = cp.asnumpy(state.d_forces_x).copy()
 
-        gpu.zero_forces()
-        gpu.zero_energy()
-        pme.compute(gpu, block_list=bl)
-        energy2 = float(gpu.d_energy[0])
-        fx2 = cp.asnumpy(gpu.d_forces_x).copy()
+        state.zero_forces()
+        state.zero_energy()
+        pme.compute(state, block_list=bl)
+        energy2 = float(state.d_energy[0])
+        fx2 = cp.asnumpy(state.d_forces_x).copy()
 
         assert abs(energy1 - energy2) < 1e-6, f"Energy not reproducible: {energy1} vs {energy2}"
         np.testing.assert_allclose(fx1, fx2, atol=1e-6)
@@ -605,7 +605,7 @@ class TestPMEIntegration6PO6:
 
         system = System(self.topology)
 
-        system.upload_pbc(pbc_matrix)
+        system.set_pbc(pbc_matrix)
 
         system.add_force_term(create_bonded_group(self.topology, self.parameter_table))
 
@@ -625,8 +625,8 @@ class TestPMEIntegration6PO6:
         frac -= np.floor(frac)
         wrapped = (frac @ pbc_matrix).astype(np.float32)
 
-        system.upload_positions(wrapped.astype(np.float32))
-        system.upload_velocities(np.zeros((self.N, 3), dtype=np.float32))
+        system.set_positions(wrapped.astype(np.float32))
+        system.set_velocities(np.zeros((self.N, 3), dtype=np.float32))
 
         system.update_neighbor_list(force_rebuild=True)
 
@@ -638,9 +638,9 @@ class TestPMEIntegration6PO6:
         system.compute_forces()
 
         from cupy import asnumpy
-        fx = asnumpy(system.gpu.d_forces_x)
-        fy = asnumpy(system.gpu.d_forces_y)
-        fz = asnumpy(system.gpu.d_forces_z)
+        fx = asnumpy(system.state.d_forces_x)
+        fy = asnumpy(system.state.d_forces_y)
+        fz = asnumpy(system.state.d_forces_z)
 
         max_force = max(np.max(np.abs(fx)), np.max(np.abs(fy)), np.max(np.abs(fz)))
 
@@ -685,25 +685,25 @@ class TestPMEIntegration6PO6:
         print(f"Self-energy: {self_energy:.6f}")
         assert self_energy < 0, "Self-energy should be negative"
 
-    def test_pme_reads_gpu_context_charges(self):
+    def test_pme_reads_state_charges(self):
         system, pme = self._build_pme_system()
-        gpu = system.gpu
+        state = system.state
         block_list = system.block_list
 
-        gpu.zero_forces()
-        gpu.zero_energy()
-        pme.compute(gpu, block_list=block_list, compute_energy=True)
-        baseline = float(gpu.d_energy[0])
+        state.zero_forces()
+        state.zero_energy()
+        pme.compute(state, block_list=block_list, compute_energy=True)
+        baseline = float(state.d_energy[0])
 
-        gpu.d_charges[:] = gpu.d_charges * 2.0
+        state.d_charges[:] = state.d_charges * 2.0
 
-        gpu.zero_forces()
-        gpu.zero_energy()
-        pme.compute(gpu, block_list=block_list, compute_energy=True)
-        doubled = float(gpu.d_energy[0])
+        state.zero_forces()
+        state.zero_energy()
+        pme.compute(state, block_list=block_list, compute_energy=True)
+        doubled = float(state.d_energy[0])
 
         assert abs(doubled - baseline) > 1e-3, (
-            f"PME did not respond to gpu_context.d_charges mutation: "
+            f"PME did not respond to state.d_charges mutation: "
             f"baseline={baseline}, doubled={doubled}"
         )
 

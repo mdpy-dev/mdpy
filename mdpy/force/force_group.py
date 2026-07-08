@@ -67,12 +67,12 @@ class ForceGroup(ForceTerm):
             )
         return NotImplemented
 
-    def compute(self, gpu_context, block_list=None, compute_energy=True):
+    def compute(self, state, block_list=None, compute_energy=True):
         if self._merged_nonbonded is not None:
-            self._merged_nonbonded.compute(gpu_context, block_list, compute_energy)
+            self._merged_nonbonded.compute(state, block_list, compute_energy)
         else:
             for f in self._forces:
-                f.compute(gpu_context, block_list, compute_energy)
+                f.compute(state, block_list, compute_energy)
 
     def remap_indices_gpu(self, d_remap):
         if self._merged_nonbonded is not None:
@@ -84,10 +84,10 @@ class ForceGroup(ForceTerm):
     def sub_forces(self):
         return self._forces
 
-    def bind_sorted(self, topology, block_list, gpu_context):
+    def bind_sorted(self, topology, block_list, state):
         if self._merged_nonbonded is not None:
-            self._merged_nonbonded.bind_sorted(topology, block_list, gpu_context)
+            self._merged_nonbonded.bind_sorted(topology, block_list, state)
         else:
             for f in self._forces:
                 if hasattr(f, 'bind_sorted'):
-                    f.bind_sorted(topology, block_list, gpu_context)
+                    f.bind_sorted(topology, block_list, state)

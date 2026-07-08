@@ -82,12 +82,12 @@ void zero_forces_kernel(
 """
 
 
-class GPUContext:
+class State:
 
     def __init__(self, topology):
         self.num_particles = topology.num_particles
 
-        # Per-particle state arrays (zero-filled; populated by upload_* methods).
+        # Per-particle state arrays (zero-filled; populated by set_* methods).
         self.d_positions_x = cp.zeros(self.num_particles, dtype=np.float32)
         self.d_positions_y = cp.zeros(self.num_particles, dtype=np.float32)
         self.d_positions_z = cp.zeros(self.num_particles, dtype=np.float32)
@@ -112,7 +112,7 @@ class GPUContext:
         self.d_energy = cp.zeros(1, dtype=np.float32)
         self.d_energy_accumulator = None
 
-        # PBC: lazy-allocated on first upload_pbc. None until then.
+        # PBC: lazy-allocated on first set_pbc. None until then.
         self.d_pbc_matrix = None
         self.d_pbc_inv = None
         self._box_x = 0.0
@@ -192,7 +192,7 @@ class GPUContext:
             _ZERO_FORCES_KERNEL, "zero_forces_kernel"
         )
 
-    def upload_pbc(self, pbc_matrix):
+    def set_pbc(self, pbc_matrix):
         """Set the periodic box matrix. Allocates d_pbc_matrix/d_pbc_inv on
         first call; subsequent calls overwrite in place. Does NOT trigger a
         neighbor-list rebuild."""
@@ -215,7 +215,7 @@ class GPUContext:
         )
         self._has_pbc = True
 
-    def upload_positions(self, positions):
+    def set_positions(self, positions):
         data = np.ascontiguousarray(np.asarray(positions, dtype=np.float32))
         self.d_positions_x[:] = cp.asarray(data[:, 0])
         self.d_positions_y[:] = cp.asarray(data[:, 1])
@@ -224,18 +224,30 @@ class GPUContext:
             self._wrap_positions_inplace()
         self._has_positions = True
 
-    def upload_velocities(self, velocities):
+    def set_velocities(self, velocities):
         data = np.ascontiguousarray(np.asarray(velocities, dtype=np.float32))
         self.d_velocities_x[:] = cp.asarray(data[:, 0])
         self.d_velocities_y[:] = cp.asarray(data[:, 1])
         self.d_velocities_z[:] = cp.asarray(data[:, 2])
         self._has_velocities = True
 
-    def upload_prev_positions(self, positions):
+    def set_prev_positions(self, positions):
         data = np.ascontiguousarray(np.asarray(positions, dtype=np.float32))
         self.d_prev_positions_x[:] = cp.asarray(data[:, 0])
         self.d_prev_positions_y[:] = cp.asarray(data[:, 1])
         self.d_prev_positions_z[:] = cp.asarray(data[:, 2])
+
+    def set_charges(self, charges):
+        data = np.ascontiguousarray(np.asarray(charges, dtype=np.float32))
+        self.d_charges[:] = cp.asarray(data)
+
+    def set_masses(self, masses):
+        data = np.ascontiguousarray(np.asarray(masses, dtype=np.float32))
+        self.d_masses[:] = cp.asarray(data)
+
+    def set_types(self, particle_type_indices):
+        data = np.ascontiguousarray(np.asarray(particle_type_indices, dtype=np.int32))
+        self.d_types[:] = cp.asarray(data)
 
     def download_positions(self):
         return np.stack(

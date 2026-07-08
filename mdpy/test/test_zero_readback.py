@@ -14,7 +14,7 @@ from mdpy.core.block_list import BlockList, BLOCK_SIZE
 
 class _PBCContext:
     """Minimal stand-in exposing d_pbc_matrix/d_pbc_inv for BlockList.rebuild,
-    which now reads PBC from a GPUContext."""
+    which now reads PBC from a State."""
 
     def __init__(self, pbc_matrix, pbc_inv, positions=None):
         self.d_pbc_matrix = cp.asarray(
