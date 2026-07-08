@@ -1,16 +1,15 @@
 import numpy as np
 import cupy as cp
-from mdpy.core.topology import Topology, Builder
+from mdpy.core.topology import Topology
 
 
 def _topo_with_bonds():
-    builder = Builder()
-    builder.set_particles(6)
-    builder.add_bond(0, 1, 0.0, 0.0)
-    builder.add_bond(1, 2, 0.0, 0.0)
-    builder.add_bond(2, 3, 0.0, 0.0)
-    builder.add_angle(0, 1, 2, 0.0, 0.0)   # -> 0-3 is a 1-3 exclusion
-    topology, _ = builder.build()
+    topology = Topology()
+    topology.num_particles = 6
+    topology.add_bond(0, 1)
+    topology.add_bond(1, 2)
+    topology.add_bond(2, 3)
+    topology.add_angle(0, 1, 2)
     return topology
 
 
