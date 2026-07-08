@@ -9,7 +9,7 @@ from mdpy.core.state import State
 from mdpy.core.block_list import BlockList
 from mdpy.core.parameter_table import ParameterTable
 from mdpy.force.bonded_force import BondedForce
-from mdpy.force.factories.charmm import create_bonded_group
+from mdpy.force.factories.charmm import create_bonded_group, create_charmm_forces
 from mdpy.system import System
 from mdpy.integrator.verlet import VerletIntegrator
 from mdpy.integrator.langevin import LangevinBAOABIntegrator
@@ -19,8 +19,7 @@ from mdpy.force.expressions.geometry import distance
 from mdpy.force.nonbonded_force import NonbondedForce
 from mdpy.io.psf_parser import PSFParser
 from mdpy.io.pdb_parser import PDBParser
-from mdpy.io.charmm_toppar_parser import CharmmTopparParser
-from mdpy.factories.system_factory import create_system
+from mdpy.io.charmm_toppar_parser import CharmmTopparParser, create_parameter_table
 
 
 def _make_system(topology, pbc_matrix, cutoff=12.0, skin=None,
@@ -1095,16 +1094,28 @@ class TestAsyncRebuild:
         assert np.all(np.isfinite(pos))
 
 
-class TestCreateSystemFactory:
+class TestInlineSystemAssembly:
 
-    def test_create_system_wires_everything(self):
+    def test_inline_assembly_wires_everything(self):
         data_dir = os.path.join(os.path.dirname(__file__), 'data')
         psf = PSFParser(os.path.join(data_dir, '6PO6.psf'))
         pdb = PDBParser(os.path.join(data_dir, '6PO6.pdb'))
         toppar = CharmmTopparParser(os.path.join(data_dir, 'par_all36_prot.prm'))
         pbc = np.eye(3, dtype=np.float64) * 30.0
 
-        system = create_system(psf, pdb, toppar, pbc, cutoff=12.0)
+        topology = psf.topology
+        parameter_table = create_parameter_table(topology, toppar)
+        state = State(topology.num_particles)
+        state.set_pbc(pbc)
+        state.set_positions(pdb.positions)
+        state.set_charges(psf.charges)
+        state.set_masses(psf.masses)
+        state.set_type_indices(psf.particle_type_indices)
+        forces = create_charmm_forces(topology, parameter_table, pbc, cutoff=12.0)
+        system = System(topology, state)
+        system.add_force_term(forces['bonded'])
+        system.add_force_term(forces['nonbonded'])
+        system.add_force_term(forces['pme'], stream='pme')
 
         # State seeded from IO but velocities not set yet -> not ready.
         assert system.state.is_ready is False
