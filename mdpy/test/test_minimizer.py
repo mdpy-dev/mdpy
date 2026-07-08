@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import numpy as np
+import os
+
 import cupy as cp
 import pytest
 
@@ -210,3 +212,53 @@ class TestFIRE:
         minimizer.step(system)
         new_pos = system.state.download_positions()
         np.testing.assert_allclose(new_pos, positions)
+
+
+class TestMinimizerIntegration:
+
+    @pytest.fixture(scope="class")
+    def sixpo6_system(self):
+        from mdpy.io.psf_parser import PSFParser
+        from mdpy.io.pdb_parser import PDBParser
+        from mdpy.io.charmm_toppar_parser import CharmmTopparParser, create_parameter_table
+        from mdpy.force.factories.charmm import create_charmm_forces
+
+        DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
+        psf = PSFParser(os.path.join(DATA_DIR, "6PO6.psf"))
+        pdb = PDBParser(os.path.join(DATA_DIR, "6PO6.pdb"))
+        toppar = CharmmTopparParser(
+            os.path.join(DATA_DIR, "par_all36_prot.prm"),
+            os.path.join(DATA_DIR, "toppar_water_ions.str"),
+        )
+        topology = psf.topology
+        parameter_table = create_parameter_table(topology, toppar, type_names=psf.particle_type_names)
+        pbc_matrix = np.eye(3, dtype=np.float64) * 50.0
+        state = State(topology.num_particles)
+        state.set_pbc(pbc_matrix)
+        state.set_positions(pdb.positions)
+        state.set_charges(psf.charges)
+        state.set_masses(psf.masses)
+        state.set_type_indices(psf.particle_type_indices)
+        state.set_velocities(np.zeros((topology.num_particles, 3), dtype=np.float64))
+        forces = create_charmm_forces(
+            topology, parameter_table, pbc_matrix, cutoff=12.0,
+            particle_type_indices=psf.particle_type_indices,
+        )
+        system = System(topology, state)
+        for f in forces["bonded"]:
+            system.add_force_term(f)
+        system.add_force_term(forces["nonbonded"])
+        return system
+
+    def test_sd_reduces_max_force(self, sixpo6_system):
+        system = sixpo6_system
+        system.update_neighbor_list()
+        minimizer = SteepestDescentMinimizer(step_size=0.01)
+        system.compute_forces()
+        initial_max_f = minimizer.compute_max_force(system)
+        for _ in range(100):
+            system.compute_forces()
+            minimizer.step(system)
+        system.compute_forces()
+        final_max_f = minimizer.compute_max_force(system)
+        assert final_max_f < initial_max_f
