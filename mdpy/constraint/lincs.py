@@ -1,7 +1,7 @@
 import cupy as cp
 import numpy as np
-from .constraint_base import ConstraintBase
-from ._constraint_common import PBC_MIN_IMAGE_DEVICE_FN
+from ._base import ConstraintBase
+from ._common import PBC_MIN_IMAGE_DEVICE_FN
 
 # LINCS constraint algorithm (Hess et al., J Chem Theory Comput 2008).
 #
