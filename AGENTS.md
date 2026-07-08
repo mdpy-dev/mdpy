@@ -100,7 +100,7 @@ Specifically:
 - Do NOT write `try: import cupy` / `except ImportError` — let it crash on missing CUDA
 - Do NOT use `_HAS_CUPY` / `_HAS_GPU` / `_use_gpu` runtime probes or `if self._use_gpu` branches
 - No CPU fallback methods (`_rebuild_cpu()`) or pure-Python fallbacks for numba/cupy kernels
-- `environment.py` does not offer `set_platform('CPU')` — platform is always CUDA
+- `precision.py` exposes only dtype selection (`FLOAT`/`INT`); there is no platform field and no `set_platform` — platform is always CUDA
 
 ### 3. No GPU→CPU Transfers in Hot Path
 
