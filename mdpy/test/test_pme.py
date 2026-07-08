@@ -352,10 +352,11 @@ class TestPMEReciprocalForce:
 
         pt = ParameterTable()
         np.random.seed(42)
-        topo.charges = np.random.randn(N).astype(np.float32)
+        charges = np.random.randn(N).astype(np.float32)
+        topo.charges = charges
 
         state = State(topo.num_particles)
-        state.set_charges(topo.charges)
+        state.set_charges(charges)
         state.set_pbc(pbc.flatten())
 
         pos = np.random.uniform(2, box - 2, (N, 3)).astype(np.float32)
@@ -402,10 +403,11 @@ class TestPMEReciprocalForce:
 
         np.random.seed(7)
         pt = ParameterTable()
-        topo.charges = np.random.randn(N).astype(np.float32)
+        charges = np.random.randn(N).astype(np.float32)
+        topo.charges = charges
 
         state = State(topo.num_particles)
-        state.set_charges(topo.charges)
+        state.set_charges(charges)
         state.set_pbc(pbc.flatten())
 
         pos = np.random.uniform(2, box - 2, (N, 3)).astype(np.float32)
@@ -581,6 +583,7 @@ class TestPMEIntegration6PO6:
         pdb = PDBParser(os.path.join(data_dir, '6PO6.pdb'))
         toppar = CharmmTopparParser(os.path.join(data_dir, 'par_all36_prot.prm'))
 
+        self.psf = psf
         self.topology = psf.topology
         self.parameter_table = create_parameter_table(self.topology, toppar)
         self.positions = pdb.positions.astype(np.float32)
@@ -594,11 +597,16 @@ class TestPMEIntegration6PO6:
         from mdpy.force.expressions.lennard_jones import lennard_jones
         from mdpy.force.expressions.screened_coulomb import screened_coulomb
         from mdpy.force.pme_reciprocal_force import PMEReciprocalForce
+        from mdpy.core.state import State
         from mdpy.system import System
 
         pbc_matrix = np.eye(3, dtype=np.float32) * self.box
 
-        system = System(self.topology)
+        state = State(self.topology.num_particles)
+        state.set_masses(self.psf.masses)
+        state.set_charges(self.psf.charges)
+        state.set_type_indices(self.psf.particle_type_indices)
+        system = System(self.topology, state)
 
         system.set_pbc(pbc_matrix)
 
@@ -672,7 +680,7 @@ class TestPMEIntegration6PO6:
 
         alpha = _calc_ewald_coefficient(self.cutoff)
 
-        charges = self.topology.charges.astype(np.float64)
+        charges = self.psf.charges.astype(np.float64)
         COULOMB_CONST = 0.13893556595455
         SQRT_PI = 1.772453850905516
 

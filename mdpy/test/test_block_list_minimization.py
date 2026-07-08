@@ -7,6 +7,7 @@ from mdpy.io.psf_parser import PSFParser
 from mdpy.io.pdb_parser import PDBParser
 from mdpy.io.charmm_toppar_parser import CharmmTopparParser, create_parameter_table
 from mdpy.force.factories.charmm import create_charmm_forces
+from mdpy.core.state import State
 from mdpy.system import System
 from mdpy.utils import generate_velocity_from_temperature
 
@@ -29,13 +30,17 @@ def _build_ion_system():
     pt = create_parameter_table(topology, toppar)
     pbc = np.diag(BOX)
     forces = create_charmm_forces(topology, pt, pbc, cutoff=CUTOFF)
-    s = System(topology)
+    state = State(topology.num_particles)
+    state.set_masses(psf.masses)
+    state.set_charges(psf.charges)
+    state.set_type_indices(psf.particle_type_indices)
+    s = System(topology, state)
     s.set_pbc(pbc)
     s.add_force_term(forces["bonded"])
     s.add_force_term(forces["nonbonded"])
     s.add_force_term(forces["pme"], stream="pme")
     s.set_positions(pdb.positions)
-    s.set_velocities(generate_velocity_from_temperature(300.0, topology.masses, seed=42))
+    s.set_velocities(generate_velocity_from_temperature(300.0, psf.masses, seed=42))
     return s
 
 
