@@ -8,19 +8,17 @@ _WATER_RESIDUE_NAMES = frozenset({
 })
 
 
-def _identify_water_molecules(topology):
+def _identify_water_molecules(topology, masses, molecule_ids, molecule_types):
     water_triplets = []
     water_bond_set = set()
     if topology.num_bonds == 0:
         return water_triplets, water_bond_set
     bond_indices = topology.bond_indices
-    masses = topology.masses
-    mol_ids = topology.molecule_ids
+    mol_ids = molecule_ids
     if mol_ids is None:
         return water_triplets, water_bond_set
 
-    mol_types = topology.molecule_types
-    use_mol_types = mol_types and mol_types[0] != ''
+    use_mol_types = molecule_types and molecule_types[0] != ''
 
     oxygen_hydrogen_bonds = {}
     for b in range(bond_indices.shape[0]):
@@ -28,7 +26,7 @@ def _identify_water_molecules(topology):
         if mol_ids[i] != mol_ids[j]:
             continue
         if use_mol_types:
-            if mol_types[i] not in _WATER_RESIDUE_NAMES:
+            if molecule_types[i] not in _WATER_RESIDUE_NAMES:
                 continue
         mi, mj = masses[i], masses[j]
         if (mi > 14.5 and mj < 5.0):
@@ -50,9 +48,8 @@ def _identify_water_molecules(topology):
     return water_triplets, water_bond_set
 
 
-def _identify_constrained_bonds(topology, scheme, water_bond_set):
+def _identify_constrained_bonds(topology, scheme, water_bond_set, masses):
     bond_indices = topology.bond_indices
-    masses = topology.masses
     constrained = []
     for b in range(bond_indices.shape[0]):
         i, j = int(bond_indices[b, 0]), int(bond_indices[b, 1])
@@ -81,12 +78,21 @@ def _build_bond_length_map(topology, parameter_table):
     return length_map
 
 
-def create_constraints(topology, parameter_table, scheme='h-bonds'):
+def create_constraints(topology, parameter_table, scheme='h-bonds',
+                       *, masses=None, molecule_ids=None, molecule_types=None):
     constraints = []
     if scheme == 'none':
         return constraints
 
-    water_triplets, water_bond_set = _identify_water_molecules(topology)
+    if masses is None:
+        masses = topology.masses
+    if molecule_ids is None:
+        molecule_ids = topology.molecule_ids
+    if molecule_types is None:
+        molecule_types = topology.molecule_types
+
+    water_triplets, water_bond_set = _identify_water_molecules(
+        topology, masses, molecule_ids, molecule_types)
     length_map = _build_bond_length_map(topology, parameter_table)
 
     if water_triplets:
@@ -94,17 +100,18 @@ def create_constraints(topology, parameter_table, scheme='h-bonds'):
         dOH = length_map.get((min(ow, h1), max(ow, h1)), 1.5)
         dHH_sq = 2.0 * dOH * dOH * (1.0 - np.cos(np.radians(104.45)))
         dHH = np.sqrt(dHH_sq)
-        settle = SettleConstraint(water_triplets, topology.masses, dOH, dHH)
+        settle = SettleConstraint(water_triplets, masses, dOH, dHH)
         constraints.append(settle)
 
-    constrained_bonds = _identify_constrained_bonds(topology, scheme, water_bond_set)
+    constrained_bonds = _identify_constrained_bonds(
+        topology, scheme, water_bond_set, masses)
     if constrained_bonds:
         target_lengths = [
             length_map.get((min(i, j), max(i, j)), 1.5)
             for (i, j) in constrained_bonds
         ]
         lincs = LincsConstraint(constrained_bonds, target_lengths,
-                                topology.masses, expansion_order=4,
+                                masses, expansion_order=4,
                                 num_iterations=1)
         constraints.append(lincs)
 

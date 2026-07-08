@@ -1087,3 +1087,40 @@ class TestAsyncRebuild:
         _run_steps(system, integrator, 50)
         pos, vel = system.dump_state()
         assert np.all(np.isfinite(pos))
+
+
+class TestCreateSystemFactory:
+
+    def test_create_system_wires_everything(self):
+        import os
+        from mdpy.io.psf_parser import PSFParser
+        from mdpy.io.pdb_parser import PDBParser
+        from mdpy.io.charmm_toppar_parser import CharmmTopparParser
+        from mdpy.factories.system_factory import create_system
+
+        data_dir = os.path.join(os.path.dirname(__file__), 'data')
+        psf = PSFParser(os.path.join(data_dir, '6PO6.psf'))
+        pdb = PDBParser(os.path.join(data_dir, '6PO6.pdb'))
+        toppar = CharmmTopparParser(os.path.join(data_dir, 'par_all36_prot.prm'))
+        pbc = np.eye(3, dtype=np.float64) * 30.0
+
+        system = create_system(psf, pdb, toppar, pbc, cutoff=12.0)
+
+        # State seeded from IO but velocities not set yet -> not ready.
+        assert system.state.is_ready is False
+        assert system.num_particles == 49
+
+        system.state.set_velocities(
+            np.zeros((system.num_particles, 3), dtype=np.float32))
+        assert system.state.is_ready is True
+
+        # Full pipeline (neighbor list -> forces -> energies) must run clean.
+        system.update_neighbor_list()
+        system.compute_forces()
+        energies = system.dump_energy()
+        assert len(energies) > 0
+        assert np.all(np.isfinite(list(energies.values())))
+
+        # PME runs on its own stream — verify it contributed finite energy.
+        assert 'pme_reciprocal' in energies
+

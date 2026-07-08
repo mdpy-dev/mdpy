@@ -8,14 +8,16 @@ from mdpy.core.state import State
 
 class System:
 
-    def __init__(self, topology):
+    def __init__(self, topology, state=None):
         self.topology = topology
         self.num_particles = topology.num_particles
-        self.state = State(topology.num_particles)
-        # Transitional seeding (topology still holds these — removed in Phase 7):
-        self.state.set_masses(topology.masses)
-        self.state.set_charges(topology.charges)
-        self.state.set_types(topology.particle_type_indices)
+        if state is None:
+            state = State(topology.num_particles)
+            # Transitional seeding (topology still holds these — removed in Phase 7):
+            state.set_masses(topology.masses)
+            state.set_charges(topology.charges)
+            state.set_types(topology.particle_type_indices)
+        self.state = state
 
         self._cutoff = None
         self._skin = 1.0

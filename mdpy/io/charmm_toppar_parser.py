@@ -410,7 +410,7 @@ class CharmmTopparParser:
         return sigma, epsilon, sigma_14, epsilon_14
 
 
-def create_parameter_table(topology, toppar_parser):
+def create_parameter_table(topology, toppar_parser, *, type_names=None):
     """Assemble a ParameterTable from Topology and CHARMM parameters.
 
     Parameters
@@ -420,6 +420,9 @@ def create_parameter_table(topology, toppar_parser):
         indices (bond_indices, angle_indices, etc.).
     toppar_parser : CharmmTopparParser
         Parsed CHARMM parameter data.
+    type_names : list[str], keyword-only
+        Per-particle atom type names. Falls back to ``topology.type_names``
+        when None (kept so existing positional callers keep working).
 
     Returns
     -------
@@ -430,7 +433,10 @@ def create_parameter_table(topology, toppar_parser):
     """
     parameters = toppar_parser.parameters
 
-    type_names_sorted = sorted(set(topology.type_names))
+    if type_names is None:
+        type_names = topology.type_names
+
+    type_names_sorted = sorted(set(type_names))
     type_name_to_index = {name: idx for idx, name in enumerate(type_names_sorted)}
     num_types = len(type_names_sorted)
 
@@ -511,31 +517,31 @@ def create_parameter_table(topology, toppar_parser):
 
     table.add_term_parameter(
         "bond",
-        _resolve_bonds(topology, parameters.get("bond", {})),
+        _resolve_bonds(topology, type_names, parameters.get("bond", {})),
     )
     table.add_term_parameter(
         "angle",
-        _resolve_angles(topology, parameters.get("angle", {})),
+        _resolve_angles(topology, type_names, parameters.get("angle", {})),
     )
     table.add_term_parameter(
         "dihedral",
-        _resolve_dihedrals(topology, parameters.get("dihedral", {})),
+        _resolve_dihedrals(topology, type_names, parameters.get("dihedral", {})),
     )
     table.add_term_parameter(
         "improper",
-        _resolve_impropers(topology, parameters.get("improper", {})),
+        _resolve_impropers(topology, type_names, parameters.get("improper", {})),
     )
 
     return table
 
 
-def _resolve_bonds(topology, bonded_parameters):
+def _resolve_bonds(topology, type_names, bonded_parameters):
     num_bonds = topology.num_bonds
     result = np.zeros((num_bonds, 2), dtype=env.NUMPY_FLOAT)
     for idx in range(num_bonds):
         i, j = topology.bond_indices[idx]
-        type_name_i = topology.type_names[i]
-        type_name_j = topology.type_names[j]
+        type_name_i = type_names[i]
+        type_name_j = type_names[j]
         key_forward = "%s-%s" % (type_name_i, type_name_j)
         key_reverse = "%s-%s" % (type_name_j, type_name_i)
         params = bonded_parameters.get(key_forward) or bonded_parameters.get(
@@ -546,14 +552,14 @@ def _resolve_bonds(topology, bonded_parameters):
     return result
 
 
-def _resolve_angles(topology, angle_parameters):
+def _resolve_angles(topology, type_names, angle_parameters):
     num_angles = topology.num_angles
     result = np.zeros((num_angles, 4), dtype=env.NUMPY_FLOAT)
     for idx in range(num_angles):
         i, j, k = topology.angle_indices[idx]
-        type_name_i = topology.type_names[i]
-        type_name_j = topology.type_names[j]
-        type_name_k = topology.type_names[k]
+        type_name_i = type_names[i]
+        type_name_j = type_names[j]
+        type_name_k = type_names[k]
         key_forward = "%s-%s-%s" % (type_name_i, type_name_j, type_name_k)
         key_reverse = "%s-%s-%s" % (type_name_k, type_name_j, type_name_i)
         params = angle_parameters.get(key_forward) or angle_parameters.get(key_reverse)
@@ -562,15 +568,15 @@ def _resolve_angles(topology, angle_parameters):
     return result
 
 
-def _resolve_dihedrals(topology, dihedral_parameters):
+def _resolve_dihedrals(topology, type_names, dihedral_parameters):
     num_dihedrals = topology.num_dihedrals
     result = np.zeros((num_dihedrals, 3), dtype=env.NUMPY_FLOAT)
     for idx in range(num_dihedrals):
         i, j, k, l = topology.dihedral_indices[idx]
-        type_name_i = topology.type_names[i]
-        type_name_j = topology.type_names[j]
-        type_name_k = topology.type_names[k]
-        type_name_l = topology.type_names[l]
+        type_name_i = type_names[i]
+        type_name_j = type_names[j]
+        type_name_k = type_names[k]
+        type_name_l = type_names[l]
         key_forward = "%s-%s-%s-%s" % (
             type_name_i,
             type_name_j,
@@ -591,15 +597,15 @@ def _resolve_dihedrals(topology, dihedral_parameters):
     return result
 
 
-def _resolve_impropers(topology, improper_parameters):
+def _resolve_impropers(topology, type_names, improper_parameters):
     num_impropers = topology.num_impropers
     result = np.zeros((num_impropers, 2), dtype=env.NUMPY_FLOAT)
     for idx in range(num_impropers):
         i, j, k, l = topology.improper_indices[idx]
-        type_name_i = topology.type_names[i]
-        type_name_j = topology.type_names[j]
-        type_name_k = topology.type_names[k]
-        type_name_l = topology.type_names[l]
+        type_name_i = type_names[i]
+        type_name_j = type_names[j]
+        type_name_k = type_names[k]
+        type_name_l = type_names[l]
         key_forward = "%s-%s-%s-%s" % (
             type_name_i,
             type_name_j,

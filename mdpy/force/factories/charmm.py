@@ -73,7 +73,7 @@ def _create_improper_force(topology, parameter_table):
     return force
 
 
-def _create_nb14_force(topology, parameter_table):
+def _create_nb14_force(topology, parameter_table, particle_type_indices):
     if 'lj_pair_14' not in parameter_table.type_pair_parameters:
         return None
 
@@ -88,7 +88,6 @@ def _create_nb14_force(topology, parameter_table):
     force.name = 'nb14'
     lj_pair_14 = parameter_table.type_pair_parameters['lj_pair_14']
     n_types = int(np.sqrt(len(lj_pair_14) // 2))
-    particle_type_indices = topology.particle_type_indices
 
     offset = n12 + n13
     for k in range(offset, offset + n14):
@@ -149,7 +148,8 @@ def create_bonded_group(topology, parameter_table):
 
 
 def create_charmm_forces(topology, parameter_table, pbc_matrix, cutoff=12.0,
-                         ewald_rtol=1e-5, fourier_spacing=1.2):
+                         ewald_rtol=1e-5, fourier_spacing=1.2,
+                         *, particle_type_indices=None):
     """Create all CHARMM force terms for a PME simulation.
 
     Args:
@@ -166,8 +166,11 @@ def create_charmm_forces(topology, parameter_table, pbc_matrix, cutoff=12.0,
     """
     from mdpy.force.expressions.screened_coulomb import screened_coulomb
 
+    if particle_type_indices is None:
+        particle_type_indices = topology.particle_type_indices
+
     bonded = create_bonded_group(topology, parameter_table)
-    nb14 = _create_nb14_force(topology, parameter_table)
+    nb14 = _create_nb14_force(topology, parameter_table, particle_type_indices)
     if nb14 is not None:
         bonded = bonded + nb14
 
