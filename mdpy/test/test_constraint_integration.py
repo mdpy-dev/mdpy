@@ -1,6 +1,6 @@
 import numpy as np
 import pytest
-from mdpy.core.topology import Builder
+from mdpy.core.topology import Topology
 from mdpy.core.state import State
 from mdpy.core.parameter_table import ParameterTable
 from mdpy.force.bonded_force import BondedForce
@@ -11,7 +11,6 @@ from mdpy.constraint.constraint_scheme import create_constraints
 
 
 def _build_test_system():
-    builder = Builder()
     n_waters = 3
     n_atoms = n_waters * 3
     masses = np.zeros(n_atoms, dtype=np.float32)
@@ -26,6 +25,7 @@ def _build_test_system():
     half_hh = dHH / 2.0
     height = np.sqrt(dOH**2 - half_hh**2)
 
+    bond_params_list = []
     idx = 0
     for w in range(n_waters):
         ow = idx
@@ -43,14 +43,19 @@ def _build_test_system():
         mol_ids[ow] = w
         mol_ids[hw1] = w
         mol_ids[hw2] = w
-        builder.add_bond(ow, hw1, 450.0, dOH)
-        builder.add_bond(hw1, hw2, 450.0, dHH)
+        bond_params_list.append((ow, hw1, 450.0, dOH))
+        bond_params_list.append((hw1, hw2, 450.0, dHH))
         idx += 3
 
-    builder.set_particles(n_atoms)
-    topology, term_params = builder.build()
+    topology = Topology()
+    topology.num_particles = n_atoms
+    bond_term_params = []
+    for i, j, k_val, r0_val in bond_params_list:
+        topology.add_bond(i, j)
+        bond_term_params.append([k_val, r0_val])
     pbc_matrix = np.eye(3, dtype=np.float32) * 30.0
 
+    term_params = {'bond': np.array(bond_term_params, dtype=np.float32)}
     pt = ParameterTable()
     for name, values in term_params.items():
         pt.add_term_parameter(name, values)
@@ -140,7 +145,6 @@ def test_constraint_loop_multiple_rebuilds():
 
 
 def _build_mixed_system():
-    builder = Builder()
     n_waters = 10
     n_ethane_atoms = 8
     n_atoms = n_waters * 3 + n_ethane_atoms
@@ -156,6 +160,8 @@ def _build_mixed_system():
     dHH = 1.63298
     half_hh = dHH / 2.0
     height = np.sqrt(dOH**2 - half_hh**2)
+
+    bond_params_list = []
     idx = 0
     for w in range(n_waters):
         ow = idx
@@ -173,8 +179,8 @@ def _build_mixed_system():
         mol_ids[ow] = w
         mol_ids[hw1] = w
         mol_ids[hw2] = w
-        builder.add_bond(ow, hw1, 450.0, dOH)
-        builder.add_bond(hw1, hw2, 450.0, dHH)
+        bond_params_list.append((ow, hw1, 450.0, dOH))
+        bond_params_list.append((hw1, hw2, 450.0, dHH))
         idx += 3
 
     ebase = idx
@@ -195,12 +201,17 @@ def _build_mixed_system():
         masses[ebase + i] = ethane_masses[i]
         mol_ids[ebase + i] = n_waters
     for bi, bj in ethane_bonds:
-        builder.add_bond(ebase + bi, ebase + bj, 450.0, 1.09 if bj != 4 else 1.54)
+        bond_params_list.append((ebase + bi, ebase + bj, 450.0, 1.09 if bj != 4 else 1.54))
 
-    builder.set_particles(n_atoms)
-    topology, term_params = builder.build()
+    topology = Topology()
+    topology.num_particles = n_atoms
+    bond_term_params = []
+    for i, j, k_val, r0_val in bond_params_list:
+        topology.add_bond(i, j)
+        bond_term_params.append([k_val, r0_val])
     pbc_matrix = np.eye(3, dtype=np.float32) * 40.0
 
+    term_params = {'bond': np.array(bond_term_params, dtype=np.float32)}
     pt = ParameterTable()
     for name, values in term_params.items():
         pt.add_term_parameter(name, values)
@@ -314,7 +325,6 @@ def test_settle_md_loop_rebuilds_bond_lengths():
 def test_lincs_md_loop_rebuilds_bond_lengths():
     from mdpy.constraint.lincs import LincsConstraint
 
-    builder = Builder()
     masses = np.array([12.0, 1.0, 1.0, 1.0, 12.0, 1.0, 1.0, 1.0], dtype=np.float32)
     charges = np.zeros(8, dtype=np.float32)
     ptypes = np.zeros(8, dtype=np.int32)
@@ -329,15 +339,25 @@ def test_lincs_md_loop_rebuilds_bond_lengths():
         [6.54, 6.09, 5.0],
         [7.63, 5.0, 5.0],
     ], dtype=np.float32)
-    builder.add_bond(0, 1, 450.0, 1.09)
-    builder.add_bond(0, 2, 450.0, 1.09)
-    builder.add_bond(0, 3, 450.0, 1.09)
-    builder.add_bond(4, 5, 450.0, 1.09)
-    builder.add_bond(4, 6, 450.0, 1.09)
-    builder.add_bond(4, 7, 450.0, 1.09)
-    builder.add_bond(0, 4, 450.0, 1.54)
-    builder.set_particles(len(masses))
-    topology, term_params = builder.build()
+
+    bond_specs = [
+        (0, 1, 450.0, 1.09),
+        (0, 2, 450.0, 1.09),
+        (0, 3, 450.0, 1.09),
+        (4, 5, 450.0, 1.09),
+        (4, 6, 450.0, 1.09),
+        (4, 7, 450.0, 1.09),
+        (0, 4, 450.0, 1.54),
+    ]
+
+    topology = Topology()
+    topology.num_particles = len(masses)
+    bond_term_params = []
+    for i, j, k_val, r0_val in bond_specs:
+        topology.add_bond(i, j)
+        bond_term_params.append([k_val, r0_val])
+
+    term_params = {'bond': np.array(bond_term_params, dtype=np.float32)}
     pt = ParameterTable()
     for name, values in term_params.items():
         pt.add_term_parameter(name, values)
