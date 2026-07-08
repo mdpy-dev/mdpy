@@ -8,10 +8,8 @@ copyright : (C)Copyright 2021-present, mdpy organization
 '''
 
 import numpy as np
-from copy import deepcopy
 from . import BaseDimension, UNIT_PRECISION
 from .base_dimension import format_dimension
-from ..error import UnitDimensionMismatchedError
 from .. import env
 
 class Unit:
@@ -42,12 +40,6 @@ class Unit:
         else:
             return False
     
-    def set_relative_value_to_one(self):
-        '''
-        set_relative_value_to_one sets ``self.relative_value = 1``
-        '''        
-        self._relative_value = 1
-
     def __repr__(self):
         return (
             '<Unit object: %.2e %s at 0x%x>'
@@ -72,78 +64,6 @@ class Unit:
     def __ne__(self, other) -> bool:
         return not self == other
 
-    def __add__(self, other):
-        if isinstance(other, Unit):
-            if (
-                self._base_dimension == other.base_dimension
-            ):
-                return deepcopy(self)
-            else:
-                raise UnitDimensionMismatchedError(
-                    '%s and %s can\'t be added together'
-                    %(self._base_dimension, other.base_dimension)
-                )
-        else:
-            raise NotImplementedError(
-                '+ between %s and mdpy.unit.Unit is not implemented' 
-                %(type(other))
-            )
-    
-    __iadd__ = __add__
-
-    def __radd__(self, other):
-        if isinstance(other, Unit):
-            if (
-                self._base_dimension == other.base_dimension
-            ):
-                return deepcopy(other)
-            else:
-                raise UnitDimensionMismatchedError(
-                    '%s and %s can not be added'
-                    %(other.base_dimension, self._base_dimension)
-                )
-        else:
-            raise NotImplementedError(
-                '+ between mdpy.unit.Unit and %s is not implemented' 
-                %(type(other))
-            )
-
-    def __sub__(self, other):
-        if isinstance(other, Unit):
-            if (
-                self._base_dimension == other.base_dimension
-            ):
-                return deepcopy(self)
-            else:
-                raise UnitDimensionMismatchedError(
-                    '%s and %s can not be subbed'
-                    %(self._base_dimension, other.base_dimension)
-                )
-        else:
-            raise NotImplementedError(
-                '- between %s and mdpy.unit.Unit is not implemented' 
-                %(type(other))
-            )
-
-    __isub__ = __sub__
-
-    def __rsub__(self, other):
-        if isinstance(other, Unit):
-            if (
-                self._base_dimension == other.base_dimension
-            ):
-                return deepcopy(other)
-            else:
-                raise UnitDimensionMismatchedError(
-                    '%s and %s can not be subbed'
-                    %(other.base_dimension, self._base_dimension)
-                )
-        else:
-            raise NotImplementedError(
-                '- between mdpy.unit.Unit and %s is not implemented' 
-                %(type(other))
-            )
-
     def __mul__(self, other):
         if isinstance(other, Unit):
             return Unit(
@@ -157,7 +77,21 @@ class Unit:
             )
 
     __imul__ = __mul__
-    __rmul__ = __mul__
+
+    def __rmul__(self, other):
+        if isinstance(other, Unit):
+            return Unit(
+                other.base_dimension * self._base_dimension,
+                other.relative_value * self._relative_value
+            )
+        elif isinstance(other, (int, float, np.ndarray)):
+            from .quantity import Quantity
+            return Quantity(other, self)
+        else:
+            raise TypeError(
+                '* between %s and mdpy.unit.Unit is not supported'
+                %(type(other))
+            )
 
     def __truediv__(self, other):
         if isinstance(other, Unit):
@@ -215,18 +149,6 @@ class Unit:
             np.sqrt(self._relative_value)
         )
             
-    @property
-    def unit_name(self):
-        '''
-        unit_name gets the name of the unit
-
-        Returns
-        -------
-        str
-            the name of unit
-        '''        
-        return format_dimension(self.base_dimension)
-
     @property
     def base_dimension(self):
         '''
