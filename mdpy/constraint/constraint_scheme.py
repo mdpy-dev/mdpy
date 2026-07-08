@@ -79,17 +79,10 @@ def _build_bond_length_map(topology, parameter_table):
 
 
 def create_constraints(topology, parameter_table, scheme='h-bonds',
-                       *, masses=None, molecule_ids=None, molecule_types=None):
+                       *, masses, molecule_ids, molecule_types):
     constraints = []
     if scheme == 'none':
         return constraints
-
-    if masses is None:
-        masses = topology.masses
-    if molecule_ids is None:
-        molecule_ids = topology.molecule_ids
-    if molecule_types is None:
-        molecule_types = topology.molecule_types
 
     water_triplets, water_bond_set = _identify_water_molecules(
         topology, masses, molecule_ids, molecule_types)

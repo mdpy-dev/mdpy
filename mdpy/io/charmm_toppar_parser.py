@@ -410,19 +410,17 @@ class CharmmTopparParser:
         return sigma, epsilon, sigma_14, epsilon_14
 
 
-def create_parameter_table(topology, toppar_parser, *, type_names=None):
+def create_parameter_table(topology, toppar_parser, *, type_names):
     """Assemble a ParameterTable from Topology and CHARMM parameters.
 
     Parameters
     ----------
     topology : Topology
         Must have bonded indices (bond_indices, angle_indices, etc.).
-        If ``type_names`` is None, must also have ``type_names``.
     toppar_parser : CharmmTopparParser
         Parsed CHARMM parameter data.
     type_names : list[str], keyword-only
-        Per-particle atom type names. Defaults to ``topology.type_names``
-        when not provided.
+        Per-particle atom type names.
 
     Returns
     -------
@@ -432,9 +430,6 @@ def create_parameter_table(topology, toppar_parser, *, type_names=None):
         term_parameters (bond, angle, dihedral, improper).
     """
     parameters = toppar_parser.parameters
-
-    if type_names is None:
-        type_names = topology.type_names
 
     type_names_sorted = sorted(set(type_names))
     type_name_to_index = {name: idx for idx, name in enumerate(type_names_sorted)}

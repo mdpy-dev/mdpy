@@ -3,6 +3,7 @@ import pytest
 
 from mdpy import env
 from mdpy.core.topology import Builder
+from mdpy.core.state import State
 from mdpy.system import System
 from mdpy.integrator.verlet import VerletIntegrator
 
@@ -14,14 +15,14 @@ def _make_system(n_atoms, box_size, cutoff=None):
     if cutoff is None:
         cutoff = box_size / 2.0
     builder = Builder()
-    builder.set_particles(
-        masses=np.full(n_atoms, 12.0, dtype=env.NUMPY_FLOAT),
-        charges=np.zeros(n_atoms, dtype=env.NUMPY_FLOAT),
-        particle_type_indices=np.zeros(n_atoms, dtype=env.NUMPY_INT),
-    )
+    builder.set_particles(n_atoms)
     topology, _ = builder.build()
     pbc_matrix = np.eye(3, dtype=env.NUMPY_FLOAT) * box_size
-    system = System(topology)
+    state = State(n_atoms)
+    state.set_masses(np.full(n_atoms, 12.0, dtype=env.NUMPY_FLOAT))
+    state.set_charges(np.zeros(n_atoms, dtype=env.NUMPY_FLOAT))
+    state.set_type_indices(np.zeros(n_atoms, dtype=env.NUMPY_INT))
+    system = System(topology, state)
     system.set_pbc(pbc_matrix)
     system._cutoff = cutoff
     positions = np.zeros((n_atoms, 3), dtype=env.NUMPY_FLOAT)

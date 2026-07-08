@@ -2,6 +2,7 @@ import numpy as np
 import cupy as cp
 import pytest
 from mdpy.core.topology import Builder
+from mdpy.core.state import State
 from mdpy.core.block_list import (
     BlockList, BLOCK_SIZE, SCAN_BLOCK,
     _COMPOSITE_PREFIX_SUM_KERNEL, _CELL_PREFIX_SUM_KERNEL,
@@ -10,11 +11,7 @@ from mdpy.core.block_list import (
 
 def _make_topology(n):
     builder = Builder()
-    builder.set_particles(
-        masses=np.ones(n, dtype=np.float32),
-        charges=np.zeros(n, dtype=np.float32),
-        particle_type_indices=np.zeros(n, dtype=np.int32),
-    )
+    builder.set_particles(n)
     topology, _ = builder.build()
     return topology
 
@@ -459,11 +456,7 @@ class TestExclusionMasks:
     def test_bond_excluded(self):
         n = 10
         builder = Builder()
-        builder.set_particles(
-            masses=np.ones(n, dtype=np.float32),
-            charges=np.zeros(n, dtype=np.float32),
-            particle_type_indices=np.zeros(n, dtype=np.int32),
-        )
+        builder.set_particles(n)
         for i in range(n - 1):
             builder.add_bond(i, i + 1, k=300.0, r0=1.5)
         topology, _ = builder.build()
@@ -500,11 +493,7 @@ class TestExclusionMasks:
     def test_dihedral_14_fully_excluded(self):
         n = 10
         builder = Builder()
-        builder.set_particles(
-            masses=np.ones(n, dtype=np.float32),
-            charges=np.zeros(n, dtype=np.float32),
-            particle_type_indices=np.zeros(n, dtype=np.int32),
-        )
+        builder.set_particles(n)
         for i in range(n - 1):
             builder.add_bond(i, i + 1, k=300.0, r0=1.5)
         for i in range(n - 2):
@@ -551,11 +540,7 @@ class TestBlockPairClassification:
     def test_classify_splits_block_pairs(self):
         n = 10
         builder = Builder()
-        builder.set_particles(
-            masses=np.ones(n, dtype=np.float32),
-            charges=np.zeros(n, dtype=np.float32),
-            particle_type_indices=np.zeros(n, dtype=np.int32),
-        )
+        builder.set_particles(n)
         for i in range(n - 1):
             builder.add_bond(i, i + 1, k=300.0, r0=1.5)
         topology, _ = builder.build()
@@ -1248,17 +1233,17 @@ class TestSnapshotPostWrapIntegration:
 
         n = 4
         builder = Builder()
-        builder.set_particles(
-            masses=np.ones(n, dtype=np.float32),
-            charges=np.zeros(n, dtype=np.float32),
-            particle_type_indices=np.zeros(n, dtype=np.int32),
-        )
+        builder.set_particles(n)
         topology, _ = builder.build()
 
         box = 50.0
         pbc_matrix = np.eye(3, dtype=np.float32) * box
 
-        system = System(topology)
+        state = State(n)
+        state.set_masses(np.ones(n, dtype=np.float32))
+        state.set_charges(np.zeros(n, dtype=np.float32))
+        state.set_type_indices(np.zeros(n, dtype=np.int32))
+        system = System(topology, state)
         system.set_pbc(pbc_matrix)
         system._cutoff = 10.0
         system._skin = 2.0
@@ -1304,16 +1289,16 @@ class TestSnapshotPostWrapIntegration:
 
         n = 4
         builder = Builder()
-        builder.set_particles(
-            masses=np.ones(n, dtype=np.float32),
-            charges=np.zeros(n, dtype=np.float32),
-            particle_type_indices=np.zeros(n, dtype=np.int32),
-        )
+        builder.set_particles(n)
         topology, _ = builder.build()
 
         box = 50.0
         pbc_matrix = np.eye(3, dtype=np.float32) * box
-        system = System(topology)
+        state = State(n)
+        state.set_masses(np.ones(n, dtype=np.float32))
+        state.set_charges(np.zeros(n, dtype=np.float32))
+        state.set_type_indices(np.zeros(n, dtype=np.int32))
+        system = System(topology, state)
         system.set_pbc(pbc_matrix)
         system._cutoff = 10.0
         system._skin = 2.0
@@ -1363,16 +1348,16 @@ class TestSnapshotPostWrapIntegration:
 
         n = 4
         builder = Builder()
-        builder.set_particles(
-            masses=np.ones(n, dtype=np.float32),
-            charges=np.zeros(n, dtype=np.float32),
-            particle_type_indices=np.zeros(n, dtype=np.int32),
-        )
+        builder.set_particles(n)
         topology, _ = builder.build()
 
         box = 50.0
         pbc_matrix = np.eye(3, dtype=np.float32) * box
-        system = System(topology)
+        state = State(n)
+        state.set_masses(np.ones(n, dtype=np.float32))
+        state.set_charges(np.zeros(n, dtype=np.float32))
+        state.set_type_indices(np.zeros(n, dtype=np.int32))
+        system = System(topology, state)
         system.set_pbc(pbc_matrix)
         system._cutoff = 10.0
         system._skin = 2.0

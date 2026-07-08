@@ -5,11 +5,7 @@ from mdpy.core.topology import Topology, Builder
 
 def _topo_with_bonds():
     builder = Builder()
-    builder.set_particles(
-        masses=np.ones(6, dtype=np.float32),
-        charges=np.zeros(6, dtype=np.float32),
-        particle_type_indices=np.zeros(6, dtype=np.int32),
-    )
+    builder.set_particles(6)
     builder.add_bond(0, 1, 0.0, 0.0)
     builder.add_bond(1, 2, 0.0, 0.0)
     builder.add_bond(2, 3, 0.0, 0.0)

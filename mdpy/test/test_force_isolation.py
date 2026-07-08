@@ -36,6 +36,7 @@ def _setup_system(include_bonded, include_nonbonded):
     from mdpy.force.nonbonded_force import NonbondedForce
     from mdpy.force.expressions.lennard_jones import lennard_jones
     from mdpy.force.expressions.coulomb import coulomb
+    from mdpy.core.state import State
     from mdpy.system import System
 
     psf = PSFParser(PSF_PATH)
@@ -47,7 +48,11 @@ def _setup_system(include_bonded, include_nonbonded):
     pbc_matrix = np.eye(3, dtype=np.float64) * BOX_SIZE
     pbc_inv = np.linalg.inv(pbc_matrix)
 
-    system = System(topology)
+    state = State(topology.num_particles)
+    state.set_masses(psf.masses)
+    state.set_charges(psf.charges)
+    state.set_type_indices(psf.particle_type_indices)
+    system = System(topology, state)
 
     system.set_pbc(pbc_matrix)
     system._cutoff = CUTOFF

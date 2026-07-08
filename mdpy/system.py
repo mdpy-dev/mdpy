@@ -12,11 +12,7 @@ class System:
         self.topology = topology
         self.num_particles = topology.num_particles
         if state is None:
-            state = State(topology.num_particles)
-            # Transitional seeding (topology still holds these — removed in Phase 7):
-            state.set_masses(topology.masses)
-            state.set_charges(topology.charges)
-            state.set_type_indices(topology.particle_type_indices)
+            state = State(topology.num_particles)  # caller must set_* before compute
         self.state = state
 
         self._cutoff = None

@@ -24,7 +24,12 @@ from mdpy.io.charmm_toppar_parser import CharmmTopparParser, create_parameter_ta
 
 def _make_system(topology, pbc_matrix, cutoff=12.0, skin=None,
                  rebuild_check_interval=None):
-    system = System(topology)
+    n = topology.num_particles
+    state = State(n)
+    state.set_masses(np.full(n, 12.0, dtype=env.NUMPY_FLOAT))
+    state.set_charges(np.zeros(n, dtype=env.NUMPY_FLOAT))
+    state.set_type_indices(np.zeros(n, dtype=env.NUMPY_INT))
+    system = System(topology, state)
     system.set_pbc(pbc_matrix)
     system._cutoff = cutoff
     if skin is not None:
@@ -58,11 +63,7 @@ def _make_parameter_table(term_params):
 
 def _build_four_particle():
     builder = Builder()
-    builder.set_particles(
-        masses=np.array([12.0, 12.0, 12.0, 12.0], dtype=env.NUMPY_FLOAT),
-        charges=np.zeros(4, dtype=env.NUMPY_FLOAT),
-        particle_type_indices=np.zeros(4, dtype=env.NUMPY_INT),
-    )
+    builder.set_particles(4)
     builder.add_bond(0, 1, 100.0, 1.5)
     builder.add_bond(1, 2, 100.0, 1.5)
     builder.add_bond(2, 3, 100.0, 1.5)
@@ -74,11 +75,7 @@ def _build_four_particle():
 
 def _build_simple_bond():
     builder = Builder()
-    builder.set_particles(
-        masses=np.array([12.0, 12.0], dtype=env.NUMPY_FLOAT),
-        charges=np.zeros(2, dtype=env.NUMPY_FLOAT),
-        particle_type_indices=np.zeros(2, dtype=env.NUMPY_INT),
-    )
+    builder.set_particles(2)
     builder.add_bond(0, 1, 200.0, 1.5)
     return builder.build()
 
@@ -229,18 +226,18 @@ class TestSystem:
 
         # 8 atoms in a compact box — ensures block pairs exist
         builder = Builder()
-        builder.set_particles(
-            masses=np.full(8, 12.0, dtype=env.NUMPY_FLOAT),
-            charges=np.zeros(8, dtype=env.NUMPY_FLOAT),
-            particle_type_indices=np.zeros(8, dtype=env.NUMPY_INT),
-        )
+        builder.set_particles(8)
         topology, _ = builder.build()
 
         sigma_matrix = np.full((1, 1), 3.4, dtype=np.float32)
         epsilon_matrix = np.full((1, 1), 0.1, dtype=np.float32)
 
         pbc = np.eye(3, dtype=np.float64) * 20.0
-        system = System(topology)
+        state = State(8)
+        state.set_masses(np.full(8, 12.0, dtype=env.NUMPY_FLOAT))
+        state.set_charges(np.zeros(8, dtype=env.NUMPY_FLOAT))
+        state.set_type_indices(np.zeros(8, dtype=env.NUMPY_INT))
+        system = System(topology, state)
         system.set_pbc(pbc)
 
         nb = NonbondedForce(lj_only, cutoff=8.0)
@@ -731,11 +728,7 @@ class TestRebuildSortCorrectness:
     def test_rebuild_with_large_displacement(self):
         n = 50
         builder = Builder()
-        builder.set_particles(
-            masses=np.full(n, 12.0, dtype=env.NUMPY_FLOAT),
-            charges=np.zeros(n, dtype=env.NUMPY_FLOAT),
-            particle_type_indices=np.zeros(n, dtype=env.NUMPY_INT),
-        )
+        builder.set_particles(n)
         for i in range(n - 1):
             builder.add_bond(i, i + 1, k=300.0, r0=1.5)
         topology, term_params = builder.build()
@@ -787,11 +780,7 @@ class TestRebuildSortCorrectness:
     def test_second_rebuild_positions_consistent(self):
         n = 100
         builder = Builder()
-        builder.set_particles(
-            masses=np.full(n, 12.0, dtype=env.NUMPY_FLOAT),
-            charges=np.zeros(n, dtype=env.NUMPY_FLOAT),
-            particle_type_indices=np.zeros(n, dtype=env.NUMPY_INT),
-        )
+        builder.set_particles(n)
         for i in range(n - 1):
             builder.add_bond(i, i + 1, k=300.0, r0=1.5)
         topology, term_params = builder.build()
@@ -988,11 +977,7 @@ class TestAsyncRebuild:
     def test_async_rebuild_preserves_permutation_invariant(self):
         n = 100
         builder = Builder()
-        builder.set_particles(
-            masses=np.full(n, 12.0, dtype=env.NUMPY_FLOAT),
-            charges=np.zeros(n, dtype=env.NUMPY_FLOAT),
-            particle_type_indices=np.zeros(n, dtype=env.NUMPY_INT),
-        )
+        builder.set_particles(n)
         for i in range(n - 1):
             builder.add_bond(i, i + 1, k=300.0, r0=1.5)
         topology, term_params = builder.build()

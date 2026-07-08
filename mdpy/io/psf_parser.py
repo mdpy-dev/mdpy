@@ -124,16 +124,7 @@ class PSFParser:
 
     def _create_topology(self):
         builder = Builder()
-        builder.set_particles(
-            masses=self._masses,
-            charges=self._charges,
-            particle_type_indices=self._particle_type_indices,
-            molecule_ids=np.array(self._molecule_ids, dtype=env.NUMPY_INT),
-            particle_names=self._particle_names,
-            type_names=self._type_names,
-            chain_ids=self._chain_ids,
-            molecule_types=self._molecule_types,
-        )
+        builder.set_particles(self._num_particles)
         for i, j in self._bonds:
             builder.add_bond(i, j, 0.0, 0.0)
         for i, j, k in self._angles:

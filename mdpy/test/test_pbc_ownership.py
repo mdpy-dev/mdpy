@@ -6,11 +6,7 @@ from mdpy.core.topology import Builder
 
 
 def _make_topology(n=4):
-    return Builder().set_particles(
-        np.ones(n, dtype=np.float32),
-        np.zeros(n, dtype=np.int32),
-        np.zeros(n, dtype=np.int32),
-    ).build()[0]
+    return Builder().set_particles(n).build()[0]
 
 
 def test_state_exposes_public_pbc_properties():

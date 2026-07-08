@@ -77,7 +77,7 @@ constraints = create_constraints(
 for c in constraints:
     system.add_constraint(c)
 
-velocities = generate_velocity_from_temperature(300.0, topology.masses, seed=42)
+velocities = generate_velocity_from_temperature(300.0, psf.masses, seed=42)
 system.set_velocities(velocities)
 
 pme = forces["pme"]

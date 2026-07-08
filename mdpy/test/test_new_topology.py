@@ -12,18 +12,13 @@ def _get_neighbors(topology, particle_index):
 
 def _simple_builder() -> Builder:
     builder = Builder()
-    builder.set_particles(
-        masses=np.ones(4, dtype=np.float32),
-        charges=np.zeros(4, dtype=np.float32),
-        particle_type_indices=np.array([0, 1, 1, 0], dtype=np.int32),
-    )
+    builder.set_particles(4)
     return builder
 
 
 def test_builder_set_particles():
     builder = _simple_builder()
     assert builder._num_particles == 4
-    assert len(builder._masses) == 4
 
 
 def test_builder_add_bond():

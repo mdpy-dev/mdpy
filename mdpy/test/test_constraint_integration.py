@@ -1,6 +1,7 @@
 import numpy as np
 import pytest
 from mdpy.core.topology import Builder
+from mdpy.core.state import State
 from mdpy.core.parameter_table import ParameterTable
 from mdpy.force.bonded_force import BondedForce
 from mdpy.force.factories.charmm import create_bonded_group
@@ -46,7 +47,7 @@ def _build_test_system():
         builder.add_bond(hw1, hw2, 450.0, dHH)
         idx += 3
 
-    builder.set_particles(masses, charges, ptypes, mol_ids)
+    builder.set_particles(n_atoms)
     topology, term_params = builder.build()
     pbc_matrix = np.eye(3, dtype=np.float32) * 30.0
 
@@ -60,7 +61,12 @@ def _build_test_system():
 def test_constraint_loop():
     topology, pbc_matrix, parameter_table, positions, masses, mol_ids, molecule_types = _build_test_system()
 
-    system = System(topology)
+    n = topology.num_particles
+    state = State(n)
+    state.set_masses(masses)
+    state.set_charges(np.zeros(n, dtype=np.float32))
+    state.set_type_indices(np.zeros(n, dtype=np.int32))
+    system = System(topology, state)
 
     system.set_pbc(pbc_matrix)
 
@@ -95,7 +101,12 @@ def test_constraint_loop():
 def test_constraint_loop_multiple_rebuilds():
     topology, pbc_matrix, parameter_table, positions, masses, mol_ids, molecule_types = _build_test_system()
 
-    system = System(topology)
+    n = topology.num_particles
+    state = State(n)
+    state.set_masses(masses)
+    state.set_charges(np.zeros(n, dtype=np.float32))
+    state.set_type_indices(np.zeros(n, dtype=np.int32))
+    system = System(topology, state)
 
     system.set_pbc(pbc_matrix)
 
@@ -184,7 +195,7 @@ def _build_mixed_system():
     for bi, bj in ethane_bonds:
         builder.add_bond(ebase + bi, ebase + bj, 450.0, 1.09 if bj != 4 else 1.54)
 
-    builder.set_particles(masses, charges, ptypes, mol_ids)
+    builder.set_particles(n_atoms)
     topology, term_params = builder.build()
     pbc_matrix = np.eye(3, dtype=np.float32) * 40.0
 
@@ -198,7 +209,12 @@ def _build_mixed_system():
 def test_settle_lincs_coexistence_bond_lengths():
     topology, pbc_matrix, parameter_table, positions, masses, mol_ids, molecule_types = _build_mixed_system()
 
-    system = System(topology)
+    n = topology.num_particles
+    state = State(n)
+    state.set_masses(masses)
+    state.set_charges(np.zeros(n, dtype=np.float32))
+    state.set_type_indices(np.zeros(n, dtype=np.int32))
+    system = System(topology, state)
 
     system.set_pbc(pbc_matrix)
 
@@ -248,7 +264,12 @@ def test_settle_lincs_coexistence_bond_lengths():
 def test_settle_md_loop_rebuilds_bond_lengths():
     topology, pbc_matrix, parameter_table, positions, masses, mol_ids, molecule_types = _build_test_system()
 
-    system = System(topology)
+    n = topology.num_particles
+    state = State(n)
+    state.set_masses(masses)
+    state.set_charges(np.zeros(n, dtype=np.float32))
+    state.set_type_indices(np.zeros(n, dtype=np.int32))
+    system = System(topology, state)
 
     system.set_pbc(pbc_matrix)
 
@@ -311,14 +332,19 @@ def test_lincs_md_loop_rebuilds_bond_lengths():
     builder.add_bond(4, 6, 450.0, 1.09)
     builder.add_bond(4, 7, 450.0, 1.09)
     builder.add_bond(0, 4, 450.0, 1.54)
-    builder.set_particles(masses, charges, ptypes, mol_ids)
+    builder.set_particles(len(masses))
     topology, term_params = builder.build()
     pt = ParameterTable()
     for name, values in term_params.items():
         pt.add_term_parameter(name, values)
 
     pbc_matrix = np.diag([15.0, 15.0, 15.0]).astype(np.float32)
-    system = System(topology)
+    n = len(masses)
+    state = State(n)
+    state.set_masses(masses)
+    state.set_charges(np.zeros(n, dtype=np.float32))
+    state.set_type_indices(np.zeros(n, dtype=np.int32))
+    system = System(topology, state)
     system.set_pbc(pbc_matrix)
     system._cutoff = 4.0
     bonded = create_bonded_group(topology, pt)
@@ -326,7 +352,7 @@ def test_lincs_md_loop_rebuilds_bond_lengths():
 
     constraint_pairs = [(0, 1), (0, 2), (0, 3), (4, 5), (4, 6), (4, 7), (0, 4)]
     target_lengths = [1.09, 1.09, 1.09, 1.09, 1.09, 1.09, 1.54]
-    lincs = LincsConstraint(constraint_pairs, target_lengths, topology.masses)
+    lincs = LincsConstraint(constraint_pairs, target_lengths, masses)
     system.add_constraint(lincs)
 
     system.set_positions(positions)

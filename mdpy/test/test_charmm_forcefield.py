@@ -7,6 +7,7 @@ from mdpy.io.pdb_parser import PDBParser
 from mdpy.io.charmm_toppar_parser import CharmmTopparParser
 from mdpy.io.charmm_toppar_parser import create_parameter_table
 from mdpy.core.parameter_table import ParameterTable
+from mdpy.core.state import State
 from mdpy.system import System
 from mdpy.force.bonded_force import BondedForce
 from mdpy.force.factories.charmm import create_bonded_group
@@ -50,17 +51,17 @@ class TestTopology:
     def test_topology_masses_charges_arrays(self):
         psf = PSFParser(os.path.join(DATA_DIR, '6PO6.psf'))
         topology = psf.topology
-        assert topology.masses.dtype == env.NUMPY_FLOAT
-        assert topology.charges.dtype == env.NUMPY_FLOAT
-        assert topology.masses.shape == (49,)
-        assert topology.charges.shape == (49,)
-        assert np.all(topology.masses > 0)
+        assert psf.masses.dtype == env.NUMPY_FLOAT
+        assert psf.charges.dtype == env.NUMPY_FLOAT
+        assert psf.masses.shape == (49,)
+        assert psf.charges.shape == (49,)
+        assert np.all(psf.masses > 0)
 
     def test_topology_type_names(self):
         psf = PSFParser(os.path.join(DATA_DIR, '6PO6.psf'))
         topology = psf.topology
-        assert len(topology.type_names) == 49
-        assert len(topology.particle_names) == 49
+        assert len(psf.particle_type_names) == 49
+        assert len(psf.particle_names) == 49
 
     def test_exclusion_map_built(self):
         psf = PSFParser(os.path.join(DATA_DIR, '6PO6.psf'))
@@ -97,7 +98,7 @@ class TestParameterTable:
         table = create_parameter_table(topology, toppar, type_names=psf.particle_type_names)
         assert 'charge' not in table.particle_parameters
         assert 'charge_14' not in table.particle_parameters
-        assert topology.charges.shape == (49,)
+        assert psf.charges.shape == (49,)
 
     def test_sigma_conversion_factor(self):
         from mdpy.io.charmm_toppar_parser import RMIN_TO_SIGMA_FACTOR
@@ -115,7 +116,11 @@ class TestSystem:
         parameter_table = create_parameter_table(topology, toppar, type_names=psf.particle_type_names)
         pbc_matrix = np.eye(3, dtype=env.NUMPY_FLOAT) * 100.0
 
-        system = System(topology)
+        state = State(topology.num_particles)
+        state.set_masses(psf.masses)
+        state.set_charges(psf.charges)
+        state.set_type_indices(psf.particle_type_indices)
+        system = System(topology, state)
 
         system.set_pbc(pbc_matrix)
         system.add_force_term(create_bonded_group(topology, parameter_table))
@@ -143,7 +148,11 @@ class TestSystem:
         parameter_table = create_parameter_table(topology, toppar, type_names=psf.particle_type_names)
         pbc_matrix = np.eye(3, dtype=env.NUMPY_FLOAT) * 100.0
 
-        system = System(topology)
+        state = State(topology.num_particles)
+        state.set_masses(psf.masses)
+        state.set_charges(psf.charges)
+        state.set_type_indices(psf.particle_type_indices)
+        system = System(topology, state)
 
         system.set_pbc(pbc_matrix)
         system.add_force_term(create_bonded_group(topology, parameter_table))
@@ -175,7 +184,11 @@ class TestSystem:
         parameter_table = create_parameter_table(topology, toppar, type_names=psf.particle_type_names)
         pbc_matrix = np.eye(3, dtype=env.NUMPY_FLOAT) * 100.0
 
-        system = System(topology)
+        state = State(topology.num_particles)
+        state.set_masses(psf.masses)
+        state.set_charges(psf.charges)
+        state.set_type_indices(psf.particle_type_indices)
+        system = System(topology, state)
 
         system.set_pbc(pbc_matrix)
         system.add_force_term(create_bonded_group(topology, parameter_table))
@@ -207,7 +220,11 @@ class TestSystem:
         parameter_table = create_parameter_table(topology, toppar, type_names=psf.particle_type_names)
         pbc_matrix = np.eye(3, dtype=env.NUMPY_FLOAT) * 100.0
 
-        system = System(topology)
+        state = State(topology.num_particles)
+        state.set_masses(psf.masses)
+        state.set_charges(psf.charges)
+        state.set_type_indices(psf.particle_type_indices)
+        system = System(topology, state)
 
         system.set_pbc(pbc_matrix)
         system.add_force_term(create_bonded_group(topology, parameter_table))

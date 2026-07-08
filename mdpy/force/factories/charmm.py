@@ -149,7 +149,7 @@ def create_bonded_group(topology, parameter_table):
 
 def create_charmm_forces(topology, parameter_table, pbc_matrix, cutoff=12.0,
                          ewald_rtol=1e-5, fourier_spacing=1.2,
-                         *, particle_type_indices=None):
+                         *, particle_type_indices):
     """Create all CHARMM force terms for a PME simulation.
 
     Args:
@@ -159,8 +159,7 @@ def create_charmm_forces(topology, parameter_table, pbc_matrix, cutoff=12.0,
         cutoff: nonbonded cutoff in Angstroms.
         ewald_rtol: PME Ewald coefficient relative tolerance.
         fourier_spacing: PME Fourier grid spacing in Angstroms.
-        particle_type_indices: per-particle type indices (keyword-only).
-            Defaults to ``topology.particle_type_indices`` when not provided;
+        particle_type_indices: per-particle type indices (keyword-only),
             used for 1-4 LJ parameter lookup.
 
     Returns:
@@ -170,9 +169,6 @@ def create_charmm_forces(topology, parameter_table, pbc_matrix, cutoff=12.0,
             'pme': PMEReciprocalForce
     """
     from mdpy.force.expressions.screened_coulomb import screened_coulomb
-
-    if particle_type_indices is None:
-        particle_type_indices = topology.particle_type_indices
 
     bonded = create_bonded_group(topology, parameter_table)
     nb14 = _create_nb14_force(topology, parameter_table, particle_type_indices)

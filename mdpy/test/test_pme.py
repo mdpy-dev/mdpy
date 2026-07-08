@@ -347,13 +347,10 @@ class TestPMEReciprocalForce:
 
         topo = Topology()
         topo.num_particles = N
-        topo.particle_type_indices = np.zeros(N, dtype=np.int32)
-        topo.masses = np.ones(N, dtype=np.float32)
 
         pt = ParameterTable()
         np.random.seed(42)
         charges = np.random.randn(N).astype(np.float32)
-        topo.charges = charges
 
         state = State(topo.num_particles)
         state.set_charges(charges)
@@ -398,13 +395,10 @@ class TestPMEReciprocalForce:
 
         topo = Topology()
         topo.num_particles = N
-        topo.particle_type_indices = np.zeros(N, dtype=np.int32)
-        topo.masses = np.ones(N, dtype=np.float32)
 
         np.random.seed(7)
         pt = ParameterTable()
         charges = np.random.randn(N).astype(np.float32)
-        topo.charges = charges
 
         state = State(topo.num_particles)
         state.set_charges(charges)
@@ -476,7 +470,6 @@ class TestGridSizing:
         N = 1
         topo = Topology()
         topo.num_particles = N
-        topo.particle_type_indices = np.zeros(N, dtype=np.int32)
         pt = ParameterTable()
         pbc = np.eye(3, dtype=np.float32) * box
         from mdpy.force.pme_reciprocal_force import PMEReciprocalForce
@@ -497,7 +490,6 @@ class TestGridSizing:
         N = 1
         topo = Topology()
         topo.num_particles = N
-        topo.particle_type_indices = np.zeros(N, dtype=np.int32)
         pt = ParameterTable()
         pbc = np.eye(3, dtype=np.float32) * box
         pme = PMEReciprocalForce(cutoff)
@@ -516,7 +508,6 @@ class TestGridSizing:
         N = 1
         topo = Topology()
         topo.num_particles = N
-        topo.particle_type_indices = np.zeros(N, dtype=np.int32)
         pt = ParameterTable()
         pbc = np.diag(np.array([box_x, box_y, box_z], dtype=np.float32))
         pme = PMEReciprocalForce(cutoff)
@@ -536,7 +527,6 @@ class TestGridSizing:
         N = 1
         topo = Topology()
         topo.num_particles = N
-        topo.particle_type_indices = np.zeros(N, dtype=np.int32)
         pt = ParameterTable()
         pbc = np.eye(3, dtype=np.float32) * box
         pme_default = PMEReciprocalForce(cutoff)
@@ -556,7 +546,6 @@ class TestGridSizing:
         N = 1
         topo = Topology()
         topo.num_particles = N
-        topo.particle_type_indices = np.zeros(N, dtype=np.int32)
         pt = ParameterTable()
         pbc = np.eye(3, dtype=np.float32) * box
         pme_loose = PMEReciprocalForce(cutoff, ewald_rtol=1e-3)

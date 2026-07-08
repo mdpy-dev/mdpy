@@ -14,8 +14,6 @@ class Topology:
         'angle_indices', 'num_angles',
         'dihedral_indices', 'num_dihedrals',
         'improper_indices', 'num_impropers',
-        'masses', 'charges', 'particle_type_indices', 'molecule_ids',
-        'particle_names', 'type_names', 'chain_ids', 'molecule_types',
         '_exclusion_dirty', '_exclusion_pairs', '_exclusion_csr',
         '_exclusion_reverse_csr',
     ]
@@ -25,14 +23,6 @@ class Topology:
             self._init_legacy()
             return
         self.num_particles = builder._num_particles
-        self.masses = builder._masses.copy()
-        self.charges = builder._charges.copy()
-        self.particle_type_indices = builder._particle_type_indices.copy()
-        self.molecule_ids = builder._molecule_ids.copy()
-        self.particle_names = list(builder._particle_names)
-        self.type_names = list(builder._type_names)
-        self.chain_ids = list(builder._chain_ids)
-        self.molecule_types = list(builder._molecule_types)
 
         if builder._bonds:
             self.bond_indices = np.array(
@@ -70,14 +60,6 @@ class Topology:
 
     def _init_legacy(self):
         self.num_particles = 0
-        self.masses = np.empty(0, dtype=env.NUMPY_FLOAT)
-        self.charges = np.empty(0, dtype=env.NUMPY_FLOAT)
-        self.particle_type_indices = np.empty(0, dtype=env.NUMPY_INT)
-        self.molecule_ids = np.empty(0, dtype=env.NUMPY_INT)
-        self.particle_names = []
-        self.type_names = []
-        self.chain_ids = []
-        self.molecule_types = []
         self.bond_indices = np.empty((0, 2), dtype=env.NUMPY_INT)
         self.num_bonds = 0
         self.angle_indices = np.empty((0, 3), dtype=env.NUMPY_INT)
@@ -392,42 +374,15 @@ class Builder:
 
     def __init__(self):
         self._num_particles = 0
-        self._masses = None
-        self._charges = None
-        self._particle_type_indices = None
-        self._molecule_ids = None
-        self._particle_names: list[str] = []
-        self._type_names: list[str] = []
-        self._chain_ids: list[str] = []
-        self._molecule_types: list[str] = []
+        self._particles_set = False
         self._bonds: list[list] = []
         self._angles: list[list] = []
         self._dihedrals: list[list] = []
         self._impropers: list[list] = []
 
-    def set_particles(
-        self,
-        masses: np.ndarray,
-        charges: np.ndarray,
-        particle_type_indices: np.ndarray,
-        molecule_ids: np.ndarray | None = None,
-        particle_names: list[str] | None = None,
-        type_names: list[str] | None = None,
-        chain_ids: list[str] | None = None,
-        molecule_types: list[str] | None = None,
-    ) -> Builder:
-        self._num_particles = len(masses)
-        self._masses = np.asarray(masses, dtype=env.NUMPY_FLOAT)
-        self._charges = np.asarray(charges, dtype=env.NUMPY_FLOAT)
-        self._particle_type_indices = np.asarray(particle_type_indices, dtype=env.NUMPY_INT)
-        if molecule_ids is not None:
-            self._molecule_ids = np.asarray(molecule_ids, dtype=env.NUMPY_INT)
-        else:
-            self._molecule_ids = np.zeros(self._num_particles, dtype=env.NUMPY_INT)
-        self._particle_names = particle_names or [''] * self._num_particles
-        self._type_names = type_names or [''] * self._num_particles
-        self._chain_ids = chain_ids or [''] * self._num_particles
-        self._molecule_types = molecule_types or [''] * self._num_particles
+    def set_particles(self, num_particles: int) -> 'Builder':
+        self._num_particles = num_particles
+        self._particles_set = True
         return self
 
     def add_bond(self, i: int, j: int, k: float, r0: float) -> Builder:
@@ -466,7 +421,7 @@ class Builder:
         return self
 
     def build(self) -> tuple:
-        if self._masses is None:
+        if not self._particles_set:
             raise ValueError('set_particles() must be called before build()')
         topology = Topology(self)
         term_params = {}

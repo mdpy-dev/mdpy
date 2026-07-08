@@ -42,12 +42,7 @@ def test_settle_preserves_bond_lengths():
     dOH, dHH = 1.0, 1.63298
     water_triplets, masses, mol_ids, positions, pbc_matrix = _make_water_system(50, 30.0, dOH, dHH)
     settle = SettleConstraint(water_triplets, masses, dOH, dHH)
-    topology = Builder().set_particles(
-        masses,
-        np.zeros(len(masses), dtype=np.float32),
-        np.zeros(len(masses), dtype=np.int32),
-        mol_ids,
-    ).build()[0]
+    topology = Builder().set_particles(len(masses)).build()[0]
     state = State(topology.num_particles)
     state.set_pbc(pbc_matrix.flatten())
     state.set_positions(positions)
@@ -72,12 +67,7 @@ def test_settle_no_change_if_already_correct():
     dOH, dHH = 1.0, 1.63298
     water_triplets, masses, mol_ids, positions, pbc_matrix = _make_water_system(10, 30.0, dOH, dHH)
     settle = SettleConstraint(water_triplets, masses, dOH, dHH)
-    topology = Builder().set_particles(
-        masses,
-        np.zeros(len(masses), dtype=np.float32),
-        np.zeros(len(masses), dtype=np.int32),
-        mol_ids,
-    ).build()[0]
+    topology = Builder().set_particles(len(masses)).build()[0]
     state = State(topology.num_particles)
     state.set_pbc(pbc_matrix.flatten())
     state.set_positions(positions)
@@ -96,12 +86,7 @@ def test_settle_pbc_boundary_crossing():
     height = np.sqrt(dOH**2 - half_hh**2)
     masses = np.array([15.999, 1.008, 1.008], dtype=np.float32)
     mol_ids = np.array([0, 0, 0], dtype=np.int32)
-    topology = Builder().set_particles(
-        masses,
-        np.zeros(3, dtype=np.float32),
-        np.zeros(3, dtype=np.int32),
-        mol_ids,
-    ).build()[0]
+    topology = Builder().set_particles(len(masses)).build()[0]
     state = State(topology.num_particles)
     state.set_pbc(pbc_matrix.flatten())
     settle = SettleConstraint([(0, 1, 2)], masses, dOH, dHH)
@@ -136,12 +121,7 @@ def test_settle_large_perturbation():
     dOH, dHH = 1.0, 1.63298
     water_triplets, masses, mol_ids, positions, pbc_matrix = _make_water_system(200, 50.0, dOH, dHH)
     settle = SettleConstraint(water_triplets, masses, dOH, dHH)
-    topology = Builder().set_particles(
-        masses,
-        np.zeros(len(masses), dtype=np.float32),
-        np.zeros(len(masses), dtype=np.int32),
-        mol_ids,
-    ).build()[0]
+    topology = Builder().set_particles(len(masses)).build()[0]
     state = State(topology.num_particles)
     state.set_pbc(pbc_matrix.flatten())
     state.set_positions(positions)
@@ -166,12 +146,7 @@ def test_settle_center_of_mass_conservation():
     dOH, dHH = 1.0, 1.63298
     water_triplets, masses, mol_ids, positions, pbc_matrix = _make_water_system(50, 30.0, dOH, dHH)
     settle = SettleConstraint(water_triplets, masses, dOH, dHH)
-    topology = Builder().set_particles(
-        masses,
-        np.zeros(len(masses), dtype=np.float32),
-        np.zeros(len(masses), dtype=np.int32),
-        mol_ids,
-    ).build()[0]
+    topology = Builder().set_particles(len(masses)).build()[0]
     state = State(topology.num_particles)
     state.set_pbc(pbc_matrix.flatten())
     state.set_positions(positions)
@@ -198,12 +173,7 @@ def test_settle_tip3p_real_parameters():
     dHH = 1.5139
     water_triplets, masses, mol_ids, positions, pbc_matrix = _make_water_system(100, 30.0, dOH, dHH)
     settle = SettleConstraint(water_triplets, masses, dOH, dHH)
-    topology = Builder().set_particles(
-        masses,
-        np.zeros(len(masses), dtype=np.float32),
-        np.zeros(len(masses), dtype=np.int32),
-        mol_ids,
-    ).build()[0]
+    topology = Builder().set_particles(len(masses)).build()[0]
     state = State(topology.num_particles)
     state.set_pbc(pbc_matrix.flatten())
     state.set_positions(positions)

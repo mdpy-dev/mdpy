@@ -32,11 +32,7 @@ class _PBCContext:
 
 def _make_topology(n):
     builder = Builder()
-    builder.set_particles(
-        masses=np.ones(n, dtype=np.float32),
-        charges=np.zeros(n, dtype=np.float32),
-        particle_type_indices=np.zeros(n, dtype=np.int32),
-    )
+    builder.set_particles(n)
     topology, _ = builder.build()
     return topology
 
