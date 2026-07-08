@@ -14,16 +14,12 @@ def _identify_water_molecules(topology, masses, molecule_ids, molecule_types):
     if topology.num_bonds == 0:
         return water_triplets, water_bond_set
     bond_indices = topology.bond_indices
-    mol_ids = molecule_ids
-    if mol_ids is None:
-        return water_triplets, water_bond_set
-
     use_mol_types = molecule_types and molecule_types[0] != ''
 
     oxygen_hydrogen_bonds = {}
     for b in range(bond_indices.shape[0]):
         i, j = int(bond_indices[b, 0]), int(bond_indices[b, 1])
-        if mol_ids[i] != mol_ids[j]:
+        if molecule_ids[i] != molecule_ids[j]:
             continue
         if use_mol_types:
             if molecule_types[i] not in _WATER_RESIDUE_NAMES:
