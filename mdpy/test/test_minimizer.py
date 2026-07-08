@@ -36,8 +36,8 @@ class TestSteepestDescent:
         minimizer = SteepestDescentMinimizer(step_size=0.1)
         minimizer.step(system)
         new_pos = system.state.download_positions()
-        assert new_pos[0, 0] > 0.0
-        assert new_pos[1, 0] < 2.0
+        assert new_pos[0, 0] < 0.0
+        assert new_pos[1, 0] > 2.0
 
     def test_step_size_zero_does_not_move(self):
         positions = np.array([[0.0, 0.0, 0.0], [2.0, 0.0, 0.0]], dtype=np.float32)

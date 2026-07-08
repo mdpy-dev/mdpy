@@ -22,9 +22,9 @@ void steepest_descent_step_kernel(
     float mass = masses[i];
     if (mass <= 0.0f) return;
     float inv_mass = 1.0f / mass;
-    pos_x[i] -= step_size * fx[i] * inv_mass;
-    pos_y[i] -= step_size * fy[i] * inv_mass;
-    pos_z[i] -= step_size * fz[i] * inv_mass;
+    pos_x[i] += step_size * fx[i] * inv_mass;
+    pos_y[i] += step_size * fy[i] * inv_mass;
+    pos_z[i] += step_size * fz[i] * inv_mass;
 }
 """
 
