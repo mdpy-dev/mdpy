@@ -3,7 +3,7 @@ import cupy as cp
 import pytest
 from mdpy.core.topology import Builder
 from mdpy.core.block_list import (
-    BlockList, BLOCK_SIZE, NUM_ATOMS_SENTINEL, SCAN_BLOCK,
+    BlockList, BLOCK_SIZE, SCAN_BLOCK,
     _COMPOSITE_PREFIX_SUM_KERNEL, _CELL_PREFIX_SUM_KERNEL,
 )
 
@@ -64,10 +64,6 @@ def _rebuild_and_build_block_pairs(n, box=50.0, cutoff=10.0, skin=2.0, seed=42, 
     bl = BlockList(cutoff=cutoff, skin=skin)
     bl.rebuild(topology, ctx, force=True)
     bl.build_block_pairs(topology, ctx)
-    # Read actual counts for test assertions (syncs — acceptable in tests,
-    # NOT in the hot path where kernels read from device directly).
-    bl.num_blocks = int(bl._d_num_blocks[0].get())
-    bl.num_block_pairs = int(bl.d_num_block_pairs[0].get())
     return bl, positions, pbc_matrix, pbc_inv, topology
 
 
@@ -481,8 +477,6 @@ class TestExclusionMasks:
         ctx = _PBCContext(pbc_matrix, pbc_inv, positions)
         bl.rebuild(topology, ctx, force=True)
         bl.build_block_pairs(topology, ctx)
-        bl.num_blocks = int(bl._d_num_blocks[0].get())
-        bl.num_block_pairs = int(bl.d_num_block_pairs[0].get())
 
         excl = bl.exclusion_masks
         ia = bl.interacting_atoms
@@ -528,8 +522,6 @@ class TestExclusionMasks:
         ctx = _PBCContext(pbc_matrix, pbc_inv, positions)
         bl.rebuild(topology, ctx, force=True)
         bl.build_block_pairs(topology, ctx)
-        bl.num_blocks = int(bl._d_num_blocks[0].get())
-        bl.num_block_pairs = int(bl.d_num_block_pairs[0].get())
 
         excl = bl.exclusion_masks
         ia = bl.interacting_atoms
@@ -1045,7 +1037,7 @@ class TestShiftGroupedPacking:
             bl.d_interacting_atoms[:bl.num_block_pairs * 32]
         ).reshape(bl.num_block_pairs, 32)
         fills = np.sum(
-            (int_atoms >= 0) & (int_atoms != NUM_ATOMS_SENTINEL),
+            (int_atoms >= 0),
             axis=1
         )
         max_fill = int(np.max(fills))
@@ -1447,7 +1439,7 @@ class TestRefreshSortedPosq:
 
         posq = bl.d_sorted_posq
         assert posq is not None
-        total_slots = bl.num_blocks * BLOCK_SIZE
+        total_slots = bl.max_blocks * BLOCK_SIZE
         assert posq.size == total_slots * 4
 
         posq_np = cp.asnumpy(posq).reshape(-1, 4)
@@ -1517,7 +1509,7 @@ class TestGatherSorted:
         types = cp.arange(n, dtype=np.int32)
         sorted_types = bl.gather_sorted(types)
 
-        total_slots = bl.num_blocks * BLOCK_SIZE
+        total_slots = bl.max_blocks * BLOCK_SIZE
         assert sorted_types.size == total_slots
         assert sorted_types.dtype == np.int32
 
@@ -1542,7 +1534,7 @@ class TestGatherSorted:
         values = cp.arange(n, dtype=np.float32) * 0.5
         sorted_values = bl.gather_sorted(values)
 
-        total_slots = bl.num_blocks * BLOCK_SIZE
+        total_slots = bl.max_blocks * BLOCK_SIZE
         assert sorted_values.size == total_slots
         assert sorted_values.dtype == np.float32
 

@@ -565,7 +565,7 @@ class PMEReciprocalForce(ForceTerm):
         gx, gy, gz = self.grid_x, self.grid_y, self.grid_z
 
         threads_per_block = 256
-        total_slots = block_list.num_blocks * 32
+        total_slots = block_list.max_blocks * 32
         grid_1d = ((total_slots + threads_per_block - 1) // threads_per_block,)
 
         self._d_charge_grid[:] = 0

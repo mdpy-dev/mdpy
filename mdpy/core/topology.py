@@ -122,8 +122,8 @@ class Topology:
         d_pair_i = cp.asarray(pair_i_np)
         d_pair_j = cp.asarray(pair_j_np)
 
-        _STRIDE = np.int64(2_000_000_000)
-        sort_key = d_pair_i.astype(cp.int64) * _STRIDE + d_pair_j.astype(cp.int64)
+        sort_key_stride = np.int64(2_000_000_000)
+        sort_key = d_pair_i.astype(cp.int64) * sort_key_stride + d_pair_j.astype(cp.int64)
         order = cp.argsort(sort_key)
         d_pair_i, d_pair_j = d_pair_i[order], d_pair_j[order]
 
@@ -143,7 +143,7 @@ class Topology:
         d_bi_i = cp.concatenate([d_u_i, d_u_j])
         d_bi_j = cp.concatenate([d_u_j, d_u_i])
         bi_count = d_bi_i.shape[0]
-        bi_key = d_bi_i.astype(cp.int64) * _STRIDE + d_bi_j.astype(cp.int64)
+        bi_key = d_bi_i.astype(cp.int64) * sort_key_stride + d_bi_j.astype(cp.int64)
         bi_order = cp.argsort(bi_key)
         d_bi_i, d_bi_j = d_bi_i[bi_order], d_bi_j[bi_order]
 
@@ -169,11 +169,11 @@ class Topology:
         d_offset = cp.empty(N + 1, dtype=env.NUMPY_INT)
         cp.cumsum(d_count, dtype=cp.int32, out=d_offset)
         d_neighbors = cp.empty(num_pairs, dtype=env.NUMPY_INT)
-        d_temp = cp.empty(N + 1, dtype=env.NUMPY_INT)
-        d_temp[:] = d_offset
+        d_fwd_write_cursor = cp.empty(N + 1, dtype=env.NUMPY_INT)
+        d_fwd_write_cursor[:] = d_offset
         kernels['scatter_pairs'](grid_c, (threads_per_block,),
             (d_unique_i, d_unique_j, d_offset, np.int32(num_pairs),
-             d_neighbors, d_temp))
+             d_neighbors, d_fwd_write_cursor))
         self._exclusion_csr = (d_offset, d_neighbors)
 
         # --- reverse CSR ---
@@ -184,10 +184,10 @@ class Topology:
         d_rev_offset = cp.cumsum(d_rev_offset, dtype=cp.int32).astype(env.NUMPY_INT)
         max_rev = num_pairs if num_pairs > 0 else int(d_rev_offset[-1])
         d_rev_neighbors = cp.empty(max_rev, dtype=env.NUMPY_INT)
-        d_temp2 = d_rev_offset.copy()
+        d_rev_write_cursor = d_rev_offset.copy()
         kernels['rev_fill']((n1,), (threads_per_block,),
             (d_offset, d_neighbors, d_rev_offset, np.int32(N),
-             d_rev_neighbors, d_temp2))
+             d_rev_neighbors, d_rev_write_cursor))
         self._exclusion_reverse_csr = (d_rev_offset, d_rev_neighbors)
 
         self._exclusion_dirty = False

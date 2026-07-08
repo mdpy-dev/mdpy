@@ -343,10 +343,10 @@ class NonbondedForce(ForceTerm):
     def _ensure_sorted_force_buffer(self, block_list):
         """Ensure slot-indexed force buffers are allocated for current block count.
 
-        Uses grow-only allocation: buffers grow when num_blocks increases,
+        Uses grow-only allocation: buffers grow when max_blocks increases,
         never shrinks. Reused across steps to avoid per-step allocation.
         """
-        total_slots = block_list.num_blocks * 32
+        total_slots = block_list.max_blocks * 32
         if total_slots == 0:
             return
         if self._d_sorted_fx is None or self._sorted_force_slots < total_slots:
@@ -370,7 +370,7 @@ class NonbondedForce(ForceTerm):
         atomicAdd(&pdb_fx[block_atoms[slot]], sorted_fx[slot]) — accumulates
         the sorted buffer's forces into the shared PDB-order force pool.
         """
-        total_slots = block_list.num_blocks * 32
+        total_slots = block_list.max_blocks * 32
         if total_slots == 0 or self._d_sorted_fx is None:
             return
         threads = 256
@@ -396,7 +396,7 @@ class NonbondedForce(ForceTerm):
         if block_list is None:
             return
 
-        total_slots = block_list.num_blocks * 32
+        total_slots = block_list.max_blocks * 32
         if total_slots == 0:
             return
 

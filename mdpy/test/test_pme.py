@@ -281,7 +281,7 @@ class TestForceGathering:
         d_energy = cp.zeros(1, dtype=np.float32)
 
         gather_k = get_gather_kernel()
-        total_slots = bl.num_blocks * 32
+        total_slots = bl.max_blocks * 32
         grid_1d = ((total_slots + 255) // 256,)
         gather_k(
             grid_1d, (256,),

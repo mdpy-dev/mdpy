@@ -10,8 +10,6 @@ from mdpy.core.hilbert import HILBERT_ENCODE_KERNEL
 
 BLOCK_SIZE = 32
 
-NUM_ATOMS_SENTINEL = 0x7FFFFFFF
-
 _FILL_CONSTANT_INT32_KERNEL_SRC = r"""
 extern "C" __global__
 void fill_constant_int32_kernel(
@@ -193,7 +191,7 @@ void find_interacting_blocks_kernel(
     const int* __restrict__ cell_block_count,
     const int* __restrict__ block_to_cell,
     int nc_x, int nc_y, int nc_z,
-    const int* __restrict__ d_num_blocks, int num_particles, int K,
+    const int* __restrict__ d_num_blocks, int num_particles, int num_cell_subsets,
     float build_radius_sq,
     const float* __restrict__ pbc_matrix,
     int* __restrict__ block_pairs_out,
@@ -211,10 +209,10 @@ void find_interacting_blocks_kernel(
     int tgx = threadIdx.x & 31;
     int warp_in_block = threadIdx.x >> 5;
     int global_warp = (blockIdx.x * blockDim.x + threadIdx.x) >> 5;
-    if (global_warp >= num_blocks * K) return;
+    if (global_warp >= num_blocks * num_cell_subsets) return;
 
-    int bx = global_warp / K;
-    int cell_subset = global_warp % K;
+    int bx = global_warp / num_cell_subsets;
+    int cell_subset = global_warp % num_cell_subsets;
     int my_cell = block_to_cell[bx];
 
     int cz_idx = my_cell / (nc_x * nc_y);
@@ -257,7 +255,7 @@ void find_interacting_blocks_kernel(
         for (int dy = -1; dy <= 1; dy++) {
             for (int dx = -1; dx <= 1; dx++) {
                 int cell_id = (dz + 1) * 9 + (dy + 1) * 3 + (dx + 1);
-                if (K > 1 && cell_id % K != cell_subset) continue;
+                if (num_cell_subsets > 1 && cell_id % num_cell_subsets != cell_subset) continue;
                 int nx = (cx_idx + dx + nc_x) % nc_x;
                 int ny = (cy_idx + dy + nc_y) % nc_y;
                 int nz = (cz_idx + dz + nc_z) % nc_z;
@@ -611,13 +609,13 @@ _COMPOSITE_PREFIX_SUM_KERNEL = _BLOCK_SCAN_PREAMBLE + r"""
 extern "C" __global__
 void composite_prefix_sum_kernel(
     const int* __restrict__ composite_counts,
-    int K,
+    int num_buckets,
     int* __restrict__ composite_offset
 ) {
     __shared__ int s_part[SCAN_BLOCK];
     __shared__ int s_total;
-    scan_block_excl(composite_counts, composite_offset, K, s_part, &s_total);
-    if (threadIdx.x == 0) composite_offset[K] = s_total;
+    scan_block_excl(composite_counts, composite_offset, num_buckets, s_part, &s_total);
+    if (threadIdx.x == 0) composite_offset[num_buckets] = s_total;
 }
 """
 
@@ -771,12 +769,11 @@ class BlockList:
         self._is_initialized = False
         self.rebuild_check_interval = rebuild_check_interval
 
-        self.num_blocks = 0
-        self.num_block_pairs = 0
         self.num_particles = 0
         self._max_block_pairs = 0
         self.max_blocks = 0
         self.max_total_padded = 0
+        self._d_num_blocks = None
 
         self.num_cells_x = 0
         self.num_cells_y = 0
@@ -819,17 +816,17 @@ class BlockList:
         self._block_pairs_np = None
         self._interacting_atoms_np = None
 
-        self._pool = {}
+        self._scratch_pool = {}
 
-    def _pool_get(self, name, size, dtype, fill=None):
+    def _acquire_scratch_buffer(self, name, size, dtype, fill=None):
         """Return a reusable buffer of the given size. Allocates on first call
         or when size grows; otherwise returns the cached array. If fill is not
         None, fill the buffer (memsetAsync for 0, int32 fill kernel for others)."""
         key = (name, dtype)
-        arr = self._pool.get(key)
+        arr = self._scratch_pool.get(key)
         if arr is None or arr.size < size:
             arr = cp.empty(size, dtype=dtype)
-            self._pool[key] = arr
+            self._scratch_pool[key] = arr
         arr = arr[:size]
         if fill is not None:
             if fill == 0:
@@ -919,8 +916,9 @@ class BlockList:
 
         # Density-derived Hilbert level L. Targets ~4 atoms per sub-cell:
         # atoms_per_cell / (2^L)^3 ~= 4  ->  B_raw = round(log2(apc/4)), L =
-        # (B_raw+2)//3 clamped to [1, 4]. Also cap K = num_cells_total * 2^(3L) at
-        # 1e6 so the counting-sort bucket arrays stay small.
+        # (B_raw+2)//3 clamped to [1, 4]. Also cap composite buckets
+        # (num_cells_total * 2^(3L)) at 1e6 so the counting-sort bucket arrays
+        # stay small.
         atoms_per_cell = num_particles / self.num_cells_total
         b_raw = int(round(math.log2(max(1.0, atoms_per_cell / 4.0))))
         L = max(1, min(4, (b_raw + 2) // 3))
@@ -973,10 +971,10 @@ class BlockList:
         # intra-cell Hilbert ordering instead of scattering in arrival order.
         hilbert_levels = self._hilbert_levels
         composite_buckets = self.num_cells_total * (1 << (3 * hilbert_levels))
-        sort_keys = self._pool_get("sort_keys", N, np.uint64)
-        cell_indices = self._pool_get("cell_indices", N, env.NUMPY_INT)
-        d_cell_counts = self._pool_get("cell_counts", self.num_cells_total, env.NUMPY_INT, fill=0)
-        d_composite_counts = self._pool_get("composite_counts", composite_buckets, env.NUMPY_INT, fill=0)
+        sort_keys = self._acquire_scratch_buffer("sort_keys", N, np.uint64)
+        cell_indices = self._acquire_scratch_buffer("cell_indices", N, env.NUMPY_INT)
+        d_cell_counts = self._acquire_scratch_buffer("cell_counts", self.num_cells_total, env.NUMPY_INT, fill=0)
+        d_composite_counts = self._acquire_scratch_buffer("composite_counts", composite_buckets, env.NUMPY_INT, fill=0)
         nm = (N + threads_per_block - 1) // threads_per_block
         self._kernels["cell_assign"](
             (nm,), (threads_per_block,),
@@ -997,15 +995,15 @@ class BlockList:
         # counting_scatter needs cell_offset and cell_offset_padded. prefix_sum
         # consumes only d_cell_counts (not the sorted data), so it is safe to
         # run immediately after cell_assign.
-        cell_offset = self._pool_get("cell_offset", self.num_cells_total + 1, env.NUMPY_INT)
-        cell_block_offset = self._pool_get("cell_block_offset", self.num_cells_total + 1, env.NUMPY_INT)
-        cell_block_count = self._pool_get("cell_block_count", self.num_cells_total, env.NUMPY_INT)
-        cell_offset_padded = self._pool_get("cell_offset_padded", self.num_cells_total + 1, env.NUMPY_INT)
-        d_num_blocks = self._pool_get("num_blocks", 1, env.NUMPY_INT)
-        d_total_padded = self._pool_get("total_padded", 1, env.NUMPY_INT)
+        cell_offset = self._acquire_scratch_buffer("cell_offset", self.num_cells_total + 1, env.NUMPY_INT)
+        cell_block_offset = self._acquire_scratch_buffer("cell_block_offset", self.num_cells_total + 1, env.NUMPY_INT)
+        cell_block_count = self._acquire_scratch_buffer("cell_block_count", self.num_cells_total, env.NUMPY_INT)
+        cell_offset_padded = self._acquire_scratch_buffer("cell_offset_padded", self.num_cells_total + 1, env.NUMPY_INT)
+        d_num_blocks = self._acquire_scratch_buffer("num_blocks", 1, env.NUMPY_INT)
+        d_total_padded = self._acquire_scratch_buffer("total_padded", 1, env.NUMPY_INT)
         # num_blocks is unknown until the prefix sum writes it; num_blocks <= N
         # (each block holds >=1 atom), so N is a safe upper bound. Sliced below.
-        block_to_cell = self._pool_get("block_to_cell", N, env.NUMPY_INT)
+        block_to_cell = self._acquire_scratch_buffer("block_to_cell", N, env.NUMPY_INT)
         self._kernels["cell_prefix_sum"](
             (1,), (SCAN_BLOCK,),
             (
@@ -1014,7 +1012,6 @@ class BlockList:
                 cell_offset_padded, block_to_cell, d_num_blocks, d_total_padded,
             ),
         )
-        self.num_blocks = self.max_blocks
         self._d_num_blocks = d_num_blocks
 
         self.d_cell_block_offset = cell_block_offset
@@ -1024,7 +1021,7 @@ class BlockList:
         # counting_scatter scatters atoms in Hilbert order within each cell.
         # The composite buckets for a cell are contiguous (cell c occupies keys
         # [c*2^(3L), (c+1)*2^(3L))), so composite_offset aligns with cell_offset.
-        composite_offset = self._pool_get("composite_offset", composite_buckets + 1, env.NUMPY_INT)
+        composite_offset = self._acquire_scratch_buffer("composite_offset", composite_buckets + 1, env.NUMPY_INT)
         self._kernels["composite_prefix_sum"](
             (1,), (SCAN_BLOCK,),
             (d_composite_counts, np.int32(composite_buckets), composite_offset),
@@ -1037,16 +1034,16 @@ class BlockList:
         # preserves the intra-cell
         # Hilbert ordering, keeping blocks Hilbert-compact -> tight AABBs.
         # block_atoms must be pre-filled with -1 (padding) before launch.
-        block_atoms = self._pool_get("block_atoms", self.max_total_padded, env.NUMPY_INT, fill=-1)
-        composite_cursor = self._pool_get("composite_cursor", composite_buckets, env.NUMPY_INT, fill=0)
-        raw_order = self._pool_get("raw_order", N, env.NUMPY_INT)
-        pdb_to_sorted = self._pool_get("pdb_to_sorted", N, env.NUMPY_INT)
+        block_atoms = self._acquire_scratch_buffer("block_atoms", self.max_total_padded, env.NUMPY_INT, fill=-1)
+        composite_cursor = self._acquire_scratch_buffer("composite_cursor", composite_buckets, env.NUMPY_INT, fill=0)
+        raw_order = self._acquire_scratch_buffer("raw_order", N, env.NUMPY_INT)
+        pdb_to_sorted = self._acquire_scratch_buffer("pdb_to_sorted", N, env.NUMPY_INT)
         # sorted_to_pdb is NOT pooled: line 808 captures prev_sorted_to_pdb =
         # self.d_sorted_to_pdb, and counting_scatter below overwrites the
         # buffer. If pooled, prev_sorted_to_pdb would alias the same buffer
         # and be corrupted before line 971 uses it.
         sorted_to_pdb = cp.empty(N, dtype=env.NUMPY_INT)
-        cell_indices_sorted = self._pool_get("cell_indices_sorted", N, env.NUMPY_INT)
+        cell_indices_sorted = self._acquire_scratch_buffer("cell_indices_sorted", N, env.NUMPY_INT)
         self._kernels["counting_scatter"](
             (nm,), (threads_per_block,),
             (
@@ -1066,17 +1063,17 @@ class BlockList:
         self.d_block_to_cell = block_to_cell[:self.max_blocks]
 
         nb = (self.max_blocks + threads_per_block - 1) // threads_per_block
-        self.d_block_center_x = self._pool_get("block_center_x", self.max_blocks, env.NUMPY_FLOAT)
-        self.d_block_center_y = self._pool_get("block_center_y", self.max_blocks, env.NUMPY_FLOAT)
-        self.d_block_center_z = self._pool_get("block_center_z", self.max_blocks, env.NUMPY_FLOAT)
-        self.d_block_size_x = self._pool_get("block_size_x", self.max_blocks, env.NUMPY_FLOAT)
-        self.d_block_size_y = self._pool_get("block_size_y", self.max_blocks, env.NUMPY_FLOAT)
-        self.d_block_size_z = self._pool_get("block_size_z", self.max_blocks, env.NUMPY_FLOAT)
+        self.d_block_center_x = self._acquire_scratch_buffer("block_center_x", self.max_blocks, env.NUMPY_FLOAT)
+        self.d_block_center_y = self._acquire_scratch_buffer("block_center_y", self.max_blocks, env.NUMPY_FLOAT)
+        self.d_block_center_z = self._acquire_scratch_buffer("block_center_z", self.max_blocks, env.NUMPY_FLOAT)
+        self.d_block_size_x = self._acquire_scratch_buffer("block_size_x", self.max_blocks, env.NUMPY_FLOAT)
+        self.d_block_size_y = self._acquire_scratch_buffer("block_size_y", self.max_blocks, env.NUMPY_FLOAT)
+        self.d_block_size_z = self._acquire_scratch_buffer("block_size_z", self.max_blocks, env.NUMPY_FLOAT)
         # K4: compute block AABB bounds and atom_to_block/slot reverse map in a
         # single per-block pass. Every real atom is in exactly one block at one
         # slot, so all N entries are written here -> no -1 pre-fill needed.
-        self.d_atom_to_block = self._pool_get("atom_to_block", N, env.NUMPY_INT)
-        self.d_atom_to_slot = self._pool_get("atom_to_slot", N, env.NUMPY_INT)
+        self.d_atom_to_block = self._acquire_scratch_buffer("atom_to_block", N, env.NUMPY_INT)
+        self.d_atom_to_slot = self._acquire_scratch_buffer("atom_to_slot", N, env.NUMPY_INT)
         self._kernels["block_meta"](
             (nb,), (threads_per_block,),
             (
@@ -1105,8 +1102,8 @@ class BlockList:
         pos_x = gpu_context.d_positions_x
         pos_y = gpu_context.d_positions_y
         pos_z = gpu_context.d_positions_z
-        num_blocks = self.num_blocks
-        # Cell-subset decomposition: split the 27-cell scan into K subsets
+        num_blocks = self.max_blocks
+        # Cell-subset decomposition: split the 27-cell scan into cell_subsets subsets
         # to fill the GPU. Target ~2 full waves (80 SMs x 4 blocks/SM = 320/wave).
         target_total_warps = 640 * 8
         cell_subsets = max(1, min(8, (target_total_warps + self.max_blocks - 1) // self.max_blocks))
@@ -1124,7 +1121,7 @@ class BlockList:
 
         threads_per_block = 256
         grid_blocks = max((self.max_blocks * cell_subsets + 7) // 8, 1)
-        d_num_blocks = self._pool.get(("num_blocks", env.NUMPY_INT))
+        d_num_blocks = self._scratch_pool.get(("num_blocks", env.NUMPY_INT))
         self._kernels["find_interacting"](
             (grid_blocks,), (threads_per_block,),
             (
@@ -1145,7 +1142,6 @@ class BlockList:
             ),
         )
 
-        self.num_block_pairs = self._max_block_pairs
         self.num_cell_subsets = cell_subsets
         self.d_block_pairs = self._d_block_pair_buf
         self.d_interacting_atoms = self._d_interacting_buf
@@ -1232,9 +1228,9 @@ class BlockList:
         pos_y = gpu_context.d_positions_y
         pos_z = gpu_context.d_positions_z
         N = self.num_particles
-        snap_x = self._pool_get("snap_x", N, env.NUMPY_FLOAT)
-        snap_y = self._pool_get("snap_y", N, env.NUMPY_FLOAT)
-        snap_z = self._pool_get("snap_z", N, env.NUMPY_FLOAT)
+        snap_x = self._acquire_scratch_buffer("snap_x", N, env.NUMPY_FLOAT)
+        snap_y = self._acquire_scratch_buffer("snap_y", N, env.NUMPY_FLOAT)
+        snap_z = self._acquire_scratch_buffer("snap_z", N, env.NUMPY_FLOAT)
         threads_per_block = 256
         grid = ((N + threads_per_block - 1) // threads_per_block,)
         self._kernels["capture_snapshot"](
@@ -1250,13 +1246,13 @@ class BlockList:
         """Generic PDB→block-order gather using d_block_atoms.
 
         Takes any PDB-order device array (int32 or float32), returns a fresh
-        block-ordered device array padded to num_blocks * BLOCK_SIZE.
+        block-ordered device array padded to max_blocks * BLOCK_SIZE.
         Dispatches to int or float kernel based on src_pdb.dtype.
         """
-        if self.num_blocks == 0:
+        if self.max_blocks == 0:
             return cp.empty(0, dtype=src_pdb.dtype)
         self._ensure_kernels()
-        total_slots = self.num_blocks * BLOCK_SIZE
+        total_slots = self.max_blocks * BLOCK_SIZE
         dst = cp.empty(total_slots, dtype=src_pdb.dtype)
         threads_per_block = 256
         grid = ((total_slots + threads_per_block - 1) // threads_per_block,)
@@ -1285,11 +1281,11 @@ class BlockList:
         padded, warp-aligned float4 [x,y,z,q] buffer that the nonbonded
         kernel reads for coalesced access. Same-size buffer reuse.
         """
-        if self.num_blocks == 0:
+        if self.max_blocks == 0:
             self._d_sorted_posq = None
             return
         self._ensure_kernels()
-        total_slots = self.num_blocks * BLOCK_SIZE
+        total_slots = self.max_blocks * BLOCK_SIZE
         if self._d_sorted_posq is None or self._d_sorted_posq.size != total_slots * 4:
             self._d_sorted_posq = cp.empty(total_slots * 4, dtype=env.NUMPY_FLOAT)
         threads_per_block = 256
@@ -1327,6 +1323,23 @@ class BlockList:
     def d_sorted_types(self):
         """Block-ordered atom types (int32). None until first rebuild."""
         return self._d_sorted_types
+
+    @property
+    def num_blocks(self):
+        """Actual block count from the last rebuild (reads the device scalar,
+        syncing the GPU). Diagnostic only — for buffer sizing use max_blocks."""
+        d = getattr(self, '_d_num_blocks', None)
+        if d is None or not self._is_initialized:
+            return 0
+        return int(d[0])
+
+    @property
+    def num_block_pairs(self):
+        """Actual block-pair count from the last build_block_pairs (reads the
+        device scalar, syncing the GPU). Diagnostic only."""
+        if not self._is_initialized:
+            return 0
+        return int(self.d_num_block_pairs[0])
 
     def read_flag_sync(self):
         """Read d_rebuild_flag with a GPU sync. Returns 0 or 1."""
@@ -1366,9 +1379,8 @@ class BlockList:
         self.d_positions_at_rebuild_z = cp.empty(0, dtype=env.NUMPY_FLOAT)
 
     def _init_empty(self):
-        self.num_blocks = 0
-        self.num_block_pairs = 0
         self.num_particles = 0
+        self._d_num_blocks = None
         self._alloc_empty_buffers()
         self._d_sorted_posq = None
         self._d_sorted_types = None
