@@ -151,10 +151,8 @@ class BondedForce(ForceTerm):
         self._per_particle_properties = list(dict.fromkeys(
             expression.per_particle.values()
         ))
-        self._pending_indices = []
-        self._pending_parameters = []
-        self._num_terms = 0
-        self._capacity = 0
+        self._indices = []
+        self._parameters = []
         self._d_indices = None
         self._d_parameters = None
         self._kernel = None
@@ -164,33 +162,27 @@ class BondedForce(ForceTerm):
 
     @property
     def num_terms(self):
-        return self._num_terms
+        return len(self._indices)
 
     def set_parameter(self, name, array):
         arr = np.asarray(array, dtype=env.NUMPY_FLOAT).ravel()
         self._per_particle_gpu[name] = cp.asarray(arr)
 
     def add(self, indices, **params):
-        self._pending_indices.append(list(indices))
-        self._pending_parameters.append([params.get(name, 0.0) for name in self._parameter_names])
-        self._num_terms += 1
+        self._indices.append(list(indices))
+        self._parameters.append([params.get(name, 0.0) for name in self._parameter_names])
         self._dirty = True
 
     def sync(self):
-        if not self._pending_indices:
+        if not self._dirty:
             return
-        indices = np.array(self._pending_indices, dtype=np.int32)
-        parameters = np.array(self._pending_parameters, dtype=np.float32)
-        new_count = indices.shape[0]
-        if self._capacity < new_count:
-            new_capacity = max(new_count, max(64, int(self._capacity * 1.5)))
-            self._d_indices = cp.zeros((new_capacity, self._body), dtype=np.int32)
-            self._d_parameters = cp.zeros((new_capacity, self._parameters_per_term), dtype=np.float32)
-            self._capacity = new_capacity
-        self._d_indices[:new_count] = cp.asarray(indices)
-        self._d_parameters[:new_count] = cp.asarray(parameters)
-        self._pending_indices.clear()
-        self._pending_parameters.clear()
+        if len(self._indices) == 0:
+            self._d_indices = None
+            self._d_parameters = None
+            self._dirty = False
+            return
+        self._d_indices = cp.asarray(np.array(self._indices, dtype=np.int32))
+        self._d_parameters = cp.asarray(np.array(self._parameters, dtype=np.float32))
         self._dirty = False
 
     def _assemble_kernel(self):
@@ -233,7 +225,8 @@ class BondedForce(ForceTerm):
             self._num_sm = cp.cuda.runtime.getDeviceProperties(0)['multiProcessorCount']
 
     def compute(self, state, block_list=None, compute_energy=True):
-        if self._num_terms == 0:
+        num_terms_local = len(self._indices)
+        if num_terms_local == 0:
             return
         if self._dirty:
             self.sync()
@@ -243,7 +236,7 @@ class BondedForce(ForceTerm):
 
         block_size = 128
         max_blocks = 6 * self._num_sm
-        grid_size = max(min((self._num_terms + block_size - 1) // block_size, max_blocks), 1)
+        grid_size = max(min((num_terms_local + block_size - 1) // block_size, max_blocks), 1)
 
         args = [
             state.d_positions_x,
@@ -257,7 +250,7 @@ class BondedForce(ForceTerm):
             state.d_pbc_matrix,
             self._d_indices.ravel(),
             self._d_parameters.ravel(),
-            np.int32(self._num_terms),
+            np.int32(num_terms_local),
         ]
         for prop_name in self._per_particle_properties:
             if prop_name == 'charge' and state.d_charges is not None:
