@@ -262,8 +262,6 @@ class NonbondedForce(ForceTerm):
         self._pair_param_data = {}
         self._scalar_data = {}
 
-        self._d_per_particle = {}
-        self._d_sorted_per_particle = {}
         self._d_pair_params = {}
 
         self._pair_kernel = None
@@ -334,11 +332,6 @@ class NonbondedForce(ForceTerm):
 
         self._compiled = True
 
-    def _resolve_per_particle(self, gpu_context):
-        for base_name in self._prop_bases:
-            if base_name == "charge":
-                self._d_per_particle[base_name] = gpu_context.d_charges
-
     def _ensure_sorted_force_buffer(self, block_list):
         """Ensure slot-indexed force buffers are allocated for current block count.
 
@@ -390,8 +383,6 @@ class NonbondedForce(ForceTerm):
         if not self._compiled:
             self._lazy_compile(gpu_context)
 
-        self._resolve_per_particle(gpu_context)
-
         if block_list is None:
             return
 
@@ -434,14 +425,6 @@ class NonbondedForce(ForceTerm):
                 np.int32(gpu_context.num_particles),
             ]
         )
-        for base in self._prop_bases:
-            if base == "charge":
-                continue
-            args.append(self._d_sorted_per_particle[base])
-        for base in self._prop_bases:
-            if base == "charge":
-                continue
-            args.append(self._d_per_particle[base])
         for name in self._expr_info.params:
             args.append(self._d_pair_params[name])
         args.append(block_list.d_sorted_types)
