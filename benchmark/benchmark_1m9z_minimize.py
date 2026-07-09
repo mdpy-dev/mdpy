@@ -62,6 +62,11 @@ parameter_set = toppar.resolve_parameter_set(topology, psf.particle_type_names)
 pbc_matrix = pdb.pbc_matrix.astype(np.float64)
 box_size = pbc_matrix[0, 0]
 
+# Pre-compute centered positions
+center = pdb.positions.mean(axis=0)
+shift = np.array([box_size / 2, box_size / 2, box_size / 2]) - center
+_INITIAL_POSITIONS = pdb.positions + shift
+
 
 def build_system():
     forces = create_charmm_forces(
@@ -69,7 +74,8 @@ def build_system():
     )
     state = State(topology.num_particles)
     state.set_pbc(pbc_matrix)
-    state.set_positions(pdb.positions)
+    state.set_positions(_INITIAL_POSITIONS)
+
     state.set_particle_charges(psf.particle_charges)
     state.set_particle_masses(psf.particle_masses)
     state.set_particle_type_indices(parameter_set.particle_type_indices)
@@ -153,8 +159,8 @@ print(f"Phase 2: Minimizer comparison ({COMPARE_STEPS} steps each)")
 print(f"{'='*70}")
 
 
-def run_minimizer(name, minimizer, system):
-    system.state.set_positions(pdb.positions)
+def run_minimizer(name, minimizer, system, initial_positions):
+    system.state.set_positions(initial_positions)
     system.update_neighbor_list(force_rebuild=True)
     system.compute_forces(compute_energy=True)
     e_init = float(cp.asnumpy(system.state.d_energy[0]))
@@ -183,7 +189,7 @@ minimizers = [
 results = []
 for name, minim in minimizers:
     print(f"  Running {name}...", end=" ", flush=True)
-    r = run_minimizer(name, minim, system)
+    r = run_minimizer(name, minim, system, _INITIAL_POSITIONS)
     results.append((name, *r))
     print(f"dE={(r[1] - r[0]) * _TO_KJMOL:+.0f} kJ/mol, maxF: {r[2]*_TO_KJMOLA:.1f}->{r[3]*_TO_KJMOLA:.2f}, {r[4]:.2f}s")
 
