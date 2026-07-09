@@ -60,7 +60,13 @@ void add_sorted_forces_kernel(
 
 
 def _assemble_exclusion_kernel(
-    expr_info, energy_cuda, grad_cuda, radial_force_cuda, total_energy_expr, compute_energy=True
+    expr_info,
+    energy_cuda,
+    grad_cuda,
+    radial_force_cuda,
+    total_energy_expr,
+    compute_energy=True,
+    compute_virial=False,
 ):
     i_props, j_props = _split_per_particle(expr_info.per_particle)
     for base in expr_info.per_particle.values():
@@ -114,6 +120,22 @@ def _assemble_exclusion_kernel(
         energy_accum = ""
         energy_reduce = ""
 
+    if compute_virial:
+        virial_buffer_arg = "    float* __restrict__ virial_buffer,"
+        virial_init = "    float total_virial = 0.0f;"
+        virial_accum = "                total_virial += r * force_magnitude;"
+        virial_reduce = """
+    for (int offset = 16; offset > 0; offset >>= 1) {{
+        total_virial += __shfl_down_sync(0xffffffff, total_virial, offset);
+    }}
+    if (tgx == 0) atomicAdd(virial_buffer, total_virial);
+"""
+    else:
+        virial_buffer_arg = ""
+        virial_init = ""
+        virial_accum = ""
+        virial_reduce = ""
+
     kernel = f"""extern "C" __global__
 void exclusion_block_pair_kernel(
     const float4* __restrict__ sorted_data,
@@ -124,6 +146,7 @@ void exclusion_block_pair_kernel(
     float* __restrict__ f_y,
     float* __restrict__ f_z,
 {energy_buffer_arg}
+{virial_buffer_arg}
     const int* __restrict__ block_atoms,
     const int* __restrict__ block_pairs,
     const int* __restrict__ interacting_atoms,
@@ -148,6 +171,7 @@ void exclusion_block_pair_kernel(
     int pos = (int)((long long)warp_id * num_block_pairs / total_warps);
     int end = (int)((long long)(warp_id + 1) * num_block_pairs / total_warps);
 {energy_init}
+{virial_init}
     __shared__ int atom_indices_shared[256];
     __shared__ unsigned int excl_shared[256];
     for (; pos < end; pos++) {{
@@ -204,6 +228,7 @@ void exclusion_block_pair_kernel(
                 force_x += fx; force_y += fy; force_z += fz;
                 shfl_fx -= fx; shfl_fy -= fy; shfl_fz -= fz;
 {energy_accum}
+{virial_accum}
             }}
             shfl_px = __shfl_sync(0xffffffff, shfl_px, (tgx + 1) & 31);
             shfl_py = __shfl_sync(0xffffffff, shfl_py, (tgx + 1) & 31);
@@ -227,6 +252,7 @@ void exclusion_block_pair_kernel(
         }}
     }}
 {energy_reduce}
+{virial_reduce}
 }}"""
     return kernel
 
@@ -246,8 +272,10 @@ class NonbondedForce(ForceTerm):
 
         self._d_pair_params = {}
 
-        self._pair_kernel = None
-        self._pair_kernel_fo = None
+        self._pair_kernel_F = None
+        self._pair_kernel_FE = None
+        self._pair_kernel_FV = None
+        self._pair_kernel_FEV = None
 
         self._n_types = 0
 
@@ -256,10 +284,10 @@ class NonbondedForce(ForceTerm):
         self._num_sm = None
         self._compiled = False
 
-        self._d_sorted_fx = None       # slot-indexed force buffer, 3 separate arrays
-        self._d_sorted_fy = None       # matching State's d_forces_x/y/z convention
+        self._d_sorted_fx = None  # slot-indexed force buffer, 3 separate arrays
+        self._d_sorted_fy = None  # matching State's d_forces_x/y/z convention
         self._d_sorted_fz = None
-        self._sorted_force_slots = 0   # current allocated size (total_slots)
+        self._sorted_force_slots = 0  # current allocated size (total_slots)
 
         self._energy_cuda = None
         self._total_energy_expr = None
@@ -288,25 +316,49 @@ class NonbondedForce(ForceTerm):
             self._energy_cuda_raw
         )
 
-        excl_src = _assemble_exclusion_kernel(
-            self._expr_info,
-            self._energy_cuda,
-            self._grad_cuda,
-            self._radial_force_cuda,
-            self._total_energy_expr,
-            compute_energy=True,
-        )
-        excl_src_fo = _assemble_exclusion_kernel(
+        excl_src_F = _assemble_exclusion_kernel(
             self._expr_info,
             self._energy_cuda,
             self._grad_cuda,
             self._radial_force_cuda,
             self._total_energy_expr,
             compute_energy=False,
+            compute_virial=False,
+        )
+        excl_src_FE = _assemble_exclusion_kernel(
+            self._expr_info,
+            self._energy_cuda,
+            self._grad_cuda,
+            self._radial_force_cuda,
+            self._total_energy_expr,
+            compute_energy=True,
+            compute_virial=False,
+        )
+        excl_src_FV = _assemble_exclusion_kernel(
+            self._expr_info,
+            self._energy_cuda,
+            self._grad_cuda,
+            self._radial_force_cuda,
+            self._total_energy_expr,
+            compute_energy=False,
+            compute_virial=True,
+        )
+        excl_src_FEV = _assemble_exclusion_kernel(
+            self._expr_info,
+            self._energy_cuda,
+            self._grad_cuda,
+            self._radial_force_cuda,
+            self._total_energy_expr,
+            compute_energy=True,
+            compute_virial=True,
         )
 
-        self._pair_kernel = cp.RawKernel(excl_src, "exclusion_block_pair_kernel")
-        self._pair_kernel_fo = cp.RawKernel(excl_src_fo, "exclusion_block_pair_kernel")
+        self._pair_kernel_F = cp.RawKernel(excl_src_F, "exclusion_block_pair_kernel")
+        self._pair_kernel_FE = cp.RawKernel(excl_src_FE, "exclusion_block_pair_kernel")
+        self._pair_kernel_FV = cp.RawKernel(excl_src_FV, "exclusion_block_pair_kernel")
+        self._pair_kernel_FEV = cp.RawKernel(
+            excl_src_FEV, "exclusion_block_pair_kernel"
+        )
 
         self._add_forces_kernel = cp.RawKernel(
             _ADD_SORTED_FORCES_KERNEL_SRC, "add_sorted_forces_kernel"
@@ -350,9 +402,12 @@ class NonbondedForce(ForceTerm):
         threads = 256
         grid = ((total_slots + threads - 1) // threads,)
         self._add_forces_kernel(
-            grid, (threads,),
+            grid,
+            (threads,),
             (
-                self._d_sorted_fx, self._d_sorted_fy, self._d_sorted_fz,
+                self._d_sorted_fx,
+                self._d_sorted_fy,
+                self._d_sorted_fz,
                 block_list.d_block_atoms,
                 np.int32(total_slots),
                 state.d_forces_x,
@@ -361,7 +416,9 @@ class NonbondedForce(ForceTerm):
             ),
         )
 
-    def compute(self, state, block_list=None, compute_energy=True, compute_virial=False):
+    def compute(
+        self, state, block_list=None, compute_energy=True, compute_virial=False
+    ):
         if not self._compiled:
             self._lazy_compile(state)
 
@@ -379,10 +436,14 @@ class NonbondedForce(ForceTerm):
         num_sm = self._num_sm
         grid_size = 16 * num_sm
 
-        if compute_energy:
-            pair_kernel = self._pair_kernel
+        if compute_energy and compute_virial:
+            pair_kernel = self._pair_kernel_FEV
+        elif compute_energy:
+            pair_kernel = self._pair_kernel_FE
+        elif compute_virial:
+            pair_kernel = self._pair_kernel_FV
         else:
-            pair_kernel = self._pair_kernel_fo
+            pair_kernel = self._pair_kernel_F
 
         # Assemble kernel args inline (replaces deleted _build_excl_args)
         args = [
@@ -396,6 +457,8 @@ class NonbondedForce(ForceTerm):
         ]
         if compute_energy:
             args.append(state.d_energy)
+        if compute_virial:
+            args.append(state.d_virial)
         args.extend(
             [
                 block_list.d_block_atoms,
