@@ -1,10 +1,10 @@
-"""mdpy 1M9Z (95,567 atoms) PME performance benchmark.
+"""mdpy STMV (1,066,628 atoms) PME performance benchmark.
+
+STMV (Satellite Tobacco Mosaic Virus) is the standard million-atom MD benchmark.
+System: CHARMM22/27 force field, protein capsid + ssRNA + water/ions, cubic box.
 
 Usage:
-    conda run -n md_analysis python benchmark/benchmark_1m9z.py
-
-Tune PME precision via environment variables:
-    EWALD_RTOL=5e-4 FOURIER_SPACING=1.44 conda run -n md_analysis python benchmark/benchmark_1m9z.py
+    CUDA_VISIBLE_DEVICES=0 conda run -n md_analysis python benchmark/benchmark_stmv.py
 """
 
 import os, sys, time
@@ -22,86 +22,64 @@ from mdpy.force.factories.charmm import create_charmm_forces
 from mdpy.integrator.langevin import LangevinBAOABIntegrator
 from mdpy.core.state import State
 from mdpy.system import System
-from mdpy.constraint.constraint_scheme import create_constraints
 from mdpy.utils import generate_velocity_from_temperature
 
-BOX_SIZE = 108.0
+STMV_DIR = os.path.join(os.path.dirname(__file__), "data", "stmv")
+
+BOX_SIZE = 216.832
 CUTOFF = 12.0
 TIME_STEP_FS = 2
 NUM_BLOCKS = 5
-BLOCK_STEPS = 2500
-WARMUP_STEPS = 50
-EWALD_RTOL = float(os.environ.get("EWALD_RTOL", "1e-5"))
-FOURIER_SPACING = float(os.environ.get("FOURIER_SPACING", "1.2"))
+BLOCK_STEPS = 500
+WARMUP_STEPS = 20
 
-psf = PSFParser(os.path.join(DATA_DIR, "1M9Z.psf"))
-pdb = PDBParser(os.path.join(DATA_DIR, "1M9Z_minimized.pdb"))
+psf = PSFParser(os.path.join(STMV_DIR, "stmv.psf"))
+pdb = PDBParser(os.path.join(STMV_DIR, "stmv_minimized.pdb"))
 toppar = CharmmTopparParser(
-    os.path.join(DATA_DIR, "par_all36_prot.prm"),
-    os.path.join(DATA_DIR, "toppar_water_ions.str"),
+    os.path.join(STMV_DIR, "par_all27_prot_na.prm"),
+    os.path.join(STMV_DIR, "toppar_water_ions.str"),
 )
 topology = psf.topology
 parameter_set = toppar.resolve_parameter_set(topology, psf.particle_type_names)
 pbc_matrix = np.eye(3, dtype=np.float64) * BOX_SIZE
 
-state = State(topology.num_particles)
-state.set_pbc(pbc_matrix)
-state.set_positions(pdb.positions)
-state.set_charges(psf.charges)
-state.set_masses(psf.masses)
-state.set_type_indices(parameter_set.particle_type_indices)
 forces = create_charmm_forces(
-    topology,
-    parameter_set,
-    pbc_matrix,
-    cutoff=CUTOFF,
-    ewald_rtol=EWALD_RTOL,
-    fourier_spacing=FOURIER_SPACING,
-)
+    topology, parameter_set, pbc_matrix, cutoff=CUTOFF)
+
+state = State(topology.num_particles)
+state.set_masses(psf.masses)
+state.set_charges(psf.charges)
+state.set_type_indices(parameter_set.particle_type_indices)
 system = System(topology, state)
-for f in forces["bonded"]:
-    system.add_force_term(f)
+system.set_pbc(pbc_matrix)
+system.add_force_term(forces["bonded"], stream='pme')
 system.add_force_term(forces["nonbonded"])
-system.add_force_term(forces["pme"], stream="pme")
+system.add_force_term(forces["pme"], stream='pme')
 
-constraints = create_constraints(
-    topology,
-    parameter_set,
-    scheme="h-bonds",
-    masses=psf.masses,
-    molecule_ids=psf.molecule_ids,
-    molecule_types=psf.molecule_types,
-)
-for c in constraints:
-    system.add_constraint(c)
-
-velocities = generate_velocity_from_temperature(300.0, psf.masses, seed=42)
+positions = pdb.positions
+velocities = generate_velocity_from_temperature(10.0, psf.masses, seed=42)
+system.set_positions(positions)
 system.set_velocities(velocities)
-
-pme = forces["pme"]
 
 integrator = LangevinBAOABIntegrator(TIME_STEP_FS, 300.0, 1.0)
 
 
 def _run_steps(n):
     for i in range(n):
-        system.update_neighbor_list(sync_interval=20)
+        system.update_neighbor_list(sync_interval=10)
         system.compute_forces()
         integrator.step(system)
-        system.apply_constraints(TIME_STEP_FS)
 
 
-print("mdpy 1M9Z PME benchmark")
-print(f"  Atoms:         {topology.num_particles}")
-print(f"  Box:           {BOX_SIZE} A")
-print(f"  Cutoff:        {CUTOFF} A")
-print(f"  time_step:    {TIME_STEP_FS} fs")
-print(f"  Integrator:    Langevin BAOAB")
-print(f"  ewald_rtol:    {EWALD_RTOL}")
-print(f"  fourier_spacing: {FOURIER_SPACING} A")
-print(f"  PME alpha:     {pme.alpha:.4f}")
+print("mdpy STMV PME benchmark")
+print(f"  Atoms:      {topology.num_particles}")
+print(f"  Box:        {BOX_SIZE} A")
+print(f"  Cutoff:     {CUTOFF} A")
+print(f"  time_step: {TIME_STEP_FS} fs")
+print(f"  Integrator: Langevin BAOAB")
+print(f"  PME alpha:  {forces['pme'].alpha:.4f}")
 print(
-    f"  PME grid:      {pme.grid_x} x {pme.grid_y} x {pme.grid_z}"
+    f"  PME grid:   {forces['pme'].grid_x} x {forces['pme'].grid_y} x {forces['pme'].grid_z}"
 )
 print()
 
