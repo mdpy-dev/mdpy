@@ -96,6 +96,8 @@ class System:
     def compute_forces(self, compute_energy=False, compute_virial=False):
         self._ensure_ready()
         self.state.zero_forces()
+        if compute_energy:
+            self.state.zero_energy()
         if compute_virial:
             self.state.zero_virial()
         if self._block_list is not None:
