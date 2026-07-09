@@ -319,7 +319,9 @@ class BondedForce(ForceTerm):
             return
         if self._dirty:
             self._sync()
-        kernel = self._get_kernel(compute_energy=compute_energy, compute_virial=False)
+        kernel = self._get_kernel(
+            compute_energy=compute_energy, compute_virial=compute_virial
+        )
 
         if self._num_sm is None:
             self._num_sm = cp.cuda.runtime.getDeviceProperties(0)["multiProcessorCount"]
@@ -340,9 +342,8 @@ class BondedForce(ForceTerm):
         ]
         if compute_energy:
             args.append(state.d_energy)
-        # Bonded force does not accumulate virial — the expression transpiler
-        # does not emit _result_virial.  The kernel is always compiled without
-        # virial support, so we never append state.d_virial.
+        if compute_virial:
+            args.append(state.d_virial)
         args.extend(
             [
                 state.d_pbc_inv,
