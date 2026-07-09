@@ -89,7 +89,8 @@ class PDBWriter:
 
             serial = self._particle_ids[i]
             atom_name = self._particle_names[i]
-            residue_name = self._particle_molecule_types[i]
+            # Truncate residue name to 3 chars (PDB standard)
+            residue_name = self._particle_molecule_types[i][:3]
             chain = self._particle_chain_ids[i]
             resid = self._particle_molecule_ids[i]
 
@@ -106,33 +107,50 @@ class PDBWriter:
             # Element symbol from atom name
             elem = _guess_element(atom_name)
 
-            # Precise PDB column format matching PDBParser._parse():
+            # PDB column format (matching PDBParser._parse):
             #   1-6:   "ATOM  "
-            #   7-11:  serial (right-justified, 5d)
-            #   12:    space
-            #   13-16: atom name (left-justified, 4s)
-            #   17:    space (alt loc)
-            #   18-20: residue name (right-justified, 3s)
-            #   21:    space
-            #   22:    chain ID
-            #   23-26: residue seq (right-justified, 4d)
-            #   27-30: spaces
-            #   31-38: x (8.3f)
-            #   39-46: y (8.3f)
-            #   47-54: z (8.3f)
-            #   55-60: occupancy ("  1.00")
-            #   61-66: temp factor (6.2f)
-            #   67-76: spaces
-            #   77-78: element (right-justified, 2s)
-            lines.append(
-                f"ATOM  {serial:5d} {atom_name:<4s}"
-                f" {residue_name:>3s}"
-                f" {chain}{resid:4d}"
-                f"    "
-                f"{x:8.3f}{y:8.3f}{z:8.3f}"
-                f"  1.00{beta:6.2f}          "
-                f"{elem:>2s}\n"
+            #   7-11:  serial   (5d)
+            #   12:    " "      (space)
+            #   13-16: name     (4s, left)
+            #   17:    " "      (alt loc)
+            #   18-20: res_name (3s, right)
+            #   21:    " "      (space)
+            #   22:    chain    (1c)
+            #   23-26: res_id   (4d)
+            #   27-30: "    "   (spaces)
+            #   31-38: x        (8.3f)
+            #   39-46: y        (8.3f)
+            #   47-54: z        (8.3f)
+            #   55-60: "  1.00" (occupancy)
+            #   61-66: beta     (6.2f)
+            #   67-76: " " * 10 (spaces)
+            #   77-78: element  (2s, right)
+            # Build using exact column positions for ATOM records.
+            # Columns use 1-based indexing (matching PDB spec).
+            # Parser slices: [6:11]=serial, [12:16]=name, [17:21]=residue,
+            #                [21]=chain, [22:26]=resid, [30:38]=x,
+            #                [38:46]=y, [46:54]=z.
+            line = (
+                f"ATOM  "                               #  1-6
+                f"{serial:5d}"                          #  7-11
+                f" "                                    # 12
+                f"{atom_name:<4.4s}"                    # 13-16
+                f" "                                    # 17  (alt loc)
+                f"{residue_name:>3.3s}"                 # 18-20
+                f" "                                    # 21
+                f"{chain}"                              # 22
+                f"{resid:4d}"                           # 23-26
+                f"    "                                 # 27-30
+                f"{x:8.3f}"                             # 31-38
+                f"{y:8.3f}"                             # 39-46
+                f"{z:8.3f}"                             # 47-54
+                f"  1.00"                               # 55-60
+                f"{beta:6.2f}"                          # 61-66
+                f"          "                           # 67-76
+                f"{elem:>2s}"                           # 77-78
+                f"\n"
             )
+            lines.append(line)
 
         lines.append("END\n")
 
