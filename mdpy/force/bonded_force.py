@@ -224,7 +224,7 @@ class BondedForce(ForceTerm):
         if self._num_sm is None:
             self._num_sm = cp.cuda.runtime.getDeviceProperties(0)['multiProcessorCount']
 
-    def compute(self, state, block_list=None, compute_energy=True):
+    def compute(self, state, block_list=None, compute_energy=True, compute_virial=False):
         num_terms_local = len(self._indices)
         if num_terms_local == 0:
             return

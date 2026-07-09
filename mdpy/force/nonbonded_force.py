@@ -361,7 +361,7 @@ class NonbondedForce(ForceTerm):
             ),
         )
 
-    def compute(self, state, block_list=None, compute_energy=True):
+    def compute(self, state, block_list=None, compute_energy=True, compute_virial=False):
         if not self._compiled:
             self._lazy_compile(state)
 

@@ -549,7 +549,7 @@ class PMEReciprocalForce(ForceTerm):
         cp.fft.irfftn(fft, s=(self.grid_x, self.grid_y, self.grid_z))
         self._fft_warmed = True
 
-    def compute(self, state, block_list=None, compute_energy=True):
+    def compute(self, state, block_list=None, compute_energy=True, compute_virial=False):
         N = self._N
         order = self.order
         gx, gy, gz = self.grid_x, self.grid_y, self.grid_z
