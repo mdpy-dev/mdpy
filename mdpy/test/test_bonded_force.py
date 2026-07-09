@@ -13,6 +13,7 @@ def _make_large_pbc():
 class MockState:
     def __init__(self, positions, pbc_matrix):
         import cupy as cp
+
         pos = positions.astype(np.float32)
         self.d_positions_x = cp.asarray(pos[:, 0])
         self.d_positions_y = cp.asarray(pos[:, 1])
@@ -22,6 +23,7 @@ class MockState:
         self.d_forces_y = cp.zeros(N, dtype=np.float32)
         self.d_forces_z = cp.zeros(N, dtype=np.float32)
         self.d_energy = cp.zeros(1, dtype=np.float32)
+        self.d_virial = cp.zeros(1, dtype=np.float32)
         self.d_particle_charges = None
         pbc_inv = np.linalg.inv(pbc_matrix)
         self.d_pbc_inv = cp.asarray(
@@ -34,7 +36,10 @@ class MockState:
     @property
     def d_forces(self):
         import cupy as cp
-        return cp.stack([self.d_forces_x, self.d_forces_y, self.d_forces_z], axis=1).ravel()
+
+        return cp.stack(
+            [self.d_forces_x, self.d_forces_y, self.d_forces_z], axis=1
+        ).ravel()
 
 
 @bonded_expression(body=2)
@@ -70,10 +75,13 @@ def test_harmonic_bond_energy():
     r0 = 1.5
     force.add([0, 1], k=k, r0=r0)
 
-    positions = np.array([
-        [0.0, 0.0, 0.0],
-        [2.0, 0.0, 0.0],
-    ], dtype=precision.FLOAT)
+    positions = np.array(
+        [
+            [0.0, 0.0, 0.0],
+            [2.0, 0.0, 0.0],
+        ],
+        dtype=precision.FLOAT,
+    )
     pbc_matrix = _make_large_pbc()
 
     context = MockState(positions, pbc_matrix)
@@ -90,10 +98,13 @@ def test_harmonic_bond_forces():
     r0 = 1.5
     force.add([0, 1], k=k, r0=r0)
 
-    positions = np.array([
-        [0.0, 0.0, 0.0],
-        [2.0, 0.0, 0.0],
-    ], dtype=precision.FLOAT)
+    positions = np.array(
+        [
+            [0.0, 0.0, 0.0],
+            [2.0, 0.0, 0.0],
+        ],
+        dtype=precision.FLOAT,
+    )
     pbc_matrix = _make_large_pbc()
 
     context = MockState(positions, pbc_matrix)
@@ -101,10 +112,12 @@ def test_harmonic_bond_forces():
 
     gpu_forces = context.d_forces.get().reshape(-1, 3)
     expected_force_magnitude = 2.0 * k * (2.0 - r0)
-    assert abs(gpu_forces[0, 0] - expected_force_magnitude) < 0.1, \
-        f"Force on atom 0: {gpu_forces[0, 0]} != {expected_force_magnitude}"
-    assert abs(gpu_forces[1, 0] + expected_force_magnitude) < 0.1, \
-        f"Force on atom 1: {gpu_forces[1, 0]} != {-expected_force_magnitude}"
+    assert (
+        abs(gpu_forces[0, 0] - expected_force_magnitude) < 0.1
+    ), f"Force on atom 0: {gpu_forces[0, 0]} != {expected_force_magnitude}"
+    assert (
+        abs(gpu_forces[1, 0] + expected_force_magnitude) < 0.1
+    ), f"Force on atom 1: {gpu_forces[1, 0]} != {-expected_force_magnitude}"
 
 
 def test_harmonic_bond_newtons_third_law():
@@ -113,10 +126,13 @@ def test_harmonic_bond_newtons_third_law():
     r0 = 1.0
     force.add([0, 1], k=k, r0=r0)
 
-    positions = np.array([
-        [1.0, 2.0, 3.0],
-        [4.0, 5.0, 6.0],
-    ], dtype=precision.FLOAT)
+    positions = np.array(
+        [
+            [1.0, 2.0, 3.0],
+            [4.0, 5.0, 6.0],
+        ],
+        dtype=precision.FLOAT,
+    )
     pbc_matrix = _make_large_pbc()
 
     context = MockState(positions, pbc_matrix)
@@ -124,8 +140,7 @@ def test_harmonic_bond_newtons_third_law():
 
     gpu_forces = context.d_forces.get().reshape(-1, 3)
     total_force = np.sum(gpu_forces, axis=0)
-    assert np.linalg.norm(total_force) < 1e-3, \
-        f"Forces not balanced: sum={total_force}"
+    assert np.linalg.norm(total_force) < 1e-3, f"Forces not balanced: sum={total_force}"
 
 
 def test_multiple_bonds():
@@ -135,11 +150,14 @@ def test_multiple_bonds():
     force.add([0, 1], k=k, r0=r0)
     force.add([1, 2], k=k, r0=r0)
 
-    positions = np.array([
-        [0.0, 0.0, 0.0],
-        [2.0, 0.0, 0.0],
-        [4.0, 0.0, 0.0],
-    ], dtype=precision.FLOAT)
+    positions = np.array(
+        [
+            [0.0, 0.0, 0.0],
+            [2.0, 0.0, 0.0],
+            [4.0, 0.0, 0.0],
+        ],
+        dtype=precision.FLOAT,
+    )
     pbc_matrix = _make_large_pbc()
 
     context = MockState(positions, pbc_matrix)
@@ -151,8 +169,7 @@ def test_multiple_bonds():
 
     gpu_forces = context.d_forces.get().reshape(-1, 3)
     total_force = np.sum(gpu_forces, axis=0)
-    assert np.linalg.norm(total_force) < 0.5, \
-        f"Forces not balanced: sum={total_force}"
+    assert np.linalg.norm(total_force) < 0.5, f"Forces not balanced: sum={total_force}"
 
 
 def test_harmonic_angle_energy():
@@ -161,11 +178,14 @@ def test_harmonic_angle_energy():
     theta0 = np.pi / 3
     force.add([0, 1, 2], k=k, theta0=theta0)
 
-    positions = np.array([
-        [0.0, 1.5, 0.0],
-        [0.0, 0.0, 0.0],
-        [1.5 * np.cos(np.pi / 6), 1.5 * np.sin(np.pi / 6), 0.0],
-    ], dtype=precision.FLOAT)
+    positions = np.array(
+        [
+            [0.0, 1.5, 0.0],
+            [0.0, 0.0, 0.0],
+            [1.5 * np.cos(np.pi / 6), 1.5 * np.sin(np.pi / 6), 0.0],
+        ],
+        dtype=precision.FLOAT,
+    )
     pbc_matrix = _make_large_pbc()
 
     context = MockState(positions, pbc_matrix)
@@ -182,11 +202,14 @@ def test_harmonic_angle_forces_balanced():
     theta0 = np.pi / 3
     force.add([0, 1, 2], k=k, theta0=theta0)
 
-    positions = np.array([
-        [0.0, 1.5, 0.0],
-        [0.0, 0.0, 0.0],
-        [1.5 * np.cos(np.pi / 6), 1.5 * np.sin(np.pi / 6), 0.0],
-    ], dtype=precision.FLOAT)
+    positions = np.array(
+        [
+            [0.0, 1.5, 0.0],
+            [0.0, 0.0, 0.0],
+            [1.5 * np.cos(np.pi / 6), 1.5 * np.sin(np.pi / 6), 0.0],
+        ],
+        dtype=precision.FLOAT,
+    )
     pbc_matrix = _make_large_pbc()
 
     context = MockState(positions, pbc_matrix)
@@ -194,8 +217,9 @@ def test_harmonic_angle_forces_balanced():
 
     gpu_forces = context.d_forces.get().reshape(-1, 3)
     total_force = np.sum(gpu_forces, axis=0)
-    assert np.linalg.norm(total_force) < 0.5, \
-        f"Angle forces not balanced: sum={total_force}"
+    assert (
+        np.linalg.norm(total_force) < 0.5
+    ), f"Angle forces not balanced: sum={total_force}"
 
 
 def test_periodic_dihedral_energy():
@@ -205,12 +229,15 @@ def test_periodic_dihedral_energy():
     delta = np.pi
     force.add([0, 1, 2, 3], k=k, n=n, delta=delta)
 
-    positions = np.array([
-        [0.0, 1.5, 0.0],
-        [0.0, 0.0, 0.0],
-        [1.5, 0.0, 0.0],
-        [1.5, 0.0, 1.5],
-    ], dtype=precision.FLOAT)
+    positions = np.array(
+        [
+            [0.0, 1.5, 0.0],
+            [0.0, 0.0, 0.0],
+            [1.5, 0.0, 0.0],
+            [1.5, 0.0, 1.5],
+        ],
+        dtype=precision.FLOAT,
+    )
     pbc_matrix = _make_large_pbc()
 
     context = MockState(positions, pbc_matrix)
@@ -227,12 +254,15 @@ def test_periodic_dihedral_forces_balanced():
     delta = np.pi
     force.add([0, 1, 2, 3], k=k, n=n, delta=delta)
 
-    positions = np.array([
-        [0.0, 1.5, 0.0],
-        [0.0, 0.0, 0.0],
-        [1.5, 0.0, 0.0],
-        [1.5, 0.0, 1.5],
-    ], dtype=precision.FLOAT)
+    positions = np.array(
+        [
+            [0.0, 1.5, 0.0],
+            [0.0, 0.0, 0.0],
+            [1.5, 0.0, 0.0],
+            [1.5, 0.0, 1.5],
+        ],
+        dtype=precision.FLOAT,
+    )
     pbc_matrix = _make_large_pbc()
 
     context = MockState(positions, pbc_matrix)
@@ -240,8 +270,9 @@ def test_periodic_dihedral_forces_balanced():
 
     gpu_forces = context.d_forces.get().reshape(-1, 3)
     total_force = np.sum(gpu_forces, axis=0)
-    assert np.linalg.norm(total_force) < 0.5, \
-        f"Dihedral forces not balanced: sum={total_force}"
+    assert (
+        np.linalg.norm(total_force) < 0.5
+    ), f"Dihedral forces not balanced: sum={total_force}"
 
 
 def test_improper_forces_balanced():
@@ -250,12 +281,15 @@ def test_improper_forces_balanced():
     psi0 = 0.0
     force.add([0, 1, 2, 3], k=k, psi0=psi0)
 
-    positions = np.array([
-        [0.0, 1.5, 0.0],
-        [0.0, 0.0, 0.0],
-        [1.5, 0.0, 0.0],
-        [1.5, 0.0, 1.5],
-    ], dtype=precision.FLOAT)
+    positions = np.array(
+        [
+            [0.0, 1.5, 0.0],
+            [0.0, 0.0, 0.0],
+            [1.5, 0.0, 0.0],
+            [1.5, 0.0, 1.5],
+        ],
+        dtype=precision.FLOAT,
+    )
     pbc_matrix = _make_large_pbc()
 
     context = MockState(positions, pbc_matrix)
@@ -263,8 +297,9 @@ def test_improper_forces_balanced():
 
     gpu_forces = context.d_forces.get().reshape(-1, 3)
     total_force = np.sum(gpu_forces, axis=0)
-    assert np.linalg.norm(total_force) < 0.5, \
-        f"Improper forces not balanced: sum={total_force}"
+    assert (
+        np.linalg.norm(total_force) < 0.5
+    ), f"Improper forces not balanced: sum={total_force}"
 
 
 def test_bond_energy_at_equilibrium():
@@ -273,10 +308,13 @@ def test_bond_energy_at_equilibrium():
     r0 = 1.5
     force.add([0, 1], k=k, r0=r0)
 
-    positions = np.array([
-        [0.0, 0.0, 0.0],
-        [1.5, 0.0, 0.0],
-    ], dtype=precision.FLOAT)
+    positions = np.array(
+        [
+            [0.0, 0.0, 0.0],
+            [1.5, 0.0, 0.0],
+        ],
+        dtype=precision.FLOAT,
+    )
     pbc_matrix = _make_large_pbc()
 
     context = MockState(positions, pbc_matrix)
@@ -289,10 +327,13 @@ def test_bond_energy_at_equilibrium():
 def test_empty_terms():
     force = BondedForce(harmonic_bond)
 
-    positions = np.array([
-        [0.0, 0.0, 0.0],
-        [2.0, 0.0, 0.0],
-    ], dtype=precision.FLOAT)
+    positions = np.array(
+        [
+            [0.0, 0.0, 0.0],
+            [2.0, 0.0, 0.0],
+        ],
+        dtype=precision.FLOAT,
+    )
     pbc_matrix = _make_large_pbc()
 
     context = MockState(positions, pbc_matrix)
@@ -310,11 +351,14 @@ def test_incremental_add_and_sync():
     force.add([0, 1], k=k, r0=r0)
     force.add([1, 2], k=k, r0=r0)
 
-    positions = np.array([
-        [0.0, 0.0, 0.0],
-        [2.0, 0.0, 0.0],
-        [3.5, 0.0, 0.0],
-    ], dtype=precision.FLOAT)
+    positions = np.array(
+        [
+            [0.0, 0.0, 0.0],
+            [2.0, 0.0, 0.0],
+            [3.5, 0.0, 0.0],
+        ],
+        dtype=precision.FLOAT,
+    )
     pbc_matrix = _make_large_pbc()
 
     context = MockState(positions, pbc_matrix)
@@ -346,6 +390,7 @@ def test_per_particle_set_parameter():
     assert force._per_particle_gpu["charge"].shape[0] == 4
 
     import cupy as cp
+
     gpu_charges = cp.asnumpy(force._per_particle_gpu["charge"])
     np.testing.assert_allclose(gpu_charges, charges, atol=1e-6)
 
@@ -358,10 +403,13 @@ def test_per_particle_energy():
     force.set_parameter("charge", charges)
     force.add([0, 1])
 
-    positions = np.array([
-        [0.0, 0.0, 0.0],
-        [3.0, 0.0, 0.0],
-    ], dtype=precision.FLOAT)
+    positions = np.array(
+        [
+            [0.0, 0.0, 0.0],
+            [3.0, 0.0, 0.0],
+        ],
+        dtype=precision.FLOAT,
+    )
     pbc_matrix = _make_large_pbc()
 
     context = MockState(positions, pbc_matrix)
@@ -380,10 +428,13 @@ def test_per_particle_forces_balanced():
     force.set_parameter("charge", charges)
     force.add([0, 1])
 
-    positions = np.array([
-        [0.0, 0.0, 0.0],
-        [3.0, 0.0, 0.0],
-    ], dtype=precision.FLOAT)
+    positions = np.array(
+        [
+            [0.0, 0.0, 0.0],
+            [3.0, 0.0, 0.0],
+        ],
+        dtype=precision.FLOAT,
+    )
     pbc_matrix = _make_large_pbc()
 
     context = MockState(positions, pbc_matrix)
@@ -391,8 +442,7 @@ def test_per_particle_forces_balanced():
 
     gpu_forces = context.d_forces.get().reshape(-1, 3)
     total_force = np.sum(gpu_forces, axis=0)
-    assert np.linalg.norm(total_force) < 0.5, \
-        f"Forces not balanced: sum={total_force}"
+    assert np.linalg.norm(total_force) < 0.5, f"Forces not balanced: sum={total_force}"
 
 
 def test_per_particle_multiple_pairs():
@@ -403,12 +453,15 @@ def test_per_particle_multiple_pairs():
     force.add([0, 1])
     force.add([2, 3])
 
-    positions = np.array([
-        [0.0, 0.0, 0.0],
-        [2.0, 0.0, 0.0],
-        [5.0, 0.0, 0.0],
-        [7.0, 0.0, 0.0],
-    ], dtype=precision.FLOAT)
+    positions = np.array(
+        [
+            [0.0, 0.0, 0.0],
+            [2.0, 0.0, 0.0],
+            [5.0, 0.0, 0.0],
+            [7.0, 0.0, 0.0],
+        ],
+        dtype=precision.FLOAT,
+    )
     pbc_matrix = _make_large_pbc()
 
     context = MockState(positions, pbc_matrix)
@@ -427,10 +480,13 @@ def test_per_particle_no_per_particle_props():
     r0 = 1.5
     force.add([0, 1], k=k, r0=r0)
 
-    positions = np.array([
-        [0.0, 0.0, 0.0],
-        [2.0, 0.0, 0.0],
-    ], dtype=precision.FLOAT)
+    positions = np.array(
+        [
+            [0.0, 0.0, 0.0],
+            [2.0, 0.0, 0.0],
+        ],
+        dtype=precision.FLOAT,
+    )
     pbc_matrix = _make_large_pbc()
 
     context = MockState(positions, pbc_matrix)
@@ -447,7 +503,7 @@ COULOMB_CONSTANT = 0.13893556595455
 def _analytical_nb14_energy(r, q1, q2, sigma, epsilon):
     e_coul = COULOMB_CONSTANT * q1 * q2 / r
     sr = sigma / r
-    sr6 = sr ** 6
+    sr6 = sr**6
     e_lj = 4.0 * epsilon * (sr6 * sr6 - sr6)
     return e_coul + e_lj
 
@@ -467,10 +523,13 @@ def test_nb14_energy_analytical():
     force.set_parameter("charge", charges)
     force.add([0, 1], sigma=sigma, epsilon=epsilon)
 
-    positions = np.array([
-        [0.0, 0.0, 0.0],
-        [r, 0.0, 0.0],
-    ], dtype=precision.FLOAT)
+    positions = np.array(
+        [
+            [0.0, 0.0, 0.0],
+            [r, 0.0, 0.0],
+        ],
+        dtype=precision.FLOAT,
+    )
     pbc_matrix = _make_large_pbc()
 
     context = MockState(positions, pbc_matrix)
@@ -488,10 +547,13 @@ def test_nb14_forces_balanced():
     force.set_parameter("charge", charges)
     force.add([0, 1], sigma=1.0, epsilon=0.1)
 
-    positions = np.array([
-        [1.0, 2.0, 3.0],
-        [4.0, 5.0, 6.0],
-    ], dtype=precision.FLOAT)
+    positions = np.array(
+        [
+            [1.0, 2.0, 3.0],
+            [4.0, 5.0, 6.0],
+        ],
+        dtype=precision.FLOAT,
+    )
     pbc_matrix = _make_large_pbc()
 
     context = MockState(positions, pbc_matrix)
@@ -499,8 +561,9 @@ def test_nb14_forces_balanced():
 
     gpu_forces = context.d_forces.get().reshape(-1, 3)
     total_force = np.sum(gpu_forces, axis=0)
-    assert np.linalg.norm(total_force) < 0.5, \
-        f"nb14 forces not balanced: sum={total_force}"
+    assert (
+        np.linalg.norm(total_force) < 0.5
+    ), f"nb14 forces not balanced: sum={total_force}"
 
 
 def test_nb14_multiple_pairs():
@@ -514,12 +577,15 @@ def test_nb14_multiple_pairs():
     force.add([0, 1], sigma=sigma1, epsilon=eps1)
     force.add([2, 3], sigma=sigma2, epsilon=eps2)
 
-    positions = np.array([
-        [0.0, 0.0, 0.0],
-        [2.5, 0.0, 0.0],
-        [5.0, 0.0, 0.0],
-        [7.5, 0.0, 0.0],
-    ], dtype=precision.FLOAT)
+    positions = np.array(
+        [
+            [0.0, 0.0, 0.0],
+            [2.5, 0.0, 0.0],
+            [5.0, 0.0, 0.0],
+            [7.5, 0.0, 0.0],
+        ],
+        dtype=precision.FLOAT,
+    )
     pbc_matrix = _make_large_pbc()
 
     context = MockState(positions, pbc_matrix)
@@ -543,10 +609,13 @@ def test_nb14_force_direction():
     force.set_parameter("charge", charges)
     force.add([0, 1], sigma=sigma, epsilon=epsilon)
 
-    positions = np.array([
-        [0.0, 0.0, 0.0],
-        [5.0, 0.0, 0.0],
-    ], dtype=precision.FLOAT)
+    positions = np.array(
+        [
+            [0.0, 0.0, 0.0],
+            [5.0, 0.0, 0.0],
+        ],
+        dtype=precision.FLOAT,
+    )
     pbc_matrix = _make_large_pbc()
 
     context = MockState(positions, pbc_matrix)
@@ -555,5 +624,150 @@ def test_nb14_force_direction():
     gpu_forces = context.d_forces.get().reshape(-1, 3)
     f0x = gpu_forces[0, 0]
     f1x = gpu_forces[1, 0]
-    assert abs(f0x + f1x) < 0.5, \
-        f"Forces not equal and opposite: f0x={f0x}, f1x={f1x}"
+    assert abs(f0x + f1x) < 0.5, f"Forces not equal and opposite: f0x={f0x}, f1x={f1x}"
+
+
+def test_harmonic_bond_virial():
+    """Bonded virial matches manual Clausius virial W = F_k · r_k."""
+    force = BondedForce(harmonic_bond)
+    k = 100.0
+    r0 = 1.5
+    force.add([0, 1], k=k, r0=r0)
+
+    positions = np.array(
+        [
+            [0.0, 0.0, 0.0],
+            [2.0, 0.0, 0.0],
+        ],
+        dtype=precision.FLOAT,
+    )
+    pbc_matrix = _make_large_pbc()
+
+    context = MockState(positions, pbc_matrix)
+    force.compute(context, compute_virial=True)
+
+    virial = float(context.d_virial[0])
+    assert abs(virial) > 1e-8, f"Bonded virial should be nonzero, got {virial}"
+
+    r = 2.0
+    dr = r - r0
+    expected_virial = -2.0 * k * dr * r
+    assert virial == pytest.approx(
+        expected_virial, rel=1e-2
+    ), f"Virial {virial} != expected {expected_virial}"
+
+
+def test_harmonic_bond_virial_zero_at_equilibrium():
+    """Virial is zero when bond is at equilibrium distance."""
+    force = BondedForce(harmonic_bond)
+    k = 100.0
+    r0 = 1.5
+    force.add([0, 1], k=k, r0=r0)
+
+    positions = np.array(
+        [
+            [0.0, 0.0, 0.0],
+            [1.5, 0.0, 0.0],
+        ],
+        dtype=precision.FLOAT,
+    )
+    pbc_matrix = _make_large_pbc()
+
+    context = MockState(positions, pbc_matrix)
+    force.compute(context, compute_virial=True)
+
+    virial = float(context.d_virial[0])
+    assert abs(virial) < 1e-6, f"Virial should be zero at equilibrium, got {virial}"
+    assert (
+        abs(float(context.d_energy[0])) < 1e-6
+    ), "Energy should be zero at equilibrium"
+
+
+def test_charmm_angle_virial():
+    """CHARMM angle virial is nonzero from UB distance term."""
+    from mdpy.force.expressions.charmm_angle import charmm_angle
+
+    force = BondedForce(charmm_angle)
+    k = 50.0
+    theta0 = np.pi / 2
+    k_ub = 20.0
+    r_ub = 3.0
+    force.add([0, 1, 2], k=k, theta0=theta0, k_ub=k_ub, r_ub=r_ub)
+
+    positions = np.array(
+        [
+            [3.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0],
+            [0.0, 4.0, 0.0],
+        ],
+        dtype=precision.FLOAT,
+    )
+    pbc_matrix = _make_large_pbc()
+
+    context = MockState(positions, pbc_matrix)
+    force.compute(context, compute_energy=True, compute_virial=True)
+
+    virial = float(context.d_virial[0])
+    assert (
+        abs(virial) > 1e-8
+    ), f"CHARMM angle virial should be nonzero due to UB distance term, got {virial}"
+    expected_virial = -2.0 * k_ub * (5.0 - r_ub) * 5.0
+    assert virial == pytest.approx(
+        expected_virial, rel=1e-2
+    ), f"Virial {virial} != expected {expected_virial}"
+
+
+def test_dihedral_virial():
+    """Dihedral virial is approximately zero (homogeneous degree 0 term)."""
+    force = BondedForce(periodic_dihedral)
+    k = 10.0
+    n_val = 2.0
+    delta = np.pi
+    force.add([0, 1, 2, 3], k=k, n=n_val, delta=delta)
+
+    positions = np.array(
+        [
+            [0.0, 0.0, 0.0],
+            [1.5, 0.0, 0.0],
+            [1.5, 1.5, 0.0],
+            [0.0, 1.5, -1.5],
+        ],
+        dtype=precision.FLOAT,
+    )
+    pbc_matrix = _make_large_pbc()
+
+    context = MockState(positions, pbc_matrix)
+    force.compute(context, compute_energy=True, compute_virial=True)
+
+    virial = float(context.d_virial[0])
+    assert (
+        abs(virial) < 1e-5
+    ), f"Dihedral virial should be near zero (degree 0), got {virial}"
+
+
+def test_multiple_bonds_virial_accumulation():
+    """Virial from multiple bond terms sums correctly."""
+    force = BondedForce(harmonic_bond)
+    k = 100.0
+    r0 = 1.5
+    force.add([0, 1], k=k, r0=r0)
+    force.add([1, 2], k=k, r0=r0)
+
+    positions = np.array(
+        [
+            [0.0, 0.0, 0.0],
+            [2.0, 0.0, 0.0],
+            [4.0, 0.0, 0.0],
+        ],
+        dtype=precision.FLOAT,
+    )
+    pbc_matrix = _make_large_pbc()
+
+    context = MockState(positions, pbc_matrix)
+    force.compute(context, compute_energy=True, compute_virial=True)
+
+    virial = float(context.d_virial[0])
+    expected = -400.0
+    assert virial == pytest.approx(
+        expected, rel=1e-2
+    ), f"Multi-bond virial {virial} != expected {expected}"
