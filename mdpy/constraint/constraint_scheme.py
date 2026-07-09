@@ -8,23 +8,23 @@ _WATER_RESIDUE_NAMES = frozenset({
 })
 
 
-def _identify_water_molecules(topology, masses, molecule_ids, molecule_types):
+def _identify_water_molecules(topology, particle_masses, particle_molecule_ids, particle_molecule_types):
     water_triplets = []
     water_bond_set = set()
     if topology.num_bonds == 0:
         return water_triplets, water_bond_set
     bond_indices = topology.bond_indices
-    use_mol_types = molecule_types and molecule_types[0] != ''
+    use_mol_types = particle_molecule_types and particle_molecule_types[0] != ''
 
     oxygen_hydrogen_bonds = {}
     for b in range(bond_indices.shape[0]):
         i, j = int(bond_indices[b, 0]), int(bond_indices[b, 1])
-        if molecule_ids[i] != molecule_ids[j]:
+        if particle_molecule_ids[i] != particle_molecule_ids[j]:
             continue
         if use_mol_types:
-            if molecule_types[i] not in _WATER_RESIDUE_NAMES:
+            if particle_molecule_types[i] not in _WATER_RESIDUE_NAMES:
                 continue
-        mi, mj = masses[i], masses[j]
+        mi, mj = particle_masses[i], particle_masses[j]
         if (mi > 14.5 and mj < 5.0):
             oxygen, hydrogen = i, j
         elif (mj > 14.5 and mi < 5.0):
@@ -74,33 +74,33 @@ def _build_bond_length_map(topology, parameter_table):
     return length_map
 
 
-def create_constraints(topology, parameter_table, scheme='h-bonds',
-                       *, masses, molecule_ids, molecule_types):
+def create_constraints(topology, parameter_set, scheme='h-bonds',
+                       *, particle_masses, particle_molecule_ids, particle_molecule_types):
     constraints = []
     if scheme == 'none':
         return constraints
 
     water_triplets, water_bond_set = _identify_water_molecules(
-        topology, masses, molecule_ids, molecule_types)
-    length_map = _build_bond_length_map(topology, parameter_table)
+        topology, particle_masses, particle_molecule_ids, particle_molecule_types)
+    length_map = _build_bond_length_map(topology, parameter_set)
 
     if water_triplets:
         ow, h1 = water_triplets[0][0], water_triplets[0][1]
         dOH = length_map.get((min(ow, h1), max(ow, h1)), 1.5)
         dHH_sq = 2.0 * dOH * dOH * (1.0 - np.cos(np.radians(104.45)))
         dHH = np.sqrt(dHH_sq)
-        settle = SettleConstraint(water_triplets, masses, dOH, dHH)
+        settle = SettleConstraint(water_triplets, particle_masses, dOH, dHH)
         constraints.append(settle)
 
     constrained_bonds = _identify_constrained_bonds(
-        topology, scheme, water_bond_set, masses)
+        topology, scheme, water_bond_set, particle_masses)
     if constrained_bonds:
         target_lengths = [
             length_map.get((min(i, j), max(i, j)), 1.5)
             for (i, j) in constrained_bonds
         ]
         lincs = LincsConstraint(constrained_bonds, target_lengths,
-                                masses, expansion_order=4,
+                                particle_masses, expansion_order=4,
                                 num_iterations=1)
         constraints.append(lincs)
 
