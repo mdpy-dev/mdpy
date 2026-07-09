@@ -340,8 +340,9 @@ class BondedForce(ForceTerm):
         ]
         if compute_energy:
             args.append(state.d_energy)
-        if compute_virial:
-            args.append(state.d_virial)
+        # Bonded force does not accumulate virial — the expression transpiler
+        # does not emit _result_virial.  The kernel is always compiled without
+        # virial support, so we never append state.d_virial.
         args.extend(
             [
                 state.d_pbc_inv,
