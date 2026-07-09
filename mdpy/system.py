@@ -93,15 +93,19 @@ class System:
                 "State not fully set: positions/velocities/charges/masses/types/pbc "
                 "must all be set before compute.")
 
-    def compute_forces(self):
+    def compute_forces(self, compute_energy=False, compute_virial=False):
         self._ensure_ready()
         self.state.zero_forces()
+        if compute_virial:
+            self.state.zero_virial()
         if self._block_list is not None:
             self._block_list.refresh_sorted_posq(self.state)
 
         if not self._pme_force_terms:
             for term in self._primary_force_terms:
-                term.compute(self.state, self._block_list, compute_energy=False)
+                term.compute(self.state, self._block_list,
+                             compute_energy=compute_energy,
+                             compute_virial=compute_virial)
             return
 
         # PME runs on a non-blocking stream concurrent with primary terms.
@@ -113,18 +117,16 @@ class System:
         self._pme_stream.wait_event(self._ev_zero_forces)
         with self._pme_stream:
             for term in self._pme_force_terms:
-                term.compute(self.state, self._block_list, compute_energy=False)
-            # Record INSIDE the with-block so the event is recorded on the
-            # pme stream, not the null stream (record() uses the current stream).
+                term.compute(self.state, self._block_list,
+                             compute_energy=compute_energy,
+                             compute_virial=compute_virial)
             self._ev_pme_done.record()
 
-        # Primary terms run on the null stream, overlapping with PME.
         for term in self._primary_force_terms:
-            term.compute(self.state, self._block_list, compute_energy=False)
+            term.compute(self.state, self._block_list,
+                         compute_energy=compute_energy,
+                         compute_virial=compute_virial)
 
-        # Make the null stream wait for PME to finish writing forces before
-        # compute_forces returns, so the next null-stream op (integrator) sees
-        # fully-accumulated forces.
         cp.cuda.Stream.null.wait_event(self._ev_pme_done)
 
     def update_neighbor_list(self, sync_interval=10, force_rebuild=False):
