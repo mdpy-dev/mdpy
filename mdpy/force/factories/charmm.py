@@ -15,11 +15,11 @@ from mdpy.force.expressions.lennard_jones import lennard_jones
 from mdpy.force.pme_reciprocal_force import PMEReciprocalForce
 
 
-def _create_bond_force(topology, parameter_table):
+def _create_bond_force(topology, parameter_set):
     force = BondedForce(harmonic_bond)
     force.name = 'bond'
     if topology.num_bonds > 0:
-        bond_params = parameter_table.get_term_parameter('bond')
+        bond_params = parameter_set.get_term_parameter('bond')
         for idx in range(topology.num_bonds):
             i, j = topology.bond_indices[idx]
             k_val, r0 = bond_params[idx]
@@ -27,11 +27,11 @@ def _create_bond_force(topology, parameter_table):
     return force
 
 
-def _create_angle_force(topology, parameter_table):
+def _create_angle_force(topology, parameter_set):
     force = BondedForce(charmm_angle)
     force.name = 'angle'
     if topology.num_angles > 0:
-        angle_params = parameter_table.get_term_parameter('angle')
+        angle_params = parameter_set.get_term_parameter('angle')
         for idx in range(topology.num_angles):
             i, j, k_atom = topology.angle_indices[idx]
             k_val, theta0, k_ub, r_ub = angle_params[idx]
@@ -43,11 +43,11 @@ def _create_angle_force(topology, parameter_table):
     return force
 
 
-def _create_dihedral_force(topology, parameter_table):
+def _create_dihedral_force(topology, parameter_set):
     force = BondedForce(periodic_dihedral)
     force.name = 'dihedral'
     if topology.num_dihedrals > 0:
-        dihedral_params = parameter_table.get_term_parameter('dihedral')
+        dihedral_params = parameter_set.get_term_parameter('dihedral')
         for idx in range(topology.num_dihedrals):
             i, j, k_atom, l = topology.dihedral_indices[idx]
             k_val, n_val, delta = dihedral_params[idx]
@@ -58,11 +58,11 @@ def _create_dihedral_force(topology, parameter_table):
     return force
 
 
-def _create_improper_force(topology, parameter_table):
+def _create_improper_force(topology, parameter_set):
     force = BondedForce(harmonic_improper)
     force.name = 'improper'
     if topology.num_impropers > 0:
-        improper_params = parameter_table.get_term_parameter('improper')
+        improper_params = parameter_set.get_term_parameter('improper')
         for idx in range(topology.num_impropers):
             i, j, k_atom, l = topology.improper_indices[idx]
             k_val, psi0 = improper_params[idx]
@@ -73,8 +73,8 @@ def _create_improper_force(topology, parameter_table):
     return force
 
 
-def _create_nb14_force(topology, parameter_table, particle_type_indices):
-    if 'lj_pair_14' not in parameter_table.type_pair_parameters:
+def _create_nb14_force(topology, parameter_set):
+    if 'lj_pair_14' not in parameter_set.type_pair_parameters:
         return None
 
     from mdpy.core.topology import _build_bond_graph_exclusion_pairs
@@ -86,15 +86,15 @@ def _create_nb14_force(topology, parameter_table, particle_type_indices):
 
     force = BondedForce(nb14_lj_coulomb)
     force.name = 'nb14'
-    lj_pair_14 = parameter_table.type_pair_parameters['lj_pair_14']
+    lj_pair_14 = parameter_set.type_pair_parameters['lj_pair_14']
     n_types = int(np.sqrt(len(lj_pair_14) // 2))
 
     offset = n12 + n13
     for k in range(offset, offset + n14):
         i_atom = int(pair_i[k])
         j_atom = int(pair_j[k])
-        type_i = int(particle_type_indices[i_atom])
-        type_j = int(particle_type_indices[j_atom])
+        type_i = int(parameter_set.particle_type_indices[i_atom])
+        type_j = int(parameter_set.particle_type_indices[j_atom])
         pair_idx = type_i * n_types + type_j
         sigma = float(lj_pair_14[pair_idx * 2])
         epsilon = float(lj_pair_14[pair_idx * 2 + 1])
@@ -131,33 +131,30 @@ def _create_pme_exclusion_force(topology, alpha):
     return force if force.num_terms > 0 else None
 
 
-def create_bonded_forces(topology, parameter_table):
+def create_bonded_forces(topology, parameter_set):
     """Create a list of all CHARMM bonded force terms.
 
     Returns: list of BondedForce (bond + angle + dihedral + improper).
     """
     return [
-        _create_bond_force(topology, parameter_table),
-        _create_angle_force(topology, parameter_table),
-        _create_dihedral_force(topology, parameter_table),
-        _create_improper_force(topology, parameter_table),
+        _create_bond_force(topology, parameter_set),
+        _create_angle_force(topology, parameter_set),
+        _create_dihedral_force(topology, parameter_set),
+        _create_improper_force(topology, parameter_set),
     ]
 
 
-def create_charmm_forces(topology, parameter_table, pbc_matrix, cutoff=12.0,
-                         ewald_rtol=1e-5, fourier_spacing=1.2,
-                         *, particle_type_indices):
+def create_charmm_forces(topology, parameter_set, pbc_matrix, cutoff=12.0,
+                         ewald_rtol=1e-5, fourier_spacing=1.2):
     """Create all CHARMM force terms for a PME simulation.
 
     Args:
         topology: molecular topology from PSF parser.
-        parameter_table: parameter table from CHARMM toppar parser.
+        parameter_set: ParameterSet from CHARMM toppar parser.
         pbc_matrix: 3x3 PBC matrix (needed for PME).
         cutoff: nonbonded cutoff in Angstroms.
         ewald_rtol: PME Ewald coefficient relative tolerance.
         fourier_spacing: PME Fourier grid spacing in Angstroms.
-        particle_type_indices: per-particle type indices (keyword-only),
-            used for 1-4 LJ parameter lookup.
 
     Returns:
         dict with keys:
@@ -167,19 +164,19 @@ def create_charmm_forces(topology, parameter_table, pbc_matrix, cutoff=12.0,
     """
     from mdpy.force.expressions.screened_coulomb import screened_coulomb
 
-    bonded = create_bonded_forces(topology, parameter_table)
-    nb14 = _create_nb14_force(topology, parameter_table, particle_type_indices)
+    bonded = create_bonded_forces(topology, parameter_set)
+    nb14 = _create_nb14_force(topology, parameter_set)
     if nb14 is not None:
         bonded.append(nb14)
 
     pme = PMEReciprocalForce(cutoff, fourier_spacing=fourier_spacing, ewald_rtol=ewald_rtol)
-    pme.initialize_grid(topology, parameter_table, pbc_matrix=pbc_matrix)
+    pme.initialize_grid(topology, parameter_set, pbc_matrix=pbc_matrix)
     pme_excl = _create_pme_exclusion_force(topology, pme.alpha)
     if pme_excl is not None:
         bonded.append(pme_excl)
 
     nb = NonbondedForce(lennard_jones + screened_coulomb, cutoff)
-    lj_pair = parameter_table.type_pair_parameters['lj_pair']
+    lj_pair = parameter_set.type_pair_parameters['lj_pair']
     nb.set_pair_parameter('sigma', lj_pair[0::2].astype(precision.FLOAT))
     nb.set_pair_parameter('epsilon', lj_pair[1::2].astype(precision.FLOAT))
     nb.name = 'nonbonded'
