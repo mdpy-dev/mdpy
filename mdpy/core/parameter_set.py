@@ -70,8 +70,10 @@ class ParameterSet:
         """Store a parameter indexed by type pair (flattened n_type × n_type matrix).
 
         name   : str — parameter name, e.g. ``'sigma_ij'``.
-        values : 1D array of shape (num_types * num_types,).
-                 Indexed as ``values[type_i * num_types + type_j]``.
+        values : 1D array of shape (num_types * num_types * 2,).
+                 Indexed as ``values[(type_i * num_types + type_j) * 2]``
+                 (sigma) and ``values[(type_i * num_types + type_j) * 2 + 1]``
+                 (epsilon).
         """
         self.type_pair_parameters[name] = np.asarray(values, dtype=precision.FLOAT)
 
