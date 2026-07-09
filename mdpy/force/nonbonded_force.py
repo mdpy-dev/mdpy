@@ -123,7 +123,7 @@ def _assemble_exclusion_kernel(
     if compute_virial:
         virial_buffer_arg = "    float* __restrict__ virial_buffer,"
         virial_init = "    float total_virial = 0.0f;"
-        virial_accum = "                total_virial += r * force_magnitude;"
+        virial_accum = "                total_virial -= r * force_magnitude;"
         virial_reduce = """
     for (int offset = 16; offset > 0; offset >>= 1) {{
         total_virial += __shfl_down_sync(0xffffffff, total_virial, offset);

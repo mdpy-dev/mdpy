@@ -139,12 +139,11 @@ class TestVirialValidation:
         # Force on atom 0 from atom 1 in x-direction
         fx = float(system.state.d_forces_x[0])
 
-        # For central forces: W = r_ij · F_i = dx * fx (dy=dz=0)
-        # Nonbonded kernel accumulates: virial += r * force_magnitude
-        # where force_magnitude = radial force = fx * r / dx = fx (when dx=r)
+        # Clausius virial: W = r_ij · F_i = r * F_on_i
+        # For repulsive dx>0, fx<0: W = (-4)(-0.38) = +1.52 > 0
         expected = r * abs(fx)
         assert abs(virial) > 1e-8, f"Virial is zero, expected ~{expected:.6e}"
-        assert virial == pytest.approx(-expected, rel=1e-3)
+        assert virial == pytest.approx(expected, rel=1e-3)
 
     def test_virial_is_zero_without_compute_virial_flag(self):
         """Virial stays zero when compute_virial=False."""

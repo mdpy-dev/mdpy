@@ -236,7 +236,7 @@ class BondedForce(ForceTerm):
     if ((threadIdx.x & 31) == 0)
         atomicAdd(virial_buf, v);
 """
-            virial_accum = "        v += _result_virial;"
+            virial_accum = "        v -= _result_virial;"
         else:
             virial_buffer_arg = ""
             virial_init = ""
