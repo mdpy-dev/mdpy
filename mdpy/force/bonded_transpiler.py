@@ -2,11 +2,20 @@ import ast
 import inspect
 import textwrap
 
-from mdpy.force.markers import param as _param_marker, scalar as _scalar_marker, point as _point_marker
-from mdpy.force._transpiler_common import ExprInfo, _strip_trailing_digits, _MATH_FUNCTIONS, _numeric_literal
+from mdpy.force.markers import (
+    param as _param_marker,
+    scalar as _scalar_marker,
+    point as _point_marker,
+)
+from mdpy.force._transpiler_common import (
+    ExprInfo,
+    _strip_trailing_digits,
+    _MATH_FUNCTIONS,
+    _numeric_literal,
+)
 from mdpy.force.ad_engine import TapeEntry, ForwardADEngine
 
-_DISTANCE_FORWARD = r'''
+_DISTANCE_FORWARD = r"""
         float3 _delta_{rn} = pbc_wrap_vec(sub_f3(load_pos(pos_x,pos_y,pos_z,{atom_b}), load_pos(pos_x,pos_y,pos_z,{atom_a})), pbc_inv, pbc_matrix);
         float {rn} = len_f3(_delta_{rn});
         float _inv_r_{rn} = 0.0f;
@@ -15,9 +24,9 @@ _DISTANCE_FORWARD = r'''
         }}
         float3 _partial_{rn}_0 = scale_f3(_delta_{rn}, -_inv_r_{rn});
         float3 _partial_{rn}_1 = scale_f3(_delta_{rn}, _inv_r_{rn});
-'''
+"""
 
-_ANGLE_FORWARD = r'''
+_ANGLE_FORWARD = r"""
         float3 _r1_{rn} = pbc_wrap_vec(sub_f3(load_pos(pos_x,pos_y,pos_z,{arm1}), load_pos(pos_x,pos_y,pos_z,{vertex})), pbc_inv, pbc_matrix);
         float3 _r2_{rn} = pbc_wrap_vec(sub_f3(load_pos(pos_x,pos_y,pos_z,{arm2}), load_pos(pos_x,pos_y,pos_z,{vertex})), pbc_inv, pbc_matrix);
         float _l1_{rn} = len_f3(_r1_{rn});
@@ -38,9 +47,9 @@ _ANGLE_FORWARD = r'''
         float3 _partial_{rn}_2 = make_f3(0.0f, 0.0f, 0.0f);
         if (_lc3_{rn} > 1e-12f) _partial_{rn}_2 = scale_f3(_c3_{rn}, 1.0f / (_lc3_{rn} * _l2_{rn}));
         float3 _partial_{rn}_1 = scale_f3(add_f3(_partial_{rn}_0, _partial_{rn}_2), -1.0f);
-'''
+"""
 
-_DISTANCE_TO_POINT_FORWARD = r'''
+_DISTANCE_TO_POINT_FORWARD = r"""
         float3 _dpt_{rn} = pbc_wrap_vec(sub_f3(load_pos(pos_x,pos_y,pos_z,{atom_a}), make_f3(ref_x, ref_y, ref_z)), pbc_inv, pbc_matrix);
         float {rn} = len_f3(_dpt_{rn});
         float _inv_r_{rn} = 0.0f;
@@ -48,9 +57,9 @@ _DISTANCE_TO_POINT_FORWARD = r'''
             _inv_r_{rn} = 1.0f / {rn};
         }}
         float3 _partial_{rn}_0 = scale_f3(_dpt_{rn}, _inv_r_{rn});
-'''
+"""
 
-_DIHEDRAL_FORWARD = r'''
+_DIHEDRAL_FORWARD = r"""
         float3 _rab_{rn} = pbc_wrap_vec(sub_f3(load_pos(pos_x,pos_y,pos_z,{b}), load_pos(pos_x,pos_y,pos_z,{a})), pbc_inv, pbc_matrix);
         float3 _rbc_{rn} = pbc_wrap_vec(sub_f3(load_pos(pos_x,pos_y,pos_z,{c}), load_pos(pos_x,pos_y,pos_z,{b})), pbc_inv, pbc_matrix);
         float3 _rcd_{rn} = pbc_wrap_vec(sub_f3(load_pos(pos_x,pos_y,pos_z,{d}), load_pos(pos_x,pos_y,pos_z,{c})), pbc_inv, pbc_matrix);
@@ -75,24 +84,24 @@ _DIHEDRAL_FORWARD = r'''
         float3 _st_{rn} = scale_f3(add_f3(_t1_{rn}, add_f3(_t2_{rn}, _t3_{rn})), -1.0f);
         float3 _partial_{rn}_2 = scale_f3(cross_f3(_st_{rn}, _voc_{rn}), _ils_{rn});
         float3 _partial_{rn}_1 = scale_f3(add_f3(_partial_{rn}_0, add_f3(_partial_{rn}_2, _partial_{rn}_3)), -1.0f);
-'''
+"""
 
 HELPER_REGISTRY = {
-    'distance': {
-        'position_args': ['atom_a', 'atom_b'],
-        'forward': _DISTANCE_FORWARD,
+    "distance": {
+        "position_args": ["atom_a", "atom_b"],
+        "forward": _DISTANCE_FORWARD,
     },
-    'angle': {
-        'position_args': ['arm1', 'vertex', 'arm2'],
-        'forward': _ANGLE_FORWARD,
+    "angle": {
+        "position_args": ["arm1", "vertex", "arm2"],
+        "forward": _ANGLE_FORWARD,
     },
-    'dihedral': {
-        'position_args': ['a', 'b', 'c', 'd'],
-        'forward': _DIHEDRAL_FORWARD,
+    "dihedral": {
+        "position_args": ["a", "b", "c", "d"],
+        "forward": _DIHEDRAL_FORWARD,
     },
-    'distance_to_point': {
-        'position_args': ['atom_a'],
-        'forward': _DISTANCE_TO_POINT_FORWARD,
+    "distance_to_point": {
+        "position_args": ["atom_a"],
+        "forward": _DISTANCE_TO_POINT_FORWARD,
     },
 }
 
@@ -110,7 +119,7 @@ def _classify_for_bonded(func, body):
         elif p.default is _param_marker:
             params.append(name)
         elif p.default is _point_marker:
-            point_params.extend([f'{name}_x', f'{name}_y', f'{name}_z'])
+            point_params.extend([f"{name}_x", f"{name}_y", f"{name}_z"])
         elif p.default is _scalar_marker:
             scalars.append(name)
         elif p.default is inspect.Parameter.empty:
@@ -123,20 +132,28 @@ def _classify_for_bonded(func, body):
 
 
 def _build_projection(result_name, position_args, arg_indices, grad_expr):
-    """Emit the generic force-projection CUDA for one helper call.
+    """Emit force-projection and virial-accumulation CUDA for one helper call.
 
     For each atom the geometry reads (slot i maps to atom a{arg_indices[i]+1}),
-    apply F_i = -(dE/dq) * partial_i.
+    apply F_i = -(dE/dq) * partial_i and accumulate virial:
+      _result_virial -= dot_f3(F_i, load_pos(pos_x, pos_y, pos_z, a{idx+1}))
     """
-    lines = ['        {', f'            float _neg_grad_{result_name} = -({grad_expr});']
+    lines = [
+        "        {",
+        f"            float _neg_grad_{result_name} = -({grad_expr});",
+    ]
     for i in range(len(position_args)):
-        atom = f'a{arg_indices[i] + 1}'
-        lines.append(
-            f'            add_force(f_x,f_y,f_z, {atom}, '
-            f'scale_f3(_partial_{result_name}_{i}, _neg_grad_{result_name}));'
+        atom = f"a{arg_indices[i] + 1}"
+        force_var = f"_fv_{result_name}_{i}"
+        lines.extend(
+            [
+                f"            float3 {force_var} = scale_f3(_partial_{result_name}_{i}, _neg_grad_{result_name});",
+                f"            add_force(f_x,f_y,f_z, {atom}, {force_var});",
+                f"            _result_virial -= dot_f3({force_var}, load_pos(pos_x,pos_y,pos_z, {atom}));",
+            ]
         )
-    lines.append('        }')
-    return '\n'.join(lines)
+    lines.append("        }")
+    return "\n".join(lines)
 
 
 class _BondedASTWalker:
@@ -149,15 +166,15 @@ class _BondedASTWalker:
         self._helper_calls = []
         self._counter = 0
 
-    def _fresh_name(self, prefix='_t'):
+    def _fresh_name(self, prefix="_t"):
         self._counter += 1
-        return f'{prefix}{self._counter}'
+        return f"{prefix}{self._counter}"
 
     def _expr(self, node):
         if isinstance(node, ast.Constant):
             v = node.value
             if isinstance(v, float):
-                return f'{v}f'
+                return f"{v}f"
             if isinstance(v, int) and not isinstance(v, bool):
                 return str(v)
             return str(v)
@@ -176,29 +193,35 @@ class _BondedASTWalker:
             left = self._expr(node.left)
             right = self._expr(node.right)
             op_map = {
-                ast.Add: '+', ast.Sub: '-', ast.Mult: '*',
-                ast.Div: '/', ast.Mod: '%', ast.Pow: '**',
+                ast.Add: "+",
+                ast.Sub: "-",
+                ast.Mult: "*",
+                ast.Div: "/",
+                ast.Mod: "%",
+                ast.Pow: "**",
             }
             op_str = op_map.get(type(node.op))
             if op_str is None:
                 raise ValueError(f"Unsupported binary op: {type(node.op).__name__}")
             result = self._fresh_name()
-            if op_str == '**':
-                cuda_val = f'powf({left}, {right})'
-                self.tape.append(TapeEntry(result, 'pow', [left, right]))
+            if op_str == "**":
+                cuda_val = f"powf({left}, {right})"
+                self.tape.append(TapeEntry(result, "pow", [left, right]))
             else:
-                cuda_val = f'({left} {op_str} {right})'
-                op_name = {'+': 'add', '-': 'sub', '*': 'mul', '/': 'div', '%': 'mod'}[op_str]
+                cuda_val = f"({left} {op_str} {right})"
+                op_name = {"+": "add", "-": "sub", "*": "mul", "/": "div", "%": "mod"}[
+                    op_str
+                ]
                 self.tape.append(TapeEntry(result, op_name, [left, right]))
-            self.forward_lines.append(f'float {result} = {cuda_val};')
+            self.forward_lines.append(f"float {result} = {cuda_val};")
             return result
 
         if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.USub):
             operand = self._expr(node.operand)
             result = self._fresh_name()
-            cuda_val = f'(0.0f - {operand})'
-            self.tape.append(TapeEntry(result, 'sub', ['0.0f', operand]))
-            self.forward_lines.append(f'float {result} = {cuda_val};')
+            cuda_val = f"(0.0f - {operand})"
+            self.tape.append(TapeEntry(result, "sub", ["0.0f", operand]))
+            self.forward_lines.append(f"float {result} = {cuda_val};")
             return result
 
         if isinstance(node, ast.Call):
@@ -206,8 +229,8 @@ class _BondedASTWalker:
             if isinstance(node.func, ast.Name):
                 func_name = node.func.id
 
-            if func_name in ('distance', 'angle', 'dihedral', 'distance_to_point'):
-                result = self._fresh_name('_h')
+            if func_name in ("distance", "angle", "dihedral", "distance_to_point"):
+                result = self._fresh_name("_h")
                 arg_indices = []
                 for arg in node.args:
                     if isinstance(arg, ast.Name) and arg.id in self._position_index:
@@ -215,16 +238,16 @@ class _BondedASTWalker:
                 # helper_type is just func_name now — no lookup table needed
                 self.tape.append(TapeEntry(result, func_name, []))
                 self._helper_calls.append((func_name, result, arg_indices))
-                self.forward_lines.append(f'// {func_name} computed by helper')
+                self.forward_lines.append(f"// {func_name} computed by helper")
                 return result
 
             if func_name in _MATH_FUNCTIONS:
                 arg = self._expr(node.args[0])
                 cuda_name = _MATH_FUNCTIONS[func_name]
                 result = self._fresh_name()
-                cuda_val = f'{cuda_name}({arg})'
+                cuda_val = f"{cuda_name}({arg})"
                 self.tape.append(TapeEntry(result, func_name, [arg]))
-                self.forward_lines.append(f'float {result} = {cuda_val};')
+                self.forward_lines.append(f"float {result} = {cuda_val};")
                 return result
 
             raise ValueError(f"Unsupported function call: {func_name}")
@@ -238,7 +261,7 @@ class _BondedExpression:
         self._expr_info = _classify_for_bonded(func, body)
         self.body = body
         self.parameter_names = self._expr_info.params
-        self.cuda_fragment = ''
+        self.cuda_fragment = ""
         self._compile()
 
     @property
@@ -280,44 +303,52 @@ class _BondedExpression:
 
         for helper_type, result_name, arg_indices in walker._helper_calls:
             entry = HELPER_REGISTRY[helper_type]
-            template = entry['forward']
-            position_args = entry['position_args']
-            fmt = {'rn': result_name}
+            template = entry["forward"]
+            position_args = entry["position_args"]
+            fmt = {"rn": result_name}
             for ph, idx in zip(position_args, arg_indices):
-                fmt[ph] = f'a{idx + 1}'
+                fmt[ph] = f"a{idx + 1}"
             parts.append(template.format(**fmt))
 
         for line in walker.forward_lines:
-            parts.append(f'        {line}')
+            parts.append(f"        {line}")
 
-        parts.append(f'        float _result_energy = {energy_var};')
+        parts.append(f"        float _result_energy = {energy_var};")
+        parts.append("        float _result_virial = 0.0f;")
 
         num_helpers = len(walker._helper_calls)
         if num_helpers <= 1:
             shared_grad_lines, shared_derivs = fwd_ad.differentiate(walker.tape)
             for line in shared_grad_lines:
-                parts.append(f'        {line}')
+                parts.append(f"        {line}")
 
-        for idx, (helper_type, result_name, arg_indices) in enumerate(walker._helper_calls):
+        for idx, (helper_type, result_name, arg_indices) in enumerate(
+            walker._helper_calls
+        ):
             entry = HELPER_REGISTRY[helper_type]
-            position_args = entry['position_args']
+            position_args = entry["position_args"]
             if num_helpers > 1:
-                prefix = f'_g{idx}_'
+                prefix = f"_g{idx}_"
                 grad_lines, derivs = fwd_ad.differentiate(
-                    walker.tape, seed_vars={result_name: '1.0f'}, prefix=prefix,
+                    walker.tape,
+                    seed_vars={result_name: "1.0f"},
+                    prefix=prefix,
                 )
                 for line in grad_lines:
-                    parts.append(f'        {line}')
+                    parts.append(f"        {line}")
             else:
                 derivs = shared_derivs
 
-            grad_expr = derivs.get(energy_var, '0.0f')
-            parts.append(_build_projection(result_name, position_args, arg_indices, grad_expr))
+            grad_expr = derivs.get(energy_var, "0.0f")
+            parts.append(
+                _build_projection(result_name, position_args, arg_indices, grad_expr)
+            )
 
-        self.cuda_fragment = '\n'.join(parts)
+        self.cuda_fragment = "\n".join(parts)
 
 
 def bonded_expression(body):
     def decorator(func):
         return _BondedExpression(func, body)
+
     return decorator
