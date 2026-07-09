@@ -288,7 +288,7 @@ def precompute_bk_factors(
                 denom = m2 * bxby * bz
                 bk_val = math.exp(-recip_exp_factor * m2) / denom
                 bk[kx, ky, kz] = bk_val
-                virial_factor = 2.0 * recip_exp_factor * m2 - 1.0
+                virial_factor = 1.0 - 2.0 * recip_exp_factor * m2
                 bk_virial[kx, ky, kz] = bk_val * virial_factor
 
             firstz = 0
