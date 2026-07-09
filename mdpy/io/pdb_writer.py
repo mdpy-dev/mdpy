@@ -89,9 +89,11 @@ class PDBWriter:
 
             serial = self._particle_ids[i]
             atom_name = self._particle_names[i]
-            # Truncate residue name to 3 chars (PDB standard)
+            # Truncate residue name to 3 chars (PDB standard).
             residue_name = self._particle_molecule_types[i][:3]
-            chain = self._particle_chain_ids[i]
+            # Chain ID must be 1 character.  Some PSF files store multi-char
+            # segment IDs in the chain field; truncate to first char.
+            chain = str(self._particle_chain_ids[i])[:1] or " "
             resid = self._particle_molecule_ids[i]
 
             # Temperature factor: velocity magnitude if provided
