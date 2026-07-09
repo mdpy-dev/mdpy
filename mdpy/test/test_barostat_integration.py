@@ -1,6 +1,8 @@
 """Integration tests: NPT ensemble simulation with barostat on 6PO6 molecular system."""
 
 import os
+
+import cupy as cp
 import numpy as np
 import pytest
 
@@ -21,6 +23,15 @@ _PSF_PATH = os.path.join(DATA_DIR, "6PO6.psf")
 _PDB_PATH = os.path.join(DATA_DIR, "6PO6.pdb")
 _PRM_PATH = os.path.join(DATA_DIR, "par_all36_prot.prm")
 _STR_PATH = os.path.join(DATA_DIR, "toppar_water_ions.str")
+
+
+@pytest.fixture(autouse=True)
+def _sync_gpu():
+    """Ensure GPU is synchronized between tests to avoid CUDA resource conflicts."""
+    yield
+    import gc
+    gc.collect()
+    cp.cuda.Stream.null.synchronize()
 
 
 def _setup_6po6_npt():
