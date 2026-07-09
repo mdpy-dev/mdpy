@@ -27,6 +27,7 @@ from .unit_definition import joule, kilojoule, joule_permol, kilojoule_permol, c
 from .unit_definition import newton, kilonewton
 from .unit_definition import kilojoule_permol_over_angstrom, kilojoule_permol_over_nanometer, kilocalorie_permol_over_angstrom, kilocalorie_permol_over_nanometer
 from .unit_definition import watt, kilowatt
+from .unit_definition import pascal, kilopascal, bar, atm
 
 # Default Unit
 default_length_unit = angstrom
@@ -48,6 +49,7 @@ default_resistance_unit = default_voltage_unit / default_current_unit
 default_capacitance_unit = default_charge_unit / default_voltage_unit
 default_conductance_unit = 1 / default_resistance_unit
 default_electric_intensity_unit = default_voltage_unit / default_length_unit
+default_pressure_unit = default_force_unit / default_length_unit**2
 
 
 from .quantity import Quantity
@@ -80,7 +82,9 @@ __all__ = [
     'kilojoule_permol_over_angstrom', 'kilojoule_permol_over_nanometer', 
     'kilocalorie_permol_over_angstrom', 'kilocalorie_permol_over_nanometer',
     'watt', 'kilowatt',
-    
+    'pascal', 'kilopascal', 'bar', 'atm',
+    'default_pressure_unit',
+
     'NA', 'KB', 'EPSILON0'
 ]
 

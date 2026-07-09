@@ -129,3 +129,12 @@ kilojoule_permol_over_angstrom = kilojoule_permol / angstrom
 kilojoule_permol_over_nanometer = kilojoule_permol / nanometer
 kilocalorie_permol_over_angstrom = kilocalorie_permol / angstrom
 kilocalorie_permol_over_nanometer = kilocalorie_permol / nanometer
+
+######################
+## Pressure Unit    ##
+######################
+
+pascal = Unit(force / length**2, 1)
+kilopascal = Unit(force / length**2, 1e3)
+bar = Unit(force / length**2, 1e5)
+atm = Unit(force / length**2, 1.01325e5)
