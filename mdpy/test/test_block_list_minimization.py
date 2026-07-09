@@ -31,9 +31,9 @@ def _build_ion_system():
     pbc = np.diag(BOX)
     forces = create_charmm_forces(topology, parameter_set, pbc, cutoff=CUTOFF)
     state = State(topology.num_particles)
-    state.set_masses(psf.particle_masses)
-    state.set_charges(psf.particle_charges)
-    state.set_type_indices(parameter_set.particle_type_indices)
+    state.set_particle_masses(psf.particle_masses)
+    state.set_particle_charges(psf.particle_charges)
+    state.set_particle_type_indices(parameter_set.particle_type_indices)
     s = System(topology, state)
     s.set_pbc(pbc)
     for f in forces["bonded"]:

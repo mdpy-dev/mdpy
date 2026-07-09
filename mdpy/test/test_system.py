@@ -26,9 +26,9 @@ def _make_system(topology, pbc_matrix, cutoff=12.0, skin=None,
                  rebuild_check_interval=None):
     n = topology.num_particles
     state = State(n)
-    state.set_masses(np.full(n, 12.0, dtype=precision.FLOAT))
-    state.set_charges(np.zeros(n, dtype=precision.FLOAT))
-    state.set_type_indices(np.zeros(n, dtype=precision.INT))
+    state.set_particle_masses(np.full(n, 12.0, dtype=precision.FLOAT))
+    state.set_particle_charges(np.zeros(n, dtype=precision.FLOAT))
+    state.set_particle_type_indices(np.zeros(n, dtype=precision.INT))
     system = System(topology, state)
     system.set_pbc(pbc_matrix)
     system._cutoff = cutoff
@@ -113,7 +113,7 @@ class TestState:
         assert ctx.d_velocities_x.shape == (4,)
         assert ctx.d_forces_x.shape == (4,)
         assert ctx.d_prev_positions_x.shape == (4,)
-        assert ctx.d_masses.shape == (4,)
+        assert ctx.d_particle_masses.shape == (4,)
         assert ctx.d_energy.shape == (1,)
         assert ctx.d_pbc_matrix.shape == (9,)
         assert ctx.d_pbc_inv.shape == (9,)
@@ -158,9 +158,9 @@ class TestState:
     def test_state_constructed_from_num_particles(self):
         state = State(4)
         assert state.num_particles == 4
-        assert state.d_charges.shape == (4,)
-        assert state.d_masses.shape == (4,)
-        assert state.d_type_indices.shape == (4,)
+        assert state.d_particle_charges.shape == (4,)
+        assert state.d_particle_masses.shape == (4,)
+        assert state.d_particle_type_indices.shape == (4,)
         assert state.is_ready is False
 
     def test_state_is_ready_after_all_fields_set(self):
@@ -168,9 +168,9 @@ class TestState:
         state.set_pbc(np.eye(3, dtype=np.float32).ravel())
         state.set_positions(np.zeros((2, 3), dtype=np.float32))
         state.set_velocities(np.zeros((2, 3), dtype=np.float32))
-        state.set_charges(np.zeros(2, dtype=np.float32))
-        state.set_masses(np.ones(2, dtype=np.float32))
-        state.set_type_indices(np.zeros(2, dtype=np.int32))
+        state.set_particle_charges(np.zeros(2, dtype=np.float32))
+        state.set_particle_masses(np.ones(2, dtype=np.float32))
+        state.set_particle_type_indices(np.zeros(2, dtype=np.int32))
         assert state.is_ready is True
 
 
@@ -244,9 +244,9 @@ class TestSystem:
 
         pbc = np.eye(3, dtype=np.float64) * 20.0
         state = State(8)
-        state.set_masses(np.full(8, 12.0, dtype=precision.FLOAT))
-        state.set_charges(np.zeros(8, dtype=precision.FLOAT))
-        state.set_type_indices(np.zeros(8, dtype=precision.INT))
+        state.set_particle_masses(np.full(8, 12.0, dtype=precision.FLOAT))
+        state.set_particle_charges(np.zeros(8, dtype=precision.FLOAT))
+        state.set_particle_type_indices(np.zeros(8, dtype=precision.INT))
         system = System(topology, state)
         system.set_pbc(pbc)
 
@@ -1131,9 +1131,9 @@ class TestInlineSystemAssembly:
         state = State(topology.num_particles)
         state.set_pbc(pbc)
         state.set_positions(pdb.positions)
-        state.set_charges(psf.particle_charges)
-        state.set_masses(psf.particle_masses)
-        state.set_type_indices(parameter_set.particle_type_indices)
+        state.set_particle_charges(psf.particle_charges)
+        state.set_particle_masses(psf.particle_masses)
+        state.set_particle_type_indices(parameter_set.particle_type_indices)
         forces = create_charmm_forces(topology, parameter_set, pbc, cutoff=12.0)
         system = System(topology, state)
         for f in forces['bonded']:

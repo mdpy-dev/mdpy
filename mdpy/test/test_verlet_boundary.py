@@ -18,9 +18,9 @@ def _make_system(n_atoms, box_size, cutoff=None):
     topology.num_particles = n_atoms
     pbc_matrix = np.eye(3, dtype=precision.FLOAT) * box_size
     state = State(n_atoms)
-    state.set_masses(np.full(n_atoms, 12.0, dtype=precision.FLOAT))
-    state.set_charges(np.zeros(n_atoms, dtype=precision.FLOAT))
-    state.set_type_indices(np.zeros(n_atoms, dtype=precision.INT))
+    state.set_particle_masses(np.full(n_atoms, 12.0, dtype=precision.FLOAT))
+    state.set_particle_charges(np.zeros(n_atoms, dtype=precision.FLOAT))
+    state.set_particle_type_indices(np.zeros(n_atoms, dtype=precision.INT))
     system = System(topology, state)
     system.set_pbc(pbc_matrix)
     system._cutoff = cutoff

@@ -33,9 +33,9 @@ def ion_system():
     state = State(topology.num_particles)
     state.set_pbc(pbc)
     state.set_positions(pdb.positions)
-    state.set_charges(psf.particle_charges)
-    state.set_masses(psf.particle_masses)
-    state.set_type_indices(parameter_set.particle_type_indices)
+    state.set_particle_charges(psf.particle_charges)
+    state.set_particle_masses(psf.particle_masses)
+    state.set_particle_type_indices(parameter_set.particle_type_indices)
     forces = create_charmm_forces(topology, parameter_set, pbc, cutoff=12.0)
     system = System(topology, state)
     for f in forces['bonded']:

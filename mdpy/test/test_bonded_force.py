@@ -22,7 +22,7 @@ class MockState:
         self.d_forces_y = cp.zeros(N, dtype=np.float32)
         self.d_forces_z = cp.zeros(N, dtype=np.float32)
         self.d_energy = cp.zeros(1, dtype=np.float32)
-        self.d_charges = None
+        self.d_particle_charges = None
         pbc_inv = np.linalg.inv(pbc_matrix)
         self.d_pbc_inv = cp.asarray(
             np.ascontiguousarray(pbc_inv, dtype=np.float32).ravel()

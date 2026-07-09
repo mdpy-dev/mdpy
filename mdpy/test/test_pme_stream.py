@@ -51,9 +51,9 @@ def _build_system(pme_stream):
     forces = create_charmm_forces(topology, pt, pbc, cutoff=12.0)
 
     state = State(topology.num_particles)
-    state.set_masses(psf.particle_masses)
-    state.set_charges(psf.particle_charges)
-    state.set_type_indices(pt.particle_type_indices)
+    state.set_particle_masses(psf.particle_masses)
+    state.set_particle_charges(psf.particle_charges)
+    state.set_particle_type_indices(pt.particle_type_indices)
     system = System(topology, state)
     system.set_pbc(pbc)
     for f in forces['bonded']:

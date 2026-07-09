@@ -32,9 +32,9 @@ def _build_system():
     pbc_matrix = np.eye(3, dtype=np.float32) * BOX
 
     state = State(topology.num_particles)
-    state.set_masses(psf.particle_masses)
-    state.set_charges(psf.particle_charges)
-    state.set_type_indices(parameter_set.particle_type_indices)
+    state.set_particle_masses(psf.particle_masses)
+    state.set_particle_charges(psf.particle_charges)
+    state.set_particle_type_indices(parameter_set.particle_type_indices)
     system = System(topology, state)
 
     system.set_pbc(pbc_matrix)
@@ -65,7 +65,7 @@ def _build_system():
 def test_pme_charges_unchanged_after_rebuild():
     system, pme = _build_system()
 
-    charges_before = cp.asnumpy(system.state.d_charges).copy()
+    charges_before = cp.asnumpy(system.state.d_particle_charges).copy()
 
     system.update_neighbor_list(sync_interval=10)
     system.compute_forces()
@@ -73,7 +73,7 @@ def test_pme_charges_unchanged_after_rebuild():
     bl = system.block_list
     assert bl.d_raw_order.size > 0, "Rebuild did not produce sort order"
 
-    charges_after = cp.asnumpy(system.state.d_charges)
+    charges_after = cp.asnumpy(system.state.d_particle_charges)
 
     np.testing.assert_array_almost_equal(
         charges_after, charges_before, decimal=5,

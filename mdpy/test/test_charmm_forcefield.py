@@ -116,9 +116,9 @@ class TestSystem:
         pbc_matrix = np.eye(3, dtype=precision.FLOAT) * 100.0
 
         state = State(topology.num_particles)
-        state.set_masses(psf.particle_masses)
-        state.set_charges(psf.particle_charges)
-        state.set_type_indices(parameter_set.particle_type_indices)
+        state.set_particle_masses(psf.particle_masses)
+        state.set_particle_charges(psf.particle_charges)
+        state.set_particle_type_indices(parameter_set.particle_type_indices)
         system = System(topology, state)
 
         system.set_pbc(pbc_matrix)
@@ -149,9 +149,9 @@ class TestSystem:
         pbc_matrix = np.eye(3, dtype=precision.FLOAT) * 100.0
 
         state = State(topology.num_particles)
-        state.set_masses(psf.particle_masses)
-        state.set_charges(psf.particle_charges)
-        state.set_type_indices(parameter_set.particle_type_indices)
+        state.set_particle_masses(psf.particle_masses)
+        state.set_particle_charges(psf.particle_charges)
+        state.set_particle_type_indices(parameter_set.particle_type_indices)
         system = System(topology, state)
 
         system.set_pbc(pbc_matrix)
@@ -186,9 +186,9 @@ class TestSystem:
         pbc_matrix = np.eye(3, dtype=precision.FLOAT) * 100.0
 
         state = State(topology.num_particles)
-        state.set_masses(psf.particle_masses)
-        state.set_charges(psf.particle_charges)
-        state.set_type_indices(parameter_set.particle_type_indices)
+        state.set_particle_masses(psf.particle_masses)
+        state.set_particle_charges(psf.particle_charges)
+        state.set_particle_type_indices(parameter_set.particle_type_indices)
         system = System(topology, state)
 
         system.set_pbc(pbc_matrix)
@@ -223,9 +223,9 @@ class TestSystem:
         pbc_matrix = np.eye(3, dtype=precision.FLOAT) * 100.0
 
         state = State(topology.num_particles)
-        state.set_masses(psf.particle_masses)
-        state.set_charges(psf.particle_charges)
-        state.set_type_indices(parameter_set.particle_type_indices)
+        state.set_particle_masses(psf.particle_masses)
+        state.set_particle_charges(psf.particle_charges)
+        state.set_particle_type_indices(parameter_set.particle_type_indices)
         system = System(topology, state)
 
         system.set_pbc(pbc_matrix)

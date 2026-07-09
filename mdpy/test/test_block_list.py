@@ -45,9 +45,9 @@ class _PBCContext:
             self.d_positions_y = cp.asarray(pos[:, 1])
             self.d_positions_z = cp.asarray(pos[:, 2])
         if charges is not None:
-            self.d_charges = cp.asarray(np.asarray(charges, dtype=np.float32))
+            self.d_particle_charges = cp.asarray(np.asarray(charges, dtype=np.float32))
         if types is not None:
-            self.d_type_indices = cp.asarray(np.asarray(types, dtype=np.int32))
+            self.d_particle_type_indices = cp.asarray(np.asarray(types, dtype=np.int32))
 
 
 def _rebuild_and_build_block_pairs(n, box=50.0, cutoff=10.0, skin=2.0, seed=42, positions=None):
@@ -1235,9 +1235,9 @@ class TestSnapshotPostWrapIntegration:
         pbc_matrix = np.eye(3, dtype=np.float32) * box
 
         state = State(n)
-        state.set_masses(np.ones(n, dtype=np.float32))
-        state.set_charges(np.zeros(n, dtype=np.float32))
-        state.set_type_indices(np.zeros(n, dtype=np.int32))
+        state.set_particle_masses(np.ones(n, dtype=np.float32))
+        state.set_particle_charges(np.zeros(n, dtype=np.float32))
+        state.set_particle_type_indices(np.zeros(n, dtype=np.int32))
         system = System(topology, state)
         system.set_pbc(pbc_matrix)
         system._cutoff = 10.0
@@ -1289,9 +1289,9 @@ class TestSnapshotPostWrapIntegration:
         box = 50.0
         pbc_matrix = np.eye(3, dtype=np.float32) * box
         state = State(n)
-        state.set_masses(np.ones(n, dtype=np.float32))
-        state.set_charges(np.zeros(n, dtype=np.float32))
-        state.set_type_indices(np.zeros(n, dtype=np.int32))
+        state.set_particle_masses(np.ones(n, dtype=np.float32))
+        state.set_particle_charges(np.zeros(n, dtype=np.float32))
+        state.set_particle_type_indices(np.zeros(n, dtype=np.int32))
         system = System(topology, state)
         system.set_pbc(pbc_matrix)
         system._cutoff = 10.0
@@ -1346,9 +1346,9 @@ class TestSnapshotPostWrapIntegration:
         box = 50.0
         pbc_matrix = np.eye(3, dtype=np.float32) * box
         state = State(n)
-        state.set_masses(np.ones(n, dtype=np.float32))
-        state.set_charges(np.zeros(n, dtype=np.float32))
-        state.set_type_indices(np.zeros(n, dtype=np.int32))
+        state.set_particle_masses(np.ones(n, dtype=np.float32))
+        state.set_particle_charges(np.zeros(n, dtype=np.float32))
+        state.set_particle_type_indices(np.zeros(n, dtype=np.int32))
         system = System(topology, state)
         system.set_pbc(pbc_matrix)
         system._cutoff = 10.0

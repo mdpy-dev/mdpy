@@ -68,9 +68,9 @@ def test_constraint_loop():
 
     n = topology.num_particles
     state = State(n)
-    state.set_masses(masses)
-    state.set_charges(np.zeros(n, dtype=np.float32))
-    state.set_type_indices(np.zeros(n, dtype=np.int32))
+    state.set_particle_masses(masses)
+    state.set_particle_charges(np.zeros(n, dtype=np.float32))
+    state.set_particle_type_indices(np.zeros(n, dtype=np.int32))
     system = System(topology, state)
 
     system.set_pbc(pbc_matrix)
@@ -81,7 +81,7 @@ def test_constraint_loop():
     for f in bonded:
         system.add_force_term(f)
 
-    constraints = create_constraints(topology, parameter_table, scheme='h-bonds', masses=masses, molecule_ids=mol_ids, molecule_types=molecule_types)
+    constraints = create_constraints(topology, parameter_table, scheme='h-bonds', particle_masses=masses, particle_molecule_ids=mol_ids, particle_molecule_types=molecule_types)
     for c in constraints:
         system.add_constraint(c)
 
@@ -109,9 +109,9 @@ def test_constraint_loop_multiple_rebuilds():
 
     n = topology.num_particles
     state = State(n)
-    state.set_masses(masses)
-    state.set_charges(np.zeros(n, dtype=np.float32))
-    state.set_type_indices(np.zeros(n, dtype=np.int32))
+    state.set_particle_masses(masses)
+    state.set_particle_charges(np.zeros(n, dtype=np.float32))
+    state.set_particle_type_indices(np.zeros(n, dtype=np.int32))
     system = System(topology, state)
 
     system.set_pbc(pbc_matrix)
@@ -122,7 +122,7 @@ def test_constraint_loop_multiple_rebuilds():
     for f in bonded:
         system.add_force_term(f)
 
-    constraints = create_constraints(topology, parameter_table, scheme='h-bonds', masses=masses, molecule_ids=mol_ids, molecule_types=molecule_types)
+    constraints = create_constraints(topology, parameter_table, scheme='h-bonds', particle_masses=masses, particle_molecule_ids=mol_ids, particle_molecule_types=molecule_types)
     for c in constraints:
         system.add_constraint(c)
 
@@ -224,9 +224,9 @@ def test_settle_lincs_coexistence_bond_lengths():
 
     n = topology.num_particles
     state = State(n)
-    state.set_masses(masses)
-    state.set_charges(np.zeros(n, dtype=np.float32))
-    state.set_type_indices(np.zeros(n, dtype=np.int32))
+    state.set_particle_masses(masses)
+    state.set_particle_charges(np.zeros(n, dtype=np.float32))
+    state.set_particle_type_indices(np.zeros(n, dtype=np.int32))
     system = System(topology, state)
 
     system.set_pbc(pbc_matrix)
@@ -236,7 +236,7 @@ def test_settle_lincs_coexistence_bond_lengths():
     for f in bonded:
         system.add_force_term(f)
 
-    constraints = create_constraints(topology, parameter_table, scheme='h-bonds', masses=masses, molecule_ids=mol_ids, molecule_types=molecule_types)
+    constraints = create_constraints(topology, parameter_table, scheme='h-bonds', particle_masses=masses, particle_molecule_ids=mol_ids, particle_molecule_types=molecule_types)
     for c in constraints:
         system.add_constraint(c)
 
@@ -280,9 +280,9 @@ def test_settle_md_loop_rebuilds_bond_lengths():
 
     n = topology.num_particles
     state = State(n)
-    state.set_masses(masses)
-    state.set_charges(np.zeros(n, dtype=np.float32))
-    state.set_type_indices(np.zeros(n, dtype=np.int32))
+    state.set_particle_masses(masses)
+    state.set_particle_charges(np.zeros(n, dtype=np.float32))
+    state.set_particle_type_indices(np.zeros(n, dtype=np.int32))
     system = System(topology, state)
 
     system.set_pbc(pbc_matrix)
@@ -292,7 +292,7 @@ def test_settle_md_loop_rebuilds_bond_lengths():
     for f in bonded:
         system.add_force_term(f)
 
-    constraints = create_constraints(topology, parameter_table, scheme='h-bonds', masses=masses, molecule_ids=mol_ids, molecule_types=molecule_types)
+    constraints = create_constraints(topology, parameter_table, scheme='h-bonds', particle_masses=masses, particle_molecule_ids=mol_ids, particle_molecule_types=molecule_types)
     for c in constraints:
         system.add_constraint(c)
 
@@ -365,9 +365,9 @@ def test_lincs_md_loop_rebuilds_bond_lengths():
     pbc_matrix = np.diag([15.0, 15.0, 15.0]).astype(np.float32)
     n = len(masses)
     state = State(n)
-    state.set_masses(masses)
-    state.set_charges(np.zeros(n, dtype=np.float32))
-    state.set_type_indices(np.zeros(n, dtype=np.int32))
+    state.set_particle_masses(masses)
+    state.set_particle_charges(np.zeros(n, dtype=np.float32))
+    state.set_particle_type_indices(np.zeros(n, dtype=np.int32))
     system = System(topology, state)
     system.set_pbc(pbc_matrix)
     system._cutoff = 4.0

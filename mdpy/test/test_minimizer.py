@@ -18,11 +18,11 @@ def _make_system(num_particles, positions, forces, masses=None):
     state = State(num_particles)
     state.set_positions(np.asarray(positions, dtype=np.float32))
     state.set_velocities(np.zeros((num_particles, 3), dtype=np.float32))
-    state.set_charges(np.zeros(num_particles, dtype=np.float32))
-    state.set_masses(np.full(num_particles, 1.0, dtype=np.float32)
+    state.set_particle_charges(np.zeros(num_particles, dtype=np.float32))
+    state.set_particle_masses(np.full(num_particles, 1.0, dtype=np.float32)
                      if masses is None
                      else np.asarray(masses, dtype=np.float32))
-    state.set_type_indices(np.zeros(num_particles, dtype=np.int32))
+    state.set_particle_type_indices(np.zeros(num_particles, dtype=np.int32))
     state.set_pbc(np.eye(3, dtype=np.float32) * 100.0)
     state.d_forces_x[:] = cp.asarray(forces[:, 0])
     state.d_forces_y[:] = cp.asarray(forces[:, 1])
@@ -236,9 +236,9 @@ class TestMinimizerIntegration:
         state = State(topology.num_particles)
         state.set_pbc(pbc_matrix)
         state.set_positions(pdb.positions)
-        state.set_charges(psf.particle_charges)
-        state.set_masses(psf.particle_masses)
-        state.set_type_indices(parameter_set.particle_type_indices)
+        state.set_particle_charges(psf.particle_charges)
+        state.set_particle_masses(psf.particle_masses)
+        state.set_particle_type_indices(parameter_set.particle_type_indices)
         state.set_velocities(np.zeros((topology.num_particles, 3), dtype=np.float64))
         forces = create_charmm_forces(
             topology, parameter_set, pbc_matrix, cutoff=12.0,

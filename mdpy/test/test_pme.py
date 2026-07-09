@@ -353,7 +353,7 @@ class TestPMEReciprocalForce:
         charges = np.random.randn(N).astype(np.float32)
 
         state = State(topo.num_particles)
-        state.set_charges(charges)
+        state.set_particle_charges(charges)
         state.set_pbc(pbc.flatten())
 
         pos = np.random.uniform(2, box - 2, (N, 3)).astype(np.float32)
@@ -401,7 +401,7 @@ class TestPMEReciprocalForce:
         charges = np.random.randn(N).astype(np.float32)
 
         state = State(topo.num_particles)
-        state.set_charges(charges)
+        state.set_particle_charges(charges)
         state.set_pbc(pbc.flatten())
 
         pos = np.random.uniform(2, box - 2, (N, 3)).astype(np.float32)
@@ -591,9 +591,9 @@ class TestPMEIntegration6PO6:
         pbc_matrix = np.eye(3, dtype=np.float32) * self.box
 
         state = State(self.topology.num_particles)
-        state.set_masses(self.psf.particle_masses)
-        state.set_charges(self.psf.particle_charges)
-        state.set_type_indices(self.parameter_set.particle_type_indices)
+        state.set_particle_masses(self.psf.particle_masses)
+        state.set_particle_charges(self.psf.particle_charges)
+        state.set_particle_type_indices(self.parameter_set.particle_type_indices)
         system = System(self.topology, state)
 
         system.set_pbc(pbc_matrix)
@@ -687,7 +687,7 @@ class TestPMEIntegration6PO6:
         pme.compute(state, block_list=block_list, compute_energy=True)
         baseline = float(state.d_energy[0])
 
-        state.d_charges[:] = state.d_charges * 2.0
+        state.d_particle_charges[:] = state.d_particle_charges * 2.0
 
         state.zero_forces()
         state.zero_energy()
@@ -695,7 +695,7 @@ class TestPMEIntegration6PO6:
         doubled = float(state.d_energy[0])
 
         assert abs(doubled - baseline) > 1e-3, (
-            f"PME did not respond to state.d_charges mutation: "
+            f"PME did not respond to state.d_particle_charges mutation: "
             f"baseline={baseline}, doubled={doubled}"
         )
 
@@ -705,8 +705,8 @@ class TestPMEIntegration6PO6:
         system.compute_forces()
         e_before = system.dump_energy()['pme_reciprocal']
 
-        orig = float(system.state.d_charges[0].get())
-        system.state.d_charges[0] = orig * 2.0
+        orig = float(system.state.d_particle_charges[0].get())
+        system.state.d_particle_charges[0] = orig * 2.0
 
         system.compute_forces()
         e_after = system.dump_energy()['pme_reciprocal']
@@ -716,7 +716,7 @@ class TestPMEIntegration6PO6:
             f"before={e_before}, after={e_after}"
         )
 
-        system.state.d_charges[0] = orig
+        system.state.d_particle_charges[0] = orig
 
 
 class TestBilateralPaddingUnwrapped:

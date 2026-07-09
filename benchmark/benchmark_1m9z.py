@@ -47,9 +47,9 @@ pbc_matrix = np.eye(3, dtype=np.float64) * BOX_SIZE
 state = State(topology.num_particles)
 state.set_pbc(pbc_matrix)
 state.set_positions(pdb.positions)
-state.set_charges(psf.particle_charges)
-state.set_masses(psf.particle_masses)
-state.set_type_indices(parameter_set.particle_type_indices)
+state.set_particle_charges(psf.particle_charges)
+state.set_particle_masses(psf.particle_masses)
+state.set_particle_type_indices(parameter_set.particle_type_indices)
 forces = create_charmm_forces(
     topology,
     parameter_set,
@@ -68,9 +68,9 @@ constraints = create_constraints(
     topology,
     parameter_set,
     scheme="h-bonds",
-    masses=psf.particle_masses,
-    molecule_ids=psf.particle_molecule_ids,
-    molecule_types=psf.particle_molecule_types,
+    particle_masses=psf.particle_masses,
+    particle_molecule_ids=psf.particle_molecule_ids,
+    particle_molecule_types=psf.particle_molecule_types,
 )
 for c in constraints:
     system.add_constraint(c)

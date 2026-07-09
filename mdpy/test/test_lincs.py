@@ -130,9 +130,9 @@ def test_lincs_multiple_rebuilds():
     from mdpy.constraint.lincs import LincsConstraint
 
     state = State(8)
-    state.set_masses(masses)
-    state.set_charges(np.zeros(8, dtype=np.float32))
-    state.set_type_indices(np.zeros(8, dtype=np.int32))
+    state.set_particle_masses(masses)
+    state.set_particle_charges(np.zeros(8, dtype=np.float32))
+    state.set_particle_type_indices(np.zeros(8, dtype=np.int32))
     system = System(topology, state)
 
     system.set_pbc(pbc_matrix)
@@ -315,9 +315,9 @@ def test_lincs_md_loop_bond_length_statistics():
     from mdpy.constraint.lincs import LincsConstraint
 
     state = State(8)
-    state.set_masses(masses)
-    state.set_charges(np.zeros(8, dtype=np.float32))
-    state.set_type_indices(np.zeros(8, dtype=np.int32))
+    state.set_particle_masses(masses)
+    state.set_particle_charges(np.zeros(8, dtype=np.float32))
+    state.set_particle_type_indices(np.zeros(8, dtype=np.int32))
     system = System(topology, state)
 
     system.set_pbc(pbc_matrix)
