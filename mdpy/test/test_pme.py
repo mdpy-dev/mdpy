@@ -338,7 +338,7 @@ class TestPMEReciprocalForce:
         from mdpy.force.pme_reciprocal_force import PMEReciprocalForce
         from mdpy.core.state import State
         from mdpy.core.topology import Topology
-        from mdpy.core.parameter_table import ParameterTable
+        from mdpy.core.parameter_set import ParameterSet
 
         N = 20
         box = 40.0
@@ -348,7 +348,7 @@ class TestPMEReciprocalForce:
         topo = Topology()
         topo.num_particles = N
 
-        pt = ParameterTable()
+        pt = ParameterSet()
         np.random.seed(42)
         charges = np.random.randn(N).astype(np.float32)
 
@@ -386,7 +386,7 @@ class TestPMEReciprocalForce:
         from mdpy.force.pme_reciprocal_force import PMEReciprocalForce
         from mdpy.core.state import State
         from mdpy.core.topology import Topology
-        from mdpy.core.parameter_table import ParameterTable
+        from mdpy.core.parameter_set import ParameterSet
 
         N = 15
         box = 35.0
@@ -397,7 +397,7 @@ class TestPMEReciprocalForce:
         topo.num_particles = N
 
         np.random.seed(7)
-        pt = ParameterTable()
+        pt = ParameterSet()
         charges = np.random.randn(N).astype(np.float32)
 
         state = State(topo.num_particles)
@@ -463,14 +463,14 @@ class TestGridSizing:
 
     def test_from_box_1m9z(self):
         from mdpy.core.topology import Topology
-        from mdpy.core.parameter_table import ParameterTable
+        from mdpy.core.parameter_set import ParameterSet
 
         box = 108.0
         cutoff = 12.0
         N = 1
         topo = Topology()
         topo.num_particles = N
-        pt = ParameterTable()
+        pt = ParameterSet()
         pbc = np.eye(3, dtype=np.float32) * box
         from mdpy.force.pme_reciprocal_force import PMEReciprocalForce
         pme = PMEReciprocalForce(cutoff)
@@ -482,7 +482,7 @@ class TestGridSizing:
 
     def test_from_box_6po6(self):
         from mdpy.core.topology import Topology
-        from mdpy.core.parameter_table import ParameterTable
+        from mdpy.core.parameter_set import ParameterSet
         from mdpy.force.pme_reciprocal_force import PMEReciprocalForce
 
         box = 100.0
@@ -490,7 +490,7 @@ class TestGridSizing:
         N = 1
         topo = Topology()
         topo.num_particles = N
-        pt = ParameterTable()
+        pt = ParameterSet()
         pbc = np.eye(3, dtype=np.float32) * box
         pme = PMEReciprocalForce(cutoff)
         pme.initialize_grid(topo, pt, pbc_matrix=pbc)
@@ -500,7 +500,7 @@ class TestGridSizing:
 
     def test_from_box_rectangular(self):
         from mdpy.core.topology import Topology
-        from mdpy.core.parameter_table import ParameterTable
+        from mdpy.core.parameter_set import ParameterSet
         from mdpy.force.pme_reciprocal_force import PMEReciprocalForce
 
         box_x, box_y, box_z = 80.0, 60.0, 40.0
@@ -508,7 +508,7 @@ class TestGridSizing:
         N = 1
         topo = Topology()
         topo.num_particles = N
-        pt = ParameterTable()
+        pt = ParameterSet()
         pbc = np.diag(np.array([box_x, box_y, box_z], dtype=np.float32))
         pme = PMEReciprocalForce(cutoff)
         pme.initialize_grid(topo, pt, pbc_matrix=pbc)
@@ -519,7 +519,7 @@ class TestGridSizing:
 
     def test_from_box_custom_spacing(self):
         from mdpy.core.topology import Topology
-        from mdpy.core.parameter_table import ParameterTable
+        from mdpy.core.parameter_set import ParameterSet
         from mdpy.force.pme_reciprocal_force import PMEReciprocalForce
 
         box = 108.0
@@ -527,7 +527,7 @@ class TestGridSizing:
         N = 1
         topo = Topology()
         topo.num_particles = N
-        pt = ParameterTable()
+        pt = ParameterSet()
         pbc = np.eye(3, dtype=np.float32) * box
         pme_default = PMEReciprocalForce(cutoff)
         pme_default.initialize_grid(topo, pt, pbc_matrix=pbc)
@@ -537,7 +537,7 @@ class TestGridSizing:
 
     def test_from_box_custom_rtol(self):
         from mdpy.core.topology import Topology
-        from mdpy.core.parameter_table import ParameterTable
+        from mdpy.core.parameter_set import ParameterSet
         from mdpy.force.pme_reciprocal_force import PMEReciprocalForce
         from scipy.special import erfc
 
@@ -546,7 +546,7 @@ class TestGridSizing:
         N = 1
         topo = Topology()
         topo.num_particles = N
-        pt = ParameterTable()
+        pt = ParameterSet()
         pbc = np.eye(3, dtype=np.float32) * box
         pme_loose = PMEReciprocalForce(cutoff, ewald_rtol=1e-3)
         pme_loose.initialize_grid(topo, pt, pbc_matrix=pbc)

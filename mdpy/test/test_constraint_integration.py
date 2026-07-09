@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 from mdpy.core.topology import Topology
 from mdpy.core.state import State
-from mdpy.core.parameter_table import ParameterTable
+from mdpy.core.parameter_set import ParameterSet
 from mdpy.force.bonded_force import BondedForce
 from mdpy.force.factories.charmm import create_bonded_forces
 from mdpy.system import System
@@ -56,7 +56,7 @@ def _build_test_system():
     pbc_matrix = np.eye(3, dtype=np.float32) * 30.0
 
     term_params = {'bond': np.array(bond_term_params, dtype=np.float32)}
-    pt = ParameterTable()
+    pt = ParameterSet()
     for name, values in term_params.items():
         pt.add_term_parameter(name, values)
 
@@ -212,7 +212,7 @@ def _build_mixed_system():
     pbc_matrix = np.eye(3, dtype=np.float32) * 40.0
 
     term_params = {'bond': np.array(bond_term_params, dtype=np.float32)}
-    pt = ParameterTable()
+    pt = ParameterSet()
     for name, values in term_params.items():
         pt.add_term_parameter(name, values)
 
@@ -358,7 +358,7 @@ def test_lincs_md_loop_rebuilds_bond_lengths():
         bond_term_params.append([k_val, r0_val])
 
     term_params = {'bond': np.array(bond_term_params, dtype=np.float32)}
-    pt = ParameterTable()
+    pt = ParameterSet()
     for name, values in term_params.items():
         pt.add_term_parameter(name, values)
 

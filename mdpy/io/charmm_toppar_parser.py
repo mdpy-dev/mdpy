@@ -12,7 +12,7 @@ import numpy as np
 from mdpy import precision
 from mdpy.error import FileFormatError
 from mdpy.unit import *
-from mdpy.core.parameter_table import ParameterTable
+from mdpy.core.parameter_set import ParameterSet
 
 RMIN_TO_SIGMA_FACTOR = precision.FLOAT(2 ** (-1 / 6))
 USED_BLOCK_LABELS = ["ATOMS", "BONDS", "ANGLES", "DIHEDRALS", "IMPROPER", "NONBONDED", "NBFIX"]
@@ -411,7 +411,7 @@ class CharmmTopparParser:
 
 
 def create_parameter_table(topology, toppar_parser, *, type_names):
-    """Assemble a ParameterTable from Topology and CHARMM parameters.
+    """Assemble a ParameterSet from Topology and CHARMM parameters.
 
     Parameters
     ----------
@@ -424,7 +424,7 @@ def create_parameter_table(topology, toppar_parser, *, type_names):
 
     Returns
     -------
-    ParameterTable
+    ParameterSet
         With type_parameters (sigma, epsilon, sigma_14, epsilon_14),
         type_pair_parameters (lj_pair, lj_pair_14), and
         term_parameters (bond, angle, dihedral, improper).
@@ -463,7 +463,7 @@ def create_parameter_table(topology, toppar_parser, *, type_names):
             epsilon_14_array[type_index] = entry[0]
             sigma_14_array[type_index] = entry[1]
 
-    table = ParameterTable()
+    table = ParameterSet()
     table.add_type_parameter("sigma", sigma_array)
     table.add_type_parameter("epsilon", epsilon_array)
     table.add_type_parameter("sigma_14", sigma_14_array)

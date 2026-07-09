@@ -6,7 +6,7 @@ from mdpy.io.psf_parser import PSFParser
 from mdpy.io.pdb_parser import PDBParser
 from mdpy.io.charmm_toppar_parser import CharmmTopparParser
 from mdpy.io.charmm_toppar_parser import create_parameter_table
-from mdpy.core.parameter_table import ParameterTable
+from mdpy.core.parameter_set import ParameterSet
 from mdpy.core.state import State
 from mdpy.system import System
 from mdpy.force.bonded_force import BondedForce
@@ -71,7 +71,7 @@ class TestTopology:
         assert int(neighbors.shape[0]) > 0
 
 
-class TestParameterTable:
+class TestParameterSet:
 
     def test_parameter_table_has_sigma_epsilon(self):
         psf = PSFParser(os.path.join(DATA_DIR, '6PO6.psf'))

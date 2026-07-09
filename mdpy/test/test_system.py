@@ -7,7 +7,7 @@ from mdpy import precision
 from mdpy.core.topology import Topology
 from mdpy.core.state import State
 from mdpy.core.block_list import BlockList
-from mdpy.core.parameter_table import ParameterTable
+from mdpy.core.parameter_set import ParameterSet
 from mdpy.force.bonded_force import BondedForce
 from mdpy.force.factories.charmm import create_bonded_forces, create_charmm_forces
 from mdpy.system import System
@@ -55,7 +55,7 @@ def _make_large_pbc():
 
 
 def _make_parameter_table(term_params):
-    pt = ParameterTable()
+    pt = ParameterSet()
     for name, values in term_params.items():
         pt.add_term_parameter(name, values)
     return pt

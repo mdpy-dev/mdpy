@@ -68,7 +68,7 @@ def test_lincs_no_change_if_already_correct():
 
 
 def _make_rebuild_test_system():
-    from mdpy.core.parameter_table import ParameterTable
+    from mdpy.core.parameter_set import ParameterSet
     from mdpy.force.bonded_force import BondedForce
     from mdpy.force.factories.charmm import create_bonded_forces
     from mdpy.system import System
@@ -112,7 +112,7 @@ def _make_rebuild_test_system():
         ], dtype=np.float32),
     }
 
-    pt = ParameterTable()
+    pt = ParameterSet()
     for name, values in term_params.items():
         pt.add_term_parameter(name, values)
 
