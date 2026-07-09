@@ -30,7 +30,6 @@ class PSFParser:
         idx = self._parse_section(lines, idx, '!NTHETA:', 3, '_angles')
         idx = self._parse_section(lines, idx, '!NPHI:', 4, '_dihedrals')
         idx = self._parse_section(lines, idx, '!NIMPHI:', 4, '_impropers')
-        self._build_type_index()
         self._topology = self._create_topology()
 
     def _skip_header(self, lines, idx):
@@ -114,14 +113,6 @@ class PSFParser:
         setattr(self, attr_name, interactions)
         return idx
 
-    def _build_type_index(self):
-        unique_types = sorted(set(self._type_names))
-        self._type_name_to_index = {name: idx for idx, name in enumerate(unique_types)}
-        self._particle_type_indices = np.array(
-            [self._type_name_to_index[t] for t in self._type_names], dtype=precision.INT
-        )
-        self._unique_type_names = unique_types
-
     def _create_topology(self):
         topology = Topology()
         topology.num_particles = self._num_particles
@@ -181,14 +172,6 @@ class PSFParser:
     @property
     def chain_ids(self):
         return self._chain_ids
-
-    @property
-    def unique_type_names(self):
-        return self._unique_type_names
-
-    @property
-    def particle_type_indices(self):
-        return self._particle_type_indices
 
     @property
     def charges(self):
