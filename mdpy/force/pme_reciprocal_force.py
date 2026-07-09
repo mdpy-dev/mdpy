@@ -640,7 +640,7 @@ class PMEReciprocalForce(ForceTerm):
             norm = vol / (grid_total * grid_total)
             virial_recip = float(cp.sum(rho_sq * self._d_bk_virial_factors)) * norm
             cp.cuda.Stream.null.synchronize()
-            state.d_virial[0] += np.float32(virial_recip * COULOMB_CONST)
+            state.d_virial[0] -= np.float32(virial_recip * COULOMB_CONST)
 
         _irfft_func = _default_fft_func(
             self._d_complex_buffer, None, None, value_type="C2R"
