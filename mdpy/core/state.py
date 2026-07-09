@@ -81,6 +81,35 @@ void zero_forces_kernel(
 }
 """
 
+_SCALE_POSITIONS_KERNEL = r"""
+extern "C" __global__
+void scale_positions_kernel(
+    float* __restrict__ pos_x,
+    float* __restrict__ pos_y,
+    float* __restrict__ pos_z,
+    float* __restrict__ vel_x,
+    float* __restrict__ vel_y,
+    float* __restrict__ vel_z,
+    float* __restrict__ prev_pos_x,
+    float* __restrict__ prev_pos_y,
+    float* __restrict__ prev_pos_z,
+    float scale_factor,
+    int num_particles
+) {
+    int index = blockIdx.x * blockDim.x + threadIdx.x;
+    if (index >= num_particles) return;
+    pos_x[index] *= scale_factor;
+    pos_y[index] *= scale_factor;
+    pos_z[index] *= scale_factor;
+    vel_x[index] *= scale_factor;
+    vel_y[index] *= scale_factor;
+    vel_z[index] *= scale_factor;
+    prev_pos_x[index] *= scale_factor;
+    prev_pos_y[index] *= scale_factor;
+    prev_pos_z[index] *= scale_factor;
+}
+"""
+
 
 class State:
 
@@ -135,6 +164,7 @@ class State:
         self._zero_forces_kernel = None
         self._wrap_kernel = None
         self._wrap_correct_kernel = None
+        self._scale_positions_kernel = None
 
     def _ensure_wrap_kernel(self):
         if self._wrap_kernel is not None:
@@ -282,6 +312,10 @@ class State:
             axis=1,
         )
 
+    def download_virial(self):
+        """Return the total virial trace as a Python float."""
+        return float(cp.asnumpy(self.d_virial[0]))
+
     def zero_forces(self):
         self._ensure_zero_forces_kernel()
         N = self.num_particles
@@ -317,6 +351,57 @@ class State:
         self._inv_box_x = 1.0 / self._box_x
         self._inv_box_y = 1.0 / self._box_y
         self._inv_box_z = 1.0 / self._box_z
+
+    def scale_box(self, scale_factor):
+        """Scale the PBC box uniformly by scale_factor.
+
+        Updates d_pbc_matrix, d_pbc_inv, and the CPU-side box dimensions.
+        """
+        scale = np.float32(scale_factor)
+        self.d_pbc_matrix[0] *= scale
+        self.d_pbc_matrix[4] *= scale
+        self.d_pbc_matrix[8] *= scale
+        self.d_pbc_inv[0] /= scale
+        self.d_pbc_inv[4] /= scale
+        self.d_pbc_inv[8] /= scale
+        self._box_x *= scale
+        self._box_y *= scale
+        self._box_z *= scale
+        self._inv_box_x = 1.0 / self._box_x
+        self._inv_box_y = 1.0 / self._box_y
+        self._inv_box_z = 1.0 / self._box_z
+
+    def scale_positions_and_velocities(self, scale_factor):
+        """Scale all particle positions, velocities, and prev_positions uniformly.
+
+        Includes prev_positions because mdpy integrators use position-Verlet
+        storage (pos, prev_pos). Scaling only pos would break velocity
+        reconstruction v = (pos - prev_pos)/dt.
+        """
+        if self._scale_positions_kernel is None:
+            self._scale_positions_kernel = cp.RawKernel(
+                _SCALE_POSITIONS_KERNEL, "scale_positions_kernel"
+            )
+        N = self.num_particles
+        threads_per_block = 256
+        grid = ((N + threads_per_block - 1) // threads_per_block,)
+        self._scale_positions_kernel(
+            grid,
+            (threads_per_block,),
+            (
+                self.d_positions_x,
+                self.d_positions_y,
+                self.d_positions_z,
+                self.d_velocities_x,
+                self.d_velocities_y,
+                self.d_velocities_z,
+                self.d_prev_positions_x,
+                self.d_prev_positions_y,
+                self.d_prev_positions_z,
+                np.float32(scale_factor),
+                np.int32(N),
+            ),
+        )
 
     @property
     def box_x(self):
@@ -356,6 +441,11 @@ class State:
 
     @property
     def is_ready(self):
-        return (self._has_positions and self._has_velocities
-                and self._has_charges and self._has_masses
-                and self._has_type_indices and self._has_pbc)
+        return (
+            self._has_positions
+            and self._has_velocities
+            and self._has_charges
+            and self._has_masses
+            and self._has_type_indices
+            and self._has_pbc
+        )
