@@ -319,9 +319,7 @@ class BondedForce(ForceTerm):
             return
         if self._dirty:
             self._sync()
-        kernel = self._get_kernel(
-            compute_energy=compute_energy, compute_virial=compute_virial
-        )
+        kernel = self._get_kernel(compute_energy=compute_energy, compute_virial=False)
 
         if self._num_sm is None:
             self._num_sm = cp.cuda.runtime.getDeviceProperties(0)["multiProcessorCount"]
