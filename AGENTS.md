@@ -295,6 +295,8 @@ No abbreviations. Readability first:
 
 - `position`, `force`, `velocity`, `cutoff_radius`, `temperature`
 - All quantity/count variables must use the `num_` prefix: `num_particles`, `num_blocks`, `num_cells`, `num_pairs` — not `n_particles`, `count_particles`, `particle_count`
+- All per-particle arrays must use the `particle_` prefix: `particle_charges`, `particle_masses`, `particle_molecule_ids`, `particle_type_indices`, `particle_type_names` — not `charges`, `masses`, `molecule_ids`, `type_indices`, `type_names`. This applies to CPU-side properties (PSFParser, ParameterSet), GPU-side arrays (`d_particle_charges`), and setter methods (`set_particle_charges()`).
+- Exception: `positions`, `velocities`, `forces` — the three fundamental MD observables — do NOT get the `particle_` prefix. Their per-particle nature is unambiguous.
 - Exception: widely recognized physics abbreviations (`pbc`, `lj`, `pme`, `rmsd`, `rdf`)
 
 ## Git Workflow
