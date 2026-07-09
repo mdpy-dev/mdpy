@@ -386,148 +386,139 @@ class CharmmTopparParser:
 
         return self._fine_top_info(top_info), self._fine_par_info(par_info)
 
-    def type_parameters(self, unique_type_names):
+    def _type_parameters(self, type_name_to_index):
         """Return (sigma_array, epsilon_array, sigma_14_array, epsilon_14_array)
-        for the given sorted list of type names.
+        for types in the given name→index mapping.
         """
-        num_types = len(unique_type_names)
+        num_types = len(type_name_to_index)
         sigma = np.zeros(num_types, dtype=precision.FLOAT)
         epsilon = np.zeros(num_types, dtype=precision.FLOAT)
         sigma_14 = np.zeros(num_types, dtype=precision.FLOAT)
         epsilon_14 = np.zeros(num_types, dtype=precision.FLOAT)
         nonbonded = self._parameters.get("nonbonded", {})
-        for type_index, type_name in enumerate(unique_type_names):
+        for type_name, type_index in type_name_to_index.items():
             entry = nonbonded.get(type_name)
-            if entry is not None:
-                epsilon[type_index] = entry[0]
-                sigma[type_index] = entry[1]
-                if len(entry) == 4:
-                    epsilon_14[type_index] = entry[2]
-                    sigma_14[type_index] = entry[3]
-                else:
-                    epsilon_14[type_index] = entry[0]
-                    sigma_14[type_index] = entry[1]
+            if entry is None:
+                import warnings
+                warnings.warn(
+                    "Atom type '%s' has no NONBOND parameters in the loaded "
+                    "PRM files. LJ epsilon/sigma default to 0 — atoms of this "
+                    "type will have NO van der Waals repulsion. Check PSF/PRM "
+                    "force-field version compatibility." % type_name,
+                    RuntimeWarning,
+                    stacklevel=2,
+                )
+                continue
+            epsilon[type_index] = entry[0]
+            sigma[type_index] = entry[1]
+            if len(entry) == 4:
+                epsilon_14[type_index] = entry[2]
+                sigma_14[type_index] = entry[3]
+            else:
+                epsilon_14[type_index] = entry[0]
+                sigma_14[type_index] = entry[1]
         return sigma, epsilon, sigma_14, epsilon_14
 
+    def resolve_parameter_set(self, topology, type_names):
+        """Resolve CHARMM parameters for a specific topology and type set.
 
-def create_parameter_table(topology, toppar_parser, *, type_names):
-    """Assemble a ParameterSet from Topology and CHARMM parameters.
+        Parameters
+        ----------
+        topology : Topology
+            Must have bonded indices (bond_indices, angle_indices, etc.).
+        type_names : list[str]
+            Per-particle atom type names, PDB order
+            (e.g. ``psf.particle_type_names``).
 
-    Parameters
-    ----------
-    topology : Topology
-        Must have bonded indices (bond_indices, angle_indices, etc.).
-    toppar_parser : CharmmTopparParser
-        Parsed CHARMM parameter data.
-    type_names : list[str], keyword-only
-        Per-particle atom type names.
+        Returns
+        -------
+        ParameterSet
+            With type_parameters (sigma, epsilon, sigma_14, epsilon_14),
+            type_pair_parameters (lj_pair, lj_pair_14),
+            term_parameters (bond, angle, dihedral, improper),
+            particle_type_indices (PDB-order per-particle type indices),
+            type_name_to_index (dict of str to int),
+            and num_types (int).
+        """
+        type_names_sorted = sorted(set(type_names))
+        type_name_to_index = {name: idx for idx, name in enumerate(type_names_sorted)}
+        num_types = len(type_names_sorted)
 
-    Returns
-    -------
-    ParameterSet
-        With type_parameters (sigma, epsilon, sigma_14, epsilon_14),
-        type_pair_parameters (lj_pair, lj_pair_14), and
-        term_parameters (bond, angle, dihedral, improper).
-    """
-    parameters = toppar_parser.parameters
+        particle_type_indices = np.array(
+            [type_name_to_index[t] for t in type_names], dtype=precision.INT
+        )
 
-    type_names_sorted = sorted(set(type_names))
-    type_name_to_index = {name: idx for idx, name in enumerate(type_names_sorted)}
-    num_types = len(type_names_sorted)
+        sigma_array, epsilon_array, sigma_14_array, epsilon_14_array = \
+            self._type_parameters(type_name_to_index)
 
-    sigma_array = np.zeros(num_types, dtype=precision.FLOAT)
-    epsilon_array = np.zeros(num_types, dtype=precision.FLOAT)
-    sigma_14_array = np.zeros(num_types, dtype=precision.FLOAT)
-    epsilon_14_array = np.zeros(num_types, dtype=precision.FLOAT)
+        params = ParameterSet()
+        params.particle_type_indices = particle_type_indices
+        params.type_name_to_index = type_name_to_index
+        params.num_types = num_types
+        params.add_type_parameter("sigma", sigma_array)
+        params.add_type_parameter("epsilon", epsilon_array)
+        params.add_type_parameter("sigma_14", sigma_14_array)
+        params.add_type_parameter("epsilon_14", epsilon_14_array)
 
-    nonbonded = parameters.get("nonbonded", {})
-    for type_name, type_index in type_name_to_index.items():
-        entry = nonbonded.get(type_name)
-        if entry is None:
-            import warnings
-            warnings.warn(
-                "Atom type '%s' has no NONBOND parameters in the loaded "
-                "PRM files. LJ epsilon/sigma default to 0 — atoms of this "
-                "type will have NO van der Waals repulsion. Check PSF/PRM "
-                "force-field version compatibility." % type_name,
-                RuntimeWarning,
-                stacklevel=2,
-            )
-            continue
-        epsilon_array[type_index] = entry[0]
-        sigma_array[type_index] = entry[1]
-        if len(entry) == 4:
-            epsilon_14_array[type_index] = entry[2]
-            sigma_14_array[type_index] = entry[3]
-        else:
-            epsilon_14_array[type_index] = entry[0]
-            sigma_14_array[type_index] = entry[1]
+        def _build_pair_matrix(sigma_arr, epsilon_arr, n):
+            sigma_half = 0.5 * sigma_arr
+            sqrt_eps = np.sqrt(np.maximum(epsilon_arr, 0.0))
+            sigma_ij = sigma_half[:, None] + sigma_half[None, :]
+            epsilon_ij = sqrt_eps[:, None] * sqrt_eps[None, :]
+            return sigma_ij.ravel().astype(precision.FLOAT), epsilon_ij.ravel().astype(precision.FLOAT)
 
-    table = ParameterSet()
-    table.add_type_parameter("sigma", sigma_array)
-    table.add_type_parameter("epsilon", epsilon_array)
-    table.add_type_parameter("sigma_14", sigma_14_array)
-    table.add_type_parameter("epsilon_14", epsilon_14_array)
+        sigma_ij, epsilon_ij = _build_pair_matrix(sigma_array, epsilon_array, num_types)
+        sigma_ij_14, epsilon_ij_14 = _build_pair_matrix(sigma_14_array, epsilon_14_array, num_types)
 
-    def _build_pair_matrix(sigma_arr, epsilon_arr, n):
-        sigma_half = 0.5 * sigma_arr
-        sqrt_eps = np.sqrt(np.maximum(epsilon_arr, 0.0))
-        sigma_ij = sigma_half[:, None] + sigma_half[None, :]
-        epsilon_ij = sqrt_eps[:, None] * sqrt_eps[None, :]
-        return sigma_ij.ravel().astype(precision.FLOAT), epsilon_ij.ravel().astype(precision.FLOAT)
+        n_pair = num_types * num_types
+        lj_pair = np.empty(n_pair * 2, dtype=precision.FLOAT)
+        lj_pair[0::2] = sigma_ij
+        lj_pair[1::2] = epsilon_ij
+        lj_pair_14 = np.empty(n_pair * 2, dtype=precision.FLOAT)
+        lj_pair_14[0::2] = sigma_ij_14
+        lj_pair_14[1::2] = epsilon_ij_14
 
-    sigma_ij, epsilon_ij = _build_pair_matrix(sigma_array, epsilon_array, num_types)
-    sigma_ij_14, epsilon_ij_14 = _build_pair_matrix(sigma_14_array, epsilon_14_array, num_types)
+        nbfix_data = self._parameters.get("nbfix", {})
+        for key, entry in nbfix_data.items():
+            parts = key.split("-")
+            if len(parts) == 2:
+                ti = type_name_to_index.get(parts[0])
+                tj = type_name_to_index.get(parts[1])
+                if ti is not None and tj is not None:
+                    eps_val, sig_val = entry[0], entry[1]
+                    eps_14_val, sig_14_val = entry[2], entry[3]
+                    idx = ti * num_types + tj
+                    idx_rev = tj * num_types + ti
+                    lj_pair[idx * 2] = sig_val
+                    lj_pair[idx * 2 + 1] = eps_val
+                    lj_pair[idx_rev * 2] = sig_val
+                    lj_pair[idx_rev * 2 + 1] = eps_val
+                    lj_pair_14[idx * 2] = sig_14_val
+                    lj_pair_14[idx * 2 + 1] = eps_14_val
+                    lj_pair_14[idx_rev * 2] = sig_14_val
+                    lj_pair_14[idx_rev * 2 + 1] = eps_14_val
 
-    n_pair = num_types * num_types
-    lj_pair = np.empty(n_pair * 2, dtype=precision.FLOAT)
-    lj_pair[0::2] = sigma_ij
-    lj_pair[1::2] = epsilon_ij
-    lj_pair_14 = np.empty(n_pair * 2, dtype=precision.FLOAT)
-    lj_pair_14[0::2] = sigma_ij_14
-    lj_pair_14[1::2] = epsilon_ij_14
+        params.add_type_pair_parameter("lj_pair", lj_pair)
+        params.add_type_pair_parameter("lj_pair_14", lj_pair_14)
 
-    nbfix_data = parameters.get("nbfix", {})
-    for key, entry in nbfix_data.items():
-        parts = key.split("-")
-        if len(parts) == 2:
-            ti = type_name_to_index.get(parts[0])
-            tj = type_name_to_index.get(parts[1])
-            if ti is not None and tj is not None:
-                eps_val, sig_val = entry[0], entry[1]
-                eps_14_val, sig_14_val = entry[2], entry[3]
-                idx = ti * num_types + tj
-                idx_rev = tj * num_types + ti
-                lj_pair[idx * 2] = sig_val
-                lj_pair[idx * 2 + 1] = eps_val
-                lj_pair[idx_rev * 2] = sig_val
-                lj_pair[idx_rev * 2 + 1] = eps_val
-                lj_pair_14[idx * 2] = sig_14_val
-                lj_pair_14[idx * 2 + 1] = eps_14_val
-                lj_pair_14[idx_rev * 2] = sig_14_val
-                lj_pair_14[idx_rev * 2 + 1] = eps_14_val
+        params.add_term_parameter(
+            "bond",
+            _resolve_bonds(topology, type_names, self._parameters.get("bond", {})),
+        )
+        params.add_term_parameter(
+            "angle",
+            _resolve_angles(topology, type_names, self._parameters.get("angle", {})),
+        )
+        params.add_term_parameter(
+            "dihedral",
+            _resolve_dihedrals(topology, type_names, self._parameters.get("dihedral", {})),
+        )
+        params.add_term_parameter(
+            "improper",
+            _resolve_impropers(topology, type_names, self._parameters.get("improper", {})),
+        )
 
-    table.add_type_pair_parameter("lj_pair", lj_pair)
-    table.add_type_pair_parameter("lj_pair_14", lj_pair_14)
-
-    table.add_term_parameter(
-        "bond",
-        _resolve_bonds(topology, type_names, parameters.get("bond", {})),
-    )
-    table.add_term_parameter(
-        "angle",
-        _resolve_angles(topology, type_names, parameters.get("angle", {})),
-    )
-    table.add_term_parameter(
-        "dihedral",
-        _resolve_dihedrals(topology, type_names, parameters.get("dihedral", {})),
-    )
-    table.add_term_parameter(
-        "improper",
-        _resolve_impropers(topology, type_names, parameters.get("improper", {})),
-    )
-
-    return table
+        return params
 
 
 def _resolve_bonds(topology, type_names, bonded_parameters):
