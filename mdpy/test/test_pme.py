@@ -591,8 +591,8 @@ class TestPMEIntegration6PO6:
         pbc_matrix = np.eye(3, dtype=np.float32) * self.box
 
         state = State(self.topology.num_particles)
-        state.set_masses(self.psf.masses)
-        state.set_charges(self.psf.charges)
+        state.set_masses(self.psf.particle_masses)
+        state.set_charges(self.psf.particle_charges)
         state.set_type_indices(self.parameter_set.particle_type_indices)
         system = System(self.topology, state)
 
@@ -669,7 +669,7 @@ class TestPMEIntegration6PO6:
 
         alpha = _calc_ewald_coefficient(self.cutoff)
 
-        charges = self.psf.charges.astype(np.float64)
+        charges = self.psf.particle_charges.astype(np.float64)
         COULOMB_CONST = 0.13893556595455
         SQRT_PI = 1.772453850905516
 

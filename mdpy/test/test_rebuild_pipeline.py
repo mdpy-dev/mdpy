@@ -44,8 +44,8 @@ def _setup_system():
     pbc_inv = np.linalg.inv(pbc_matrix)
 
     state = State(topology.num_particles)
-    state.set_masses(psf.masses)
-    state.set_charges(psf.charges)
+    state.set_masses(psf.particle_masses)
+    state.set_charges(psf.particle_charges)
     state.set_type_indices(parameter_set.particle_type_indices)
     system = System(topology, state)
 

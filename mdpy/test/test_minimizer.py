@@ -236,8 +236,8 @@ class TestMinimizerIntegration:
         state = State(topology.num_particles)
         state.set_pbc(pbc_matrix)
         state.set_positions(pdb.positions)
-        state.set_charges(psf.charges)
-        state.set_masses(psf.masses)
+        state.set_charges(psf.particle_charges)
+        state.set_masses(psf.particle_masses)
         state.set_type_indices(parameter_set.particle_type_indices)
         state.set_velocities(np.zeros((topology.num_particles, 3), dtype=np.float64))
         forces = create_charmm_forces(

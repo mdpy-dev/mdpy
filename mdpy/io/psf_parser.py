@@ -61,22 +61,22 @@ class PSFParser:
         self._particle_ids = []
         self._type_names = []
         self._particle_names = []
-        self._molecule_ids = []
-        self._molecule_types = []
-        self._chain_ids = []
-        self._masses = np.zeros(n_atoms, dtype=precision.FLOAT)
-        self._charges = np.zeros(n_atoms, dtype=precision.FLOAT)
+        self._particle_molecule_ids = []
+        self._particle_molecule_types = []
+        self._particle_chain_ids = []
+        self._particle_masses = np.zeros(n_atoms, dtype=precision.FLOAT)
+        self._particle_charges = np.zeros(n_atoms, dtype=precision.FLOAT)
 
         for i in range(n_atoms):
             parts = lines[idx + i].split()
             self._particle_ids.append(int(parts[0]))
-            self._chain_ids.append(parts[1])
-            self._molecule_ids.append(int(parts[2]))
-            self._molecule_types.append(parts[3])
+            self._particle_chain_ids.append(parts[1])
+            self._particle_molecule_ids.append(int(parts[2]))
+            self._particle_molecule_types.append(parts[3])
             self._particle_names.append(parts[4])
             self._type_names.append(parts[5])
-            self._charges[i] = float(parts[6])
-            self._masses[i] = float(parts[7])
+            self._particle_charges[i] = float(parts[6])
+            self._particle_masses[i] = float(parts[7])
 
         return idx + n_atoms
 
@@ -162,24 +162,24 @@ class PSFParser:
         return self._particle_names
 
     @property
-    def molecule_ids(self):
-        return self._molecule_ids
+    def particle_molecule_ids(self):
+        return self._particle_molecule_ids
 
     @property
-    def molecule_types(self):
-        return self._molecule_types
+    def particle_molecule_types(self):
+        return self._particle_molecule_types
 
     @property
-    def chain_ids(self):
-        return self._chain_ids
+    def particle_chain_ids(self):
+        return self._particle_chain_ids
 
     @property
-    def charges(self):
-        return self._charges
+    def particle_charges(self):
+        return self._particle_charges
 
     @property
-    def masses(self):
-        return self._masses
+    def particle_masses(self):
+        return self._particle_masses
 
     @property
     def topology(self) -> Topology:

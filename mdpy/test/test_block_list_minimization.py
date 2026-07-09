@@ -31,8 +31,8 @@ def _build_ion_system():
     pbc = np.diag(BOX)
     forces = create_charmm_forces(topology, parameter_set, pbc, cutoff=CUTOFF)
     state = State(topology.num_particles)
-    state.set_masses(psf.masses)
-    state.set_charges(psf.charges)
+    state.set_masses(psf.particle_masses)
+    state.set_charges(psf.particle_charges)
     state.set_type_indices(parameter_set.particle_type_indices)
     s = System(topology, state)
     s.set_pbc(pbc)
@@ -41,7 +41,7 @@ def _build_ion_system():
     s.add_force_term(forces["nonbonded"])
     s.add_force_term(forces["pme"], stream="pme")
     s.set_positions(pdb.positions)
-    s.set_velocities(generate_velocity_from_temperature(300.0, psf.masses, seed=42))
+    s.set_velocities(generate_velocity_from_temperature(300.0, psf.particle_masses, seed=42))
     return s
 
 

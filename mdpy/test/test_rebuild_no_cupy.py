@@ -21,8 +21,8 @@ def _build_ion():
     pbc = np.diag([75.450, 77.623, 69.668])
     forces = create_charmm_forces(topo, pt, pbc, cutoff=12.0)
     state = State(topo.num_particles)
-    state.set_masses(psf.masses)
-    state.set_charges(psf.charges)
+    state.set_masses(psf.particle_masses)
+    state.set_charges(psf.particle_charges)
     state.set_type_indices(pt.particle_type_indices)
     s = System(topo, state)
     s.set_pbc(pbc)
@@ -32,7 +32,7 @@ def _build_ion():
     s.add_force_term(forces["pme"], stream="pme")
     s.set_positions(pdb.positions)
     s.set_velocities(
-        generate_velocity_from_temperature(300.0, psf.masses, seed=42)
+        generate_velocity_from_temperature(300.0, psf.particle_masses, seed=42)
     )
     return s
 

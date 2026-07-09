@@ -47,8 +47,8 @@ forces = create_charmm_forces(
     topology, parameter_set, pbc_matrix, cutoff=CUTOFF)
 
 state = State(topology.num_particles)
-state.set_masses(psf.masses)
-state.set_charges(psf.charges)
+state.set_masses(psf.particle_masses)
+state.set_charges(psf.particle_charges)
 state.set_type_indices(parameter_set.particle_type_indices)
 system = System(topology, state)
 system.set_pbc(pbc_matrix)
@@ -57,7 +57,7 @@ system.add_force_term(forces["nonbonded"])
 system.add_force_term(forces["pme"], stream='pme')
 
 positions = pdb.positions
-velocities = generate_velocity_from_temperature(10.0, psf.masses, seed=42)
+velocities = generate_velocity_from_temperature(10.0, psf.particle_masses, seed=42)
 system.set_positions(positions)
 system.set_velocities(velocities)
 

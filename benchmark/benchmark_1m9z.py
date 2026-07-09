@@ -47,8 +47,8 @@ pbc_matrix = np.eye(3, dtype=np.float64) * BOX_SIZE
 state = State(topology.num_particles)
 state.set_pbc(pbc_matrix)
 state.set_positions(pdb.positions)
-state.set_charges(psf.charges)
-state.set_masses(psf.masses)
+state.set_charges(psf.particle_charges)
+state.set_masses(psf.particle_masses)
 state.set_type_indices(parameter_set.particle_type_indices)
 forces = create_charmm_forces(
     topology,
@@ -68,14 +68,14 @@ constraints = create_constraints(
     topology,
     parameter_set,
     scheme="h-bonds",
-    masses=psf.masses,
-    molecule_ids=psf.molecule_ids,
-    molecule_types=psf.molecule_types,
+    masses=psf.particle_masses,
+    molecule_ids=psf.particle_molecule_ids,
+    molecule_types=psf.particle_molecule_types,
 )
 for c in constraints:
     system.add_constraint(c)
 
-velocities = generate_velocity_from_temperature(300.0, psf.masses, seed=42)
+velocities = generate_velocity_from_temperature(300.0, psf.particle_masses, seed=42)
 system.set_velocities(velocities)
 
 pme = forces["pme"]

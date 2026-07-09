@@ -50,11 +50,11 @@ class TestTopology:
     def test_topology_masses_charges_arrays(self):
         psf = PSFParser(os.path.join(DATA_DIR, '6PO6.psf'))
         topology = psf.topology
-        assert psf.masses.dtype == precision.FLOAT
-        assert psf.charges.dtype == precision.FLOAT
-        assert psf.masses.shape == (49,)
-        assert psf.charges.shape == (49,)
-        assert np.all(psf.masses > 0)
+        assert psf.particle_masses.dtype == precision.FLOAT
+        assert psf.particle_charges.dtype == precision.FLOAT
+        assert psf.particle_masses.shape == (49,)
+        assert psf.particle_charges.shape == (49,)
+        assert np.all(psf.particle_masses > 0)
 
     def test_topology_type_names(self):
         psf = PSFParser(os.path.join(DATA_DIR, '6PO6.psf'))
@@ -97,7 +97,7 @@ class TestParameterSet:
         parameter_set = toppar.resolve_parameter_set(topology, psf.particle_type_names)
         assert 'charge' not in parameter_set.particle_parameters
         assert 'charge_14' not in parameter_set.particle_parameters
-        assert psf.charges.shape == (49,)
+        assert psf.particle_charges.shape == (49,)
 
     def test_sigma_conversion_factor(self):
         from mdpy.io.charmm_toppar_parser import RMIN_TO_SIGMA_FACTOR
@@ -116,8 +116,8 @@ class TestSystem:
         pbc_matrix = np.eye(3, dtype=precision.FLOAT) * 100.0
 
         state = State(topology.num_particles)
-        state.set_masses(psf.masses)
-        state.set_charges(psf.charges)
+        state.set_masses(psf.particle_masses)
+        state.set_charges(psf.particle_charges)
         state.set_type_indices(parameter_set.particle_type_indices)
         system = System(topology, state)
 
@@ -149,8 +149,8 @@ class TestSystem:
         pbc_matrix = np.eye(3, dtype=precision.FLOAT) * 100.0
 
         state = State(topology.num_particles)
-        state.set_masses(psf.masses)
-        state.set_charges(psf.charges)
+        state.set_masses(psf.particle_masses)
+        state.set_charges(psf.particle_charges)
         state.set_type_indices(parameter_set.particle_type_indices)
         system = System(topology, state)
 
@@ -186,8 +186,8 @@ class TestSystem:
         pbc_matrix = np.eye(3, dtype=precision.FLOAT) * 100.0
 
         state = State(topology.num_particles)
-        state.set_masses(psf.masses)
-        state.set_charges(psf.charges)
+        state.set_masses(psf.particle_masses)
+        state.set_charges(psf.particle_charges)
         state.set_type_indices(parameter_set.particle_type_indices)
         system = System(topology, state)
 
@@ -223,8 +223,8 @@ class TestSystem:
         pbc_matrix = np.eye(3, dtype=precision.FLOAT) * 100.0
 
         state = State(topology.num_particles)
-        state.set_masses(psf.masses)
-        state.set_charges(psf.charges)
+        state.set_masses(psf.particle_masses)
+        state.set_charges(psf.particle_charges)
         state.set_type_indices(parameter_set.particle_type_indices)
         system = System(topology, state)
 
