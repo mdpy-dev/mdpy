@@ -419,14 +419,14 @@ class CharmmTopparParser:
                 sigma_14[type_index] = entry[1]
         return sigma, epsilon, sigma_14, epsilon_14
 
-    def resolve_parameter_set(self, topology, type_names):
+    def resolve_parameter_set(self, topology, particle_type_names):
         """Resolve CHARMM parameters for a specific topology and type set.
 
         Parameters
         ----------
         topology : Topology
             Must have bonded indices (bond_indices, angle_indices, etc.).
-        type_names : list[str]
+        particle_type_names : list[str]
             Per-particle atom type names, PDB order
             (e.g. ``psf.particle_type_names``).
 
@@ -440,12 +440,12 @@ class CharmmTopparParser:
             type_name_to_index (dict of str to int),
             and num_types (int).
         """
-        type_names_sorted = sorted(set(type_names))
+        type_names_sorted = sorted(set(particle_type_names))
         type_name_to_index = {name: idx for idx, name in enumerate(type_names_sorted)}
         num_types = len(type_names_sorted)
 
         particle_type_indices = np.array(
-            [type_name_to_index[t] for t in type_names], dtype=precision.INT
+            [type_name_to_index[t] for t in particle_type_names], dtype=precision.INT
         )
 
         sigma_array, epsilon_array, sigma_14_array, epsilon_14_array = \
@@ -503,31 +503,31 @@ class CharmmTopparParser:
 
         params.add_term_parameter(
             "bond",
-            _resolve_bonds(topology, type_names, self._parameters.get("bond", {})),
+            _resolve_bonds(topology, particle_type_names, self._parameters.get("bond", {})),
         )
         params.add_term_parameter(
             "angle",
-            _resolve_angles(topology, type_names, self._parameters.get("angle", {})),
+            _resolve_angles(topology, particle_type_names, self._parameters.get("angle", {})),
         )
         params.add_term_parameter(
             "dihedral",
-            _resolve_dihedrals(topology, type_names, self._parameters.get("dihedral", {})),
+            _resolve_dihedrals(topology, particle_type_names, self._parameters.get("dihedral", {})),
         )
         params.add_term_parameter(
             "improper",
-            _resolve_impropers(topology, type_names, self._parameters.get("improper", {})),
+            _resolve_impropers(topology, particle_type_names, self._parameters.get("improper", {})),
         )
 
         return params
 
 
-def _resolve_bonds(topology, type_names, bonded_parameters):
+def _resolve_bonds(topology, particle_type_names, bonded_parameters):
     num_bonds = topology.num_bonds
     result = np.zeros((num_bonds, 2), dtype=precision.FLOAT)
     for idx in range(num_bonds):
         i, j = topology.bond_indices[idx]
-        type_name_i = type_names[i]
-        type_name_j = type_names[j]
+        type_name_i = particle_type_names[i]
+        type_name_j = particle_type_names[j]
         key_forward = "%s-%s" % (type_name_i, type_name_j)
         key_reverse = "%s-%s" % (type_name_j, type_name_i)
         params = bonded_parameters.get(key_forward) or bonded_parameters.get(
@@ -538,14 +538,14 @@ def _resolve_bonds(topology, type_names, bonded_parameters):
     return result
 
 
-def _resolve_angles(topology, type_names, angle_parameters):
+def _resolve_angles(topology, particle_type_names, angle_parameters):
     num_angles = topology.num_angles
     result = np.zeros((num_angles, 4), dtype=precision.FLOAT)
     for idx in range(num_angles):
         i, j, k = topology.angle_indices[idx]
-        type_name_i = type_names[i]
-        type_name_j = type_names[j]
-        type_name_k = type_names[k]
+        type_name_i = particle_type_names[i]
+        type_name_j = particle_type_names[j]
+        type_name_k = particle_type_names[k]
         key_forward = "%s-%s-%s" % (type_name_i, type_name_j, type_name_k)
         key_reverse = "%s-%s-%s" % (type_name_k, type_name_j, type_name_i)
         params = angle_parameters.get(key_forward) or angle_parameters.get(key_reverse)
@@ -554,15 +554,15 @@ def _resolve_angles(topology, type_names, angle_parameters):
     return result
 
 
-def _resolve_dihedrals(topology, type_names, dihedral_parameters):
+def _resolve_dihedrals(topology, particle_type_names, dihedral_parameters):
     num_dihedrals = topology.num_dihedrals
     result = np.zeros((num_dihedrals, 3), dtype=precision.FLOAT)
     for idx in range(num_dihedrals):
         i, j, k, l = topology.dihedral_indices[idx]
-        type_name_i = type_names[i]
-        type_name_j = type_names[j]
-        type_name_k = type_names[k]
-        type_name_l = type_names[l]
+        type_name_i = particle_type_names[i]
+        type_name_j = particle_type_names[j]
+        type_name_k = particle_type_names[k]
+        type_name_l = particle_type_names[l]
         key_forward = "%s-%s-%s-%s" % (
             type_name_i,
             type_name_j,
@@ -583,15 +583,15 @@ def _resolve_dihedrals(topology, type_names, dihedral_parameters):
     return result
 
 
-def _resolve_impropers(topology, type_names, improper_parameters):
+def _resolve_impropers(topology, particle_type_names, improper_parameters):
     num_impropers = topology.num_impropers
     result = np.zeros((num_impropers, 2), dtype=precision.FLOAT)
     for idx in range(num_impropers):
         i, j, k, l = topology.improper_indices[idx]
-        type_name_i = type_names[i]
-        type_name_j = type_names[j]
-        type_name_k = type_names[k]
-        type_name_l = type_names[l]
+        type_name_i = particle_type_names[i]
+        type_name_j = particle_type_names[j]
+        type_name_k = particle_type_names[k]
+        type_name_l = particle_type_names[l]
         key_forward = "%s-%s-%s-%s" % (
             type_name_i,
             type_name_j,
