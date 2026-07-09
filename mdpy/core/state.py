@@ -110,6 +110,7 @@ class State:
         self.d_particle_charges = cp.zeros(self.num_particles, dtype=np.float32)
 
         self.d_energy = cp.zeros(1, dtype=np.float32)
+        self.d_virial = cp.zeros(1, dtype=np.float32)
         self.d_energy_accumulator = None
 
         # PBC: lazy-allocated on first set_pbc. None until then.
@@ -299,6 +300,9 @@ class State:
 
     def zero_energy(self):
         self.d_energy[:] = 0
+
+    def zero_virial(self):
+        self.d_virial[:] = 0
 
     def allocate_energy_accumulator(self, num_terms):
         self.d_energy_accumulator = cp.zeros(num_terms, dtype=np.float32)
