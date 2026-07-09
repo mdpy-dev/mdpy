@@ -211,3 +211,10 @@ class System:
             state.d_forces_z.get(),
         ], axis=1)
 
+    def download_virial(self):
+        """Return the total virial trace as a Python float.
+
+        Must be called after compute_forces(compute_virial=True).
+        """
+        return self.state.download_virial()
+
