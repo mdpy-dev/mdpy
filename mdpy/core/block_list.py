@@ -1296,7 +1296,7 @@ class BlockList:
                 state.d_positions_x,
                 state.d_positions_y,
                 state.d_positions_z,
-                state.d_charges,
+                state.d_particle_charges,
                 self.d_block_atoms,
                 np.int32(state.d_positions_x.size),
                 np.int32(total_slots),
@@ -1311,7 +1311,7 @@ class BlockList:
         are static but block membership changes when the block list
         rebuilds. Thin wrapper around the generic gather_sorted primitive.
         """
-        self._d_sorted_type_indices = self.gather_sorted(state.d_type_indices)
+        self._d_sorted_type_indices = self.gather_sorted(state.d_particle_type_indices)
 
     @property
     def d_sorted_posq(self):

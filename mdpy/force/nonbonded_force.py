@@ -279,7 +279,7 @@ class NonbondedForce(ForceTerm):
             first_matrix = next(iter(self._pair_param_data.values()))
             self._n_types = int(np.sqrt(first_matrix.shape[0]))
         else:
-            self._n_types = int(cp.max(state.d_type_indices).get()) + 1
+            self._n_types = int(cp.max(state.d_particle_type_indices).get()) + 1
 
         for name, mat in self._pair_param_data.items():
             self._d_pair_params[name] = cp.asarray(mat)

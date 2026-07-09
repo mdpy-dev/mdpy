@@ -118,7 +118,7 @@ class Minimizer:
         self._max_force_kernel(
             (num_blocks,), (threads_per_block,),
             (state.d_forces_x, state.d_forces_y, state.d_forces_z,
-             state.d_masses, self._output_buffer, np.int32(num_particles)),
+             state.d_particle_masses, self._output_buffer, np.int32(num_particles)),
             shared_mem=shared_mem,
         )
         return float(cp.max(self._output_buffer))
@@ -135,7 +135,7 @@ class Minimizer:
         self._rms_force_kernel(
             (num_blocks,), (threads_per_block,),
             (state.d_forces_x, state.d_forces_y, state.d_forces_z,
-             state.d_masses, self._output_buffer, np.int32(num_particles)),
+             state.d_particle_masses, self._output_buffer, np.int32(num_particles)),
             shared_mem=shared_mem,
         )
         return float(np.sqrt(cp.sum(self._output_buffer) / num_particles))

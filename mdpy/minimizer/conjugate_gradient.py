@@ -144,7 +144,7 @@ class ConjugateGradientMinimizer(Minimizer):
         self._grad_sq_kernel(
             (num_blocks,), (threads_per_block,),
             (state.d_forces_x, state.d_forces_y, state.d_forces_z,
-             state.d_masses, self._grad_sq_buffer, np.int32(num_particles)),
+             state.d_particle_masses, self._grad_sq_buffer, np.int32(num_particles)),
             shared_mem=shared_mem,
         )
         cur_grad_sq = float(cp.sum(self._grad_sq_buffer))
@@ -160,7 +160,7 @@ class ConjugateGradientMinimizer(Minimizer):
             (num_blocks,), (threads_per_block,),
             (state.d_positions_x, state.d_positions_y, state.d_positions_z,
              state.d_forces_x, state.d_forces_y, state.d_forces_z,
-             state.d_masses,
+             state.d_particle_masses,
              self._direction_x, self._direction_y, self._direction_z,
              np.float32(self.step_size), np.float32(beta), np.int32(num_particles)),
         )

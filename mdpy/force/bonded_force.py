@@ -253,8 +253,8 @@ class BondedForce(ForceTerm):
             np.int32(num_terms_local),
         ]
         for prop_name in self._per_particle_properties:
-            if prop_name == 'charge' and state.d_charges is not None:
-                args.append(state.d_charges)
+            if prop_name == 'charge' and state.d_particle_charges is not None:
+                args.append(state.d_particle_charges)
             elif prop_name in self._per_particle_gpu:
                 args.append(self._per_particle_gpu[prop_name])
         self._kernel((grid_size,), (block_size,), tuple(args))

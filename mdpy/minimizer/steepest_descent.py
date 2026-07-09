@@ -53,5 +53,5 @@ class SteepestDescentMinimizer(Minimizer):
             (num_blocks,), (threads_per_block,),
             (state.d_positions_x, state.d_positions_y, state.d_positions_z,
              state.d_forces_x, state.d_forces_y, state.d_forces_z,
-             state.d_masses, np.float32(self.step_size), np.int32(num_particles)),
+             state.d_particle_masses, np.float32(self.step_size), np.int32(num_particles)),
         )

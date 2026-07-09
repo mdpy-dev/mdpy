@@ -572,7 +572,7 @@ class PMEReciprocalForce(ForceTerm):
         sorted_pos_x = state.d_positions_x
         sorted_pos_y = state.d_positions_y
         sorted_pos_z = state.d_positions_z
-        sorted_charges = state.d_charges
+        sorted_charges = state.d_particle_charges
 
         cell_spread_k = get_cell_spread_kernel()
         shmem = self._subgrid_total * 4
@@ -623,7 +623,7 @@ class PMEReciprocalForce(ForceTerm):
                 state.d_positions_x,
                 state.d_positions_y,
                 state.d_positions_z,
-                state.d_charges,
+                state.d_particle_charges,
                 np.int32(N),
                 block_list.d_block_atoms,
                 np.int32(total_slots),
@@ -643,7 +643,7 @@ class PMEReciprocalForce(ForceTerm):
         )
 
         if compute_energy:
-            sum_q2 = float(cp.sum(state.d_charges.astype(cp.float64) ** 2))
+            sum_q2 = float(cp.sum(state.d_particle_charges.astype(cp.float64) ** 2))
             self_energy_factor = -COULOMB_CONST * self.alpha / SQRT_PI * sum_q2
             self_k = get_self_energy_kernel()
             self_k((1,), (1,), (np.float32(self_energy_factor), state.d_energy))

@@ -178,6 +178,6 @@ class FIREMinimizer(Minimizer):
             (state.d_positions_x, state.d_positions_y, state.d_positions_z,
              self._velocity_x, self._velocity_y, self._velocity_z,
              state.d_forces_x, state.d_forces_y, state.d_forces_z,
-             state.d_masses,
+             state.d_particle_masses,
              np.float32(self._time_step), np.float32(self._alpha), np.int32(num_particles)),
         )

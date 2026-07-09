@@ -175,9 +175,9 @@ class LBFGSMinimizer(Minimizer):
         self._ensure_step_kernel()
         self._ensure_dot_buffer(num_blocks)
 
-        self._grad_x[:] = state.d_forces_x / state.d_masses
-        self._grad_y[:] = state.d_forces_y / state.d_masses
-        self._grad_z[:] = state.d_forces_z / state.d_masses
+        self._grad_x[:] = state.d_forces_x / state.d_particle_masses
+        self._grad_y[:] = state.d_forces_y / state.d_particle_masses
+        self._grad_z[:] = state.d_forces_z / state.d_particle_masses
 
         if self._num_updates == 0:
             self._direction_x[:] = self._grad_x
