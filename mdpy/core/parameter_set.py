@@ -2,25 +2,33 @@ import numpy as np
 from mdpy import precision
 
 
-class ParameterTable:
-    """Three-tier parameter storage.
+class ParameterSet:
+    """System-specific force field parameter set.
+
+    Stores type-indexed parameters, per-particle parameters, bonded term
+    parameters, and type-pair parameters — all resolved for a specific
+    topology and atom type set.
 
     Attributes
     ----------
     type_parameters : dict[str, ndarray]
         Maps parameter name to an array of shape (num_types,).
-        Indexed by particle type index. Example entry:
-        ``self.type_parameters['sigma']`` → ``sigma[type_index]``.
-
+        Indexed by particle type index.
     particle_parameters : dict[str, ndarray]
         Maps parameter name to an array of shape (num_particles,).
-        Indexed by particle index. Example entry:
-        ``self.particle_parameters['mass']`` → ``mass[particle_index]``.
-
+        Indexed by particle index.
     term_parameters : dict[str, ndarray]
         Maps term type name to a 2D array of shape (num_terms, k).
-        Indexed by bonded term index. Example entry:
-        ``self.term_parameters['bond']`` → ``bond_parameters[term_index, :]``.
+        Indexed by bonded term index.
+    type_pair_parameters : dict[str, ndarray]
+        Maps parameter name to a 1D array of stride-2 pairs of shape
+        (num_types * num_types * 2,). Indexed as [type_i * num_types + type_j].
+    particle_type_indices : ndarray of int (num_particles,)
+        Per-particle type index, PDB order. Set during resolve.
+    type_name_to_index : dict[str, int]
+        Maps alphabetically-sorted type name to integer index.
+    num_types : int
+        Number of unique atom types in this system.
     """
 
     def __init__(self):
@@ -28,6 +36,9 @@ class ParameterTable:
         self.particle_parameters = {}
         self.term_parameters = {}
         self.type_pair_parameters = {}
+        self.particle_type_indices = None
+        self.type_name_to_index = {}
+        self.num_types = 0
 
     def add_type_parameter(self, name, values):
         """Store a parameter indexed by particle type.
