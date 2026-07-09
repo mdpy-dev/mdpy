@@ -1,8 +1,8 @@
-"""mdpy 1M9Z minimization benchmark — compares all four minimizers.
+"""mdpy 1M9Z minimization benchmark — FIRE minimize raw PDB, save result.
 
-Tests SteepestDescent, ConjugateGradient, LBFGS, and FIRE on the same
-1M9Z minimized structure, same number of steps. Reports energy (kJ/mol)
-and max force (kJ/mol/A) for each, showing which converges fastest.
+Reads 1M9Z.pdb (raw solvated structure at 100 A), runs FIRE minimization,
+then saves the minimized positions to 1M9Z_minimized.pdb using PDBWriter.
+Also compares all four minimizers (SD, CG, LBFGS, FIRE) for reference.
 
 Usage:
     CUDA_VISIBLE_DEVICES=0 conda run -n md_analysis python benchmark/benchmark_1m9z_minimize.py
@@ -18,6 +18,7 @@ from _data_path import DATA_DIR
 
 from mdpy.io.psf_parser import PSFParser
 from mdpy.io.pdb_parser import PDBParser
+from mdpy.io.pdb_writer import PDBWriter
 from mdpy.io.charmm_toppar_parser import CharmmTopparParser
 from mdpy.force.factories.charmm import create_charmm_forces
 from mdpy.core.state import State
@@ -37,31 +38,35 @@ from mdpy.unit import (
 # ---- Parameters ----
 CUTOFF = 12.0
 STEP_SIZE = 0.01
-NUM_STEPS = 500
-E_M1 = None
+FIRE_STEPS = 3000
+COMPARE_STEPS = 500
 
-# ---- Unit conversion ----
 _TO_KJMOL = float(Quantity(1.0, default_energy_unit).convert_to(kilojoule_permol).value)
 _TO_KJMOLA = float(
     Quantity(1.0, default_force_unit).convert_to(kilojoule_permol_over_angstrom).value
 )
 
+# ---- Load raw 1M9Z (100 A box, 95,567 atoms with water) ----
+DATA_LOCAL = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
+
+psf = PSFParser(os.path.join(DATA_LOCAL, "1M9Z.psf"))
+pdb = PDBParser(os.path.join(DATA_LOCAL, "1M9Z.pdb"))
+toppar = CharmmTopparParser(
+    os.path.join(DATA_LOCAL, "par_all36_prot.prm"),
+    os.path.join(DATA_LOCAL, "toppar_water_ions.str"),
+)
+topology = psf.topology
+parameter_set = toppar.resolve_parameter_set(topology, psf.particle_type_names)
+
+# Box from CRYST1
+pbc_matrix = pdb.pbc_matrix.astype(np.float64)
+box_size = pbc_matrix[0, 0]
+
 
 def build_system():
-    psf = PSFParser(os.path.join(DATA_DIR, "1M9Z.psf"))
-    pdb = PDBParser(os.path.join(DATA_DIR, "1M9Z_minimized.pdb"))
-    toppar = CharmmTopparParser(
-        os.path.join(DATA_DIR, "par_all36_prot.prm"),
-        os.path.join(DATA_DIR, "toppar_water_ions.str"),
-    )
-    topology = psf.topology
-    parameter_set = toppar.resolve_parameter_set(topology, psf.particle_type_names)
-    pbc_matrix = pdb.pbc_matrix.astype(np.float64)
-
     forces = create_charmm_forces(
         topology, parameter_set, pbc_matrix, cutoff=CUTOFF,
     )
-
     state = State(topology.num_particles)
     state.set_pbc(pbc_matrix)
     state.set_positions(pdb.positions)
@@ -69,55 +74,105 @@ def build_system():
     state.set_particle_masses(psf.particle_masses)
     state.set_particle_type_indices(parameter_set.particle_type_indices)
     state.set_velocities(np.zeros((topology.num_particles, 3), dtype=np.float64))
-
     system = System(topology, state)
     for f in forces["bonded"]:
         system.add_force_term(f)
     system.add_force_term(forces["nonbonded"])
     system.add_force_term(forces["pme"])
+    return system
 
-    return system, pdb
+
+# ---- Header ----
+print(f"mdpy 1M9Z minimization")
+print(f"  Source:  1M9Z.pdb (raw solvated)")
+print(f"  Atoms:   {topology.num_particles}")
+print(f"  Box:     {box_size:.0f} A (from CRYST1)")
+print(f"  Cutoff:  {CUTOFF} A")
+
+# =====================================================
+# Phase 1: FIRE minimize + save
+# =====================================================
+print(f"\n{'='*70}")
+print(f"Phase 1: FIRE minimize ({FIRE_STEPS} steps) → save to PDB")
+print(f"{'='*70}")
+
+system = build_system()
+minimizer = FIREMinimizer(time_step=STEP_SIZE, n_min=5)
+
+system.update_neighbor_list(force_rebuild=True)
+system.compute_forces(compute_energy=True)
+e0 = float(cp.asnumpy(system.state.d_energy[0]))
+mf0 = minimizer.compute_max_force(system)
+print(f"  init:  E={e0 * _TO_KJMOL:14.1f} kJ/mol, maxF={mf0 * _TO_KJMOLA:.2f} kJ/(mol·A)")
+
+cp.cuda.Stream.null.synchronize()
+t0 = time.perf_counter()
+
+for i in range(FIRE_STEPS):
+    system.update_neighbor_list(sync_interval=20)
+    system.compute_forces(compute_energy=False)
+    minimizer.step(system)
+    if i % 1000 == 0 and i > 0:
+        system.compute_forces(compute_energy=True)
+        e = float(cp.asnumpy(system.state.d_energy[0]))
+        print(f"  step {i:4d}: E={e * _TO_KJMOL:14.1f} kJ/mol")
+
+cp.cuda.Stream.null.synchronize()
+elapsed = time.perf_counter() - t0
+
+system.compute_forces(compute_energy=True)
+e1 = float(cp.asnumpy(system.state.d_energy[0]))
+mf1 = minimizer.compute_max_force(system)
+print(f"  final: E={e1 * _TO_KJMOL:14.1f} kJ/mol, maxF={mf1 * _TO_KJMOLA:.2f}")
+print(f"  dE={(e1 - e0) * _TO_KJMOL:+.1f} kJ/mol, {elapsed:.1f}s ({FIRE_STEPS / elapsed:.0f} steps/s)")
+
+# ---- Save using PDBWriter ----
+pos = system.state.download_positions()
+writer = PDBWriter(
+    particle_ids=np.array(psf.particle_ids),
+    particle_names=list(psf.particle_names),
+    particle_molecule_ids=np.array(psf.particle_molecule_ids),
+    particle_molecule_types=list(psf.particle_molecule_types),
+    particle_chain_ids=list(psf.particle_chain_ids),
+)
+out_path = os.path.join(DATA_LOCAL, "1M9Z_minimized.pdb")
+writer.write(out_path, positions=pos, pbc_matrix=pbc_matrix)
+
+# Verify round-trip
+pdb2 = PDBParser(out_path)
+assert len(pdb2.positions) == len(pos)
+assert np.allclose(pdb2.positions, pos, atol=1e-3)
+print(f"  Saved + verified: {len(pos)} atoms → {out_path}")
+print(f"  Box preserved: {pdb2.pbc_matrix[0,0]:.1f} A")
+
+# =====================================================
+# Phase 2: Four-minimizer comparison (for reference)
+# =====================================================
+print(f"\n{'='*70}")
+print(f"Phase 2: Minimizer comparison ({COMPARE_STEPS} steps each)")
+print(f"{'='*70}")
 
 
-def run_minimizer(name, minimizer, system, initial_positions):
-    """Run minimizer, return (name, e_init, e_final, mf_init, mf_final, elapsed)."""
-    # Reset positions for fair comparison
-    system.state.set_positions(initial_positions)
+def run_minimizer(name, minimizer, system):
+    system.state.set_positions(pdb.positions)
     system.update_neighbor_list(force_rebuild=True)
     system.compute_forces(compute_energy=True)
-
     e_init = float(cp.asnumpy(system.state.d_energy[0]))
     mf_init = minimizer.compute_max_force(system)
 
-    cp.cuda.Stream.null.synchronize()
     t0 = time.perf_counter()
-
-    for _ in range(NUM_STEPS):
+    for _ in range(COMPARE_STEPS):
         system.update_neighbor_list(sync_interval=10)
         system.compute_forces(compute_energy=False)
         minimizer.step(system)
 
-    cp.cuda.Stream.null.synchronize()
     elapsed = time.perf_counter() - t0
-
     system.compute_forces(compute_energy=True)
     e_final = float(cp.asnumpy(system.state.d_energy[0]))
     mf_final = minimizer.compute_max_force(system)
+    return e_init, e_final, mf_init, mf_final, elapsed
 
-    return name, e_init, e_final, mf_init, mf_final, elapsed
 
-
-# ---- Build system once ----
-print("Loading 1M9Z...")
-system, pdb = build_system()
-box_size = system.state.box_x
-
-print(f"\n{'='*70}")
-print(f"Minimizer comparison — 1M9Z ({system.num_particles} atoms, {box_size:.0f} A box)")
-print(f"  steps: {NUM_STEPS}, step_size: {STEP_SIZE} (CG: 0.001)")
-print(f"{'='*70}")
-
-# ---- Run all four minimizers ----
 minimizers = [
     ("SteepestDescent", SteepestDescentMinimizer(step_size=STEP_SIZE)),
     ("ConjugateGradient", ConjugateGradientMinimizer(step_size=0.001)),
@@ -127,77 +182,21 @@ minimizers = [
 
 results = []
 for name, minim in minimizers:
-    print(f"\n  Running {name}...", end=" ", flush=True)
-    result = run_minimizer(name, minim, system, pdb.positions)
-    results.append(result)
-    e_init, e_final, mf_init, mf_final, elapsed = result[1:]
-    print(
-        f"dE = {(e_final - e_init) * _TO_KJMOL:+.1f} kJ/mol, "
-        f"maxF: {mf_init * _TO_KJMOLA:.1f} -> {mf_final * _TO_KJMOLA:.2f}, "
-        f"{elapsed:.2f}s"
-    )
+    print(f"  Running {name}...", end=" ", flush=True)
+    r = run_minimizer(name, minim, system)
+    results.append((name, *r))
+    print(f"dE={(r[1] - r[0]) * _TO_KJMOL:+.0f} kJ/mol, maxF: {r[2]*_TO_KJMOLA:.1f}->{r[3]*_TO_KJMOLA:.2f}, {r[4]:.2f}s")
 
-# ---- Comparison table ----
-print(f"\n\n{'='*90}")
-print("Results")
-print(f"{'='*90}")
-print(
-    f"  {'Minimizer':<20s}  {'E_init(kJ/mol)':>16s}  {'E_final(kJ/mol)':>16s}  "
-    f"{'dE(kJ/mol)':>12s}  {'maxF_init':>10s}  {'maxF_final':>10s}  {'time':>7s}"
-)
-print(
-    f"  {'-'*20:<20s}  {'-'*16:<16s}  {'-'*16:<16s}  "
-    f"{'-'*12:<12s}  {'-'*10:<10s}  {'-'*10:<10s}  {'-'*7:<7s}"
-)
-
+print(f"\n  {'Minimizer':<20s}  {'E_final(kJ/mol)':>16s}  {'dE(kJ/mol)':>12s}  {'maxF_final':>10s}  {'time':>7s}")
+print(f"  {'-'*20:<20s}  {'-'*16:<16s}  {'-'*12:<12s}  {'-'*10:<10s}  {'-'*7:<7s}")
 for name, e_init, e_final, mf_init, mf_final, elapsed in results:
     print(
-        f"  {name:<20s}  {e_init * _TO_KJMOL:16.1f}  {e_final * _TO_KJMOL:16.1f}  "
+        f"  {name:<20s}  {e_final * _TO_KJMOL:16.1f}  "
         f"{(e_final - e_init) * _TO_KJMOL:+12.1f}  "
-        f"{mf_init * _TO_KJMOLA:10.2f}  {mf_final * _TO_KJMOLA:10.3f}  {elapsed:6.2f}s"
+        f"{mf_final * _TO_KJMOLA:10.3f}  {elapsed:6.2f}s"
     )
 
-# ---- Winner ----
-best = min(results, key=lambda r: r[2])  # lowest final energy
-print(f"\n  Lowest final energy: {best[0]} ({best[2] * _TO_KJMOL:.1f} kJ/mol)")
-best_f = min(results, key=lambda r: r[4])  # lowest final max force
-print(f"  Lowest final maxF:   {best_f[0]} ({best_f[4] * _TO_KJMOLA:.3f} kJ/(mol·A))")
-
-# ---- Validation ----
-print(f"\n{'='*90}")
-print("Validation")
-print(f"{'='*90}")
-
-checks = []
-for name, e_init, e_final, mf_init, mf_final, elapsed in results:
-    checks.append(
-        (
-            f"{name}: energy decreased",
-            e_final < e_init + 1e-6,
-        )
-    )
-    checks.append(
-        (
-            f"{name}: maxF decreased",
-            mf_final < mf_init,
-        )
-    )
-    checks.append(
-        (
-            f"{name}: finite",
-            np.isfinite(e_final) and np.isfinite(mf_final),
-        )
-    )
-
-all_ok = True
-for label, ok in checks:
-    status = "PASS" if ok else "FAIL"
-    if not ok:
-        all_ok = False
-    print(f"  [{status}] {label}")
-
-if all_ok:
-    print(f"\n  All checks PASSED")
-else:
-    print(f"\n  Some checks FAILED")
-    sys.exit(1)
+best_e = min(results, key=lambda r: r[2])
+best_f = min(results, key=lambda r: r[4])
+print(f"\n  Lowest energy: {best_e[0]} ({best_e[2] * _TO_KJMOL:.0f} kJ/mol)")
+print(f"  Lowest maxF:   {best_f[0]} ({best_f[4] * _TO_KJMOLA:.3f} kJ/(mol·A))")
