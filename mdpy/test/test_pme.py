@@ -75,14 +75,20 @@ class TestBSplineWeights:
             theta_minus, _ = compute_bspline_weights(u - h, order=4)
             for k in range(4):
                 numerical = (theta_plus[k] - theta_minus[k]) / (2.0 * h)
-                assert abs(dtheta[k] - numerical) < 1e-4, \
-                    f"u={u} k={k}: dtheta={dtheta[k]} numerical={numerical}"
+                assert (
+                    abs(dtheta[k] - numerical) < 1e-4
+                ), f"u={u} k={k}: dtheta={dtheta[k]} numerical={numerical}"
 
 
 class TestCellBasedChargeSpreading:
 
-    def _run_cell_spread(self, N, grid_x, grid_y, grid_z, box_x, box_y, box_z, order=4, seed=123):
-        from mdpy.force.pme_reciprocal_force import get_cell_spread_kernel, compute_bspline_weights
+    def _run_cell_spread(
+        self, N, grid_x, grid_y, grid_z, box_x, box_y, box_z, order=4, seed=123
+    ):
+        from mdpy.force.pme_reciprocal_force import (
+            get_cell_spread_kernel,
+            compute_bspline_weights,
+        )
         from mdpy.core.block_list import BlockList
 
         np.random.seed(seed)
@@ -113,7 +119,12 @@ class TestCellBasedChargeSpreading:
                     iy = (gy0 + ky) % grid_y
                     for kz in range(order):
                         iz = (gz0 + kz) % grid_z
-                        ref_grid[ix * grid_y * grid_z + iy * grid_z + iz] += float(charges[i]) * float(theta_x[kx]) * float(theta_y[ky]) * float(theta_z[kz])
+                        ref_grid[ix * grid_y * grid_z + iy * grid_z + iz] += (
+                            float(charges[i])
+                            * float(theta_x[kx])
+                            * float(theta_y[ky])
+                            * float(theta_z[kz])
+                        )
 
         d_grid_ref = cp.asarray(ref_grid.astype(np.float32))
 
@@ -121,7 +132,11 @@ class TestCellBasedChargeSpreading:
         pbc = np.eye(3, dtype=np.float64) * max(box_x, box_y, box_z)
         pbc_inv = np.linalg.inv(pbc)
         positions = np.stack([pos_x, pos_y, pos_z], axis=1).astype(np.float64)
-        topo = type('T', (), {'num_particles': N, 'particle_type_indices': np.zeros(N, dtype=np.int32)})()
+        topo = type(
+            "T",
+            (),
+            {"num_particles": N, "particle_type_indices": np.zeros(N, dtype=np.int32)},
+        )()
         bl.rebuild(topo, _PBCContext(pbc, pbc_inv, positions), force=True)
 
         subgrid_dx = -(-grid_x // bl.num_cells_x) + 2 * order
@@ -138,16 +153,32 @@ class TestCellBasedChargeSpreading:
         cell_spread_k = get_cell_spread_kernel()
         shmem = subgrid_total * 4
         cell_spread_k(
-            (bl.num_cells_total,), (256,),
-            (sorted_pos_x, sorted_pos_y, sorted_pos_z, sorted_charges,
-             bl.d_cell_block_offset, bl.d_cell_block_count, bl.d_block_atoms,
-             np.int32(N),
-             np.float32(1.0 / box_x), np.float32(1.0 / box_y), np.float32(1.0 / box_z),
-             np.int32(grid_x), np.int32(grid_y), np.int32(grid_z),
-             np.int32(bl.num_cells_x), np.int32(bl.num_cells_y), np.int32(bl.num_cells_z),
-             np.int32(subgrid_dx), np.int32(subgrid_dy), np.int32(subgrid_dz),
-             np.int32(order),
-             d_grid_cell),
+            (bl.num_cells_total,),
+            (256,),
+            (
+                sorted_pos_x,
+                sorted_pos_y,
+                sorted_pos_z,
+                sorted_charges,
+                bl.d_cell_block_offset,
+                bl.d_cell_block_count,
+                bl.d_block_atoms,
+                np.int32(N),
+                np.float32(1.0 / box_x),
+                np.float32(1.0 / box_y),
+                np.float32(1.0 / box_z),
+                np.int32(grid_x),
+                np.int32(grid_y),
+                np.int32(grid_z),
+                np.int32(bl.num_cells_x),
+                np.int32(bl.num_cells_y),
+                np.int32(bl.num_cells_z),
+                np.int32(subgrid_dx),
+                np.int32(subgrid_dy),
+                np.int32(subgrid_dz),
+                np.int32(order),
+                d_grid_cell,
+            ),
             shared_mem=shmem,
         )
 
@@ -158,8 +189,12 @@ class TestCellBasedChargeSpreading:
         ref_sum = float(cp.sum(d_ref))
         cell_sum = float(cp.sum(d_cell))
         expected = float(np.sum(charges))
-        assert abs(ref_sum - expected) < abs(expected) * 1e-4 + 1e-5, f"ref_sum={ref_sum}"
-        assert abs(cell_sum - expected) < abs(expected) * 1e-4 + 1e-5, f"cell_sum={cell_sum}"
+        assert (
+            abs(ref_sum - expected) < abs(expected) * 1e-4 + 1e-5
+        ), f"ref_sum={ref_sum}"
+        assert (
+            abs(cell_sum - expected) < abs(expected) * 1e-4 + 1e-5
+        ), f"cell_sum={cell_sum}"
 
     def test_matches_per_particle_spread(self):
         d_ref, d_cell, _ = self._run_cell_spread(50, 32, 32, 32, 50.0, 50.0, 50.0)
@@ -167,18 +202,24 @@ class TestCellBasedChargeSpreading:
         cell = cp.asnumpy(d_cell)
         nonzero = np.abs(ref) > 1e-10
         if np.any(nonzero):
-            rel_err = np.max(np.abs(ref[nonzero] - cell[nonzero]) / (np.abs(ref[nonzero]) + 1e-10))
+            rel_err = np.max(
+                np.abs(ref[nonzero] - cell[nonzero]) / (np.abs(ref[nonzero]) + 1e-10)
+            )
             assert rel_err < 1e-3, f"Max relative error: {rel_err}"
         abs_err = np.max(np.abs(ref - cell))
         assert abs_err < 1e-4, f"Max absolute error: {abs_err}"
 
     def test_matches_large_system(self):
-        d_ref, d_cell, _ = self._run_cell_spread(500, 64, 64, 64, 80.0, 80.0, 80.0, seed=42)
+        d_ref, d_cell, _ = self._run_cell_spread(
+            500, 64, 64, 64, 80.0, 80.0, 80.0, seed=42
+        )
         ref = cp.asnumpy(d_ref)
         cell = cp.asnumpy(d_cell)
         nonzero = np.abs(ref) > 1e-10
         if np.any(nonzero):
-            rel_err = np.max(np.abs(ref[nonzero] - cell[nonzero]) / (np.abs(ref[nonzero]) + 1e-10))
+            rel_err = np.max(
+                np.abs(ref[nonzero] - cell[nonzero]) / (np.abs(ref[nonzero]) + 1e-10)
+            )
             assert rel_err < 1e-2, f"Max relative error: {rel_err}"
         abs_err = np.max(np.abs(ref - cell))
         assert abs_err < 1e-3, f"Max absolute error: {abs_err}"
@@ -193,20 +234,23 @@ class TestCellBasedChargeSpreading:
 class TestBSplineModuli:
 
     def test_dc_component_zero(self):
-        bk = precompute_bk_factors(0.35, 32, 32, 32, 4, 50.0, 50.0, 50.0)
+        bk, _ = precompute_bk_factors(0.35, 32, 32, 32, 4, 50.0, 50.0, 50.0)
         assert abs(bk[0, 0, 0]) < 1e-10, f"DC component should be ~0, got {bk[0,0,0]}"
 
     def test_nonzero_terms_positive(self):
-        bk = precompute_bk_factors(0.35, 32, 32, 32, 4, 50.0, 50.0, 50.0)
+        bk, _ = precompute_bk_factors(0.35, 32, 32, 32, 4, 50.0, 50.0, 50.0)
         for ix, iy, iz in [(1, 0, 0), (0, 1, 0), (0, 0, 1), (1, 1, 1), (5, 5, 5)]:
             if iz < bk.shape[2]:
                 val = bk[ix, iy, iz]
-                assert abs(val.imag) < abs(val.real) * 1e-6 + 1e-10, \
-                    f"bk[{ix},{iy},{iz}] should be real: {val}"
-                assert val.real > 0, f"bk[{ix},{iy},{iz}] should be positive: {val.real}"
+                assert (
+                    abs(val.imag) < abs(val.real) * 1e-6 + 1e-10
+                ), f"bk[{ix},{iy},{iz}] should be real: {val}"
+                assert (
+                    val.real > 0
+                ), f"bk[{ix},{iy},{iz}] should be positive: {val.real}"
 
     def test_symmetry(self):
-        bk = precompute_bk_factors(0.35, 32, 32, 32, 4, 50.0, 50.0, 50.0)
+        bk, _ = precompute_bk_factors(0.35, 32, 32, 32, 4, 50.0, 50.0, 50.0)
         assert bk.shape == (32, 32, 17), f"Expected (32,32,17), got {bk.shape}"
 
 
@@ -235,7 +279,11 @@ class TestForceGathering:
         pbc = np.eye(3, dtype=np.float64) * max(box_x, box_y, box_z)
         pbc_inv = np.linalg.inv(pbc)
         positions = np.stack([pos_x, pos_y, pos_z], axis=1).astype(np.float64)
-        topo = type('T', (), {'num_particles': N, 'particle_type_indices': np.zeros(N, dtype=np.int32)})()
+        topo = type(
+            "T",
+            (),
+            {"num_particles": N, "particle_type_indices": np.zeros(N, dtype=np.int32)},
+        )()
         bl = BlockList(cutoff=12.0, skin=1.0)
         bl.rebuild(topo, _PBCContext(pbc, pbc_inv, positions), force=True)
         subgrid_dx = -(-grid_x // bl.num_cells_x) + 2 * order
@@ -252,21 +300,39 @@ class TestForceGathering:
         cell_spread_k = get_cell_spread_kernel()
         shmem = subgrid_total * 4
         cell_spread_k(
-            (bl.num_cells_total,), (256,),
-            (sorted_pos_x, sorted_pos_y, sorted_pos_z, sorted_charges_gpu,
-             bl.d_cell_block_offset, bl.d_cell_block_count, bl.d_block_atoms,
-             np.int32(N),
-             np.float32(1.0 / box_x), np.float32(1.0 / box_y), np.float32(1.0 / box_z),
-             np.int32(grid_x), np.int32(grid_y), np.int32(grid_z),
-             np.int32(bl.num_cells_x), np.int32(bl.num_cells_y), np.int32(bl.num_cells_z),
-             np.int32(subgrid_dx), np.int32(subgrid_dy), np.int32(subgrid_dz),
-             np.int32(order),
-             d_charge_grid),
+            (bl.num_cells_total,),
+            (256,),
+            (
+                sorted_pos_x,
+                sorted_pos_y,
+                sorted_pos_z,
+                sorted_charges_gpu,
+                bl.d_cell_block_offset,
+                bl.d_cell_block_count,
+                bl.d_block_atoms,
+                np.int32(N),
+                np.float32(1.0 / box_x),
+                np.float32(1.0 / box_y),
+                np.float32(1.0 / box_z),
+                np.int32(grid_x),
+                np.int32(grid_y),
+                np.int32(grid_z),
+                np.int32(bl.num_cells_x),
+                np.int32(bl.num_cells_y),
+                np.int32(bl.num_cells_z),
+                np.int32(subgrid_dx),
+                np.int32(subgrid_dy),
+                np.int32(subgrid_dz),
+                np.int32(order),
+                d_charge_grid,
+            ),
             shared_mem=shmem,
         )
 
         alpha = 0.35
-        bk = precompute_bk_factors(alpha, grid_x, grid_y, grid_z, order, box_x, box_y, box_z)
+        bk, _ = precompute_bk_factors(
+            alpha, grid_x, grid_y, grid_z, order, box_x, box_y, box_z
+        )
         d_bk = cp.asarray(bk)
 
         grid_3d = d_charge_grid.reshape(grid_x, grid_y, grid_z)
@@ -284,14 +350,29 @@ class TestForceGathering:
         total_slots = bl.max_blocks * 32
         grid_1d = ((total_slots + 255) // 256,)
         gather_k(
-            grid_1d, (256,),
-            (d_pos_x, d_pos_y, d_pos_z, d_charges,
-             np.int32(N),
-             bl.d_block_atoms,
-             np.int32(total_slots),
-             np.float32(1.0 / box_x), np.float32(1.0 / box_y), np.float32(1.0 / box_z),
-             np.int32(grid_x), np.int32(grid_y), np.int32(grid_z), np.int32(order),
-             d_phi_grid, d_fx, d_fy, d_fz, d_energy),
+            grid_1d,
+            (256,),
+            (
+                d_pos_x,
+                d_pos_y,
+                d_pos_z,
+                d_charges,
+                np.int32(N),
+                bl.d_block_atoms,
+                np.int32(total_slots),
+                np.float32(1.0 / box_x),
+                np.float32(1.0 / box_y),
+                np.float32(1.0 / box_z),
+                np.int32(grid_x),
+                np.int32(grid_y),
+                np.int32(grid_z),
+                np.int32(order),
+                d_phi_grid,
+                d_fx,
+                d_fy,
+                d_fz,
+                d_energy,
+            ),
         )
 
         net_fx = float(cp.sum(d_fx))
@@ -313,7 +394,7 @@ class TestForceGathering:
         sq_pi = 1.772453850905516
         coulomb_const = 0.13893556595455
 
-        expected = -coulomb_const * alpha / sq_pi * float(np.sum(charges ** 2))
+        expected = -coulomb_const * alpha / sq_pi * float(np.sum(charges**2))
 
         d_energy = cp.zeros(1, dtype=np.float32)
         self_k = get_self_energy_kernel()
@@ -328,10 +409,13 @@ class TestPMEReciprocalForce:
     @staticmethod
     def _build_block_list(pos, pbc, topo, cutoff):
         from mdpy.core.block_list import BlockList
+
         pbc_64 = np.asarray(pbc, dtype=np.float64).reshape(3, 3)
         pbc_inv = np.linalg.inv(pbc_64)
         bl = BlockList(cutoff=cutoff, skin=1.0)
-        bl.rebuild(topo, _PBCContext(pbc_64, pbc_inv, pos.astype(np.float64)), force=True)
+        bl.rebuild(
+            topo, _PBCContext(pbc_64, pbc_inv, pos.astype(np.float64)), force=True
+        )
         return bl
 
     def test_nonzero_energy_and_forces(self):
@@ -376,7 +460,9 @@ class TestPMEReciprocalForce:
         energy = float(state.d_energy[0])
 
         print(f"PME reciprocal energy: {energy:.6f}")
-        print(f"Max force: {max(np.max(np.abs(fx)), np.max(np.abs(fy)), np.max(np.abs(fz))):.6f}")
+        print(
+            f"Max force: {max(np.max(np.abs(fx)), np.max(np.abs(fy)), np.max(np.abs(fz))):.6f}"
+        )
 
         assert abs(energy) > 1e-6, f"Energy should be nonzero, got {energy}"
         max_force = max(np.max(np.abs(fx)), np.max(np.abs(fy)), np.max(np.abs(fz)))
@@ -426,7 +512,9 @@ class TestPMEReciprocalForce:
         energy2 = float(state.d_energy[0])
         fx2 = cp.asnumpy(state.d_forces_x).copy()
 
-        assert abs(energy1 - energy2) < 1e-6, f"Energy not reproducible: {energy1} vs {energy2}"
+        assert (
+            abs(energy1 - energy2) < 1e-6
+        ), f"Energy not reproducible: {energy1} vs {energy2}"
         np.testing.assert_allclose(fx1, fx2, atol=1e-6)
 
 
@@ -473,6 +561,7 @@ class TestGridSizing:
         pt = ParameterSet()
         pbc = np.eye(3, dtype=np.float32) * box
         from mdpy.force.pme_reciprocal_force import PMEReciprocalForce
+
         pme = PMEReciprocalForce(cutoff)
         pme.initialize_grid(topo, pt, pbc_matrix=pbc)
         assert pme.grid_x == 90
@@ -565,15 +654,17 @@ class TestPMEIntegration6PO6:
         from mdpy.io.pdb_parser import PDBParser
         from mdpy.io.charmm_toppar_parser import CharmmTopparParser
 
-        data_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
+        data_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
 
-        psf = PSFParser(os.path.join(data_dir, '6PO6.psf'))
-        pdb = PDBParser(os.path.join(data_dir, '6PO6.pdb'))
-        toppar = CharmmTopparParser(os.path.join(data_dir, 'par_all36_prot.prm'))
+        psf = PSFParser(os.path.join(data_dir, "6PO6.psf"))
+        pdb = PDBParser(os.path.join(data_dir, "6PO6.pdb"))
+        toppar = CharmmTopparParser(os.path.join(data_dir, "par_all36_prot.prm"))
 
         self.psf = psf
         self.topology = psf.topology
-        self.parameter_set = toppar.resolve_parameter_set(self.topology, self.psf.particle_type_names)
+        self.parameter_set = toppar.resolve_parameter_set(
+            self.topology, self.psf.particle_type_names
+        )
         self.positions = pdb.positions.astype(np.float32)
         self.N = self.topology.num_particles
         self.box = 100.0
@@ -602,9 +693,9 @@ class TestPMEIntegration6PO6:
             system.add_force_term(f)
 
         nb = NonbondedForce(lennard_jones + screened_coulomb, cutoff=self.cutoff)
-        lj_pair = self.parameter_set.type_pair_parameters['lj_pair']
-        nb.set_pair_parameter('sigma', lj_pair[0::2].astype(np.float32))
-        nb.set_pair_parameter('epsilon', lj_pair[1::2].astype(np.float32))
+        lj_pair = self.parameter_set.type_pair_parameters["lj_pair"]
+        nb.set_pair_parameter("sigma", lj_pair[0::2].astype(np.float32))
+        nb.set_pair_parameter("epsilon", lj_pair[1::2].astype(np.float32))
         system.add_force_term(nb)
 
         pme = PMEReciprocalForce(self.cutoff)
@@ -630,6 +721,7 @@ class TestPMEIntegration6PO6:
         system.compute_forces()
 
         from cupy import asnumpy
+
         fx = asnumpy(system.state.d_forces_x)
         fy = asnumpy(system.state.d_forces_y)
         fz = asnumpy(system.state.d_forces_z)
@@ -637,7 +729,9 @@ class TestPMEIntegration6PO6:
         max_force = max(np.max(np.abs(fx)), np.max(np.abs(fy)), np.max(np.abs(fz)))
 
         print(f"6PO6 N={self.N}")
-        print(f"PME params: alpha={pme.alpha:.4f}, grid=({pme.grid_x}, {pme.grid_y}, {pme.grid_z})")
+        print(
+            f"PME params: alpha={pme.alpha:.4f}, grid=({pme.grid_x}, {pme.grid_y}, {pme.grid_z})"
+        )
         print(f"Max force: {max_force:.6f}")
 
         assert max_force > 1e-6, "Forces should be nonzero"
@@ -657,12 +751,13 @@ class TestPMEIntegration6PO6:
         energies = system.dump_energy()
         print(f"PME energies: {energies}")
 
-        assert 'bond' in energies
-        assert 'nonbonded' in energies
-        assert 'pme_reciprocal' in energies
+        assert "bond" in energies
+        assert "nonbonded" in energies
+        assert "pme_reciprocal" in energies
 
-        assert abs(energies['pme_reciprocal']) > 1e-6, \
-            f"PME reciprocal energy should be nonzero: {energies['pme_reciprocal']}"
+        assert (
+            abs(energies["pme_reciprocal"]) > 1e-6
+        ), f"PME reciprocal energy should be nonzero: {energies['pme_reciprocal']}"
 
     def test_pme_self_energy_negative(self):
         from mdpy.force.pme_reciprocal_force import _calc_ewald_coefficient
@@ -673,7 +768,7 @@ class TestPMEIntegration6PO6:
         COULOMB_CONST = 0.13893556595455
         SQRT_PI = 1.772453850905516
 
-        self_energy = -COULOMB_CONST * alpha / SQRT_PI * np.sum(charges ** 2)
+        self_energy = -COULOMB_CONST * alpha / SQRT_PI * np.sum(charges**2)
         print(f"Self-energy: {self_energy:.6f}")
         assert self_energy < 0, "Self-energy should be negative"
 
@@ -703,13 +798,13 @@ class TestPMEIntegration6PO6:
         system, pme = self._build_pme_system()
 
         system.compute_forces()
-        e_before = system.dump_energy()['pme_reciprocal']
+        e_before = system.dump_energy()["pme_reciprocal"]
 
         orig = float(system.state.d_particle_charges[0].get())
         system.state.d_particle_charges[0] = orig * 2.0
 
         system.compute_forces()
-        e_after = system.dump_energy()['pme_reciprocal']
+        e_after = system.dump_energy()["pme_reciprocal"]
 
         assert abs(e_after - e_before) > 1e-6, (
             f"PME energy did not reflect single-charge mutation: "
@@ -732,7 +827,11 @@ class TestBilateralPaddingUnwrapped:
         order = 4
 
         positions = np.array([[25.0, 25.0, 25.0]], dtype=np.float64)
-        topo = type('T', (), {'num_particles': N, 'particle_type_indices': np.zeros(N, dtype=np.int32)})()
+        topo = type(
+            "T",
+            (),
+            {"num_particles": N, "particle_type_indices": np.zeros(N, dtype=np.int32)},
+        )()
         pbc = np.eye(3, dtype=np.float64) * box
         pbc_inv = np.linalg.inv(pbc)
 
@@ -747,19 +846,25 @@ class TestBilateralPaddingUnwrapped:
         expected_dy = -(-grid_y // bl.num_cells_y) + 2 * order
         expected_dz = -(-grid_z // bl.num_cells_z) + 2 * order
 
-        assert subgrid_dx == expected_dx, \
-            f"subgrid_dx={subgrid_dx}, expected={expected_dx}"
+        assert (
+            subgrid_dx == expected_dx
+        ), f"subgrid_dx={subgrid_dx}, expected={expected_dx}"
         assert subgrid_dy == expected_dy
         assert subgrid_dz == expected_dz
 
         base_dx = -(-grid_x // bl.num_cells_x)
-        assert subgrid_dx == base_dx + 2 * order, \
-            f"Bilateral padding should add 2*order: base={base_dx}, got={subgrid_dx}"
-        assert subgrid_dx > base_dx, \
-            f"Subgrid must be larger than base: {subgrid_dx} vs {base_dx}"
+        assert (
+            subgrid_dx == base_dx + 2 * order
+        ), f"Bilateral padding should add 2*order: base={base_dx}, got={subgrid_dx}"
+        assert (
+            subgrid_dx > base_dx
+        ), f"Subgrid must be larger than base: {subgrid_dx} vs {base_dx}"
 
     def test_charge_conservation_at_boundary(self):
-        from mdpy.force.pme_reciprocal_force import get_cell_spread_kernel, compute_bspline_weights
+        from mdpy.force.pme_reciprocal_force import (
+            get_cell_spread_kernel,
+            compute_bspline_weights,
+        )
         from mdpy.core.block_list import BlockList
 
         box = 50.0
@@ -796,11 +901,19 @@ class TestBilateralPaddingUnwrapped:
                     iy = (gy0 + ky) % grid_y
                     for kz in range(order):
                         iz = (gz0 + kz) % grid_z
-                        ref_grid[ix * grid_y * grid_z + iy * grid_z + iz] += \
-                            float(charge[i]) * float(theta_x[kx]) * float(theta_y[ky]) * float(theta_z[kz])
+                        ref_grid[ix * grid_y * grid_z + iy * grid_z + iz] += (
+                            float(charge[i])
+                            * float(theta_x[kx])
+                            * float(theta_y[ky])
+                            * float(theta_z[kz])
+                        )
 
         positions = np.stack([pos_x, pos_y, pos_z], axis=1).astype(np.float64)
-        topo = type('T', (), {'num_particles': N, 'particle_type_indices': np.zeros(N, dtype=np.int32)})()
+        topo = type(
+            "T",
+            (),
+            {"num_particles": N, "particle_type_indices": np.zeros(N, dtype=np.int32)},
+        )()
         pbc = np.eye(3, dtype=np.float64) * box
         pbc_inv = np.linalg.inv(pbc)
         bl = BlockList(cutoff=cutoff, skin=skin)
@@ -819,16 +932,32 @@ class TestBilateralPaddingUnwrapped:
         cell_spread_k = get_cell_spread_kernel()
         shmem = subgrid_total * 4
         cell_spread_k(
-            (bl.num_cells_total,), (256,),
-            (sorted_pos_x, sorted_pos_y, sorted_pos_z, sorted_charges,
-             bl.d_cell_block_offset, bl.d_cell_block_count, bl.d_block_atoms,
-             np.int32(N),
-             np.float32(1.0 / box), np.float32(1.0 / box), np.float32(1.0 / box),
-             np.int32(grid_x), np.int32(grid_y), np.int32(grid_z),
-             np.int32(bl.num_cells_x), np.int32(bl.num_cells_y), np.int32(bl.num_cells_z),
-             np.int32(subgrid_dx), np.int32(subgrid_dy), np.int32(subgrid_dz),
-             np.int32(order),
-             d_grid_cell),
+            (bl.num_cells_total,),
+            (256,),
+            (
+                sorted_pos_x,
+                sorted_pos_y,
+                sorted_pos_z,
+                sorted_charges,
+                bl.d_cell_block_offset,
+                bl.d_cell_block_count,
+                bl.d_block_atoms,
+                np.int32(N),
+                np.float32(1.0 / box),
+                np.float32(1.0 / box),
+                np.float32(1.0 / box),
+                np.int32(grid_x),
+                np.int32(grid_y),
+                np.int32(grid_z),
+                np.int32(bl.num_cells_x),
+                np.int32(bl.num_cells_y),
+                np.int32(bl.num_cells_z),
+                np.int32(subgrid_dx),
+                np.int32(subgrid_dy),
+                np.int32(subgrid_dz),
+                np.int32(order),
+                d_grid_cell,
+            ),
             shared_mem=shmem,
         )
 
@@ -836,15 +965,20 @@ class TestBilateralPaddingUnwrapped:
         ref_sum = float(np.sum(ref_grid))
         cell_sum = float(np.sum(cell_grid))
 
-        assert abs(cell_sum - 1.0) < 1e-4, \
-            f"Charge not conserved: cell_sum={cell_sum:.6f}, expected=1.0"
-        assert abs(cell_sum - ref_sum) < 1e-4, \
-            f"Cell sum ({cell_sum:.6f}) != ref sum ({ref_sum:.6f})"
+        assert (
+            abs(cell_sum - 1.0) < 1e-4
+        ), f"Charge not conserved: cell_sum={cell_sum:.6f}, expected=1.0"
+        assert (
+            abs(cell_sum - ref_sum) < 1e-4
+        ), f"Cell sum ({cell_sum:.6f}) != ref sum ({ref_sum:.6f})"
 
         nonzero = np.abs(cell_grid) > 1e-10
         assert np.any(nonzero), "Charge was not spread to grid at all"
 
         ref_arr = ref_grid.astype(np.float32)
         if np.any(nonzero):
-            rel_err = np.max(np.abs(ref_arr[nonzero] - cell_grid[nonzero]) / (np.abs(ref_arr[nonzero]) + 1e-10))
+            rel_err = np.max(
+                np.abs(ref_arr[nonzero] - cell_grid[nonzero])
+                / (np.abs(ref_arr[nonzero]) + 1e-10)
+            )
             assert rel_err < 1e-3, f"Max relative error: {rel_err}"

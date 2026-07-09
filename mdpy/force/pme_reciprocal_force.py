@@ -19,7 +19,7 @@ COULOMB_CONST = 1.0 / (4.0 * math.pi * float(EPSILON0.value))
 # CUDA float-literal form of the Coulomb constant, used to inject the value into
 # the raw kernel strings below (which cannot be f-strings because CUDA braces
 # would need escaping).
-_COULOMB_CUDA = f'{COULOMB_CONST}f'
+_COULOMB_CUDA = f"{COULOMB_CONST}f"
 
 
 def _calc_ewald_coefficient(cutoff: float, rtol: float = 1e-5) -> float:
@@ -250,7 +250,7 @@ def precompute_bk_factors(
     box_x: float,
     box_y: float,
     box_z: float,
-) -> np.ndarray:
+) -> tuple[np.ndarray, np.ndarray]:  # (bk, bk_virial)
     moduli_x = _compute_bspline_moduli(grid_x, order)
     moduli_y = _compute_bspline_moduli(grid_y, order)
     moduli_z = _compute_bspline_moduli(grid_z, order)
@@ -266,6 +266,7 @@ def precompute_bk_factors(
 
     nz_half = grid_z // 2 + 1
     bk = np.zeros((grid_x, grid_y, nz_half), dtype=np.float32)
+    bk_virial = np.zeros((grid_x, grid_y, nz_half), dtype=np.float32)
 
     firstz = 1
     for kx in range(grid_x):
@@ -285,11 +286,14 @@ def precompute_bk_factors(
                 bz = moduli_z[kz]
                 m2 = mhx2y2 + mhz * mhz
                 denom = m2 * bxby * bz
-                bk[kx, ky, kz] = math.exp(-recip_exp_factor * m2) / denom
+                bk_val = math.exp(-recip_exp_factor * m2) / denom
+                bk[kx, ky, kz] = bk_val
+                virial_factor = 2.0 * recip_exp_factor * m2 - 1.0
+                bk_virial[kx, ky, kz] = bk_val * virial_factor
 
             firstz = 0
 
-    return bk
+    return bk, bk_virial
 
 
 _GATHER_KERNEL_SOURCE = r"""
@@ -418,7 +422,7 @@ void gather_kernel(
         atomicAdd(energy_buffer, energy);
     }
 }
-""".replace('__MDPY_COULOMB__', _COULOMB_CUDA)
+""".replace("__MDPY_COULOMB__", _COULOMB_CUDA)
 
 _SELF_ENERGY_KERNEL_SOURCE = r"""
 extern "C" __global__
@@ -461,6 +465,7 @@ def get_cell_spread_kernel():
         )
     return _cell_spread_kernel
 
+
 class PMEReciprocalForce(ForceTerm):
     name = "pme_reciprocal"
 
@@ -482,6 +487,8 @@ class PMEReciprocalForce(ForceTerm):
         self.grid_z = 0
 
         self._d_bk_factors = None
+        self._d_bk_virial_factors = None
+        self._d_complex_buffer_virial = None
         self._d_charge_grid = None
 
         self._N = 0
@@ -527,7 +534,7 @@ class PMEReciprocalForce(ForceTerm):
             (self.grid_x, self.grid_y, nz_half), dtype=cp.complex64
         )
 
-        bk = precompute_bk_factors(
+        bk, bk_virial = precompute_bk_factors(
             self.alpha,
             self.grid_x,
             self.grid_y,
@@ -538,6 +545,7 @@ class PMEReciprocalForce(ForceTerm):
             box_z,
         )
         self._d_bk_factors = cp.asarray(bk)
+        self._d_bk_virial_factors = cp.asarray(bk_virial)
 
         self._warm_fft()
 
@@ -549,7 +557,9 @@ class PMEReciprocalForce(ForceTerm):
         cp.fft.irfftn(fft, s=(self.grid_x, self.grid_y, self.grid_z))
         self._fft_warmed = True
 
-    def compute(self, state, block_list=None, compute_energy=True, compute_virial=False):
+    def compute(
+        self, state, block_list=None, compute_energy=True, compute_virial=False
+    ):
         N = self._N
         order = self.order
         gx, gy, gz = self.grid_x, self.grid_y, self.grid_z
@@ -564,9 +574,7 @@ class PMEReciprocalForce(ForceTerm):
             self._subgrid_dx = -(-gx // block_list.num_cells_x) + 2 * order
             self._subgrid_dy = -(-gy // block_list.num_cells_y) + 2 * order
             self._subgrid_dz = -(-gz // block_list.num_cells_z) + 2 * order
-            self._subgrid_total = (
-                self._subgrid_dx * self._subgrid_dy * self._subgrid_dz
-            )
+            self._subgrid_total = self._subgrid_dx * self._subgrid_dy * self._subgrid_dz
             self._subgrid_initialized = True
 
         sorted_pos_x = state.d_positions_x
@@ -607,13 +615,45 @@ class PMEReciprocalForce(ForceTerm):
         )
 
         grid_3d = self._d_charge_grid.reshape(gx, gy, gz)
-        _rfft_func = _default_fft_func(grid_3d, None, None, value_type='R2C')
-        _rfft_func(grid_3d, None, None, None, cufft.CUFFT_FORWARD, 'R2C',
-                   out=self._d_complex_buffer)
-        cp.multiply(self._d_complex_buffer, self._d_bk_factors, out=self._d_complex_buffer)
-        _irfft_func = _default_fft_func(self._d_complex_buffer, None, None, value_type='C2R')
-        _irfft_func(self._d_complex_buffer, (gx, gy, gz), None, None,
-                    cufft.CUFFT_INVERSE, 'C2R', out=grid_3d)
+        _rfft_func = _default_fft_func(grid_3d, None, None, value_type="R2C")
+        _rfft_func(
+            grid_3d,
+            None,
+            None,
+            None,
+            cufft.CUFFT_FORWARD,
+            "R2C",
+            out=self._d_complex_buffer,
+        )
+
+        if compute_virial and self._d_bk_virial_factors is not None:
+            self._d_complex_buffer_virial = self._d_complex_buffer.copy()
+
+        cp.multiply(
+            self._d_complex_buffer, self._d_bk_factors, out=self._d_complex_buffer
+        )
+
+        if compute_virial and self._d_bk_virial_factors is not None:
+            rho_sq = cp.abs(self._d_complex_buffer_virial) ** 2
+            nk_mode = self.grid_x * self.grid_y * self.grid_z
+            vol = state.box_x * state.box_y * state.box_z
+            norm = vol / (nk_mode * nk_mode)
+            virial_recip = float(cp.sum(rho_sq * self._d_bk_virial_factors)) * norm
+            cp.cuda.Stream.null.synchronize()
+            state.d_virial[0] += np.float32(virial_recip * COULOMB_CONST)
+
+        _irfft_func = _default_fft_func(
+            self._d_complex_buffer, None, None, value_type="C2R"
+        )
+        _irfft_func(
+            self._d_complex_buffer,
+            (gx, gy, gz),
+            None,
+            None,
+            cufft.CUFFT_INVERSE,
+            "C2R",
+            out=grid_3d,
+        )
 
         gather_k = get_gather_kernel()
         gather_k(
@@ -647,4 +687,3 @@ class PMEReciprocalForce(ForceTerm):
             self_energy_factor = -COULOMB_CONST * self.alpha / SQRT_PI * sum_q2
             self_k = get_self_energy_kernel()
             self_k((1,), (1,), (np.float32(self_energy_factor), state.d_energy))
-
