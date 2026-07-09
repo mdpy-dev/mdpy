@@ -105,9 +105,9 @@ class State:
         self.d_prev_positions_z = cp.zeros(self.num_particles, dtype=np.float32)
 
         # Per-particle properties (zero-filled; populated by set_* methods).
-        self.d_masses = cp.zeros(self.num_particles, dtype=np.float32)
-        self.d_type_indices = cp.zeros(self.num_particles, dtype=np.int32)
-        self.d_charges = cp.zeros(self.num_particles, dtype=np.float32)
+        self.d_particle_masses = cp.zeros(self.num_particles, dtype=np.float32)
+        self.d_particle_type_indices = cp.zeros(self.num_particles, dtype=np.int32)
+        self.d_particle_charges = cp.zeros(self.num_particles, dtype=np.float32)
 
         self.d_energy = cp.zeros(1, dtype=np.float32)
         self.d_energy_accumulator = None
@@ -240,19 +240,19 @@ class State:
         self.d_prev_positions_y[:] = cp.asarray(data[:, 1])
         self.d_prev_positions_z[:] = cp.asarray(data[:, 2])
 
-    def set_charges(self, charges):
-        data = np.ascontiguousarray(np.asarray(charges, dtype=np.float32))
-        self.d_charges[:] = cp.asarray(data)
+    def set_particle_charges(self, particle_charges):
+        data = np.ascontiguousarray(np.asarray(particle_charges, dtype=np.float32))
+        self.d_particle_charges[:] = cp.asarray(data)
         self._has_charges = True
 
-    def set_masses(self, masses):
-        data = np.ascontiguousarray(np.asarray(masses, dtype=np.float32))
-        self.d_masses[:] = cp.asarray(data)
+    def set_particle_masses(self, particle_masses):
+        data = np.ascontiguousarray(np.asarray(particle_masses, dtype=np.float32))
+        self.d_particle_masses[:] = cp.asarray(data)
         self._has_masses = True
 
-    def set_type_indices(self, particle_type_indices):
+    def set_particle_type_indices(self, particle_type_indices):
         data = np.ascontiguousarray(np.asarray(particle_type_indices, dtype=np.int32))
-        self.d_type_indices[:] = cp.asarray(data)
+        self.d_particle_type_indices[:] = cp.asarray(data)
         self._has_type_indices = True
 
     def download_positions(self):
