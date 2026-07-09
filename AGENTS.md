@@ -313,6 +313,9 @@ comm -13 <(sort /tmp/mdpy_pre_task_dirty.txt) <(git diff --name-only | sort) > /
 # If nothing changed, skip commit.
 # If only new (untracked) files: git ls-files --others --exclude-standard
 
+# Step 2.5: Format all changed Python files with black
+xargs -a /tmp/mdpy_my_changes.txt conda run -n md_analysis black
+
 # Step 3: For non-trivial changes (core files, new files, refactors),
 # dispatch the mdpy-code-reviewer subagent on each changed file.
 # Address Critical and High findings. Skip for typo/comment-only changes.

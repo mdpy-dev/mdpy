@@ -17,7 +17,7 @@ def _build_test_system():
     charges = np.zeros(n_atoms, dtype=np.float32)
     ptypes = np.zeros(n_atoms, dtype=np.int32)
     mol_ids = np.zeros(n_atoms, dtype=np.int32)
-    molecule_types = [''] * n_atoms
+    molecule_types = [""] * n_atoms
     positions = np.zeros((n_atoms, 3), dtype=np.float32)
 
     dOH = 1.0
@@ -55,7 +55,7 @@ def _build_test_system():
         bond_term_params.append([k_val, r0_val])
     pbc_matrix = np.eye(3, dtype=np.float32) * 30.0
 
-    term_params = {'bond': np.array(bond_term_params, dtype=np.float32)}
+    term_params = {"bond": np.array(bond_term_params, dtype=np.float32)}
     pt = ParameterSet()
     for name, values in term_params.items():
         pt.add_term_parameter(name, values)
@@ -64,7 +64,15 @@ def _build_test_system():
 
 
 def test_constraint_loop():
-    topology, pbc_matrix, parameter_table, positions, masses, mol_ids, molecule_types = _build_test_system()
+    (
+        topology,
+        pbc_matrix,
+        parameter_table,
+        positions,
+        masses,
+        mol_ids,
+        molecule_types,
+    ) = _build_test_system()
 
     n = topology.num_particles
     state = State(n)
@@ -81,14 +89,23 @@ def test_constraint_loop():
     for f in bonded:
         system.add_force_term(f)
 
-    constraints = create_constraints(topology, parameter_table, scheme='h-bonds', particle_masses=masses, particle_molecule_ids=mol_ids, particle_molecule_types=molecule_types)
+    constraints = create_constraints(
+        topology,
+        parameter_table,
+        scheme="h-bonds",
+        particle_masses=masses,
+        particle_molecule_ids=mol_ids,
+        particle_molecule_types=molecule_types,
+    )
     for c in constraints:
         system.add_constraint(c)
 
     system.set_positions(positions)
 
     time_step = 0.002
-    velocities = np.random.RandomState(42).randn(*positions.shape).astype(np.float32) * 0.001
+    velocities = (
+        np.random.RandomState(42).randn(*positions.shape).astype(np.float32) * 0.001
+    )
     system.set_velocities(velocities)
 
     integrator = VerletIntegrator(time_step)
@@ -105,7 +122,15 @@ def test_constraint_loop():
 
 
 def test_constraint_loop_multiple_rebuilds():
-    topology, pbc_matrix, parameter_table, positions, masses, mol_ids, molecule_types = _build_test_system()
+    (
+        topology,
+        pbc_matrix,
+        parameter_table,
+        positions,
+        masses,
+        mol_ids,
+        molecule_types,
+    ) = _build_test_system()
 
     n = topology.num_particles
     state = State(n)
@@ -122,12 +147,21 @@ def test_constraint_loop_multiple_rebuilds():
     for f in bonded:
         system.add_force_term(f)
 
-    constraints = create_constraints(topology, parameter_table, scheme='h-bonds', particle_masses=masses, particle_molecule_ids=mol_ids, particle_molecule_types=molecule_types)
+    constraints = create_constraints(
+        topology,
+        parameter_table,
+        scheme="h-bonds",
+        particle_masses=masses,
+        particle_molecule_ids=mol_ids,
+        particle_molecule_types=molecule_types,
+    )
     for c in constraints:
         system.add_constraint(c)
 
     system.set_positions(positions)
-    velocities = np.random.RandomState(123).randn(*positions.shape).astype(np.float32) * 0.001
+    velocities = (
+        np.random.RandomState(123).randn(*positions.shape).astype(np.float32) * 0.001
+    )
     system.set_velocities(velocities)
 
     integrator = VerletIntegrator(0.002)
@@ -153,7 +187,7 @@ def _build_mixed_system():
     charges = np.zeros(n_atoms, dtype=np.float32)
     ptypes = np.zeros(n_atoms, dtype=np.int32)
     mol_ids = np.zeros(n_atoms, dtype=np.int32)
-    molecule_types = [''] * n_atoms
+    molecule_types = [""] * n_atoms
     positions = np.zeros((n_atoms, 3), dtype=np.float32)
 
     dOH = 1.0
@@ -184,16 +218,19 @@ def _build_mixed_system():
         idx += 3
 
     ebase = idx
-    ethane_positions = np.array([
-        [5.0, 15.0, 5.0],
-        [5.0, 15.0, 6.09],
-        [5.0, 16.09, 5.0],
-        [6.09, 15.0, 5.0],
-        [6.54, 15.0, 5.0],
-        [6.54, 15.0, 6.09],
-        [6.54, 16.09, 5.0],
-        [7.63, 15.0, 5.0],
-    ], dtype=np.float32)
+    ethane_positions = np.array(
+        [
+            [5.0, 15.0, 5.0],
+            [5.0, 15.0, 6.09],
+            [5.0, 16.09, 5.0],
+            [6.09, 15.0, 5.0],
+            [6.54, 15.0, 5.0],
+            [6.54, 15.0, 6.09],
+            [6.54, 16.09, 5.0],
+            [7.63, 15.0, 5.0],
+        ],
+        dtype=np.float32,
+    )
     ethane_masses = [12.0, 1.0, 1.0, 1.0, 12.0, 1.0, 1.0, 1.0]
     ethane_bonds = [(0, 1), (0, 2), (0, 3), (4, 5), (4, 6), (4, 7), (0, 4)]
     for i in range(8):
@@ -201,7 +238,9 @@ def _build_mixed_system():
         masses[ebase + i] = ethane_masses[i]
         mol_ids[ebase + i] = n_waters
     for bi, bj in ethane_bonds:
-        bond_params_list.append((ebase + bi, ebase + bj, 450.0, 1.09 if bj != 4 else 1.54))
+        bond_params_list.append(
+            (ebase + bi, ebase + bj, 450.0, 1.09 if bj != 4 else 1.54)
+        )
 
     topology = Topology()
     topology.num_particles = n_atoms
@@ -211,7 +250,7 @@ def _build_mixed_system():
         bond_term_params.append([k_val, r0_val])
     pbc_matrix = np.eye(3, dtype=np.float32) * 40.0
 
-    term_params = {'bond': np.array(bond_term_params, dtype=np.float32)}
+    term_params = {"bond": np.array(bond_term_params, dtype=np.float32)}
     pt = ParameterSet()
     for name, values in term_params.items():
         pt.add_term_parameter(name, values)
@@ -220,7 +259,15 @@ def _build_mixed_system():
 
 
 def test_settle_lincs_coexistence_bond_lengths():
-    topology, pbc_matrix, parameter_table, positions, masses, mol_ids, molecule_types = _build_mixed_system()
+    (
+        topology,
+        pbc_matrix,
+        parameter_table,
+        positions,
+        masses,
+        mol_ids,
+        molecule_types,
+    ) = _build_mixed_system()
 
     n = topology.num_particles
     state = State(n)
@@ -236,12 +283,21 @@ def test_settle_lincs_coexistence_bond_lengths():
     for f in bonded:
         system.add_force_term(f)
 
-    constraints = create_constraints(topology, parameter_table, scheme='h-bonds', particle_masses=masses, particle_molecule_ids=mol_ids, particle_molecule_types=molecule_types)
+    constraints = create_constraints(
+        topology,
+        parameter_table,
+        scheme="h-bonds",
+        particle_masses=masses,
+        particle_molecule_ids=mol_ids,
+        particle_molecule_types=molecule_types,
+    )
     for c in constraints:
         system.add_constraint(c)
 
     system.set_positions(positions)
-    system.set_velocities(np.random.RandomState(42).randn(*positions.shape).astype(np.float32) * 0.001)
+    system.set_velocities(
+        np.random.RandomState(42).randn(*positions.shape).astype(np.float32) * 0.001
+    )
 
     integrator = VerletIntegrator(0.002)
     for step in range(100):
@@ -272,11 +328,21 @@ def test_settle_lincs_coexistence_bond_lengths():
     target_lengths = [1.09, 1.09, 1.09, 1.09, 1.09, 1.09, 1.54]
     for c, (bi, bj) in enumerate(ethane_bonds):
         d = np.linalg.norm(pos[ebase + bi] - pos[ebase + bj])
-        assert abs(d - target_lengths[c]) < 0.05, f"Ethane bond {c} ({bi}-{bj}): {d:.4f}"
+        assert (
+            abs(d - target_lengths[c]) < 0.05
+        ), f"Ethane bond {c} ({bi}-{bj}): {d:.4f}"
 
 
 def test_settle_md_loop_rebuilds_bond_lengths():
-    topology, pbc_matrix, parameter_table, positions, masses, mol_ids, molecule_types = _build_test_system()
+    (
+        topology,
+        pbc_matrix,
+        parameter_table,
+        positions,
+        masses,
+        mol_ids,
+        molecule_types,
+    ) = _build_test_system()
 
     n = topology.num_particles
     state = State(n)
@@ -292,12 +358,21 @@ def test_settle_md_loop_rebuilds_bond_lengths():
     for f in bonded:
         system.add_force_term(f)
 
-    constraints = create_constraints(topology, parameter_table, scheme='h-bonds', particle_masses=masses, particle_molecule_ids=mol_ids, particle_molecule_types=molecule_types)
+    constraints = create_constraints(
+        topology,
+        parameter_table,
+        scheme="h-bonds",
+        particle_masses=masses,
+        particle_molecule_ids=mol_ids,
+        particle_molecule_types=molecule_types,
+    )
     for c in constraints:
         system.add_constraint(c)
 
     system.set_positions(positions)
-    system.set_velocities(np.random.RandomState(99).randn(*positions.shape).astype(np.float32) * 0.01)
+    system.set_velocities(
+        np.random.RandomState(99).randn(*positions.shape).astype(np.float32) * 0.01
+    )
 
     integrator = VerletIntegrator(0.002)
     dOH = 1.0
@@ -329,16 +404,19 @@ def test_lincs_md_loop_rebuilds_bond_lengths():
     charges = np.zeros(8, dtype=np.float32)
     ptypes = np.zeros(8, dtype=np.int32)
     mol_ids = np.zeros(8, dtype=np.int32)
-    positions = np.array([
-        [5.0, 5.0, 5.0],
-        [5.0, 5.0, 6.09],
-        [5.0, 6.09, 5.0],
-        [6.09, 5.0, 5.0],
-        [6.54, 5.0, 5.0],
-        [6.54, 5.0, 6.09],
-        [6.54, 6.09, 5.0],
-        [7.63, 5.0, 5.0],
-    ], dtype=np.float32)
+    positions = np.array(
+        [
+            [5.0, 5.0, 5.0],
+            [5.0, 5.0, 6.09],
+            [5.0, 6.09, 5.0],
+            [6.09, 5.0, 5.0],
+            [6.54, 5.0, 5.0],
+            [6.54, 5.0, 6.09],
+            [6.54, 6.09, 5.0],
+            [7.63, 5.0, 5.0],
+        ],
+        dtype=np.float32,
+    )
 
     bond_specs = [
         (0, 1, 450.0, 1.09),
@@ -357,7 +435,7 @@ def test_lincs_md_loop_rebuilds_bond_lengths():
         topology.add_bond(i, j)
         bond_term_params.append([k_val, r0_val])
 
-    term_params = {'bond': np.array(bond_term_params, dtype=np.float32)}
+    term_params = {"bond": np.array(bond_term_params, dtype=np.float32)}
     pt = ParameterSet()
     for name, values in term_params.items():
         pt.add_term_parameter(name, values)
@@ -381,7 +459,9 @@ def test_lincs_md_loop_rebuilds_bond_lengths():
     system.add_constraint(lincs)
 
     system.set_positions(positions)
-    system.set_velocities(np.random.RandomState(77).randn(*positions.shape).astype(np.float32) * 0.01)
+    system.set_velocities(
+        np.random.RandomState(77).randn(*positions.shape).astype(np.float32) * 0.01
+    )
 
     integrator = VerletIntegrator(0.002)
     for step in range(100):
@@ -394,6 +474,6 @@ def test_lincs_md_loop_rebuilds_bond_lengths():
     assert not np.any(np.isnan(pos))
     for c, (i, j) in enumerate(constraint_pairs):
         d = np.linalg.norm(pos[i] - pos[j])
-        assert abs(d - target_lengths[c]) < 0.05, (
-            f"Bond {c} ({i}-{j}): {d:.4f} != {target_lengths[c]}"
-        )
+        assert (
+            abs(d - target_lengths[c]) < 0.05
+        ), f"Bond {c} ({i}-{j}): {d:.4f} != {target_lengths[c]}"

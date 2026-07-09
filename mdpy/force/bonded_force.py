@@ -7,13 +7,15 @@ import re as _re
 from mdpy import precision
 from mdpy.force.force_term import ForceTerm
 
+
 def _extract_trailing_digit(name):
-    m = _re.search(r'(\d+)$', name)
+    m = _re.search(r"(\d+)$", name)
     if m:
         return int(m.group(1))
     return None
 
-_PREAMBLE = r'''
+
+_PREAMBLE = r"""
 __device__ __forceinline__ float3 make_f3(float x, float y, float z) {
     return make_float3(x, y, z);
 }
@@ -64,19 +66,19 @@ __device__ __forceinline__ void add_force(
     atomicAdd(&fy[i], v.y);
     atomicAdd(&fz[i], v.z);
 }
-'''
+"""
 
 
 _BODY_TEMPLATES = {
-    1: r'''
+    1: r"""
     for (int idx = tid; idx < num_terms; idx += stride) {{
         int a1 = d_indices[idx*1];
         {param_loads}
         {expression_fragment}
         {energy_virial_accum}
     }}
-''',
-    2: r'''
+""",
+    2: r"""
     for (int idx = tid; idx < num_terms; idx += stride) {{
         int a1 = d_indices[idx*2];
         int a2 = d_indices[idx*2+1];
@@ -84,8 +86,8 @@ _BODY_TEMPLATES = {
         {expression_fragment}
         {energy_virial_accum}
     }}
-''',
-    3: r'''
+""",
+    3: r"""
     for (int idx = tid; idx < num_terms; idx += stride) {{
         int a1 = d_indices[idx*3];
         int a2 = d_indices[idx*3+1];
@@ -94,8 +96,8 @@ _BODY_TEMPLATES = {
         {expression_fragment}
         {energy_virial_accum}
     }}
-''',
-    4: r'''
+""",
+    4: r"""
     for (int idx = tid; idx < num_terms; idx += stride) {{
         int a1 = d_indices[idx*4];
         int a2 = d_indices[idx*4+1];
@@ -105,10 +107,10 @@ _BODY_TEMPLATES = {
         {expression_fragment}
         {energy_virial_accum}
     }}
-''',
+""",
 }
 
-_MAIN_TEMPLATE = r'''
+_MAIN_TEMPLATE = r"""
 extern "C" __global__
 void compute_bonded(
     const float* __restrict__ pos_x,
@@ -135,11 +137,11 @@ void compute_bonded(
 {energy_reduce}
 {virial_reduce}
 }}
-'''
+"""
 
 
 class BondedForce(ForceTerm):
-    name = 'bonded'
+    name = "bonded"
 
     def __init__(self, expression):
         self._expression = expression
@@ -148,9 +150,9 @@ class BondedForce(ForceTerm):
         self._parameters_per_term = len(self._parameter_names)
         self._per_particle = expression.per_particle
         self._per_particle_gpu = {}
-        self._per_particle_properties = list(dict.fromkeys(
-            expression.per_particle.values()
-        ))
+        self._per_particle_properties = list(
+            dict.fromkeys(expression.per_particle.values())
+        )
         self._indices = []
         self._parameters = []
         self._d_indices = None
@@ -176,7 +178,9 @@ class BondedForce(ForceTerm):
 
     def add(self, indices, **params):
         self._indices.append(list(indices))
-        self._parameters.append([params.get(name, 0.0) for name in self._parameter_names])
+        self._parameters.append(
+            [params.get(name, 0.0) for name in self._parameter_names]
+        )
         self._dirty = True
 
     def _sync(self):
@@ -197,17 +201,15 @@ class BondedForce(ForceTerm):
         param_loads_lines = []
         for i, parameter_name in enumerate(self._parameter_names):
             param_loads_lines.append(
-                f'float {parameter_name} = d_parameters[idx*{self._parameters_per_term} + {i}];'
+                f"float {parameter_name} = d_parameters[idx*{self._parameters_per_term} + {i}];"
             )
-        atom_index_names = ['a1', 'a2', 'a3', 'a4']
+        atom_index_names = ["a1", "a2", "a3", "a4"]
         for arg_name in self._per_particle:
             base_name = self._per_particle[arg_name]
             trailing = _extract_trailing_digit(arg_name)
-            atom_idx = atom_index_names[trailing - 1] if trailing is not None else 'a1'
-            param_loads_lines.append(
-                f'float {arg_name} = d_{base_name}[{atom_idx}];'
-            )
-        param_loads = '\n        '.join(param_loads_lines)
+            atom_idx = atom_index_names[trailing - 1] if trailing is not None else "a1"
+            param_loads_lines.append(f"float {arg_name} = d_{base_name}[{atom_idx}];")
+        param_loads = "\n        ".join(param_loads_lines)
 
         if compute_energy:
             energy_buffer_arg = "    float* __restrict__ energy_buf,"
@@ -247,7 +249,7 @@ class BondedForce(ForceTerm):
             parts.append(energy_accum)
         if virial_accum:
             parts.append(virial_accum)
-        energy_virial_accum_combined = '\n'.join(parts)
+        energy_virial_accum_combined = "\n".join(parts)
 
         body_template = _BODY_TEMPLATES[self._body]
         body = body_template.format(
@@ -258,12 +260,10 @@ class BondedForce(ForceTerm):
 
         extra_param_lines = []
         for prop_name in self._per_particle_properties:
-            extra_param_lines.append(
-                f'const float* __restrict__ d_{prop_name}'
-            )
-        extra_params = ''
+            extra_param_lines.append(f"const float* __restrict__ d_{prop_name}")
+        extra_params = ""
         if extra_param_lines:
-            extra_params = ',\n    ' + ',\n    '.join(extra_param_lines)
+            extra_params = ",\n    " + ",\n    ".join(extra_param_lines)
 
         kernel_source = _PREAMBLE + _MAIN_TEMPLATE.format(
             body=body,
@@ -282,7 +282,7 @@ class BondedForce(ForceTerm):
             if not self._kernel_compiled_FEV:
                 self._kernel_FEV = cp.RawKernel(
                     self._assemble_kernel(compute_energy=True, compute_virial=True),
-                    'compute_bonded'
+                    "compute_bonded",
                 )
                 self._kernel_compiled_FEV = True
             return self._kernel_FEV
@@ -290,7 +290,7 @@ class BondedForce(ForceTerm):
             if not self._kernel_compiled_FE:
                 self._kernel_FE = cp.RawKernel(
                     self._assemble_kernel(compute_energy=True, compute_virial=False),
-                    'compute_bonded'
+                    "compute_bonded",
                 )
                 self._kernel_compiled_FE = True
             return self._kernel_FE
@@ -298,7 +298,7 @@ class BondedForce(ForceTerm):
             if not self._kernel_compiled_FV:
                 self._kernel_FV = cp.RawKernel(
                     self._assemble_kernel(compute_energy=False, compute_virial=True),
-                    'compute_bonded'
+                    "compute_bonded",
                 )
                 self._kernel_compiled_FV = True
             return self._kernel_FV
@@ -306,25 +306,31 @@ class BondedForce(ForceTerm):
             if not self._kernel_compiled_F:
                 self._kernel_F = cp.RawKernel(
                     self._assemble_kernel(compute_energy=False, compute_virial=False),
-                    'compute_bonded'
+                    "compute_bonded",
                 )
                 self._kernel_compiled_F = True
             return self._kernel_F
 
-    def compute(self, state, block_list=None, compute_energy=True, compute_virial=False):
+    def compute(
+        self, state, block_list=None, compute_energy=True, compute_virial=False
+    ):
         num_terms_local = len(self._indices)
         if num_terms_local == 0:
             return
         if self._dirty:
             self._sync()
-        kernel = self._get_kernel(compute_energy=compute_energy, compute_virial=compute_virial)
+        kernel = self._get_kernel(
+            compute_energy=compute_energy, compute_virial=compute_virial
+        )
 
         if self._num_sm is None:
-            self._num_sm = cp.cuda.runtime.getDeviceProperties(0)['multiProcessorCount']
+            self._num_sm = cp.cuda.runtime.getDeviceProperties(0)["multiProcessorCount"]
 
         block_size = 128
         max_blocks = 6 * self._num_sm
-        grid_size = max(min((num_terms_local + block_size - 1) // block_size, max_blocks), 1)
+        grid_size = max(
+            min((num_terms_local + block_size - 1) // block_size, max_blocks), 1
+        )
 
         args = [
             state.d_positions_x,
@@ -338,15 +344,17 @@ class BondedForce(ForceTerm):
             args.append(state.d_energy)
         if compute_virial:
             args.append(state.d_virial)
-        args.extend([
-            state.d_pbc_inv,
-            state.d_pbc_matrix,
-            self._d_indices.ravel(),
-            self._d_parameters.ravel(),
-            np.int32(num_terms_local),
-        ])
+        args.extend(
+            [
+                state.d_pbc_inv,
+                state.d_pbc_matrix,
+                self._d_indices.ravel(),
+                self._d_parameters.ravel(),
+                np.int32(num_terms_local),
+            ]
+        )
         for prop_name in self._per_particle_properties:
-            if prop_name == 'charge' and state.d_particle_charges is not None:
+            if prop_name == "charge" and state.d_particle_charges is not None:
                 args.append(state.d_particle_charges)
             elif prop_name in self._per_particle_gpu:
                 args.append(self._per_particle_gpu[prop_name])

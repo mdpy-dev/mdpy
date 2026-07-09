@@ -1,6 +1,8 @@
 class ForceTerm:
 
-    name: str = ''
+    name: str = ""
 
-    def compute(self, state, block_list=None, compute_energy=True, compute_virial=False):
+    def compute(
+        self, state, block_list=None, compute_energy=True, compute_virial=False
+    ):
         raise NotImplementedError
