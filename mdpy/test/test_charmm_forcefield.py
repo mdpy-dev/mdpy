@@ -5,7 +5,6 @@ from mdpy import precision
 from mdpy.io.psf_parser import PSFParser
 from mdpy.io.pdb_parser import PDBParser
 from mdpy.io.charmm_toppar_parser import CharmmTopparParser
-from mdpy.io.charmm_toppar_parser import create_parameter_table
 from mdpy.core.parameter_set import ParameterSet
 from mdpy.core.state import State
 from mdpy.system import System
@@ -73,31 +72,31 @@ class TestTopology:
 
 class TestParameterSet:
 
-    def test_parameter_table_has_sigma_epsilon(self):
+    def test_parameter_set_has_sigma_epsilon(self):
         psf = PSFParser(os.path.join(DATA_DIR, '6PO6.psf'))
         toppar = CharmmTopparParser(os.path.join(DATA_DIR, 'par_all36_prot.prm'))
         topology = psf.topology
-        table = create_parameter_table(topology, toppar, type_names=psf.particle_type_names)
-        assert 'sigma' in table.type_parameters
-        assert 'epsilon' in table.type_parameters
+        parameter_set = toppar.resolve_parameter_set(topology, psf.particle_type_names)
+        assert 'sigma' in parameter_set.type_parameters
+        assert 'epsilon' in parameter_set.type_parameters
 
-    def test_parameter_table_values_positive(self):
+    def test_parameter_set_values_positive(self):
         psf = PSFParser(os.path.join(DATA_DIR, '6PO6.psf'))
         toppar = CharmmTopparParser(os.path.join(DATA_DIR, 'par_all36_prot.prm'))
         topology = psf.topology
-        table = create_parameter_table(topology, toppar, type_names=psf.particle_type_names)
-        sigma = table.type_parameters['sigma']
-        epsilon = table.type_parameters['epsilon']
+        parameter_set = toppar.resolve_parameter_set(topology, psf.particle_type_names)
+        sigma = parameter_set.type_parameters['sigma']
+        epsilon = parameter_set.type_parameters['epsilon']
         assert np.all(sigma > 0)
         assert np.all(epsilon > 0)
 
-    def test_charge_not_in_parameter_table(self):
+    def test_charge_not_in_parameter_set(self):
         psf = PSFParser(os.path.join(DATA_DIR, '6PO6.psf'))
         toppar = CharmmTopparParser(os.path.join(DATA_DIR, 'par_all36_prot.prm'))
         topology = psf.topology
-        table = create_parameter_table(topology, toppar, type_names=psf.particle_type_names)
-        assert 'charge' not in table.particle_parameters
-        assert 'charge_14' not in table.particle_parameters
+        parameter_set = toppar.resolve_parameter_set(topology, psf.particle_type_names)
+        assert 'charge' not in parameter_set.particle_parameters
+        assert 'charge_14' not in parameter_set.particle_parameters
         assert psf.charges.shape == (49,)
 
     def test_sigma_conversion_factor(self):
@@ -113,20 +112,20 @@ class TestSystem:
         pdb = PDBParser(os.path.join(DATA_DIR, '6PO6.pdb'))
         toppar = CharmmTopparParser(os.path.join(DATA_DIR, 'par_all36_prot.prm'))
         topology = psf.topology
-        parameter_table = create_parameter_table(topology, toppar, type_names=psf.particle_type_names)
+        parameter_set = toppar.resolve_parameter_set(topology, psf.particle_type_names)
         pbc_matrix = np.eye(3, dtype=precision.FLOAT) * 100.0
 
         state = State(topology.num_particles)
         state.set_masses(psf.masses)
         state.set_charges(psf.charges)
-        state.set_type_indices(psf.particle_type_indices)
+        state.set_type_indices(parameter_set.particle_type_indices)
         system = System(topology, state)
 
         system.set_pbc(pbc_matrix)
-        for f in create_bonded_forces(topology, parameter_table):
+        for f in create_bonded_forces(topology, parameter_set):
             system.add_force_term(f)
         nb = NonbondedForce(lennard_jones + coulomb, cutoff=12.0)
-        lj_pair = parameter_table.type_pair_parameters['lj_pair']
+        lj_pair = parameter_set.type_pair_parameters['lj_pair']
         nb.set_pair_parameter('sigma', lj_pair[0::2].astype(precision.FLOAT))
         nb.set_pair_parameter('epsilon', lj_pair[1::2].astype(precision.FLOAT))
         system.add_force_term(nb)
@@ -146,20 +145,20 @@ class TestSystem:
         pdb = PDBParser(os.path.join(DATA_DIR, '6PO6.pdb'))
         toppar = CharmmTopparParser(os.path.join(DATA_DIR, 'par_all36_prot.prm'))
         topology = psf.topology
-        parameter_table = create_parameter_table(topology, toppar, type_names=psf.particle_type_names)
+        parameter_set = toppar.resolve_parameter_set(topology, psf.particle_type_names)
         pbc_matrix = np.eye(3, dtype=precision.FLOAT) * 100.0
 
         state = State(topology.num_particles)
         state.set_masses(psf.masses)
         state.set_charges(psf.charges)
-        state.set_type_indices(psf.particle_type_indices)
+        state.set_type_indices(parameter_set.particle_type_indices)
         system = System(topology, state)
 
         system.set_pbc(pbc_matrix)
-        for f in create_bonded_forces(topology, parameter_table):
+        for f in create_bonded_forces(topology, parameter_set):
             system.add_force_term(f)
         nb = NonbondedForce(lennard_jones + coulomb, cutoff=12.0)
-        lj_pair = parameter_table.type_pair_parameters['lj_pair']
+        lj_pair = parameter_set.type_pair_parameters['lj_pair']
         nb.set_pair_parameter('sigma', lj_pair[0::2].astype(precision.FLOAT))
         nb.set_pair_parameter('epsilon', lj_pair[1::2].astype(precision.FLOAT))
         system.add_force_term(nb)
@@ -183,20 +182,20 @@ class TestSystem:
         pdb = PDBParser(os.path.join(DATA_DIR, '6PO6.pdb'))
         toppar = CharmmTopparParser(os.path.join(DATA_DIR, 'par_all36_prot.prm'))
         topology = psf.topology
-        parameter_table = create_parameter_table(topology, toppar, type_names=psf.particle_type_names)
+        parameter_set = toppar.resolve_parameter_set(topology, psf.particle_type_names)
         pbc_matrix = np.eye(3, dtype=precision.FLOAT) * 100.0
 
         state = State(topology.num_particles)
         state.set_masses(psf.masses)
         state.set_charges(psf.charges)
-        state.set_type_indices(psf.particle_type_indices)
+        state.set_type_indices(parameter_set.particle_type_indices)
         system = System(topology, state)
 
         system.set_pbc(pbc_matrix)
-        for f in create_bonded_forces(topology, parameter_table):
+        for f in create_bonded_forces(topology, parameter_set):
             system.add_force_term(f)
         nb = NonbondedForce(lennard_jones + coulomb, cutoff=12.0)
-        lj_pair = parameter_table.type_pair_parameters['lj_pair']
+        lj_pair = parameter_set.type_pair_parameters['lj_pair']
         nb.set_pair_parameter('sigma', lj_pair[0::2].astype(precision.FLOAT))
         nb.set_pair_parameter('epsilon', lj_pair[1::2].astype(precision.FLOAT))
         system.add_force_term(nb)
@@ -220,20 +219,20 @@ class TestSystem:
         pdb = PDBParser(os.path.join(DATA_DIR, '6PO6.pdb'))
         toppar = CharmmTopparParser(os.path.join(DATA_DIR, 'par_all36_prot.prm'))
         topology = psf.topology
-        parameter_table = create_parameter_table(topology, toppar, type_names=psf.particle_type_names)
+        parameter_set = toppar.resolve_parameter_set(topology, psf.particle_type_names)
         pbc_matrix = np.eye(3, dtype=precision.FLOAT) * 100.0
 
         state = State(topology.num_particles)
         state.set_masses(psf.masses)
         state.set_charges(psf.charges)
-        state.set_type_indices(psf.particle_type_indices)
+        state.set_type_indices(parameter_set.particle_type_indices)
         system = System(topology, state)
 
         system.set_pbc(pbc_matrix)
-        for f in create_bonded_forces(topology, parameter_table):
+        for f in create_bonded_forces(topology, parameter_set):
             system.add_force_term(f)
         nb = NonbondedForce(lennard_jones + coulomb, cutoff=12.0)
-        lj_pair = parameter_table.type_pair_parameters['lj_pair']
+        lj_pair = parameter_set.type_pair_parameters['lj_pair']
         nb.set_pair_parameter('sigma', lj_pair[0::2].astype(precision.FLOAT))
         nb.set_pair_parameter('epsilon', lj_pair[1::2].astype(precision.FLOAT))
         system.add_force_term(nb)
@@ -264,7 +263,7 @@ class TestMissingParameters:
         psf = PSFParser(os.path.join(DATA_DIR, '6PO6.psf'))
         toppar = CharmmTopparParser(os.path.join(DATA_DIR, 'par_all36_prot.prm'))
         topology = psf.topology
-        parameter_table = create_parameter_table(topology, toppar, type_names=psf.particle_type_names)
-        bond_params = parameter_table.get_term_parameter('bond')
+        parameter_set = toppar.resolve_parameter_set(topology, psf.particle_type_names)
+        bond_params = parameter_set.get_term_parameter('bond')
         assert topology.num_bonds > 0
         assert bond_params.shape[0] == topology.num_bonds

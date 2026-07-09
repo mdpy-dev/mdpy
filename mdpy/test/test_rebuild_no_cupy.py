@@ -4,7 +4,7 @@ import os, numpy as np, pytest
 def _build_ion():
     from mdpy.io.psf_parser import PSFParser
     from mdpy.io.pdb_parser import PDBParser
-    from mdpy.io.charmm_toppar_parser import CharmmTopparParser, create_parameter_table
+    from mdpy.io.charmm_toppar_parser import CharmmTopparParser
     from mdpy.force.factories.charmm import create_charmm_forces
     from mdpy.core.state import State
     from mdpy.system import System
@@ -13,17 +13,17 @@ def _build_ion():
     DATA = os.path.join(os.path.dirname(__file__), "..", "..", "benchmark", "data")
     psf = PSFParser(os.path.join(DATA, "ion.psf"))
     pdb = PDBParser(os.path.join(DATA, "ion.pdb"))
-    tp = CharmmTopparParser(
+    toppar = CharmmTopparParser(
         os.path.join(DATA, "par_sin.prm"), os.path.join(DATA, "par_water.prm")
     )
     topo = psf.topology
-    pt = create_parameter_table(topo, tp, type_names=psf.particle_type_names)
+    pt = toppar.resolve_parameter_set(topo, psf.particle_type_names)
     pbc = np.diag([75.450, 77.623, 69.668])
-    forces = create_charmm_forces(topo, pt, pbc, cutoff=12.0, particle_type_indices=psf.particle_type_indices)
+    forces = create_charmm_forces(topo, pt, pbc, cutoff=12.0)
     state = State(topo.num_particles)
     state.set_masses(psf.masses)
     state.set_charges(psf.charges)
-    state.set_type_indices(psf.particle_type_indices)
+    state.set_type_indices(pt.particle_type_indices)
     s = System(topo, state)
     s.set_pbc(pbc)
     for f in forces["bonded"]:

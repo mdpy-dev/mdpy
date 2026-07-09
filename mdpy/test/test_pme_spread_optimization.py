@@ -16,7 +16,7 @@ def ion_system():
     from mdpy.system import System
     from mdpy.io.psf_parser import PSFParser
     from mdpy.io.pdb_parser import PDBParser
-    from mdpy.io.charmm_toppar_parser import CharmmTopparParser, create_parameter_table
+    from mdpy.io.charmm_toppar_parser import CharmmTopparParser
     from mdpy.force.factories.charmm import create_charmm_forces
 
     data_dir = os.path.join(BENCH_DIR, "data")
@@ -29,14 +29,14 @@ def ion_system():
     pbc = np.diag([75.450, 77.623, 69.668])
 
     topology = psf.topology
-    parameter_table = create_parameter_table(topology, toppar, type_names=psf.particle_type_names)
+    parameter_set = toppar.resolve_parameter_set(topology, psf.particle_type_names)
     state = State(topology.num_particles)
     state.set_pbc(pbc)
     state.set_positions(pdb.positions)
     state.set_charges(psf.charges)
     state.set_masses(psf.masses)
-    state.set_type_indices(psf.particle_type_indices)
-    forces = create_charmm_forces(topology, parameter_table, pbc, cutoff=12.0, particle_type_indices=psf.particle_type_indices)
+    state.set_type_indices(parameter_set.particle_type_indices)
+    forces = create_charmm_forces(topology, parameter_set, pbc, cutoff=12.0)
     system = System(topology, state)
     for f in forces['bonded']:
         system.add_force_term(f)

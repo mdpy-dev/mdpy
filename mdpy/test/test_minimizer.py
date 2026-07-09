@@ -220,7 +220,7 @@ class TestMinimizerIntegration:
     def sixpo6_system(self):
         from mdpy.io.psf_parser import PSFParser
         from mdpy.io.pdb_parser import PDBParser
-        from mdpy.io.charmm_toppar_parser import CharmmTopparParser, create_parameter_table
+        from mdpy.io.charmm_toppar_parser import CharmmTopparParser
         from mdpy.force.factories.charmm import create_charmm_forces
 
         DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
@@ -231,18 +231,17 @@ class TestMinimizerIntegration:
             os.path.join(DATA_DIR, "toppar_water_ions.str"),
         )
         topology = psf.topology
-        parameter_table = create_parameter_table(topology, toppar, type_names=psf.particle_type_names)
+        parameter_set = toppar.resolve_parameter_set(topology, psf.particle_type_names)
         pbc_matrix = np.eye(3, dtype=np.float64) * 50.0
         state = State(topology.num_particles)
         state.set_pbc(pbc_matrix)
         state.set_positions(pdb.positions)
         state.set_charges(psf.charges)
         state.set_masses(psf.masses)
-        state.set_type_indices(psf.particle_type_indices)
+        state.set_type_indices(parameter_set.particle_type_indices)
         state.set_velocities(np.zeros((topology.num_particles, 3), dtype=np.float64))
         forces = create_charmm_forces(
-            topology, parameter_table, pbc_matrix, cutoff=12.0,
-            particle_type_indices=psf.particle_type_indices,
+            topology, parameter_set, pbc_matrix, cutoff=12.0,
         )
         system = System(topology, state)
         for f in forces["bonded"]:

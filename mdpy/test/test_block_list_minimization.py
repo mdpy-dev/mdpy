@@ -5,7 +5,7 @@ import pytest
 
 from mdpy.io.psf_parser import PSFParser
 from mdpy.io.pdb_parser import PDBParser
-from mdpy.io.charmm_toppar_parser import CharmmTopparParser, create_parameter_table
+from mdpy.io.charmm_toppar_parser import CharmmTopparParser
 from mdpy.force.factories.charmm import create_charmm_forces
 from mdpy.core.state import State
 from mdpy.system import System
@@ -27,13 +27,13 @@ def _build_ion_system():
         os.path.join(DATA_DIR, "par_water.prm"),
     )
     topology = psf.topology
-    pt = create_parameter_table(topology, toppar, type_names=psf.particle_type_names)
+    parameter_set = toppar.resolve_parameter_set(topology, psf.particle_type_names)
     pbc = np.diag(BOX)
-    forces = create_charmm_forces(topology, pt, pbc, cutoff=CUTOFF, particle_type_indices=psf.particle_type_indices)
+    forces = create_charmm_forces(topology, parameter_set, pbc, cutoff=CUTOFF)
     state = State(topology.num_particles)
     state.set_masses(psf.masses)
     state.set_charges(psf.charges)
-    state.set_type_indices(psf.particle_type_indices)
+    state.set_type_indices(parameter_set.particle_type_indices)
     s = System(topology, state)
     s.set_pbc(pbc)
     for f in forces["bonded"]:

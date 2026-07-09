@@ -31,7 +31,6 @@ def _setup_system():
     from mdpy.force.expressions.lennard_jones import lennard_jones
     from mdpy.force.nonbonded_force import NonbondedForce
     from mdpy.io.charmm_toppar_parser import CharmmTopparParser
-    from mdpy.io.charmm_toppar_parser import create_parameter_table
     from mdpy.io.pdb_parser import PDBParser
     from mdpy.io.psf_parser import PSFParser
     from mdpy.system import System
@@ -40,21 +39,21 @@ def _setup_system():
     pdb = PDBParser(PDB_PATH)
     toppar = CharmmTopparParser(PRM_PATH, STR_PATH)
     topology = psf.topology
-    parameter_table = create_parameter_table(topology, toppar, type_names=psf.particle_type_names)
+    parameter_set = toppar.resolve_parameter_set(topology, psf.particle_type_names)
     pbc_matrix = np.eye(3, dtype=np.float64) * BOX_SIZE
     pbc_inv = np.linalg.inv(pbc_matrix)
 
     state = State(topology.num_particles)
     state.set_masses(psf.masses)
     state.set_charges(psf.charges)
-    state.set_type_indices(psf.particle_type_indices)
+    state.set_type_indices(parameter_set.particle_type_indices)
     system = System(topology, state)
 
     system.set_pbc(pbc_matrix)
-    for f in create_bonded_forces(topology, parameter_table):
+    for f in create_bonded_forces(topology, parameter_set):
         system.add_force_term(f)
     nb = NonbondedForce(lennard_jones + coulomb, cutoff=CUTOFF)
-    lj_pair = parameter_table.type_pair_parameters['lj_pair']
+    lj_pair = parameter_set.type_pair_parameters['lj_pair']
     nb.set_pair_parameter('sigma', lj_pair[0::2].astype(precision.FLOAT))
     nb.set_pair_parameter('epsilon', lj_pair[1::2].astype(precision.FLOAT))
     system.add_force_term(nb)

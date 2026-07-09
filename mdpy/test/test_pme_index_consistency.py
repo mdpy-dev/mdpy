@@ -4,7 +4,7 @@ import cupy as cp
 import pytest
 from mdpy.io.psf_parser import PSFParser
 from mdpy.io.pdb_parser import PDBParser
-from mdpy.io.charmm_toppar_parser import CharmmTopparParser, create_parameter_table
+from mdpy.io.charmm_toppar_parser import CharmmTopparParser
 from mdpy.force.bonded_force import BondedForce
 from mdpy.force.factories.charmm import create_bonded_forces
 from mdpy.force.nonbonded_force import NonbondedForce
@@ -28,27 +28,27 @@ def _build_system():
     pdb = PDBParser(PDB)
     toppar = CharmmTopparParser(PRM)
     topology = psf.topology
-    parameter_table = create_parameter_table(topology, toppar, type_names=psf.particle_type_names)
+    parameter_set = toppar.resolve_parameter_set(topology, psf.particle_type_names)
     pbc_matrix = np.eye(3, dtype=np.float32) * BOX
 
     state = State(topology.num_particles)
     state.set_masses(psf.masses)
     state.set_charges(psf.charges)
-    state.set_type_indices(psf.particle_type_indices)
+    state.set_type_indices(parameter_set.particle_type_indices)
     system = System(topology, state)
 
     system.set_pbc(pbc_matrix)
-    for f in create_bonded_forces(topology, parameter_table):
+    for f in create_bonded_forces(topology, parameter_set):
         system.add_force_term(f)
 
     nb = NonbondedForce(lennard_jones + screened_coulomb, cutoff=CUTOFF)
-    lj_pair = parameter_table.type_pair_parameters['lj_pair']
+    lj_pair = parameter_set.type_pair_parameters['lj_pair']
     nb.set_pair_parameter('sigma', lj_pair[0::2].astype(np.float32))
     nb.set_pair_parameter('epsilon', lj_pair[1::2].astype(np.float32))
     system.add_force_term(nb)
 
     pme = PMEReciprocalForce(CUTOFF)
-    pme.initialize_grid(topology, parameter_table, pbc_matrix=pbc_matrix)
+    pme.initialize_grid(topology, parameter_set, pbc_matrix=pbc_matrix)
     system.add_force_term(pme)
 
     positions = pdb.positions.astype(np.float32)

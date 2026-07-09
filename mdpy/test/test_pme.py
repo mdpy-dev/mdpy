@@ -564,7 +564,6 @@ class TestPMEIntegration6PO6:
         from mdpy.io.psf_parser import PSFParser
         from mdpy.io.pdb_parser import PDBParser
         from mdpy.io.charmm_toppar_parser import CharmmTopparParser
-        from mdpy.io.charmm_toppar_parser import create_parameter_table
 
         data_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
 
@@ -574,7 +573,7 @@ class TestPMEIntegration6PO6:
 
         self.psf = psf
         self.topology = psf.topology
-        self.parameter_table = create_parameter_table(self.topology, toppar, type_names=self.psf.particle_type_names)
+        self.parameter_set = toppar.resolve_parameter_set(self.topology, self.psf.particle_type_names)
         self.positions = pdb.positions.astype(np.float32)
         self.N = self.topology.num_particles
         self.box = 100.0
@@ -594,22 +593,22 @@ class TestPMEIntegration6PO6:
         state = State(self.topology.num_particles)
         state.set_masses(self.psf.masses)
         state.set_charges(self.psf.charges)
-        state.set_type_indices(self.psf.particle_type_indices)
+        state.set_type_indices(self.parameter_set.particle_type_indices)
         system = System(self.topology, state)
 
         system.set_pbc(pbc_matrix)
 
-        for f in create_bonded_forces(self.topology, self.parameter_table):
+        for f in create_bonded_forces(self.topology, self.parameter_set):
             system.add_force_term(f)
 
         nb = NonbondedForce(lennard_jones + screened_coulomb, cutoff=self.cutoff)
-        lj_pair = self.parameter_table.type_pair_parameters['lj_pair']
+        lj_pair = self.parameter_set.type_pair_parameters['lj_pair']
         nb.set_pair_parameter('sigma', lj_pair[0::2].astype(np.float32))
         nb.set_pair_parameter('epsilon', lj_pair[1::2].astype(np.float32))
         system.add_force_term(nb)
 
         pme = PMEReciprocalForce(self.cutoff)
-        pme.initialize_grid(self.topology, self.parameter_table, pbc_matrix=pbc_matrix)
+        pme.initialize_grid(self.topology, self.parameter_set, pbc_matrix=pbc_matrix)
         system.add_force_term(pme)
 
         pbc_inv = np.linalg.inv(pbc_matrix.astype(np.float64))

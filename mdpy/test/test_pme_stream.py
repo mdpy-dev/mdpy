@@ -8,7 +8,6 @@ import numpy as np
 from mdpy.io.psf_parser import PSFParser
 from mdpy.io.pdb_parser import PDBParser
 from mdpy.io.charmm_toppar_parser import CharmmTopparParser
-from mdpy.io.charmm_toppar_parser import create_parameter_table
 from mdpy.force.factories.charmm import create_charmm_forces
 from mdpy.core.state import State
 from mdpy.integrator.verlet import VerletIntegrator
@@ -46,15 +45,15 @@ def _build_system(pme_stream):
     pdb = PDBParser(PDB)
     toppar = CharmmTopparParser(PRM, STR)
     topology = psf.topology
-    pt = create_parameter_table(topology, toppar, type_names=psf.particle_type_names)
+    pt = toppar.resolve_parameter_set(topology, psf.particle_type_names)
     pbc = _pbc_matrix()
 
-    forces = create_charmm_forces(topology, pt, pbc, cutoff=12.0, particle_type_indices=psf.particle_type_indices)
+    forces = create_charmm_forces(topology, pt, pbc, cutoff=12.0)
 
     state = State(topology.num_particles)
     state.set_masses(psf.masses)
     state.set_charges(psf.charges)
-    state.set_type_indices(psf.particle_type_indices)
+    state.set_type_indices(pt.particle_type_indices)
     system = System(topology, state)
     system.set_pbc(pbc)
     for f in forces['bonded']:

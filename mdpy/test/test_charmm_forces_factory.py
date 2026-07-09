@@ -4,7 +4,7 @@ import pytest
 
 from mdpy import precision
 from mdpy.io.psf_parser import PSFParser
-from mdpy.io.charmm_toppar_parser import CharmmTopparParser, create_parameter_table
+from mdpy.io.charmm_toppar_parser import CharmmTopparParser
 from mdpy.force.factories.charmm import (
     create_charmm_forces,
 )
@@ -15,46 +15,46 @@ DATA_DIR = os.path.join(os.path.dirname(__file__), 'data')
 
 
 @pytest.fixture(scope='module')
-def topology_and_table():
+def topology_and_params():
     psf = PSFParser(os.path.join(DATA_DIR, '6PO6.psf'))
     toppar = CharmmTopparParser(os.path.join(DATA_DIR, 'par_all36_prot.prm'))
     topology = psf.topology
-    parameter_table = create_parameter_table(topology, toppar, type_names=psf.particle_type_names)
-    return topology, parameter_table, psf.particle_type_indices
+    params = toppar.resolve_parameter_set(topology, psf.particle_type_names)
+    return topology, params
 
 
 class TestFactoryCreation:
 
-    def test_returns_dict_with_all_keys(self, topology_and_table):
-        topology, table, particle_type_indices = topology_and_table
-        forces = create_charmm_forces(topology, table, np.eye(3)*108.0, particle_type_indices=particle_type_indices)
+    def test_returns_dict_with_all_keys(self, topology_and_params):
+        topology, params = topology_and_params
+        forces = create_charmm_forces(topology, params, np.eye(3)*108.0)
         expected_keys = {'bonded', 'nonbonded', 'pme'}
         assert set(forces.keys()) == expected_keys
 
-    def test_bonded_is_list(self, topology_and_table):
-        topology, table, particle_type_indices = topology_and_table
-        forces = create_charmm_forces(topology, table, np.eye(3)*108.0, particle_type_indices=particle_type_indices)
+    def test_bonded_is_list(self, topology_and_params):
+        topology, params = topology_and_params
+        forces = create_charmm_forces(topology, params, np.eye(3)*108.0)
         assert isinstance(forces['bonded'], list)
         assert len(forces['bonded']) > 0
         for f in forces['bonded']:
             assert isinstance(f, BondedForce)
 
-    def test_nonbonded_is_nonbonded_force(self, topology_and_table):
-        topology, table, particle_type_indices = topology_and_table
-        forces = create_charmm_forces(topology, table, np.eye(3)*108.0, particle_type_indices=particle_type_indices)
+    def test_nonbonded_is_nonbonded_force(self, topology_and_params):
+        topology, params = topology_and_params
+        forces = create_charmm_forces(topology, params, np.eye(3)*108.0)
         from mdpy.force.nonbonded_force import NonbondedForce
         assert isinstance(forces['nonbonded'], NonbondedForce)
 
-    def test_unique_names(self, topology_and_table):
-        topology, table, particle_type_indices = topology_and_table
-        forces = create_charmm_forces(topology, table, np.eye(3)*108.0, particle_type_indices=particle_type_indices)
+    def test_unique_names(self, topology_and_params):
+        topology, params = topology_and_params
+        forces = create_charmm_forces(topology, params, np.eye(3)*108.0)
         bonded_names = [f.name for f in forces['bonded']]
         names = bonded_names + [forces['nonbonded'].name, forces['pme'].name]
         assert len(names) == len(set(names)), f"Duplicate names: {names}"
 
-    def test_pme_exclusion_in_bonded_list(self, topology_and_table):
-        topology, table, particle_type_indices = topology_and_table
-        forces = create_charmm_forces(topology, table, np.eye(3)*108.0, particle_type_indices=particle_type_indices)
+    def test_pme_exclusion_in_bonded_list(self, topology_and_params):
+        topology, params = topology_and_params
+        forces = create_charmm_forces(topology, params, np.eye(3)*108.0)
         assert isinstance(forces['bonded'], list)
         sub_names = [f.name for f in forces['bonded']]
         assert 'pme_exclusion' in sub_names, f"pme_exclusion not in {sub_names}"
@@ -62,43 +62,43 @@ class TestFactoryCreation:
 
 class TestBondForce:
 
-    def test_bond_count_matches_topology(self, topology_and_table):
-        topology, table, particle_type_indices = topology_and_table
-        forces = create_charmm_forces(topology, table, np.eye(3)*108.0, particle_type_indices=particle_type_indices)
+    def test_bond_count_matches_topology(self, topology_and_params):
+        topology, params = topology_and_params
+        forces = create_charmm_forces(topology, params, np.eye(3)*108.0)
         bonded = forces['bonded']
         bond_force = [f for f in bonded if f.name == 'bond'][0]
         assert bond_force.num_terms == topology.num_bonds
 
-    def test_bond_num_terms_is_public_property(self, topology_and_table):
-        topology, table, particle_type_indices = topology_and_table
-        forces = create_charmm_forces(topology, table, np.eye(3)*108.0, particle_type_indices=particle_type_indices)
+    def test_bond_num_terms_is_public_property(self, topology_and_params):
+        topology, params = topology_and_params
+        forces = create_charmm_forces(topology, params, np.eye(3)*108.0)
         bonded = forces['bonded']
         bond_force = [f for f in bonded if f.name == 'bond'][0]
         assert hasattr(bond_force, 'num_terms')
         assert bond_force.num_terms == topology.num_bonds
 
-    def test_bond_parameters_extracted(self, topology_and_table):
-        topology, table, particle_type_indices = topology_and_table
-        forces = create_charmm_forces(topology, table, np.eye(3)*108.0, particle_type_indices=particle_type_indices)
+    def test_bond_parameters_extracted(self, topology_and_params):
+        topology, params = topology_and_params
+        forces = create_charmm_forces(topology, params, np.eye(3)*108.0)
         bonded = forces['bonded']
         bond_force = [f for f in bonded if f.name == 'bond'][0]
-        bond_params = table.get_term_parameter('bond')
+        bond_params = params.get_term_parameter('bond')
         assert bond_force.num_terms > 0
         assert bond_force._parameters_per_term == 2
 
 
 class TestAngleForce:
 
-    def test_angle_count_matches_topology(self, topology_and_table):
-        topology, table, particle_type_indices = topology_and_table
-        forces = create_charmm_forces(topology, table, np.eye(3)*108.0, particle_type_indices=particle_type_indices)
+    def test_angle_count_matches_topology(self, topology_and_params):
+        topology, params = topology_and_params
+        forces = create_charmm_forces(topology, params, np.eye(3)*108.0)
         bonded = forces['bonded']
         angle_force = [f for f in bonded if f.name == 'angle'][0]
         assert angle_force.num_terms == topology.num_angles
 
-    def test_angle_parameters_extracted(self, topology_and_table):
-        topology, table, particle_type_indices = topology_and_table
-        forces = create_charmm_forces(topology, table, np.eye(3)*108.0, particle_type_indices=particle_type_indices)
+    def test_angle_parameters_extracted(self, topology_and_params):
+        topology, params = topology_and_params
+        forces = create_charmm_forces(topology, params, np.eye(3)*108.0)
         bonded = forces['bonded']
         angle_force = [f for f in bonded if f.name == 'angle'][0]
         assert angle_force._parameters_per_term == 4
@@ -106,16 +106,16 @@ class TestAngleForce:
 
 class TestDihedralForce:
 
-    def test_dihedral_count_matches_topology(self, topology_and_table):
-        topology, table, particle_type_indices = topology_and_table
-        forces = create_charmm_forces(topology, table, np.eye(3)*108.0, particle_type_indices=particle_type_indices)
+    def test_dihedral_count_matches_topology(self, topology_and_params):
+        topology, params = topology_and_params
+        forces = create_charmm_forces(topology, params, np.eye(3)*108.0)
         bonded = forces['bonded']
         dihedral_force = [f for f in bonded if f.name == 'dihedral'][0]
         assert dihedral_force.num_terms == topology.num_dihedrals
 
-    def test_dihedral_parameters_extracted(self, topology_and_table):
-        topology, table, particle_type_indices = topology_and_table
-        forces = create_charmm_forces(topology, table, np.eye(3)*108.0, particle_type_indices=particle_type_indices)
+    def test_dihedral_parameters_extracted(self, topology_and_params):
+        topology, params = topology_and_params
+        forces = create_charmm_forces(topology, params, np.eye(3)*108.0)
         bonded = forces['bonded']
         dihedral_force = [f for f in bonded if f.name == 'dihedral'][0]
         assert dihedral_force._parameters_per_term == 3
@@ -123,9 +123,9 @@ class TestDihedralForce:
 
 class TestImproperForce:
 
-    def test_improper_count_matches_topology(self, topology_and_table):
-        topology, table, particle_type_indices = topology_and_table
-        forces = create_charmm_forces(topology, table, np.eye(3)*108.0, particle_type_indices=particle_type_indices)
+    def test_improper_count_matches_topology(self, topology_and_params):
+        topology, params = topology_and_params
+        forces = create_charmm_forces(topology, params, np.eye(3)*108.0)
         bonded = forces['bonded']
         improper_force = [f for f in bonded if f.name == 'improper'][0]
         assert improper_force.num_terms == topology.num_impropers
@@ -133,30 +133,30 @@ class TestImproperForce:
 
 class TestNb14Force:
 
-    def test_nb14_is_bonded_force(self, topology_and_table):
-        topology, table, particle_type_indices = topology_and_table
-        forces = create_charmm_forces(topology, table, np.eye(3)*108.0, particle_type_indices=particle_type_indices)
+    def test_nb14_is_bonded_force(self, topology_and_params):
+        topology, params = topology_and_params
+        forces = create_charmm_forces(topology, params, np.eye(3)*108.0)
         bonded = forces['bonded']
         nb14_force = [f for f in bonded if f.name == 'nb14'][0]
         assert isinstance(nb14_force, BondedForce)
 
-    def test_nb14_has_charges(self, topology_and_table):
-        topology, table, particle_type_indices = topology_and_table
-        forces = create_charmm_forces(topology, table, np.eye(3)*108.0, particle_type_indices=particle_type_indices)
+    def test_nb14_has_charges(self, topology_and_params):
+        topology, params = topology_and_params
+        forces = create_charmm_forces(topology, params, np.eye(3)*108.0)
         bonded = forces['bonded']
         nb14_force = [f for f in bonded if f.name == 'nb14'][0]
         assert 'charge' in nb14_force._per_particle_properties
 
-    def test_nb14_count_positive(self, topology_and_table):
-        topology, table, particle_type_indices = topology_and_table
-        forces = create_charmm_forces(topology, table, np.eye(3)*108.0, particle_type_indices=particle_type_indices)
+    def test_nb14_count_positive(self, topology_and_params):
+        topology, params = topology_and_params
+        forces = create_charmm_forces(topology, params, np.eye(3)*108.0)
         bonded = forces['bonded']
         nb14_force = [f for f in bonded if f.name == 'nb14'][0]
         assert nb14_force.num_terms > 0
 
-    def test_nb14_has_two_params(self, topology_and_table):
-        topology, table, particle_type_indices = topology_and_table
-        forces = create_charmm_forces(topology, table, np.eye(3)*108.0, particle_type_indices=particle_type_indices)
+    def test_nb14_has_two_params(self, topology_and_params):
+        topology, params = topology_and_params
+        forces = create_charmm_forces(topology, params, np.eye(3)*108.0)
         bonded = forces['bonded']
         nb14_force = [f for f in bonded if f.name == 'nb14'][0]
         assert nb14_force._parameters_per_term == 2
@@ -164,39 +164,39 @@ class TestNb14Force:
 
 class TestNonbondedForce:
 
-    def test_nonbonded_has_charge(self, topology_and_table):
-        topology, table, particle_type_indices = topology_and_table
-        forces = create_charmm_forces(topology, table, np.eye(3)*108.0, particle_type_indices=particle_type_indices)
+    def test_nonbonded_has_charge(self, topology_and_params):
+        topology, params = topology_and_params
+        forces = create_charmm_forces(topology, params, np.eye(3)*108.0)
         nb = forces['nonbonded']
         assert 'charge' in nb._expr_info.per_particle.values()
 
-    def test_nonbonded_has_sigma_epsilon(self, topology_and_table):
-        topology, table, particle_type_indices = topology_and_table
-        forces = create_charmm_forces(topology, table, np.eye(3)*108.0, particle_type_indices=particle_type_indices)
+    def test_nonbonded_has_sigma_epsilon(self, topology_and_params):
+        topology, params = topology_and_params
+        forces = create_charmm_forces(topology, params, np.eye(3)*108.0)
         nb = forces['nonbonded']
         assert 'sigma' in nb._pair_param_data
         assert 'epsilon' in nb._pair_param_data
 
-    def test_nonbonded_sigma_matrix_shape(self, topology_and_table):
-        topology, table, particle_type_indices = topology_and_table
-        forces = create_charmm_forces(topology, table, np.eye(3)*108.0, particle_type_indices=particle_type_indices)
+    def test_nonbonded_sigma_matrix_shape(self, topology_and_params):
+        topology, params = topology_and_params
+        forces = create_charmm_forces(topology, params, np.eye(3)*108.0)
         nb = forces['nonbonded']
-        n_types = len(table.type_parameters['sigma'])
+        n_types = len(params.type_parameters['sigma'])
         sigma = nb._pair_param_data['sigma']
         assert sigma.shape[0] == n_types * n_types
 
 
 class TestEnergyComputation:
 
-    def test_bond_energy_finite(self, topology_and_table):
+    def test_bond_energy_finite(self, topology_and_params):
         import cupy as cp
 
-        topology, table, particle_type_indices = topology_and_table
+        topology, params = topology_and_params
         from mdpy.io.pdb_parser import PDBParser
         pdb = PDBParser(os.path.join(DATA_DIR, '6PO6.pdb'))
         pbc_matrix = np.eye(3, dtype=precision.FLOAT) * 100.0
 
-        forces = create_charmm_forces(topology, table, np.eye(3)*108.0, particle_type_indices=particle_type_indices)
+        forces = create_charmm_forces(topology, params, np.eye(3)*108.0)
         bonded_group = forces['bonded']
         bond_force = [f for f in bonded_group if f.name == 'bond'][0]
 
