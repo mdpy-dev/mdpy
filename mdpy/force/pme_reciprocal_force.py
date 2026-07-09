@@ -257,7 +257,7 @@ def precompute_bk_factors(
 
     volume = box_x * box_y * box_z
     grid_total = grid_x * grid_y * grid_z
-    scale_factor = math.pi * volume / grid_total
+    scale_factor = 2.0 * volume / grid_total
     recip_exp_factor = math.pi**2 / (alpha**2)
 
     recip_x = 1.0 / box_x
@@ -635,9 +635,9 @@ class PMEReciprocalForce(ForceTerm):
 
         if compute_virial and self._d_bk_virial_factors is not None:
             rho_sq = cp.abs(self._d_complex_buffer_virial) ** 2
-            nk_mode = self.grid_x * self.grid_y * self.grid_z
+            grid_total = self.grid_x * self.grid_y * self.grid_z
             vol = state.box_x * state.box_y * state.box_z
-            norm = vol / (nk_mode * nk_mode)
+            norm = vol / (grid_total * grid_total)
             virial_recip = float(cp.sum(rho_sq * self._d_bk_virial_factors)) * norm
             cp.cuda.Stream.null.synchronize()
             state.d_virial[0] += np.float32(virial_recip * COULOMB_CONST)
