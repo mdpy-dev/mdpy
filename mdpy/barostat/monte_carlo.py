@@ -155,6 +155,74 @@ class MonteCarloBarostat(BarostatBase):
             ),
         )
 
+    def apply(self, system):
+        """Attempt a Monte Carlo volume move (called every step; acts every `frequency`)."""
+        self._step += 1
+        if self._step < self.frequency:
+            return
+        self._step = 0
+
+        state = system.state
+
+        volume = state.box_x * state.box_y * state.box_z
+
+        if self._volume_scale is None:
+            self._volume_scale = 0.01 * volume
+
+        energy_initial = system.compute_total_energy()
+
+        delta_volume = self._volume_scale * (2.0 * np.random.random() - 1.0)
+        new_volume = volume + delta_volume
+        if new_volume <= 0:
+            return
+        scale_factor = np.float32((new_volume / volume) ** (1.0 / 3.0))
+
+        saved_pos_x = state.d_positions_x.copy()
+        saved_pos_y = state.d_positions_y.copy()
+        saved_pos_z = state.d_positions_z.copy()
+        saved_prev_x = state.d_prev_positions_x.copy()
+        saved_prev_y = state.d_prev_positions_y.copy()
+        saved_prev_z = state.d_prev_positions_z.copy()
+        saved_pbc = state.d_pbc_matrix.get().reshape(3, 3).copy()
+
+        self._scale_positions(state, scale_factor)
+
+        new_pbc = saved_pbc * float(scale_factor)
+        system.resize_box(new_pbc)
+
+        energy_final = system.compute_total_energy()
+
+        delta_energy = energy_final - energy_initial
+        kT = BOLTZMANN * self.temperature
+        log_v_ratio = np.log(new_volume / volume)
+        weight = (delta_energy
+                  + self.pressure * delta_volume
+                  - self._num_molecules * kT * log_v_ratio)
+
+        accept = weight <= 0.0 or np.random.random() < np.exp(-weight / kT)
+
+        self._num_attempted += 1
+
+        if accept:
+            self._num_accepted += 1
+        else:
+            state.d_positions_x[:] = saved_pos_x
+            state.d_positions_y[:] = saved_pos_y
+            state.d_positions_z[:] = saved_pos_z
+            state.d_prev_positions_x[:] = saved_prev_x
+            state.d_prev_positions_y[:] = saved_prev_y
+            state.d_prev_positions_z[:] = saved_prev_z
+            system.resize_box(saved_pbc)
+
+        if self._num_attempted >= 10:
+            rate = self._num_accepted / self._num_attempted
+            if rate < 0.25:
+                self._volume_scale /= 1.1
+            elif rate > 0.75:
+                self._volume_scale = min(self._volume_scale * 1.1, 0.3 * volume)
+            self._num_attempted = 0
+            self._num_accepted = 0
+
     @property
     def acceptance_rate(self):
         if self._num_attempted == 0:

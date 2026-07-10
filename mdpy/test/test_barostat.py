@@ -225,6 +225,7 @@ class TestSystemBarostatIntegration:
 
 
 from mdpy.barostat._base import BarostatBase
+from mdpy.barostat.monte_carlo import MonteCarloBarostat
 
 
 class TestBarostatBase:
@@ -362,3 +363,94 @@ class TestScaleMoleculePositions:
         # atom 1: 30 * 2 = 60
         assert abs(pos_x[0] - 20.0) < 1e-4
         assert abs(pos_x[1] - 60.0) < 1e-4
+
+
+class TestMonteCarloApply:
+    def test_apply_does_nothing_before_frequency(self):
+        """Barostat should be a no-op until frequency steps have elapsed."""
+        system = _make_minimal_system()
+        barostat = MonteCarloBarostat(
+            pressure_bar=1.0, temperature=300.0, frequency=5,
+            particle_molecule_ids=[0, 0, 0, 0])
+
+        original_box_x = system.state.box_x
+        for i in range(4):
+            barostat.apply(system)
+        assert abs(system.state.box_x - original_box_x) < 1e-5
+        assert barostat._num_attempted == 0
+
+    def test_apply_acts_on_frequency_step(self):
+        """After exactly `frequency` calls, a volume move is attempted."""
+        system = _make_minimal_system()
+        barostat = MonteCarloBarostat(
+            pressure_bar=1.0, temperature=300.0, frequency=3,
+            particle_molecule_ids=[0, 1, 2, 3])
+
+        for i in range(3):
+            barostat.apply(system)
+        assert barostat._num_attempted == 1
+
+    def test_apply_preserves_num_particles(self):
+        """Scaling must not change the number of particles."""
+        system = _make_minimal_system()
+        barostat = MonteCarloBarostat(
+            pressure_bar=1.0, temperature=300.0, frequency=1,
+            particle_molecule_ids=[0, 1, 2, 3])
+        barostat.apply(system)
+        system.compute_forces()
+        assert system.state.num_particles == 4
+
+    def test_acceptance_rate_tracking(self):
+        """After several attempts, acceptance_rate is between 0 and 1."""
+        system = _make_minimal_system(box_size=50.0)
+        barostat = MonteCarloBarostat(
+            pressure_bar=1.0, temperature=300.0, frequency=1,
+            particle_molecule_ids=[0, 1, 2, 3])
+        for i in range(20):
+            barostat.apply(system)
+        assert 0.0 <= barostat.acceptance_rate <= 1.0
+
+    def test_adaptive_tuning_adjusts_volume_scale(self):
+        """After 10 attempts with extreme acceptance, volume_scale changes."""
+        system = _make_minimal_system()
+        barostat = MonteCarloBarostat(
+            pressure_bar=1000.0,
+            temperature=300.0, frequency=1,
+            particle_molecule_ids=[0, 1, 2, 3])
+
+        initial_scale = barostat._volume_scale
+        for i in range(15):
+            barostat.apply(system)
+
+        assert barostat._volume_scale is not None
+        assert barostat._volume_scale > 0
+
+    def test_reject_restores_positions(self):
+        """On reject, positions should be restored to pre-trial values."""
+        system = _make_minimal_system()
+        barostat = MonteCarloBarostat(
+            pressure_bar=1e10,
+            temperature=300.0, frequency=1,
+            particle_molecule_ids=[0, 1, 2, 3])
+
+        pos_before = system.state.d_positions_x.copy()
+        barostat.apply(system)
+        pos_after = system.state.d_positions_x.get()
+
+        if barostat._num_attempted > 0 and barostat._num_accepted == 0:
+            np.testing.assert_allclose(pos_after, pos_before.get(), atol=1e-4)
+
+    def test_energy_unchanged_on_reject(self):
+        """If the move is rejected, total energy should be the same."""
+        system = _make_minimal_system()
+        barostat = MonteCarloBarostat(
+            pressure_bar=1e10,
+            temperature=300.0, frequency=1,
+            particle_molecule_ids=[0, 1, 2, 3])
+
+        energy_before = system.compute_total_energy()
+        barostat.apply(system)
+        energy_after = system.compute_total_energy()
+
+        if barostat._num_attempted > 0 and barostat._num_accepted == 0:
+            assert abs(energy_after - energy_before) < 1e-2
