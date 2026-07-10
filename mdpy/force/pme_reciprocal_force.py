@@ -541,6 +541,32 @@ class PMEReciprocalForce(ForceTerm):
 
         self._warm_fft()
 
+    def update_box(self, box_x, box_y, box_z, block_list=None):
+        """Recompute box-dependent coefficients for a new box size.
+
+        Recomputes bk_factors (which depend on reciprocal lattice vectors).
+        Conditionally invalidates the subgrid cache if block_list cell counts
+        have changed. Grid dimensions, alpha, and FFT plan are NOT changed.
+
+        Args:
+            box_x, box_y, box_z: New box edge lengths (Angstroms).
+            block_list: Current BlockList (after rebuild with new box). May be
+                None during testing; if None, subgrid invalidation is skipped.
+        """
+        bk = precompute_bk_factors(
+            self.alpha, self.grid_x, self.grid_y, self.grid_z,
+            self._order, box_x, box_y, box_z)
+        self._d_bk_factors = cp.asarray(bk)
+
+        if block_list is not None and self._subgrid_initialized:
+            new_dx = -(-self.grid_x // block_list.num_cells_x) + 2 * self._order
+            new_dy = -(-self.grid_y // block_list.num_cells_y) + 2 * self._order
+            new_dz = -(-self.grid_z // block_list.num_cells_z) + 2 * self._order
+            if (new_dx != self._subgrid_dx or
+                    new_dy != self._subgrid_dy or
+                    new_dz != self._subgrid_dz):
+                self._subgrid_initialized = False
+
     def _warm_fft(self):
         if self._fft_warmed:
             return
