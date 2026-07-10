@@ -13,7 +13,8 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 import cupy as cp
 import numpy as np
-from _data_path import DATA_DIR
+
+DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
 
 from mdpy.io.psf_parser import PSFParser
 from mdpy.io.pdb_parser import PDBParser
@@ -25,7 +26,6 @@ from mdpy.system import System
 from mdpy.constraint.constraint_scheme import create_constraints
 from mdpy.utils import generate_velocity_from_temperature
 
-BOX_SIZE = 108.0
 CUTOFF = 12.0
 TIME_STEP_FS = 2
 NUM_BLOCKS = 5
@@ -42,7 +42,7 @@ toppar = CharmmTopparParser(
 )
 topology = psf.topology
 parameter_set = toppar.resolve_parameter_set(topology, psf.particle_type_names)
-pbc_matrix = np.eye(3, dtype=np.float64) * BOX_SIZE
+pbc_matrix = pdb.pbc_matrix
 
 state = State(topology.num_particles)
 state.set_pbc(pbc_matrix)
@@ -93,7 +93,7 @@ def _run_steps(n):
 
 print("mdpy 1M9Z PME benchmark")
 print(f"  Atoms:         {topology.num_particles}")
-print(f"  Box:           {BOX_SIZE} A")
+print(f"  Box:           {pbc_matrix[0,0]:.1f} x {pbc_matrix[1,1]:.1f} x {pbc_matrix[2,2]:.1f} A")
 print(f"  Cutoff:        {CUTOFF} A")
 print(f"  time_step:    {TIME_STEP_FS} fs")
 print(f"  Integrator:    Langevin BAOAB")
