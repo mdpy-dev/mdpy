@@ -64,11 +64,12 @@ void lbfgs_step_kernel(
 
 class LBFGSMinimizer(Minimizer):
 
-    def __init__(self, sd_step_size=0.1, history_size=5, max_step=5.0):
+    def __init__(self, sd_step_size=0.1, history_size=5, max_step=5.0, max_line_search=10):
         super().__init__()
         self.sd_step_size = float(sd_step_size)
         self.history_size = history_size
         self.max_step = float(max_step)
+        self.max_line_search = int(max_line_search)
 
         self._dot_kernel = None
         self._step_kernel = None
@@ -136,6 +137,10 @@ class LBFGSMinimizer(Minimizer):
         self._grad_x = cp.zeros(num_particles, dtype=cp.float32)
         self._grad_y = cp.zeros(num_particles, dtype=cp.float32)
         self._grad_z = cp.zeros(num_particles, dtype=cp.float32)
+
+        self._save_pos_x = cp.zeros(num_particles, dtype=cp.float32)
+        self._save_pos_y = cp.zeros(num_particles, dtype=cp.float32)
+        self._save_pos_z = cp.zeros(num_particles, dtype=cp.float32)
 
         h = self.history_size
         self._s_x = cp.zeros((h, num_particles), dtype=cp.float32)
@@ -321,10 +326,22 @@ class LBFGSMinimizer(Minimizer):
             self._direction_y[:] *= scale
             self._direction_z[:] *= scale
 
-        self._step_kernel(
-            (num_blocks,), (threads_per_block,),
-            (state.d_positions_x, state.d_positions_y, state.d_positions_z,
-             self._direction_x, self._direction_y, self._direction_z,
-             np.float32(1.0), np.int32(num_particles)),
-        )
+        cp.copyto(self._save_pos_x, state.d_positions_x)
+        cp.copyto(self._save_pos_y, state.d_positions_y)
+        cp.copyto(self._save_pos_z, state.d_positions_z)
+
+        mf_current = self.compute_max_force(system)
+
+        alpha = 1.0
+        for backtrack in range(self.max_line_search):
+            state.d_positions_x[:] = self._save_pos_x + np.float32(alpha) * self._direction_x
+            state.d_positions_y[:] = self._save_pos_y + np.float32(alpha) * self._direction_y
+            state.d_positions_z[:] = self._save_pos_z + np.float32(alpha) * self._direction_z
+
+            system.compute_forces()
+            mf_trial = self.compute_max_force(system)
+
+            if mf_trial <= mf_current:
+                break
+            alpha *= 0.5
         self._num_updates += 1
