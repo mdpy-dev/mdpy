@@ -6,9 +6,11 @@ __license__ = "BSD"
 from .charmm_toppar_parser import CharmmTopparParser
 from .psf_parser import PSFParser
 from .pdb_parser import PDBParser
+from .pdb_writer import PDBWriter
 
 __all__ = [
     'CharmmTopparParser',
     'PSFParser',
     'PDBParser',
+    'PDBWriter',
 ]
