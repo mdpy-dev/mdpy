@@ -202,9 +202,9 @@ class LBFGSMinimizer(Minimizer):
         cp.subtract(state.d_positions_x, self._prev_positions_x, out=self._s_x[slot])
         cp.subtract(state.d_positions_y, self._prev_positions_y, out=self._s_y[slot])
         cp.subtract(state.d_positions_z, self._prev_positions_z, out=self._s_z[slot])
-        cp.subtract(self._grad_x, self._prev_gradients_x, out=self._y_x[slot])
-        cp.subtract(self._grad_y, self._prev_gradients_y, out=self._y_y[slot])
-        cp.subtract(self._grad_z, self._prev_gradients_z, out=self._y_z[slot])
+        cp.subtract(self._prev_gradients_x, self._grad_x, out=self._y_x[slot])
+        cp.subtract(self._prev_gradients_y, self._grad_y, out=self._y_y[slot])
+        cp.subtract(self._prev_gradients_z, self._grad_z, out=self._y_z[slot])
 
         self._prev_positions_x[:] = state.d_positions_x
         self._prev_positions_y[:] = state.d_positions_y
@@ -218,7 +218,7 @@ class LBFGSMinimizer(Minimizer):
             self._y_x[slot], self._y_y[slot], self._y_z[slot],
             num_blocks, threads_per_block, num_particles,
         )
-        if rho >= 0.0:
+        if rho <= 0.0:
             self._direction_x[:] = self._grad_x
             self._direction_y[:] = self._grad_y
             self._direction_z[:] = self._grad_z
@@ -236,9 +236,9 @@ class LBFGSMinimizer(Minimizer):
         self._head = (self._head + 1) % self.history_size
         self._count = min(self._count + 1, self.history_size)
 
-        self._direction_x[:] = -self._grad_x
-        self._direction_y[:] = -self._grad_y
-        self._direction_z[:] = -self._grad_z
+        self._direction_x[:] = self._grad_x
+        self._direction_y[:] = self._grad_y
+        self._direction_z[:] = self._grad_z
 
         m = self._count
         self._alpha = [0.0] * m
