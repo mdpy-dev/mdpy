@@ -222,3 +222,59 @@ class TestSystemBarostatIntegration:
         assert len(system.barostats) == 1
         system.apply_barostats()
         assert call_count[0] == 1
+
+
+from mdpy.barostat._base import BarostatBase
+
+
+class TestBarostatBase:
+    def test_base_has_apply_method(self):
+        assert hasattr(BarostatBase, 'apply')
+
+    def test_base_apply_raises_not_implemented(self):
+        base = BarostatBase()
+        with pytest.raises(NotImplementedError):
+            base.apply(None)
+
+    def test_base_has_name_attribute(self):
+        assert hasattr(BarostatBase, 'name')
+
+
+class TestMoleculeCSR:
+    def test_single_molecule_all_atoms(self):
+        """All atoms in one molecule → one group."""
+        from mdpy.barostat.monte_carlo import build_molecule_csr
+        mol_ids = [0, 0, 0, 0]
+        atoms, starts = build_molecule_csr(mol_ids)
+        assert len(starts) == 2  # 1 molecule + 1 sentinel
+        assert starts[0] == 0
+        assert starts[1] == 4
+
+    def test_multiple_molecules(self):
+        """4 atoms in 2 molecules (2+2)."""
+        from mdpy.barostat.monte_carlo import build_molecule_csr
+        mol_ids = [0, 0, 1, 1]
+        atoms, starts = build_molecule_csr(mol_ids)
+        assert len(starts) == 3  # 2 molecules + 1 sentinel
+        # Molecule 0: atoms 0, 1
+        assert atoms[starts[0]:starts[1]].tolist() == [0, 1]
+        # Molecule 1: atoms 2, 3
+        assert atoms[starts[1]:starts[2]].tolist() == [2, 3]
+
+    def test_interleaved_molecules(self):
+        """Molecules not contiguous in PDB order → CSR reorders them."""
+        from mdpy.barostat.monte_carlo import build_molecule_csr
+        mol_ids = [1, 0, 1, 0]  # interleaved
+        atoms, starts = build_molecule_csr(mol_ids)
+        assert len(starts) == 3
+        # Molecule 0: atoms at PDB indices 1, 3
+        assert atoms[starts[0]:starts[1]].tolist() == [1, 3]
+        # Molecule 1: atoms at PDB indices 0, 2
+        assert atoms[starts[1]:starts[2]].tolist() == [0, 2]
+
+    def test_returns_int32_arrays(self):
+        from mdpy.barostat.monte_carlo import build_molecule_csr
+        mol_ids = [0, 0, 1]
+        atoms, starts = build_molecule_csr(mol_ids)
+        assert atoms.dtype == np.int32
+        assert starts.dtype == np.int32
