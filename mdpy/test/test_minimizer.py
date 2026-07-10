@@ -161,7 +161,7 @@ class TestLBFGS:
         positions = np.array([[1.0, 0.0, 0.0]], dtype=np.float32)
         forces = np.array([[-2.0, 0.0, 0.0]], dtype=np.float32)
         system = _make_system(1, positions, forces)
-        minimizer = LBFGSMinimizer(history_size=3, step_size=0.1)
+        minimizer = LBFGSMinimizer(history_size=3, sd_step_size=0.1)
         minimizer.step(system)
         new_pos = system.state.download_positions()
         assert new_pos[0, 0] < 1.0
@@ -170,7 +170,7 @@ class TestLBFGS:
         positions = np.array([[1.0, 0.0, 0.0]], dtype=np.float32)
         forces = np.array([[-2.0, 0.0, 0.0]], dtype=np.float32)
         system = _make_system(1, positions, forces)
-        minimizer = LBFGSMinimizer(history_size=3, step_size=0.0)
+        minimizer = LBFGSMinimizer(history_size=3, sd_step_size=0.0)
         minimizer.step(system)
         new_pos = system.state.download_positions()
         np.testing.assert_allclose(new_pos, positions)
@@ -178,7 +178,7 @@ class TestLBFGS:
     def test_two_step_reduces_force(self):
         positions = np.array([[0.0, 0.0, 0.0], [2.0, 0.0, 0.0]], dtype=np.float32)
         system = _make_system(2, positions, np.zeros((2, 3), dtype=np.float32))
-        minimizer = LBFGSMinimizer(history_size=3, step_size=0.1)
+        minimizer = LBFGSMinimizer(history_size=3, sd_step_size=0.1)
 
         for step in range(3):
             x0 = float(system.state.d_positions_x[0])

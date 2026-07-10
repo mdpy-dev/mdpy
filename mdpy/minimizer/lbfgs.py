@@ -64,10 +64,11 @@ void lbfgs_step_kernel(
 
 class LBFGSMinimizer(Minimizer):
 
-    def __init__(self, step_size=1.0, history_size=5):
+    def __init__(self, sd_step_size=0.1, history_size=5, max_step=5.0):
         super().__init__()
-        self.step_size = float(step_size)
+        self.sd_step_size = float(sd_step_size)
         self.history_size = history_size
+        self.max_step = float(max_step)
 
         self._dot_kernel = None
         self._step_kernel = None
@@ -193,7 +194,7 @@ class LBFGSMinimizer(Minimizer):
                 (num_blocks,), (threads_per_block,),
                 (state.d_positions_x, state.d_positions_y, state.d_positions_z,
                  self._direction_x, self._direction_y, self._direction_z,
-                 np.float32(self.step_size), np.int32(num_particles)),
+                 np.float32(self.sd_step_size), np.int32(num_particles)),
             )
             self._num_updates = 1
             return
@@ -226,7 +227,7 @@ class LBFGSMinimizer(Minimizer):
                 (num_blocks,), (threads_per_block,),
                 (state.d_positions_x, state.d_positions_y, state.d_positions_z,
                  self._direction_x, self._direction_y, self._direction_z,
-                 np.float32(self.step_size), np.int32(num_particles)),
+                 np.float32(self.sd_step_size), np.int32(num_particles)),
             )
             self._num_updates += 1
             return
@@ -299,10 +300,31 @@ class LBFGSMinimizer(Minimizer):
             self._direction_y[:] += (self._alpha[i] - beta) * self._s_y[ring_idx]
             self._direction_z[:] += (self._alpha[i] - beta) * self._s_z[ring_idx]
 
+        directional_derivative = self._compute_dot(
+            self._direction_x, self._direction_y, self._direction_z,
+            self._grad_x, self._grad_y, self._grad_z,
+            num_blocks, threads_per_block, num_particles,
+        )
+        if directional_derivative <= 0.0:
+            self._direction_x[:] = self._grad_x
+            self._direction_y[:] = self._grad_y
+            self._direction_z[:] = self._grad_z
+
+        max_dir = max(
+            float(cp.max(cp.abs(self._direction_x))),
+            float(cp.max(cp.abs(self._direction_y))),
+            float(cp.max(cp.abs(self._direction_z))),
+        )
+        if max_dir > self.max_step:
+            scale = np.float32(self.max_step / max_dir)
+            self._direction_x[:] *= scale
+            self._direction_y[:] *= scale
+            self._direction_z[:] *= scale
+
         self._step_kernel(
             (num_blocks,), (threads_per_block,),
             (state.d_positions_x, state.d_positions_y, state.d_positions_z,
              self._direction_x, self._direction_y, self._direction_z,
-             np.float32(self.step_size), np.int32(num_particles)),
+             np.float32(1.0), np.int32(num_particles)),
         )
         self._num_updates += 1
