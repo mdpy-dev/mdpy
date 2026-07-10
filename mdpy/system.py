@@ -221,6 +221,8 @@ class System:
         GPU→CPU transfer is the final scalar read.
         """
         self._ensure_ready()
+        if not self.force_terms:
+            return 0.0
         self.state.zero_forces()
         if self._block_list is not None:
             self._block_list.refresh_sorted_posq(self.state)

@@ -225,7 +225,7 @@ class TestSystemBarostatIntegration:
 
 
 from mdpy.barostat._base import BarostatBase
-from mdpy.barostat.monte_carlo import MonteCarloBarostat
+from mdpy.barostat.monte_carlo import MonteCarloBarostat, BOLTZMANN, BAR_TO_INTERNAL_PRESSURE
 
 
 class TestBarostatBase:
@@ -454,3 +454,64 @@ class TestMonteCarloApply:
 
         if barostat._num_attempted > 0 and barostat._num_accepted == 0:
             assert abs(energy_after - energy_before) < 1e-2
+
+
+class TestNPTConvergence:
+    def test_ideal_gas_volume_converges(self):
+        """Ideal gas NPT: average volume should approach N_mol*kT/P.
+
+        Uses non-interacting particles (no nonbonded) so PV = N_mol*kT.
+        Runs 500 steps with frequency=1 and checks the average volume
+        over the last 200 steps is within 30% of the analytical value.
+        Statistical tolerance is wide due to small system size.
+        """
+        num_particles = 20
+        box_size = 80.0
+        topology = Topology()
+        topology.num_particles = num_particles
+
+        state = State(num_particles)
+        state.set_particle_masses(np.full(num_particles, 12.0, dtype=precision.FLOAT))
+        state.set_particle_charges(np.zeros(num_particles, dtype=precision.FLOAT))
+        state.set_particle_type_indices(np.zeros(num_particles, dtype=precision.INT))
+
+        system = System(topology, state)
+        system.set_pbc(np.eye(3, dtype=precision.FLOAT) * box_size)
+        system._cutoff = 12.0  # required for update_neighbor_list with no force terms
+
+        positions = np.random.RandomState(42).uniform(
+            0, box_size, size=(num_particles, 3)).astype(precision.FLOAT)
+        system.set_positions(positions)
+        system.set_velocities(np.zeros((num_particles, 3), dtype=precision.FLOAT))
+        system.update_neighbor_list(force_rebuild=True)
+
+        pressure_bar = 10.0
+        temperature = 300.0
+        barostat = MonteCarloBarostat(
+            pressure_bar=pressure_bar,
+            temperature=temperature,
+            frequency=1,
+            particle_molecule_ids=list(range(num_particles)),
+        )
+        system.add_barostat(barostat)
+
+        kT = BOLTZMANN * temperature
+        expected_volume = num_particles * kT / (pressure_bar * BAR_TO_INTERNAL_PRESSURE)
+
+        volumes = []
+        for i in range(500):
+            system.apply_barostats()
+
+        barostat._num_attempted = 0
+        barostat._num_accepted = 0
+        for i in range(500):
+            system.apply_barostats()
+            if i >= 300:
+                s = system.state
+                volumes.append(s.box_x * s.box_y * s.box_z)
+
+        avg_volume = np.mean(volumes)
+
+        ratio = avg_volume / expected_volume
+        assert 0.5 < ratio < 2.0, \
+            f"avg_volume={avg_volume:.1f}, expected={expected_volume:.1f}, ratio={ratio:.2f}"
