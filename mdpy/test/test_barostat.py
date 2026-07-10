@@ -278,3 +278,87 @@ class TestMoleculeCSR:
         atoms, starts = build_molecule_csr(mol_ids)
         assert atoms.dtype == np.int32
         assert starts.dtype == np.int32
+
+
+class TestScaleMoleculePositions:
+    def test_single_molecule_scales_about_centroid(self):
+        """2-atom molecule: centroid stays at centroid * scale."""
+        from mdpy.barostat.monte_carlo import MonteCarloBarostat
+
+        n = 2
+        state = State(n)
+        state.set_pbc(np.eye(3, dtype=precision.FLOAT) * 100.0)
+        state.set_positions(np.array([[10.0, 0.0, 0.0], [20.0, 0.0, 0.0]], dtype=precision.FLOAT))
+        state.set_velocities(np.zeros((n, 3), dtype=precision.FLOAT))
+        state.set_particle_masses(np.ones(n, dtype=precision.FLOAT))
+        state.set_particle_charges(np.zeros(n, dtype=precision.FLOAT))
+        state.set_particle_type_indices(np.zeros(n, dtype=precision.INT))
+        state.set_prev_positions(np.array([[9.0, 0.0, 0.0], [19.0, 0.0, 0.0]], dtype=precision.FLOAT))
+
+        barostat = MonteCarloBarostat(
+            pressure_bar=1.0, temperature=300.0,
+            particle_molecule_ids=[0, 0])
+
+        scale = np.float32(2.0)
+        barostat._scale_positions(state, scale)
+
+        pos_x = state.d_positions_x.get()
+        # centroid was (10+20)/2 = 15; new centroid = 30
+        # atom 0: 10 + 15*(2-1) = 25
+        # atom 1: 20 + 15*(2-1) = 35
+        assert abs(pos_x[0] - 25.0) < 1e-4
+        assert abs(pos_x[1] - 35.0) < 1e-4
+
+    def test_velocity_preserved(self):
+        """Scaling both pos and prev_pos by same delta preserves velocity."""
+        from mdpy.barostat.monte_carlo import MonteCarloBarostat
+
+        n = 2
+        state = State(n)
+        state.set_pbc(np.eye(3, dtype=precision.FLOAT) * 100.0)
+        state.set_positions(np.array([[10.0, 0.0, 0.0], [20.0, 0.0, 0.0]], dtype=precision.FLOAT))
+        state.set_velocities(np.zeros((n, 3), dtype=precision.FLOAT))
+        state.set_particle_masses(np.ones(n, dtype=precision.FLOAT))
+        state.set_particle_charges(np.zeros(n, dtype=precision.FLOAT))
+        state.set_particle_type_indices(np.zeros(n, dtype=precision.INT))
+        # prev_positions define velocity = (pos - prev) / dt
+        prev_pos = np.array([[8.0, 0.0, 0.0], [18.0, 0.0, 0.0]], dtype=precision.FLOAT)
+        state.set_prev_positions(prev_pos)
+
+        # Original velocity (assuming dt=1): v = pos - prev = [2, 0, 0] for both
+        original_vel_x = state.d_positions_x.get() - state.d_prev_positions_x.get()
+
+        barostat = MonteCarloBarostat(
+            pressure_bar=1.0, temperature=300.0,
+            particle_molecule_ids=[0, 0])
+        barostat._scale_positions(state, np.float32(1.5))
+
+        new_vel_x = state.d_positions_x.get() - state.d_prev_positions_x.get()
+        np.testing.assert_allclose(new_vel_x, original_vel_x, atol=1e-4)
+
+    def test_two_molecules_scale_independently(self):
+        """Two single-atom molecules at different positions scale independently."""
+        from mdpy.barostat.monte_carlo import MonteCarloBarostat
+
+        n = 2
+        state = State(n)
+        state.set_pbc(np.eye(3, dtype=precision.FLOAT) * 100.0)
+        state.set_positions(np.array([[10.0, 0.0, 0.0], [30.0, 0.0, 0.0]], dtype=precision.FLOAT))
+        state.set_velocities(np.zeros((n, 3), dtype=precision.FLOAT))
+        state.set_particle_masses(np.ones(n, dtype=precision.FLOAT))
+        state.set_particle_charges(np.zeros(n, dtype=precision.FLOAT))
+        state.set_particle_type_indices(np.zeros(n, dtype=precision.INT))
+        state.set_prev_positions(np.array([[9.0, 0.0, 0.0], [29.0, 0.0, 0.0]], dtype=precision.FLOAT))
+
+        barostat = MonteCarloBarostat(
+            pressure_bar=1.0, temperature=300.0,
+            particle_molecule_ids=[0, 1])
+
+        barostat._scale_positions(state, np.float32(2.0))
+
+        pos_x = state.d_positions_x.get()
+        # Single-atom molecule: centroid = atom position itself
+        # atom 0: 10 * 2 = 20
+        # atom 1: 30 * 2 = 60
+        assert abs(pos_x[0] - 20.0) < 1e-4
+        assert abs(pos_x[1] - 60.0) < 1e-4
