@@ -27,6 +27,7 @@ class System:
         self._ev_zero_forces = None
         self._ev_pme_done = None
         self.constraints = []
+        self.barostats = []
 
         self._step_counter = 0
 
@@ -40,6 +41,24 @@ class System:
 
     def set_pbc(self, pbc_matrix):
         self.state.set_pbc(pbc_matrix)
+
+    def resize_box(self, new_pbc_matrix):
+        """Change the simulation box during a run (e.g., barostat).
+
+        Coordinates the full box-change cascade:
+        1. State: update PBC matrix + inverse + box dims
+        2. Block list: rebuild with new cell grid
+        3. Force terms: notify any term with update_box() (e.g., PME)
+        """
+        self.state.set_pbc(new_pbc_matrix)
+        self.update_neighbor_list(force_rebuild=True)
+        pbc_2d = np.asarray(new_pbc_matrix).reshape(3, 3)
+        box_x = abs(float(pbc_2d[0, 0]))
+        box_y = abs(float(pbc_2d[1, 1]))
+        box_z = abs(float(pbc_2d[2, 2]))
+        for term in self.force_terms:
+            if hasattr(term, 'update_box'):
+                term.update_box(box_x, box_y, box_z, self._block_list)
 
     @property
     def block_list(self):
@@ -80,6 +99,13 @@ class System:
     def apply_constraints(self, time_step):
         for constraint in self.constraints:
             constraint.apply(self.state, time_step)
+
+    def add_barostat(self, barostat):
+        self.barostats.append(barostat)
+
+    def apply_barostats(self):
+        for barostat in self.barostats:
+            barostat.apply(self)
 
     def set_positions(self, positions):
         self.state.set_positions(positions)
@@ -186,6 +212,24 @@ class System:
             if value != 0.0:
                 result[term.name] = value
         return result
+
+    def compute_total_energy(self):
+        """Compute total potential energy on GPU, return as Python float.
+
+        Recomputes all forces + energies from scratch (does not reuse cached
+        forces). Runs all terms on the null stream for simplicity. The only
+        GPU→CPU transfer is the final scalar read.
+        """
+        self._ensure_ready()
+        self.state.zero_forces()
+        if self._block_list is not None:
+            self._block_list.refresh_sorted_posq(self.state)
+        for term_index, term in enumerate(self.force_terms):
+            self.state.zero_energy()
+            term.compute(self.state, self._block_list, compute_energy=True)
+            self.state.set_energy_slot(term_index)
+        cp.cuda.Stream.null.synchronize()
+        return float(self.state.d_energy_accumulator.sum())
 
     def dump_state(self):
         state = self.state
