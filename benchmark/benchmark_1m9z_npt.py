@@ -1,7 +1,7 @@
-"""mdpy 1M9Z NPT benchmark — Monte Carlo barostat behavior verification.
+"""mdpy 1M9Z NPT benchmark — Monte Carlo barostat.
 
 Runs NVT equilibration then NPT with MC barostat at 1 bar, 300K.
-Reports volume, density, acceptance rate, and energy at intervals.
+Reports volume, density, acceptance rate, energy, and speed at intervals.
 
 Usage:
     CUDA_VISIBLE_DEVICES=0 conda run -n md_analysis python benchmark/benchmark_1m9z_npt.py
@@ -33,10 +33,10 @@ EWALD_RTOL = float(os.environ.get("EWALD_RTOL", "1e-5"))
 FOURIER_SPACING = float(os.environ.get("FOURIER_SPACING", "1.2"))
 PRESSURE_BAR = 1.0
 TEMPERATURE = 300.0
-MC_FREQUENCY = 10
+MC_FREQUENCY = 25
 NVT_STEPS = 100
-NPT_STEPS = 1000
-REPORT_INTERVAL = 50
+NPT_STEPS = 2000
+REPORT_INTERVAL = 500
 
 KCAL_PER_INTERNAL = 1.0 / 4.1840286576e-4
 
@@ -82,8 +82,6 @@ system.set_velocities(velocities)
 
 pme = forces["pme"]
 integrator = LangevinBAOABIntegrator(TIME_STEP_FS, TEMPERATURE, 1.0)
-barostat = MonteCarloBarostat(PRESSURE_BAR, TEMPERATURE, frequency=MC_FREQUENCY)
-system.add_barostat(barostat)
 
 num_molecules = len(set(psf.particle_molecule_ids))
 total_mass = float(np.sum(psf.particle_masses))
@@ -101,6 +99,7 @@ print(f"  Target:         {PRESSURE_BAR} bar, {TEMPERATURE} K")
 print(f"  MC frequency:   {MC_FREQUENCY}")
 print()
 
+# ---- NVT equilibration (no barostat) ----
 print(f"NVT equilibration ({NVT_STEPS} steps)...")
 cp.cuda.Stream.null.synchronize()
 t0 = time.perf_counter()
@@ -111,11 +110,18 @@ for i in range(NVT_STEPS):
     system.apply_constraints(TIME_STEP_FS)
 cp.cuda.Stream.null.synchronize()
 nvt_elapsed = time.perf_counter() - t0
-print(f"  done in {nvt_elapsed:.1f}s ({nvt_elapsed/NVT_STEPS*1000:.1f} ms/step)")
+nvt_ms = nvt_elapsed / NVT_STEPS * 1000
+print(f"  done in {nvt_elapsed:.1f}s ({nvt_ms:.1f} ms/step)")
 
+# ---- Add barostat for NPT ----
+np.random.seed(42)
+barostat = MonteCarloBarostat(PRESSURE_BAR, TEMPERATURE, frequency=MC_FREQUENCY)
+system.add_barostat(barostat)
+
+# ---- NPT production ----
 print(f"\nNPT simulation ({NPT_STEPS} steps):")
-print(f"  {'Step':>6s}  {'Volume(A^3)':>12s}  {'Box_len':>8s}  {'Density':>8s}  {'Accept%':>8s}  {'E_pot(kcal/mol)':>18s}")
-print(f"  {'------':>6s}  {'------------':>12s}  {'--------':>8s}  {'--------':>8s}  {'--------':>8s}  {'------------------':>18s}")
+print(f"  {'Step':>6s}  {'Volume(A^3)':>12s}  {'Box_len':>8s}  {'Density':>8s}  {'Accept%':>8s}  {'E_pot(kcal/mol)':>18s}  {'ms/step':>8s}")
+print(f"  {'------':>6s}  {'------------':>12s}  {'--------':>8s}  {'--------':>8s}  {'--------':>8s}  {'------------------':>18s}  {'--------':>8s}")
 
 block_times = []
 for i in range(NPT_STEPS):
@@ -140,7 +146,7 @@ for i in range(NPT_STEPS):
         energy_dict = system.dump_energy()
         e_total = sum(energy_dict.values()) * KCAL_PER_INTERNAL
         recent_ms = np.mean(block_times[-REPORT_INTERVAL:]) * 1000
-        print(f"  {i+1:6d}  {vol:12.0f}  {box_len:8.2f}  {density:8.4f}  {accept_pct:8.1f}  {e_total:18.1f}")
+        print(f"  {i+1:6d}  {vol:12.0f}  {box_len:8.2f}  {density:8.4f}  {accept_pct:8.1f}  {e_total:18.1f}  {recent_ms:8.1f}")
 
 avg_ms = np.mean(block_times) * 1000
 final_vol = system.state.box_x * system.state.box_y * system.state.box_z
@@ -151,5 +157,5 @@ print(f"\nSummary:")
 print(f"  Initial density:  {initial_density:.4f} g/cm^3")
 print(f"  Final density:    {final_density:.4f} g/cm^3")
 print(f"  Volume change:    {vol_change:+.1f}%")
-print(f"  Avg acceptance:   {barostat.acceptance_rate*100:.1f}%")
-print(f"  NPT ms/step:      {avg_ms:.1f} (vs {nvt_elapsed/NVT_STEPS*1000:.1f} NVT)")
+print(f"  NVT ms/step:      {nvt_ms:.1f}")
+print(f"  NPT ms/step:      {avg_ms:.1f}")
