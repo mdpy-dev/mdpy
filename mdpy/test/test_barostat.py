@@ -405,17 +405,59 @@ class TestScaleMoleculePositions:
         barostat._scale_positions(state, scale)
 
         pos_x = state.d_positions_x.get()
-        # Reference atom = O at 99.9
-        # Unwrapped H1 = 99.9 + 0.2 = 100.1, H2 = 99.9 + 0.3 = 100.2
+        # After make_whole: O=99.9, H1=100.1, H2=100.2 (all in same image)
         # Centroid_x = (99.9 + 100.1 + 100.2) / 3 = 100.0667
         # Delta_x = 100.0667 * (1.003 - 1) = 0.3002
         expected_delta_x = 100.0667 * 0.003
         assert abs(pos_x[0] - (99.9 + expected_delta_x)) < 1e-3, \
             f"O: expected {99.9 + expected_delta_x:.4f}, got {pos_x[0]:.4f}"
-        assert abs(pos_x[1] - (0.1 + expected_delta_x)) < 1e-3, \
-            f"H1: expected {0.1 + expected_delta_x:.4f}, got {pos_x[1]:.4f}"
-        assert abs(pos_x[2] - (0.2 + expected_delta_x)) < 1e-3, \
-            f"H2: expected {0.2 + expected_delta_x:.4f}, got {pos_x[2]:.4f}"
+        assert abs(pos_x[1] - (100.1 + expected_delta_x)) < 1e-3, \
+            f"H1: expected {100.1 + expected_delta_x:.4f}, got {pos_x[1]:.4f}"
+        assert abs(pos_x[2] - (100.2 + expected_delta_x)) < 1e-3, \
+            f"H2: expected {100.2 + expected_delta_x:.4f}, got {pos_x[2]:.4f}"
+
+    def test_pbc_boundary_atoms_in_same_image_after_scale(self):
+        """After scaling, all atoms in a molecule must be in the same periodic image.
+
+        This is the key property that preserves bond lengths when the box
+        size changes: if raw displacements are small (< box/2), the minimum
+        image is just the raw displacement, which doesn't depend on box size.
+        """
+        from mdpy.barostat.monte_carlo import MonteCarloBarostat
+
+        n = 3
+        box = 100.0
+        state = State(n)
+        state.set_pbc(np.eye(3, dtype=precision.FLOAT) * box)
+        state.set_positions(np.array([
+            [99.9, 50.0, 50.0],
+            [0.1, 50.0, 50.0],
+            [0.2, 50.0, 50.0],
+        ], dtype=precision.FLOAT))
+        state.set_velocities(np.zeros((n, 3), dtype=precision.FLOAT))
+        state.set_prev_positions(np.array([
+            [99.8, 50.0, 50.0],
+            [0.0, 50.0, 50.0],
+            [0.1, 50.0, 50.0],
+        ], dtype=precision.FLOAT))
+        state.set_particle_masses(np.ones(n, dtype=precision.FLOAT))
+        state.set_particle_charges(np.zeros(n, dtype=precision.FLOAT))
+        state.set_particle_type_indices(np.zeros(n, dtype=precision.INT))
+        state.set_particle_molecule_ids(np.array([0, 0, 0], dtype=np.int32))
+
+        barostat = MonteCarloBarostat(pressure_bar=1.0, temperature=300.0)
+        barostat._build_molecule_csr(state)
+        barostat._scale_positions(state, np.float32(1.003))
+
+        pos_x = state.d_positions_x.get()
+        # After make_whole, all atoms should be in the same periodic image.
+        # Raw displacement between any two atoms should be < box/2.
+        dr_01 = pos_x[1] - pos_x[0]
+        dr_02 = pos_x[2] - pos_x[0]
+        assert abs(dr_01) < box / 2, \
+            f"H1-O raw displacement {dr_01:.4f} should be < box/2={box/2}"
+        assert abs(dr_02) < box / 2, \
+            f"H2-O raw displacement {dr_02:.4f} should be < box/2={box/2}"
 
 
 class TestMonteCarloApply:

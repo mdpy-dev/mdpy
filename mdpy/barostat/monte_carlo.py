@@ -64,34 +64,46 @@ void scale_molecule_positions_kernel(
     int first = molecule_start_index[mol];
     int last = molecule_start_index[mol + 1];
 
-    // Use first atom as reference for PBC unwrapping.
+    // Step 1: Make molecules whole — shift all atoms to the same periodic
+    // image as the first atom (reference). This ensures bonded atoms don't
+    // straddle PBC boundaries, so minimum-image bond lengths are preserved
+    // when the box size changes during barostat moves.
     int ref_atom = molecule_atoms[first];
     float rx = pos_x[ref_atom];
     float ry = pos_y[ref_atom];
     float rz = pos_z[ref_atom];
 
-    // Compute centroid using minimum-image unwrapping: for each atom,
-    // compute the shortest displacement from the reference atom (unwrapping
-    // across PBC boundaries), then reconstruct the unwrapped position.
-    float cx = 0.0f, cy = 0.0f, cz = 0.0f;
     for (int i = first; i < last; i++) {
         int atom = molecule_atoms[i];
         float dx = pos_x[atom] - rx;
         float dy = pos_y[atom] - ry;
         float dz = pos_z[atom] - rz;
-        // Minimum image: shift by integer multiples of box to get shortest distance
-        dx -= box_x * floorf(dx * inv_box_x + 0.5f);
-        dy -= box_y * floorf(dy * inv_box_y + 0.5f);
-        dz -= box_z * floorf(dz * inv_box_z + 0.5f);
-        // Accumulate unwrapped position (ref + unwrapped displacement)
-        cx += rx + dx;
-        cy += ry + dy;
-        cz += rz + dz;
+        // Shift = number of box lengths to move atom into reference's image
+        float sx = box_x * floorf(dx * inv_box_x + 0.5f);
+        float sy = box_y * floorf(dy * inv_box_y + 0.5f);
+        float sz = box_z * floorf(dz * inv_box_z + 0.5f);
+        // Apply shift to position and prev_position (preserves velocity)
+        pos_x[atom] -= sx;
+        pos_y[atom] -= sy;
+        pos_z[atom] -= sz;
+        prev_pos_x[atom] -= sx;
+        prev_pos_y[atom] -= sy;
+        prev_pos_z[atom] -= sz;
+    }
+
+    // Step 2: Compute centroid (simple average — all atoms now in same image)
+    float cx = 0.0f, cy = 0.0f, cz = 0.0f;
+    for (int i = first; i < last; i++) {
+        int atom = molecule_atoms[i];
+        cx += pos_x[atom];
+        cy += pos_y[atom];
+        cz += pos_z[atom];
     }
     float inv_n = 1.0f / (float)(last - first);
     cx *= inv_n; cy *= inv_n; cz *= inv_n;
 
-    // Scale about the centroid (same delta for all atoms preserves internal geometry)
+    // Step 3: Scale about the centroid (same delta for all atoms preserves
+    // internal geometry)
     float dx = cx * (scale - 1.0f);
     float dy = cy * (scale - 1.0f);
     float dz = cz * (scale - 1.0f);
@@ -160,8 +172,10 @@ class MonteCarloBarostat(BarostatBase):
     def _scale_positions(self, state, scale):
         """Scale positions about each molecule's centroid by `scale`.
 
-        Uses reference-atom + minimum-image unwrapping to correctly compute
-        centroids for molecules that straddle PBC boundaries.
+        First makes each molecule whole (shifts atoms to the same periodic
+        image as the first atom), then scales about the centroid. Making
+        molecules whole ensures that minimum-image bond lengths are preserved
+        when the box size changes during barostat moves.
 
         Translates both d_positions and d_prev_positions by the same delta
         so velocity = (pos - prev_pos) / dt is preserved.
