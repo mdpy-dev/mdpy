@@ -61,18 +61,19 @@ class PSFParser:
         self._particle_ids = []
         self._type_names = []
         self._particle_names = []
-        self._particle_molecule_ids = []
-        self._particle_molecule_types = []
+        self._particle_residue_ids = []
+        self._particle_residue_names = []
         self._particle_chain_ids = []
         self._particle_masses = np.zeros(n_atoms, dtype=precision.FLOAT)
         self._particle_charges = np.zeros(n_atoms, dtype=precision.FLOAT)
+        self._particle_molecule_ids = None
 
         for i in range(n_atoms):
             parts = lines[idx + i].split()
             self._particle_ids.append(int(parts[0]))
             self._particle_chain_ids.append(parts[1])
-            self._particle_molecule_ids.append(int(parts[2]))
-            self._particle_molecule_types.append(parts[3])
+            self._particle_residue_ids.append(int(parts[2]))
+            self._particle_residue_names.append(parts[3])
             self._particle_names.append(parts[4])
             self._type_names.append(parts[5])
             self._particle_charges[i] = float(parts[6])
@@ -162,12 +163,20 @@ class PSFParser:
         return self._particle_names
 
     @property
-    def particle_molecule_ids(self):
-        return self._particle_molecule_ids
+    def particle_residue_ids(self):
+        return self._particle_residue_ids
 
     @property
-    def particle_molecule_types(self):
-        return self._particle_molecule_types
+    def particle_residue_names(self):
+        return self._particle_residue_names
+
+    @property
+    def particle_molecule_ids(self):
+        if self._particle_molecule_ids is None:
+            from mdpy.utils.molecule import build_particle_molecule_ids
+            bonds = np.array(self._bonds, dtype=np.int32) if self._bonds else np.empty((0, 2), dtype=np.int32)
+            self._particle_molecule_ids = build_particle_molecule_ids(bonds, self._num_particles)
+        return self._particle_molecule_ids
 
     @property
     def particle_chain_ids(self):

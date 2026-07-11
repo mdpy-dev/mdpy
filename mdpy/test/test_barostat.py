@@ -546,3 +546,47 @@ class TestBuildParticleMoleculeIds:
         mol_ids = build_particle_molecule_ids(bonds, 4)
         unique = np.unique(mol_ids)
         assert unique.tolist() == [0, 1]
+
+
+class TestPSFParserResidueMolecule:
+    def test_psf_has_residue_ids(self):
+        from mdpy.io.psf_parser import PSFParser
+        import os
+        psf = PSFParser(os.path.join(os.path.dirname(__file__), 'data', '6PO6.psf'))
+        assert hasattr(psf, 'particle_residue_ids')
+        assert len(psf.particle_residue_ids) == psf.num_particles
+
+    def test_psf_has_residue_names(self):
+        from mdpy.io.psf_parser import PSFParser
+        import os
+        psf = PSFParser(os.path.join(os.path.dirname(__file__), 'data', '6PO6.psf'))
+        assert hasattr(psf, 'particle_residue_names')
+        assert len(psf.particle_residue_names) == psf.num_particles
+
+    def test_psf_has_molecule_ids_from_bonds(self):
+        from mdpy.io.psf_parser import PSFParser
+        import os
+        psf = PSFParser(os.path.join(os.path.dirname(__file__), 'data', '6PO6.psf'))
+        assert hasattr(psf, 'particle_molecule_ids')
+        mol_ids = psf.particle_molecule_ids
+        assert isinstance(mol_ids, np.ndarray)
+        assert mol_ids.dtype == np.int32
+        assert len(mol_ids) == psf.num_particles
+
+    def test_psf_molecule_ids_differ_from_residue_ids(self):
+        """For a protein, molecule IDs group all protein atoms into one molecule,
+        while residue IDs split them by residue."""
+        from mdpy.io.psf_parser import PSFParser
+        import os
+        psf = PSFParser(os.path.join(os.path.dirname(__file__), 'data', '1M9Z.psf'))
+        num_residues = len(set(psf.particle_residue_ids))
+        num_molecules = len(set(psf.particle_molecule_ids))
+        assert num_molecules > num_residues, \
+            f"Bond-graph molecules ({num_molecules}) should exceed residue IDs ({num_residues})"
+
+    def test_psf_no_particle_molecule_types(self):
+        """Old property name should no longer exist."""
+        from mdpy.io.psf_parser import PSFParser
+        import os
+        psf = PSFParser(os.path.join(os.path.dirname(__file__), 'data', '6PO6.psf'))
+        assert not hasattr(psf, 'particle_molecule_types')
