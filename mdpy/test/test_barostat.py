@@ -515,3 +515,34 @@ class TestNPTConvergence:
         ratio = avg_volume / expected_volume
         assert 0.5 < ratio < 2.0, \
             f"avg_volume={avg_volume:.1f}, expected={expected_volume:.1f}, ratio={ratio:.2f}"
+
+
+class TestBuildParticleMoleculeIds:
+    def test_single_molecule(self):
+        from mdpy.utils.molecule import build_particle_molecule_ids
+        bonds = np.array([[0, 1], [1, 2], [2, 3]], dtype=np.int32)
+        mol_ids = build_particle_molecule_ids(bonds, 4)
+        assert len(np.unique(mol_ids)) == 1
+        assert mol_ids.dtype == np.int32
+
+    def test_two_molecules(self):
+        from mdpy.utils.molecule import build_particle_molecule_ids
+        bonds = np.array([[0, 1], [2, 3]], dtype=np.int32)
+        mol_ids = build_particle_molecule_ids(bonds, 4)
+        assert len(np.unique(mol_ids)) == 2
+        assert mol_ids[0] == mol_ids[1]
+        assert mol_ids[2] == mol_ids[3]
+        assert mol_ids[0] != mol_ids[2]
+
+    def test_no_bonds_each_atom_own_molecule(self):
+        from mdpy.utils.molecule import build_particle_molecule_ids
+        bonds = np.empty((0, 2), dtype=np.int32)
+        mol_ids = build_particle_molecule_ids(bonds, 5)
+        assert len(np.unique(mol_ids)) == 5
+
+    def test_returns_sequential_ids(self):
+        from mdpy.utils.molecule import build_particle_molecule_ids
+        bonds = np.array([[0, 1], [2, 3]], dtype=np.int32)
+        mol_ids = build_particle_molecule_ids(bonds, 4)
+        unique = np.unique(mol_ids)
+        assert unique.tolist() == [0, 1]
