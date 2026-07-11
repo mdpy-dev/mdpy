@@ -43,13 +43,15 @@ toppar = CharmmTopparParser(
 topology = psf.topology
 parameter_set = toppar.resolve_parameter_set(topology, psf.particle_type_names)
 pbc_matrix = pdb.pbc_matrix
-
+pbc_matrix = np.eye(3) * 108
+print(pbc_matrix)
 state = State(topology.num_particles)
 state.set_pbc(pbc_matrix)
 state.set_positions(pdb.positions)
 state.set_particle_charges(psf.particle_charges)
 state.set_particle_masses(psf.particle_masses)
 state.set_particle_type_indices(parameter_set.particle_type_indices)
+state.set_particle_molecule_ids(psf.particle_molecule_ids)
 forces = create_charmm_forces(
     topology,
     parameter_set,
@@ -69,8 +71,8 @@ constraints = create_constraints(
     parameter_set,
     scheme="h-bonds",
     particle_masses=psf.particle_masses,
-    particle_molecule_ids=psf.particle_molecule_ids,
-    particle_molecule_types=psf.particle_molecule_types,
+    particle_residue_ids=psf.particle_residue_ids,
+    particle_residue_names=psf.particle_residue_names,
 )
 for c in constraints:
     system.add_constraint(c)
