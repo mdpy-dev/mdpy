@@ -210,6 +210,77 @@ class TestBSplineModuli:
         assert bk.shape == (32, 32, 17), f"Expected (32,32,17), got {bk.shape}"
 
 
+class TestBkFactorsVectorized:
+    """Verify vectorized precompute_bk_factors matches scalar reference."""
+
+    def _scalar_reference(self, alpha, grid_x, grid_y, grid_z, order, box_x, box_y, box_z):
+        """Original pure-Python implementation, kept as reference."""
+        import math as _math
+        from mdpy.force.pme_reciprocal_force import _compute_bspline_moduli
+        moduli_x = _compute_bspline_moduli(grid_x, order)
+        moduli_y = _compute_bspline_moduli(grid_y, order)
+        moduli_z = _compute_bspline_moduli(grid_z, order)
+        volume = box_x * box_y * box_z
+        grid_total = grid_x * grid_y * grid_z
+        scale_factor = _math.pi * volume / grid_total
+        recip_exp_factor = _math.pi ** 2 / (alpha ** 2)
+        recip_x = 1.0 / box_x
+        recip_y = 1.0 / box_y
+        recip_z = 1.0 / box_z
+        nz_half = grid_z // 2 + 1
+        bk = np.zeros((grid_x, grid_y, nz_half), dtype=np.float32)
+        firstz = 1
+        for kx in range(grid_x):
+            mx = kx if kx < (grid_x + 1) // 2 else kx - grid_x
+            mhx = mx * recip_x
+            bx = scale_factor * moduli_x[kx]
+            for ky in range(grid_y):
+                my = ky if ky < (grid_y + 1) // 2 else ky - grid_y
+                mhy = my * recip_y
+                mhx2y2 = mhx * mhx + mhy * mhy
+                bxby = bx * moduli_y[ky]
+                for kz in range(firstz, nz_half):
+                    mz = kz if kz < (grid_z + 1) // 2 else kz - grid_z
+                    mhz = mz * recip_z
+                    bz = moduli_z[kz]
+                    m2 = mhx2y2 + mhz * mhz
+                    denom = m2 * bxby * bz
+                    bk[kx, ky, kz] = _math.exp(-recip_exp_factor * m2) / denom
+                firstz = 0
+        return bk
+
+    def test_matches_scalar_small_grid(self):
+        """32x32x32 grid, cubic box."""
+        bk_vec = precompute_bk_factors(0.35, 32, 32, 32, 4, 50.0, 50.0, 50.0)
+        bk_ref = self._scalar_reference(0.35, 32, 32, 32, 4, 50.0, 50.0, 50.0)
+        np.testing.assert_allclose(bk_vec, bk_ref, atol=1e-6, rtol=1e-5)
+
+    def test_matches_scalar_noncubic(self):
+        """Non-cubic box, non-square grid."""
+        bk_vec = precompute_bk_factors(0.26, 84, 84, 84, 4, 100.0, 100.0, 100.0)
+        bk_ref = self._scalar_reference(0.26, 84, 84, 84, 4, 100.0, 100.0, 100.0)
+        np.testing.assert_allclose(bk_vec, bk_ref, atol=1e-5, rtol=1e-4)
+
+    def test_matches_scalar_different_box_sizes(self):
+        """Verify box-size dependence is correct."""
+        for box in [80.0, 100.0, 120.0]:
+            bk_vec = precompute_bk_factors(0.26, 64, 64, 64, 4, box, box, box)
+            bk_ref = self._scalar_reference(0.26, 64, 64, 64, 4, box, box, box)
+            np.testing.assert_allclose(bk_vec, bk_ref, atol=1e-6, rtol=1e-5,
+                                       err_msg=f"Mismatch at box={box}")
+
+    def test_dc_component_zero(self):
+        """DC component (kx=ky=kz=0) must remain zero."""
+        bk = precompute_bk_factors(0.35, 32, 32, 32, 4, 50.0, 50.0, 50.0)
+        assert abs(bk[0, 0, 0]) < 1e-10, f"DC component should be ~0, got {bk[0,0,0]}"
+
+    def test_output_dtype_and_shape(self):
+        """Output must be float32 with shape (grid_x, grid_y, grid_z//2+1)."""
+        bk = precompute_bk_factors(0.35, 84, 84, 84, 4, 100.0, 100.0, 100.0)
+        assert bk.dtype == np.float32, f"Expected float32, got {bk.dtype}"
+        assert bk.shape == (84, 84, 43), f"Expected (84,84,43), got {bk.shape}"
+
+
 class TestForceGathering:
 
     def test_net_force_near_zero(self):
