@@ -103,9 +103,9 @@ class PDBWriter:
 
         particle_names = pdb_parser.particle_names
         particle_ids = pdb_parser.particle_ids
-        particle_molecule_types = pdb_parser.particle_molecule_types
+        particle_residue_names = pdb_parser.particle_residue_names
         particle_chain_ids = pdb_parser.particle_chain_ids
-        particle_molecule_ids = pdb_parser.particle_molecule_ids
+        particle_residue_ids = pdb_parser.particle_residue_ids
         particle_type_names = pdb_parser.particle_type_names
 
         lines = []
@@ -125,9 +125,9 @@ class PDBWriter:
                 particle_names[i], particle_type_names[i]
             )
             element = str(particle_type_names[i])[:2] if particle_type_names[i] else '  '
-            res_name = str(particle_molecule_types[i])[:3] if particle_molecule_types[i] else '   '
+            res_name = str(particle_residue_names[i])[:3] if particle_residue_names[i] else '   '
             serial = int(particle_ids[i])
-            res_seq = int(particle_molecule_ids[i])
+            res_seq = int(particle_residue_ids[i])
             x, y, z = float(positions[i, 0]), float(positions[i, 1]), float(positions[i, 2])
 
             lines.append(_ATOM_FORMAT % (

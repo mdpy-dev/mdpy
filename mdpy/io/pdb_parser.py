@@ -39,8 +39,8 @@ class PDBParser:
         self._particle_ids = []
         self._particle_type_names = []
         self._particle_names = []
-        self._particle_molecule_ids = []
-        self._particle_molecule_types = []
+        self._particle_residue_ids = []
+        self._particle_residue_names = []
         self._particle_chain_ids = []
         self._matrix_ids = []
         self._pbc_matrix = None
@@ -59,8 +59,8 @@ class PDBParser:
                     self._particle_ids.append(int(line[6:11]))
                     self._particle_names.append(line[12:16].strip())
                     self._particle_type_names.append(_guess_element(line[12:16]))
-                    self._particle_molecule_ids.append(int(line[22:26]))
-                    self._particle_molecule_types.append(line[17:21].strip())
+                    self._particle_residue_ids.append(int(line[22:26]))
+                    self._particle_residue_names.append(line[17:21].strip())
                     self._particle_chain_ids.append(line[21])
                     self._matrix_ids.append(atom_index)
                     atom_index += 1
@@ -126,8 +126,8 @@ class PDBParser:
             'particle_id': self._particle_ids[matrix_id],
             'particle_type_names': self._particle_type_names[matrix_id],
             'particle_name': self._particle_names[matrix_id],
-            'molecule_id': self._particle_molecule_ids[matrix_id],
-            'molecule_type': self._particle_molecule_types[matrix_id],
+            'residue_id': self._particle_residue_ids[matrix_id],
+            'residue_name': self._particle_residue_names[matrix_id],
             'chain_id': self._particle_chain_ids[matrix_id],
             'matrix_id': matrix_id,
             'position': self._positions[matrix_id, :]
@@ -186,12 +186,12 @@ class PDBParser:
         return self._particle_names
 
     @property
-    def particle_molecule_ids(self):
-        return self._particle_molecule_ids
+    def particle_residue_ids(self):
+        return self._particle_residue_ids
 
     @property
-    def particle_molecule_types(self):
-        return self._particle_molecule_types
+    def particle_residue_names(self):
+        return self._particle_residue_names
 
     @property
     def particle_chain_ids(self):

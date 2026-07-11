@@ -46,8 +46,8 @@ class TestPDBWriterRoundTrip:
 
             pdb2 = PDBParser(tmp_path)
             assert pdb2.particle_names == pdb.particle_names
-            assert pdb2.particle_molecule_types == pdb.particle_molecule_types
-            assert pdb2.particle_molecule_ids == pdb.particle_molecule_ids
+            assert pdb2.particle_residue_names == pdb.particle_residue_names
+            assert pdb2.particle_residue_ids == pdb.particle_residue_ids
             assert pdb2.particle_chain_ids == pdb.particle_chain_ids
             assert pdb2.particle_ids == pdb.particle_ids
         finally:
@@ -135,9 +135,9 @@ class TestPDBWriterRoundTrip:
             assert first[:6] == 'ATOM  '
             assert int(first[6:11]) == pdb.particle_ids[0]
             assert first[12:16].strip() == pdb.particle_names[0]
-            assert first[17:21].strip() == pdb.particle_molecule_types[0]
+            assert first[17:21].strip() == pdb.particle_residue_names[0]
             assert first[21] == pdb.particle_chain_ids[0]
-            assert int(first[22:26]) == pdb.particle_molecule_ids[0]
+            assert int(first[22:26]) == pdb.particle_residue_ids[0]
             float(first[30:38])
             float(first[38:46])
             float(first[46:54])
