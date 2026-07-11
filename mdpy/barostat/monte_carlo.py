@@ -92,18 +92,18 @@ class MonteCarloBarostat(BarostatBase):
     each molecule's centroid, recomputes energy, and accepts/rejects via the
     Metropolis criterion.
 
+    Requires ``state.set_particle_molecule_ids()`` to have been called before
+    the first ``apply()``.
+
     Args:
         pressure_bar: Target external pressure in bar.
         temperature: Simulation temperature in Kelvin.
         frequency: Attempt a volume move every `frequency` steps (default 25).
-        particle_molecule_ids: Per-particle molecule IDs (PDB order), e.g.
-            from ``psf.particle_molecule_ids``. Used for centroid-based scaling.
     """
 
     name = 'monte_carlo_barostat'
 
-    def __init__(self, pressure_bar, temperature, frequency=25,
-                 particle_molecule_ids=None):
+    def __init__(self, pressure_bar, temperature, frequency=25):
         self.pressure_bar = float(pressure_bar)
         self.pressure = self.pressure_bar * BAR_TO_INTERNAL_PRESSURE
         self.temperature = float(temperature)
@@ -117,16 +117,17 @@ class MonteCarloBarostat(BarostatBase):
         self._d_molecule_atoms = None
         self._d_molecule_start_index = None
         self._num_molecules = 0
-        if particle_molecule_ids is not None:
-            self._init_molecules(particle_molecule_ids)
+        self._molecule_csr_built = False
 
         self._scale_kernel = None
 
-    def _init_molecules(self, particle_molecule_ids):
-        molecule_atoms, molecule_start_index = build_molecule_csr(particle_molecule_ids)
+    def _build_molecule_csr(self, state):
+        mol_ids = cp.asnumpy(state.d_particle_molecule_ids)
+        molecule_atoms, molecule_start_index = build_molecule_csr(mol_ids)
         self._d_molecule_atoms = cp.asarray(molecule_atoms)
         self._d_molecule_start_index = cp.asarray(molecule_start_index)
         self._num_molecules = len(molecule_start_index) - 1
+        self._molecule_csr_built = True
 
     def _ensure_scale_kernel(self):
         if self._scale_kernel is None:
@@ -138,8 +139,8 @@ class MonteCarloBarostat(BarostatBase):
         Translates both d_positions and d_prev_positions by the same delta
         so velocity = (pos - prev_pos) / dt is preserved.
         """
-        if self._num_molecules == 0:
-            raise RuntimeError("MonteCarloBarostat requires particle_molecule_ids")
+        if not self._molecule_csr_built:
+            raise RuntimeError("Molecule CSR not built. Call apply(system) first.")
         self._ensure_scale_kernel()
         threads_per_block = 256
         grid = ((self._num_molecules + threads_per_block - 1) // threads_per_block,)
@@ -163,6 +164,9 @@ class MonteCarloBarostat(BarostatBase):
         self._step = 0
 
         state = system.state
+
+        if not self._molecule_csr_built:
+            self._build_molecule_csr(state)
 
         volume = state.box_x * state.box_y * state.box_z
 

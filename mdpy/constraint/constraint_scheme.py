@@ -8,21 +8,21 @@ _WATER_RESIDUE_NAMES = frozenset({
 })
 
 
-def _identify_water_molecules(topology, particle_masses, particle_molecule_ids, particle_molecule_types):
+def _identify_water_molecules(topology, particle_masses, particle_residue_ids, particle_residue_names):
     water_triplets = []
     water_bond_set = set()
     if topology.num_bonds == 0:
         return water_triplets, water_bond_set
     bond_indices = topology.bond_indices
-    use_mol_types = particle_molecule_types and particle_molecule_types[0] != ''
+    use_residue_names = particle_residue_names and particle_residue_names[0] != ''
 
     oxygen_hydrogen_bonds = {}
     for b in range(bond_indices.shape[0]):
         i, j = int(bond_indices[b, 0]), int(bond_indices[b, 1])
-        if particle_molecule_ids[i] != particle_molecule_ids[j]:
+        if particle_residue_ids[i] != particle_residue_ids[j]:
             continue
-        if use_mol_types:
-            if particle_molecule_types[i] not in _WATER_RESIDUE_NAMES:
+        if use_residue_names:
+            if particle_residue_names[i] not in _WATER_RESIDUE_NAMES:
                 continue
         mi, mj = particle_masses[i], particle_masses[j]
         if (mi > 14.5 and mj < 5.0):
@@ -75,13 +75,13 @@ def _build_bond_length_map(topology, parameter_table):
 
 
 def create_constraints(topology, parameter_set, scheme='h-bonds',
-                       *, particle_masses, particle_molecule_ids, particle_molecule_types):
+                       *, particle_masses, particle_residue_ids, particle_residue_names):
     constraints = []
     if scheme == 'none':
         return constraints
 
     water_triplets, water_bond_set = _identify_water_molecules(
-        topology, particle_masses, particle_molecule_ids, particle_molecule_types)
+        topology, particle_masses, particle_residue_ids, particle_residue_names)
     length_map = _build_bond_length_map(topology, parameter_set)
 
     if water_triplets:

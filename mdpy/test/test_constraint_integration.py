@@ -81,7 +81,7 @@ def test_constraint_loop():
     for f in bonded:
         system.add_force_term(f)
 
-    constraints = create_constraints(topology, parameter_table, scheme='h-bonds', particle_masses=masses, particle_molecule_ids=mol_ids, particle_molecule_types=molecule_types)
+    constraints = create_constraints(topology, parameter_table, scheme='h-bonds', particle_masses=masses, particle_residue_ids=mol_ids, particle_residue_names=molecule_types)
     for c in constraints:
         system.add_constraint(c)
 
@@ -122,7 +122,7 @@ def test_constraint_loop_multiple_rebuilds():
     for f in bonded:
         system.add_force_term(f)
 
-    constraints = create_constraints(topology, parameter_table, scheme='h-bonds', particle_masses=masses, particle_molecule_ids=mol_ids, particle_molecule_types=molecule_types)
+    constraints = create_constraints(topology, parameter_table, scheme='h-bonds', particle_masses=masses, particle_residue_ids=mol_ids, particle_residue_names=molecule_types)
     for c in constraints:
         system.add_constraint(c)
 
@@ -236,7 +236,7 @@ def test_settle_lincs_coexistence_bond_lengths():
     for f in bonded:
         system.add_force_term(f)
 
-    constraints = create_constraints(topology, parameter_table, scheme='h-bonds', particle_masses=masses, particle_molecule_ids=mol_ids, particle_molecule_types=molecule_types)
+    constraints = create_constraints(topology, parameter_table, scheme='h-bonds', particle_masses=masses, particle_residue_ids=mol_ids, particle_residue_names=molecule_types)
     for c in constraints:
         system.add_constraint(c)
 
@@ -292,7 +292,7 @@ def test_settle_md_loop_rebuilds_bond_lengths():
     for f in bonded:
         system.add_force_term(f)
 
-    constraints = create_constraints(topology, parameter_table, scheme='h-bonds', particle_masses=masses, particle_molecule_ids=mol_ids, particle_molecule_types=molecule_types)
+    constraints = create_constraints(topology, parameter_table, scheme='h-bonds', particle_masses=masses, particle_residue_ids=mol_ids, particle_residue_names=molecule_types)
     for c in constraints:
         system.add_constraint(c)
 

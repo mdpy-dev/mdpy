@@ -154,6 +154,8 @@ def _make_minimal_system(num_particles=4, box_size=50.0, cutoff=12.0):
         positions[i, 0] = (i + 1) * box_size / (n + 1)
     system.set_positions(positions)
     system.set_velocities(np.zeros((n, 3), dtype=precision.FLOAT))
+    system.state.set_particle_molecule_ids(
+        np.arange(n, dtype=np.int32))
     system.update_neighbor_list(force_rebuild=True)
 
     return system
@@ -295,11 +297,12 @@ class TestScaleMoleculePositions:
         state.set_particle_charges(np.zeros(n, dtype=precision.FLOAT))
         state.set_particle_type_indices(np.zeros(n, dtype=precision.INT))
         state.set_prev_positions(np.array([[9.0, 0.0, 0.0], [19.0, 0.0, 0.0]], dtype=precision.FLOAT))
+        state.set_particle_molecule_ids(np.array([0, 0], dtype=np.int32))
 
         barostat = MonteCarloBarostat(
-            pressure_bar=1.0, temperature=300.0,
-            particle_molecule_ids=[0, 0])
+            pressure_bar=1.0, temperature=300.0)
 
+        barostat._build_molecule_csr(state)
         scale = np.float32(2.0)
         barostat._scale_positions(state, scale)
 
@@ -325,13 +328,14 @@ class TestScaleMoleculePositions:
         # prev_positions define velocity = (pos - prev) / dt
         prev_pos = np.array([[8.0, 0.0, 0.0], [18.0, 0.0, 0.0]], dtype=precision.FLOAT)
         state.set_prev_positions(prev_pos)
+        state.set_particle_molecule_ids(np.array([0, 0], dtype=np.int32))
 
         # Original velocity (assuming dt=1): v = pos - prev = [2, 0, 0] for both
         original_vel_x = state.d_positions_x.get() - state.d_prev_positions_x.get()
 
         barostat = MonteCarloBarostat(
-            pressure_bar=1.0, temperature=300.0,
-            particle_molecule_ids=[0, 0])
+            pressure_bar=1.0, temperature=300.0)
+        barostat._build_molecule_csr(state)
         barostat._scale_positions(state, np.float32(1.5))
 
         new_vel_x = state.d_positions_x.get() - state.d_prev_positions_x.get()
@@ -350,11 +354,12 @@ class TestScaleMoleculePositions:
         state.set_particle_charges(np.zeros(n, dtype=precision.FLOAT))
         state.set_particle_type_indices(np.zeros(n, dtype=precision.INT))
         state.set_prev_positions(np.array([[9.0, 0.0, 0.0], [29.0, 0.0, 0.0]], dtype=precision.FLOAT))
+        state.set_particle_molecule_ids(np.array([0, 1], dtype=np.int32))
 
         barostat = MonteCarloBarostat(
-            pressure_bar=1.0, temperature=300.0,
-            particle_molecule_ids=[0, 1])
+            pressure_bar=1.0, temperature=300.0)
 
+        barostat._build_molecule_csr(state)
         barostat._scale_positions(state, np.float32(2.0))
 
         pos_x = state.d_positions_x.get()
@@ -370,8 +375,7 @@ class TestMonteCarloApply:
         """Barostat should be a no-op until frequency steps have elapsed."""
         system = _make_minimal_system()
         barostat = MonteCarloBarostat(
-            pressure_bar=1.0, temperature=300.0, frequency=5,
-            particle_molecule_ids=[0, 0, 0, 0])
+            pressure_bar=1.0, temperature=300.0, frequency=5)
 
         original_box_x = system.state.box_x
         for i in range(4):
@@ -383,8 +387,7 @@ class TestMonteCarloApply:
         """After exactly `frequency` calls, a volume move is attempted."""
         system = _make_minimal_system()
         barostat = MonteCarloBarostat(
-            pressure_bar=1.0, temperature=300.0, frequency=3,
-            particle_molecule_ids=[0, 1, 2, 3])
+            pressure_bar=1.0, temperature=300.0, frequency=3)
 
         for i in range(3):
             barostat.apply(system)
@@ -394,8 +397,7 @@ class TestMonteCarloApply:
         """Scaling must not change the number of particles."""
         system = _make_minimal_system()
         barostat = MonteCarloBarostat(
-            pressure_bar=1.0, temperature=300.0, frequency=1,
-            particle_molecule_ids=[0, 1, 2, 3])
+            pressure_bar=1.0, temperature=300.0, frequency=1)
         barostat.apply(system)
         system.compute_forces()
         assert system.state.num_particles == 4
@@ -404,8 +406,7 @@ class TestMonteCarloApply:
         """After several attempts, acceptance_rate is between 0 and 1."""
         system = _make_minimal_system(box_size=50.0)
         barostat = MonteCarloBarostat(
-            pressure_bar=1.0, temperature=300.0, frequency=1,
-            particle_molecule_ids=[0, 1, 2, 3])
+            pressure_bar=1.0, temperature=300.0, frequency=1)
         for i in range(20):
             barostat.apply(system)
         assert 0.0 <= barostat.acceptance_rate <= 1.0
@@ -415,8 +416,7 @@ class TestMonteCarloApply:
         system = _make_minimal_system()
         barostat = MonteCarloBarostat(
             pressure_bar=1000.0,
-            temperature=300.0, frequency=1,
-            particle_molecule_ids=[0, 1, 2, 3])
+            temperature=300.0, frequency=1)
 
         initial_scale = barostat._volume_scale
         for i in range(15):
@@ -430,8 +430,7 @@ class TestMonteCarloApply:
         system = _make_minimal_system()
         barostat = MonteCarloBarostat(
             pressure_bar=1e10,
-            temperature=300.0, frequency=1,
-            particle_molecule_ids=[0, 1, 2, 3])
+            temperature=300.0, frequency=1)
 
         pos_before = system.state.d_positions_x.copy()
         barostat.apply(system)
@@ -445,8 +444,7 @@ class TestMonteCarloApply:
         system = _make_minimal_system()
         barostat = MonteCarloBarostat(
             pressure_bar=1e10,
-            temperature=300.0, frequency=1,
-            particle_molecule_ids=[0, 1, 2, 3])
+            temperature=300.0, frequency=1)
 
         energy_before = system.compute_total_energy()
         barostat.apply(system)
@@ -477,6 +475,7 @@ class TestNPTConvergence:
 
         system = System(topology, state)
         system.set_pbc(np.eye(3, dtype=precision.FLOAT) * box_size)
+        state.set_particle_molecule_ids(np.arange(num_particles, dtype=np.int32))
         system._cutoff = 12.0  # required for update_neighbor_list with no force terms
 
         positions = np.random.RandomState(42).uniform(
@@ -491,7 +490,6 @@ class TestNPTConvergence:
             pressure_bar=pressure_bar,
             temperature=temperature,
             frequency=1,
-            particle_molecule_ids=list(range(num_particles)),
         )
         system.add_barostat(barostat)
 
