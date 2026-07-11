@@ -266,7 +266,6 @@ def precompute_bk_factors(
 
     nz_half = grid_z // 2 + 1
 
-    # Miller indices (shifted to centered form)
     kx = np.arange(grid_x)
     mx = np.where(kx < (grid_x + 1) // 2, kx, kx - grid_x).astype(np.float64)
     mhx = mx * recip_x
@@ -279,19 +278,18 @@ def precompute_bk_factors(
     mz = np.where(kz < (grid_z + 1) // 2, kz, kz - grid_z).astype(np.float64)
     mhz = mz * recip_z
 
-    # Broadcast to 3D: (grid_x, 1, 1) x (1, grid_y, 1) x (1, 1, nz_half)
     mhx_sq = mhx[:, None, None] ** 2
     mhy_sq = mhy[None, :, None] ** 2
     mhz_sq = mhz[None, None, :] ** 2
     m2 = mhx_sq + mhy_sq + mhz_sq
 
-    # Product of moduli * scale_factor
     bx = (scale_factor * moduli_x)[:, None, None]
     by = moduli_y[None, :, None]
     bz = moduli_z[None, None, :nz_half]
     denom = m2 * bx * by * bz
 
-    bk = np.exp(-recip_exp_factor * m2) / denom
+    with np.errstate(divide='ignore', invalid='ignore'):
+        bk = np.exp(-recip_exp_factor * m2) / denom
 
     # DC component (kx=0, ky=0, kz=0): denom=0, set to 0
     bk[0, 0, 0] = 0.0
