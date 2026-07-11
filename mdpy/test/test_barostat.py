@@ -590,3 +590,25 @@ class TestPSFParserResidueMolecule:
         import os
         psf = PSFParser(os.path.join(os.path.dirname(__file__), 'data', '6PO6.psf'))
         assert not hasattr(psf, 'particle_molecule_types')
+
+
+class TestStateMoleculeIds:
+    def test_set_and_read_molecule_ids(self):
+        n = 4
+        state = State(n)
+        mol_ids = np.array([0, 0, 1, 1], dtype=np.int32)
+        state.set_particle_molecule_ids(mol_ids)
+        result = cp.asnumpy(state.d_particle_molecule_ids)
+        np.testing.assert_array_equal(result, mol_ids)
+
+    def test_molecule_ids_not_required_for_is_ready(self):
+        """Molecule IDs are optional — only barostat needs them."""
+        n = 2
+        state = State(n)
+        state.set_particle_masses(np.ones(n, dtype=precision.FLOAT))
+        state.set_particle_charges(np.zeros(n, dtype=precision.FLOAT))
+        state.set_particle_type_indices(np.zeros(n, dtype=precision.INT))
+        state.set_pbc(np.eye(3, dtype=precision.FLOAT) * 50.0)
+        state.set_positions(np.zeros((n, 3), dtype=precision.FLOAT))
+        state.set_velocities(np.zeros((n, 3), dtype=precision.FLOAT))
+        assert state.is_ready

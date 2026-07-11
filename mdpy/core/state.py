@@ -108,6 +108,7 @@ class State:
         self.d_particle_masses = cp.zeros(self.num_particles, dtype=np.float32)
         self.d_particle_type_indices = cp.zeros(self.num_particles, dtype=np.int32)
         self.d_particle_charges = cp.zeros(self.num_particles, dtype=np.float32)
+        self.d_particle_molecule_ids = None
 
         self.d_energy = cp.zeros(1, dtype=np.float32)
         self.d_energy_accumulator = None
@@ -129,6 +130,7 @@ class State:
         self._has_masses = False
         self._has_type_indices = False
         self._has_pbc = False
+        self._has_molecule_ids = False
 
         # Lazy kernel caches.
         self._zero_forces_kernel = None
@@ -254,6 +256,13 @@ class State:
         data = np.ascontiguousarray(np.asarray(particle_type_indices, dtype=np.int32))
         self.d_particle_type_indices[:] = cp.asarray(data)
         self._has_type_indices = True
+
+    def set_particle_molecule_ids(self, particle_molecule_ids):
+        data = np.ascontiguousarray(np.asarray(particle_molecule_ids, dtype=np.int32))
+        if self.d_particle_molecule_ids is None:
+            self.d_particle_molecule_ids = cp.empty(self.num_particles, dtype=np.int32)
+        self.d_particle_molecule_ids[:] = cp.asarray(data)
+        self._has_molecule_ids = True
 
     def download_positions(self):
         return np.stack(
