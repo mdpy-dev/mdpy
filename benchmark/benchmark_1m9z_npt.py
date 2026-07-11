@@ -48,15 +48,11 @@ toppar = CharmmTopparParser(
 )
 topology = psf.topology
 parameter_set = toppar.resolve_parameter_set(topology, psf.particle_type_names)
-pbc_matrix = np.eye(3, dtype=np.float64) * 120.0
+pbc_matrix = pdb.pbc_matrix
 
 state = State(topology.num_particles)
 state.set_pbc(pbc_matrix)
-scaled_positions = pdb.positions.astype(np.float64)
-frac = scaled_positions @ np.linalg.inv(pdb.pbc_matrix)
-frac -= np.floor(frac)
-scaled_positions = (frac @ pbc_matrix).astype(np.float32)
-state.set_positions(scaled_positions)
+state.set_positions(pdb.positions)
 state.set_particle_charges(psf.particle_charges)
 state.set_particle_masses(psf.particle_masses)
 state.set_particle_type_indices(parameter_set.particle_type_indices)
