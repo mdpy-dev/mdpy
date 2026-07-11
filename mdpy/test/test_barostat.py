@@ -369,6 +369,54 @@ class TestScaleMoleculePositions:
         assert abs(pos_x[0] - 20.0) < 1e-4
         assert abs(pos_x[1] - 60.0) < 1e-4
 
+    def test_pbc_boundary_molecule_scales_about_unwrapped_centroid(self):
+        """Molecule straddling PBC boundary must scale about unwrapped centroid.
+
+        Water-like molecule: O=99.9, H1=0.1, H2=0.2 in a 100 A box.
+        Simple-average centroid = 33.4 (wrong).
+        Reference-atom unwrapped centroid = 100.07 (correct).
+        Scale=1.003: delta should be 100.07*0.003 = 0.3002 A, not 33.4*0.003 = 0.1002 A.
+        """
+        from mdpy.barostat.monte_carlo import MonteCarloBarostat
+
+        n = 3
+        box = 100.0
+        state = State(n)
+        state.set_pbc(np.eye(3, dtype=precision.FLOAT) * box)
+        state.set_positions(np.array([
+            [99.9, 50.0, 50.0],
+            [0.1, 50.0, 50.0],
+            [0.2, 50.0, 50.0],
+        ], dtype=precision.FLOAT))
+        state.set_velocities(np.zeros((n, 3), dtype=precision.FLOAT))
+        state.set_prev_positions(np.array([
+            [99.8, 50.0, 50.0],
+            [0.0, 50.0, 50.0],
+            [0.1, 50.0, 50.0],
+        ], dtype=precision.FLOAT))
+        state.set_particle_masses(np.ones(n, dtype=precision.FLOAT))
+        state.set_particle_charges(np.zeros(n, dtype=precision.FLOAT))
+        state.set_particle_type_indices(np.zeros(n, dtype=precision.INT))
+        state.set_particle_molecule_ids(np.array([0, 0, 0], dtype=np.int32))
+
+        barostat = MonteCarloBarostat(pressure_bar=1.0, temperature=300.0)
+        barostat._build_molecule_csr(state)
+        scale = np.float32(1.003)
+        barostat._scale_positions(state, scale)
+
+        pos_x = state.d_positions_x.get()
+        # Reference atom = O at 99.9
+        # Unwrapped H1 = 99.9 + 0.2 = 100.1, H2 = 99.9 + 0.3 = 100.2
+        # Centroid_x = (99.9 + 100.1 + 100.2) / 3 = 100.0667
+        # Delta_x = 100.0667 * (1.003 - 1) = 0.3002
+        expected_delta_x = 100.0667 * 0.003
+        assert abs(pos_x[0] - (99.9 + expected_delta_x)) < 1e-3, \
+            f"O: expected {99.9 + expected_delta_x:.4f}, got {pos_x[0]:.4f}"
+        assert abs(pos_x[1] - (0.1 + expected_delta_x)) < 1e-3, \
+            f"H1: expected {0.1 + expected_delta_x:.4f}, got {pos_x[1]:.4f}"
+        assert abs(pos_x[2] - (0.2 + expected_delta_x)) < 1e-3, \
+            f"H2: expected {0.2 + expected_delta_x:.4f}, got {pos_x[2]:.4f}"
+
 
 class TestMonteCarloApply:
     def test_apply_does_nothing_before_frequency(self):

@@ -50,7 +50,13 @@ void scale_molecule_positions_kernel(
     float* __restrict__ pos_z,
     float* __restrict__ prev_pos_x,
     float* __restrict__ prev_pos_y,
-    float* __restrict__ prev_pos_z
+    float* __restrict__ prev_pos_z,
+    float box_x,
+    float box_y,
+    float box_z,
+    float inv_box_x,
+    float inv_box_y,
+    float inv_box_z
 ) {
     int mol = blockIdx.x * blockDim.x + threadIdx.x;
     if (mol >= num_molecules) return;
@@ -58,16 +64,34 @@ void scale_molecule_positions_kernel(
     int first = molecule_start_index[mol];
     int last = molecule_start_index[mol + 1];
 
+    // Use first atom as reference for PBC unwrapping.
+    int ref_atom = molecule_atoms[first];
+    float rx = pos_x[ref_atom];
+    float ry = pos_y[ref_atom];
+    float rz = pos_z[ref_atom];
+
+    // Compute centroid using minimum-image unwrapping: for each atom,
+    // compute the shortest displacement from the reference atom (unwrapping
+    // across PBC boundaries), then reconstruct the unwrapped position.
     float cx = 0.0f, cy = 0.0f, cz = 0.0f;
     for (int i = first; i < last; i++) {
         int atom = molecule_atoms[i];
-        cx += pos_x[atom];
-        cy += pos_y[atom];
-        cz += pos_z[atom];
+        float dx = pos_x[atom] - rx;
+        float dy = pos_y[atom] - ry;
+        float dz = pos_z[atom] - rz;
+        // Minimum image: shift by integer multiples of box to get shortest distance
+        dx -= box_x * floorf(dx * inv_box_x + 0.5f);
+        dy -= box_y * floorf(dy * inv_box_y + 0.5f);
+        dz -= box_z * floorf(dz * inv_box_z + 0.5f);
+        // Accumulate unwrapped position (ref + unwrapped displacement)
+        cx += rx + dx;
+        cy += ry + dy;
+        cz += rz + dz;
     }
     float inv_n = 1.0f / (float)(last - first);
     cx *= inv_n; cy *= inv_n; cz *= inv_n;
 
+    // Scale about the centroid (same delta for all atoms preserves internal geometry)
     float dx = cx * (scale - 1.0f);
     float dy = cy * (scale - 1.0f);
     float dz = cz * (scale - 1.0f);
@@ -136,6 +160,9 @@ class MonteCarloBarostat(BarostatBase):
     def _scale_positions(self, state, scale):
         """Scale positions about each molecule's centroid by `scale`.
 
+        Uses reference-atom + minimum-image unwrapping to correctly compute
+        centroids for molecules that straddle PBC boundaries.
+
         Translates both d_positions and d_prev_positions by the same delta
         so velocity = (pos - prev_pos) / dt is preserved.
         """
@@ -153,6 +180,12 @@ class MonteCarloBarostat(BarostatBase):
                 self._d_molecule_start_index,
                 state.d_positions_x, state.d_positions_y, state.d_positions_z,
                 state.d_prev_positions_x, state.d_prev_positions_y, state.d_prev_positions_z,
+                np.float32(state.box_x),
+                np.float32(state.box_y),
+                np.float32(state.box_z),
+                np.float32(state.inv_box_x),
+                np.float32(state.inv_box_y),
+                np.float32(state.inv_box_z),
             ),
         )
 
