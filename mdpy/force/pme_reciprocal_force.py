@@ -265,31 +265,38 @@ def precompute_bk_factors(
     recip_z = 1.0 / box_z
 
     nz_half = grid_z // 2 + 1
-    bk = np.zeros((grid_x, grid_y, nz_half), dtype=np.float32)
 
-    firstz = 1
-    for kx in range(grid_x):
-        mx = kx if kx < (grid_x + 1) // 2 else kx - grid_x
-        mhx = mx * recip_x
-        bx = scale_factor * moduli_x[kx]
+    # Miller indices (shifted to centered form)
+    kx = np.arange(grid_x)
+    mx = np.where(kx < (grid_x + 1) // 2, kx, kx - grid_x).astype(np.float64)
+    mhx = mx * recip_x
 
-        for ky in range(grid_y):
-            my = ky if ky < (grid_y + 1) // 2 else ky - grid_y
-            mhy = my * recip_y
-            mhx2y2 = mhx * mhx + mhy * mhy
-            bxby = bx * moduli_y[ky]
+    ky = np.arange(grid_y)
+    my = np.where(ky < (grid_y + 1) // 2, ky, ky - grid_y).astype(np.float64)
+    mhy = my * recip_y
 
-            for kz in range(firstz, nz_half):
-                mz = kz if kz < (grid_z + 1) // 2 else kz - grid_z
-                mhz = mz * recip_z
-                bz = moduli_z[kz]
-                m2 = mhx2y2 + mhz * mhz
-                denom = m2 * bxby * bz
-                bk[kx, ky, kz] = math.exp(-recip_exp_factor * m2) / denom
+    kz = np.arange(nz_half)
+    mz = np.where(kz < (grid_z + 1) // 2, kz, kz - grid_z).astype(np.float64)
+    mhz = mz * recip_z
 
-            firstz = 0
+    # Broadcast to 3D: (grid_x, 1, 1) x (1, grid_y, 1) x (1, 1, nz_half)
+    mhx_sq = mhx[:, None, None] ** 2
+    mhy_sq = mhy[None, :, None] ** 2
+    mhz_sq = mhz[None, None, :] ** 2
+    m2 = mhx_sq + mhy_sq + mhz_sq
 
-    return bk
+    # Product of moduli * scale_factor
+    bx = (scale_factor * moduli_x)[:, None, None]
+    by = moduli_y[None, :, None]
+    bz = moduli_z[None, None, :nz_half]
+    denom = m2 * bx * by * bz
+
+    bk = np.exp(-recip_exp_factor * m2) / denom
+
+    # DC component (kx=0, ky=0, kz=0): denom=0, set to 0
+    bk[0, 0, 0] = 0.0
+
+    return bk.astype(np.float32)
 
 
 _GATHER_KERNEL_SOURCE = r"""
