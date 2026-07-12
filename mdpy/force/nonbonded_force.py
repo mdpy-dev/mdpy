@@ -75,15 +75,15 @@ void x_cross_f_kernel(
     if (i >= num_particles) return;
     float x = px[i], y = py[i], z = pz[i];
     float fxa = fx[i], fya = fy[i], fza = fz[i];
-    atomicAdd(&virial[0], 0.5f * fxa * x);
-    atomicAdd(&virial[1], 0.5f * fxa * y);
-    atomicAdd(&virial[2], 0.5f * fxa * z);
-    atomicAdd(&virial[3], 0.5f * fya * x);
-    atomicAdd(&virial[4], 0.5f * fya * y);
-    atomicAdd(&virial[5], 0.5f * fya * z);
-    atomicAdd(&virial[6], 0.5f * fza * x);
-    atomicAdd(&virial[7], 0.5f * fza * y);
-    atomicAdd(&virial[8], 0.5f * fza * z);
+    atomicAdd(&virial[0], 0.5f * x * fxa);
+    atomicAdd(&virial[1], 0.5f * x * fya);
+    atomicAdd(&virial[2], 0.5f * x * fza);
+    atomicAdd(&virial[3], 0.5f * y * fxa);
+    atomicAdd(&virial[4], 0.5f * y * fya);
+    atomicAdd(&virial[5], 0.5f * y * fza);
+    atomicAdd(&virial[6], 0.5f * z * fxa);
+    atomicAdd(&virial[7], 0.5f * z * fya);
+    atomicAdd(&virial[8], 0.5f * z * fza);
 }
 """
 
@@ -104,15 +104,15 @@ void shift_cross_fshift_kernel(
     if (p >= num_pairs) return;
     float sx = shift_x[p], sy = shift_y[p], sz = shift_z[p];
     float fx = fsx[p], fy = fsy[p], fz = fsz[p];
-    atomicAdd(&virial[0], 0.5f * fx * sx);
-    atomicAdd(&virial[1], 0.5f * fx * sy);
-    atomicAdd(&virial[2], 0.5f * fx * sz);
-    atomicAdd(&virial[3], 0.5f * fy * sx);
-    atomicAdd(&virial[4], 0.5f * fy * sy);
-    atomicAdd(&virial[5], 0.5f * fy * sz);
-    atomicAdd(&virial[6], 0.5f * fz * sx);
-    atomicAdd(&virial[7], 0.5f * fz * sy);
-    atomicAdd(&virial[8], 0.5f * fz * sz);
+    atomicAdd(&virial[0], 0.5f * sx * fx);
+    atomicAdd(&virial[1], 0.5f * sx * fy);
+    atomicAdd(&virial[2], 0.5f * sx * fz);
+    atomicAdd(&virial[3], 0.5f * sy * fx);
+    atomicAdd(&virial[4], 0.5f * sy * fy);
+    atomicAdd(&virial[5], 0.5f * sy * fz);
+    atomicAdd(&virial[6], 0.5f * sz * fx);
+    atomicAdd(&virial[7], 0.5f * sz * fy);
+    atomicAdd(&virial[8], 0.5f * sz * fz);
 }
 """
 
