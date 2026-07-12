@@ -43,7 +43,7 @@ toppar = CharmmTopparParser(
 topology = psf.topology
 parameter_set = toppar.resolve_parameter_set(topology, psf.particle_type_names)
 pbc_matrix = pdb.pbc_matrix
-pbc_matrix = np.eye(3) * 108
+#pbc_matrix = np.eye(3) * 108
 print(pbc_matrix)
 state = State(topology.num_particles)
 state.set_pbc(pbc_matrix)
