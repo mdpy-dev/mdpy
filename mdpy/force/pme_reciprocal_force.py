@@ -437,6 +437,55 @@ void self_energy_kernel(
 }
 """
 
+
+_RECIP_VIRIAL_KERNEL_SOURCE = r"""
+extern "C" __global__
+void reciprocal_virial_kernel(
+    const float2* __restrict__ cmplx_buf,
+    float alpha,
+    float recip_box_x, float recip_box_y, float recip_box_z,
+    int gx, int gy, int gz,
+    int nz_half,
+    float* __restrict__ virial
+) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int total = gx * gy * nz_half;
+    if (idx >= total) return;
+    int kz = idx % nz_half;
+    int ky = (idx / nz_half) % gy;
+    int kx = idx / (nz_half * gy);
+    if (kx == 0 && ky == 0 && kz == 0) return;
+
+    int mx_i = (kx < (gx + 1) / 2) ? kx : kx - gx;
+    int my_i = (ky < (gy + 1) / 2) ? ky : ky - gy;
+    int mz_i = (kz < (gz + 1) / 2) ? kz : kz - gz;
+    float mhx = mx_i * recip_box_x;
+    float mhy = my_i * recip_box_y;
+    float mhz = mz_i * recip_box_z;
+    float m2 = mhx*mhx + mhy*mhy + mhz*mhz;
+
+    float2 Q = cmplx_buf[idx];
+    float q2 = Q.x*Q.x + Q.y*Q.y;
+
+    float corner = ((kz == 0) || (kz == gz / 2)) ? 0.5f : 1.0f;
+    float ets2 = corner * q2;
+    float factor = 3.14159265358979323846f;
+    float vfactor = (factor * factor / (alpha * alpha) * m2 + 1.0f) * 2.0f / m2;
+
+    float scale = 0.25f;
+    float vd = ets2 * vfactor;
+    atomicAdd(&virial[0], scale * (vd * mhx * mhx - ets2));
+    atomicAdd(&virial[4], scale * (vd * mhy * mhy - ets2));
+    atomicAdd(&virial[8], scale * (vd * mhz * mhz - ets2));
+    atomicAdd(&virial[1], scale * (vd * mhx * mhy));
+    atomicAdd(&virial[3], scale * (vd * mhx * mhy));
+    atomicAdd(&virial[2], scale * (vd * mhx * mhz));
+    atomicAdd(&virial[6], scale * (vd * mhx * mhz));
+    atomicAdd(&virial[5], scale * (vd * mhy * mhz));
+    atomicAdd(&virial[7], scale * (vd * mhy * mhz));
+}
+"""
+
 _gather_kernel = None
 _self_energy_kernel = None
 _cell_spread_kernel = None
@@ -465,6 +514,15 @@ def get_cell_spread_kernel():
             _CELL_SPREAD_KERNEL_SOURCE, "cell_spread_kernel"
         )
     return _cell_spread_kernel
+
+
+_reciprocal_virial_kernel = None
+
+def get_reciprocal_virial_kernel():
+    global _reciprocal_virial_kernel
+    if _reciprocal_virial_kernel is None:
+        _reciprocal_virial_kernel = cp.RawKernel(_RECIP_VIRIAL_KERNEL_SOURCE, "reciprocal_virial_kernel")
+    return _reciprocal_virial_kernel
 
 class PMEReciprocalForce(ForceTerm):
     name = "pme_reciprocal"
@@ -642,6 +700,25 @@ class PMEReciprocalForce(ForceTerm):
         _rfft_func(grid_3d, None, None, None, cufft.CUFFT_FORWARD, 'R2C',
                    out=self._d_complex_buffer)
         cp.multiply(self._d_complex_buffer, self._d_bk_factors, out=self._d_complex_buffer)
+        if compute_virial:
+            nz_half = self.grid_z // 2 + 1
+            total_k = self.grid_x * self.grid_y * nz_half
+            threads = 256
+            grid_k = ((total_k + threads - 1) // threads,)
+            recip_k = get_reciprocal_virial_kernel()
+            recip_k(
+                grid_k, (threads,),
+                (
+                    self._d_complex_buffer,
+                    np.float32(self.alpha),
+                    np.float32(state.inv_box_x),
+                    np.float32(state.inv_box_y),
+                    np.float32(state.inv_box_z),
+                    np.int32(self.grid_x), np.int32(self.grid_y), np.int32(self.grid_z),
+                    np.int32(nz_half),
+                    state.d_virial,
+                ),
+            )
         _irfft_func = _default_fft_func(self._d_complex_buffer, None, None, value_type='C2R')
         _irfft_func(self._d_complex_buffer, (gx, gy, gz), None, None,
                     cufft.CUFFT_INVERSE, 'C2R', out=grid_3d)
