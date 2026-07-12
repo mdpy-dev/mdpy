@@ -88,33 +88,35 @@ class System:
             ),
         )
 
-    def _compute_translational_ke(self, state):
+    def _compute_translational_ke(self):
         """Compute molecular COM translational kinetic energy on CPU.
 
         K_trans = Σ_molecules 0.5 * M_mol * |v_com|^2
         where v_com = Σ(m_i * v_i) / M_mol.
         """
-        vx = state.d_velocities_x.get()
-        vy = state.d_velocities_y.get()
-        vz = state.d_velocities_z.get()
+        self._ensure_molecule_csr()
+        state = self.state
+        velocities_x = state.d_velocities_x.get()
+        velocities_y = state.d_velocities_y.get()
+        velocities_z = state.d_velocities_z.get()
         masses = state.d_particle_masses.get()
-        mol_atoms = cp.asnumpy(self._d_molecule_atoms)
-        mol_start = cp.asnumpy(self._d_molecule_start_index)
+        molecule_atoms = cp.asnumpy(self._d_molecule_atoms)
+        molecule_start = cp.asnumpy(self._d_molecule_start_index)
         K_trans = 0.0
         for m in range(self._num_molecules):
-            s = mol_start[m]
-            e = mol_start[m + 1]
-            px = py = pz = 0.0
-            M = 0.0
-            for i in range(s, e):
-                atom = mol_atoms[i]
-                mi = masses[atom]
-                px += mi * vx[atom]
-                py += mi * vy[atom]
-                pz += mi * vz[atom]
-                M += mi
-            if M > 0:
-                K_trans += 0.5 * (px * px + py * py + pz * pz) / M
+            start = molecule_start[m]
+            end = molecule_start[m + 1]
+            momentum_x = momentum_y = momentum_z = 0.0
+            total_mass = 0.0
+            for i in range(start, end):
+                atom = molecule_atoms[i]
+                mass = masses[atom]
+                momentum_x += mass * velocities_x[atom]
+                momentum_y += mass * velocities_y[atom]
+                momentum_z += mass * velocities_z[atom]
+                total_mass += mass
+            if total_mass > 0:
+                K_trans += 0.5 * (momentum_x * momentum_x + momentum_y * momentum_y + momentum_z * momentum_z) / total_mass
         return K_trans
 
     def set_pbc(self, pbc_matrix):
