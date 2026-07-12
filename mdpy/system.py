@@ -418,12 +418,10 @@ class System:
         scale1 = 1.0 + delta
         scale2 = 1.0 - delta
 
-        self._scale_molecular_positions(scale1)
-        self.resize_box(saved_pbc_matrix * scale1)
+        self.scale_molecular_box(scale1)
         energy_plus = self.compute_total_energy()
 
-        self._scale_molecular_positions(scale2 / scale1)
-        self.resize_box(saved_pbc_matrix * scale2)
+        self.scale_molecular_box(scale2 / scale1)
         energy_minus = self.compute_total_energy()
 
         state.d_positions_x[:] = cp.asarray(saved_positions[:, 0])
