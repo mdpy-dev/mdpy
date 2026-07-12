@@ -770,7 +770,7 @@ class BlockList:
         self.rebuild_check_interval = rebuild_check_interval
 
         self.num_particles = 0
-        self._max_block_pairs = 0
+        self.max_block_pairs = 0
         self.max_blocks = 0
         self.max_total_padded = 0
         self._d_num_blocks = None
@@ -1116,7 +1116,7 @@ class BlockList:
             self._d_block_pair_shift_x_buf = cp.empty(max_block_pairs, dtype=precision.FLOAT)
             self._d_block_pair_shift_y_buf = cp.empty(max_block_pairs, dtype=precision.FLOAT)
             self._d_block_pair_shift_z_buf = cp.empty(max_block_pairs, dtype=precision.FLOAT)
-            self._max_block_pairs = max_block_pairs
+            self.max_block_pairs = max_block_pairs
         self.d_num_block_pairs[0] = 0
 
         threads_per_block = 256
@@ -1161,7 +1161,7 @@ class BlockList:
         N = self.num_particles
         threads_per_block = 256
 
-        max_total_work = self._max_block_pairs * BLOCK_SIZE
+        max_total_work = self.max_block_pairs * BLOCK_SIZE
         grid = ((max_total_work + threads_per_block - 1) // threads_per_block,)
         if self._d_exclusion_masks_buf.size < max_total_work:
             self._d_exclusion_masks_buf = cp.empty(max_total_work, dtype=np.uint32)

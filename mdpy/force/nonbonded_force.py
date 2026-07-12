@@ -261,6 +261,12 @@ class NonbondedForce(ForceTerm):
         self._d_sorted_fz = None
         self._sorted_force_slots = 0   # current allocated size (total_slots)
 
+        # per-block-pair fshift buffers (GROMACS force-shift virial, Method B)
+        self._d_fshift_bp_x = None
+        self._d_fshift_bp_y = None
+        self._d_fshift_bp_z = None
+        self._fshift_slots = 0
+
         self._energy_cuda = None
         self._total_energy_expr = None
 
@@ -336,6 +342,26 @@ class NonbondedForce(ForceTerm):
         nbytes = total_slots * 4  # 4 bytes per float32
         stream_ptr = cp.cuda.Stream.null.ptr
         for buf in (self._d_sorted_fx, self._d_sorted_fy, self._d_sorted_fz):
+            cp.cuda.runtime.memsetAsync(buf.data.ptr, 0, nbytes, stream_ptr)
+
+    def _ensure_fshift_buffer(self, block_list):
+        """Allocate per-block-pair fshift buffers if block-pair count grew."""
+        max_pairs = block_list.max_block_pairs
+        if max_pairs == 0:
+            return
+        if self._d_fshift_bp_x is None or self._fshift_slots < max_pairs:
+            self._d_fshift_bp_x = cp.empty(max_pairs, dtype=precision.FLOAT)
+            self._d_fshift_bp_y = cp.empty(max_pairs, dtype=precision.FLOAT)
+            self._d_fshift_bp_z = cp.empty(max_pairs, dtype=precision.FLOAT)
+            self._fshift_slots = max_pairs
+
+    def _zero_fshift(self, num_pairs):
+        """Zero the per-block-pair fshift buffers for the active pair range."""
+        if self._d_fshift_bp_x is None or num_pairs == 0:
+            return
+        nbytes = num_pairs * 4
+        stream_ptr = cp.cuda.Stream.null.ptr
+        for buf in (self._d_fshift_bp_x, self._d_fshift_bp_y, self._d_fshift_bp_z):
             cp.cuda.runtime.memsetAsync(buf.data.ptr, 0, nbytes, stream_ptr)
 
     def _add_sorted_forces(self, state, block_list):
