@@ -88,6 +88,21 @@ class System:
             ),
         )
 
+    def scale_molecular_box(self, scale_factor):
+        """Scale molecular COM positions and box by a uniform factor.
+
+        Makes molecules whole (PBC unwrap), scales about each molecule's
+        centroid, then resizes the box to match. This is the correct way
+        to change the box size in a molecular system — simply resizing
+        the box without scaling positions would break PBC-crossing bonds.
+
+        Args:
+            scale_factor: Uniform scaling factor (1.0 = no change).
+        """
+        self._scale_molecular_positions(scale_factor)
+        current_pbc = self.state.d_pbc_matrix.get().reshape(3, 3)
+        self.resize_box(current_pbc * float(scale_factor))
+
     def _compute_translational_ke(self):
         """Compute molecular COM translational kinetic energy on CPU.
 

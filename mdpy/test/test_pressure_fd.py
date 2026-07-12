@@ -94,3 +94,34 @@ def test_compute_current_pressure_ideal_gas():
     assert abs(P_bar - P_expected) < 0.15 * abs(P_expected), (
         f"Pressure {P_bar:.2f} bar vs expected {P_expected:.2f} bar (ideal gas N_mol*kT/V)"
     )
+
+
+def test_scale_molecular_box_scales_positions_and_box():
+    """scale_molecular_box scales each molecule's centroid about the box
+    origin while preserving internal geometry, and resizes the box.
+
+    For a uniform scale s about per-molecule centroid c:
+        new_atom = atom + c*(s-1)
+    The centroid itself becomes c*s (scales about origin), so inter-molecular
+    distances scale by s, while bonds within a molecule are unchanged.
+    """
+    N_mol = 2
+    box = 30.0
+    system = _make_water_system(N_mol=N_mol, box=box)
+    original_x = system.state.d_positions_x.get()
+
+    system.scale_molecular_box(2.0)
+
+    assert abs(system.state.box_x - 60.0) < 1e-3, (
+        f"Box should be 60.0 after 2x scale, got {system.state.box_x}"
+    )
+    # Each molecule's atoms shift rigidly by centroid_x*(scale-1); internal
+    # geometry is preserved, inter-molecular distances scale by 2.
+    expected_x = original_x.copy()
+    for m in range(N_mol):
+        atoms = slice(m * 3, m * 3 + 3)
+        centroid_x = original_x[atoms].mean()
+        expected_x[atoms] = original_x[atoms] + centroid_x * (2.0 - 1.0)
+    new_x = system.state.d_positions_x.get()
+    np.testing.assert_allclose(new_x, expected_x, atol=1e-3,
+                               err_msg="Positions should scale about per-molecule centroid")
