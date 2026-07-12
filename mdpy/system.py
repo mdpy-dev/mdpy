@@ -5,6 +5,7 @@ import numpy as np
 from mdpy.core.block_list import BlockList
 from mdpy.core.state import State
 from mdpy.unit import NA
+from mdpy.barostat.monte_carlo import build_molecule_csr, _SCALE_POSITIONS_KERNEL
 
 BAR_TO_INTERNAL_PRESSURE = float(NA.value) * 1e-32
 
@@ -34,6 +35,11 @@ class System:
 
         self._step_counter = 0
 
+        self._mol_atoms = None
+        self._mol_start_index = None
+        self._num_molecules = 0
+        self._scale_positions_kernel = None
+
     def _ensure_pme_stream(self):
         if self._pme_stream is None:
             self._pme_stream = cp.cuda.Stream(non_blocking=True)
@@ -41,6 +47,43 @@ class System:
             # timing-enabled events add ~1-2 us of sync overhead each.
             self._ev_zero_forces = cp.cuda.Event(disable_timing=True)
             self._ev_pme_done = cp.cuda.Event(disable_timing=True)
+
+    def _ensure_molecule_csr(self):
+        if self._mol_atoms is not None:
+            return
+        if self.state.d_particle_molecule_ids is None:
+            raise RuntimeError(
+                "Particle molecule IDs not set. Call state.set_particle_molecule_ids() first."
+            )
+        mol_ids = cp.asnumpy(self.state.d_particle_molecule_ids)
+        self._mol_atoms, self._mol_start_index = build_molecule_csr(mol_ids)
+        self._num_molecules = len(self._mol_start_index) - 1
+
+    def _scale_molecular_positions(self, state, scale):
+        self._ensure_molecule_csr()
+        if self._scale_positions_kernel is None:
+            self._scale_positions_kernel = cp.RawKernel(
+                _SCALE_POSITIONS_KERNEL, 'scale_molecule_positions_kernel'
+            )
+        threads = 256
+        grid = ((self._num_molecules + threads - 1) // threads,)
+        self._scale_positions_kernel(
+            grid, (threads,),
+            (
+                np.float32(scale),
+                np.int32(self._num_molecules),
+                cp.asarray(self._mol_atoms),
+                cp.asarray(self._mol_start_index),
+                state.d_positions_x, state.d_positions_y, state.d_positions_z,
+                state.d_prev_positions_x, state.d_prev_positions_y, state.d_prev_positions_z,
+                np.float32(state.box_x),
+                np.float32(state.box_y),
+                np.float32(state.box_z),
+                np.float32(state.inv_box_x),
+                np.float32(state.inv_box_y),
+                np.float32(state.inv_box_z),
+            ),
+        )
 
     def set_pbc(self, pbc_matrix):
         self.state.set_pbc(pbc_matrix)
