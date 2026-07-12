@@ -131,7 +131,8 @@ class System:
         3. Force terms: notify any term with update_box() (e.g., PME)
         """
         self.state.set_pbc(new_pbc_matrix)
-        self.update_neighbor_list(force_rebuild=True)
+        if self._block_list is not None:
+            self.update_neighbor_list(force_rebuild=True)
         pbc_2d = np.asarray(new_pbc_matrix).reshape(3, 3)
         box_x = abs(float(pbc_2d[0, 0]))
         box_y = abs(float(pbc_2d[1, 1]))
@@ -363,6 +364,63 @@ class System:
         virial_trace = sum(float(np.trace(W)) for W in virials.values())
         pressure_internal = (2.0 * kinetic_energy + 2.0 * virial_trace) / (3.0 * volume)
         return pressure_internal / BAR_TO_INTERNAL_PRESSURE
+
+    def compute_current_pressure(self):
+        """Compute instantaneous pressure via finite difference (bar).
+
+        Replicates OpenMM's MonteCarloBarostat::computeCurrentPressure:
+        scales molecular COMs by (1±delta), computes potential energy at
+        each scale, and combines with translational KE:
+
+            P = (2/3) * K_trans / V - (E1 - E2) / dV
+
+        This automatically excludes intra-molecular and constraint
+        contributions (COM scaling preserves internal geometry). Does
+        not use the virial. Does not require a barostat.
+
+        Returns:
+            Pressure in bar (float).
+        """
+        self._ensure_molecule_csr()
+        state = self.state
+        V = state.box_x * state.box_y * state.box_z
+
+        saved_pos = np.stack([
+            state.d_positions_x.get(),
+            state.d_positions_y.get(),
+            state.d_positions_z.get(),
+        ], axis=1)
+        saved_prev = np.stack([
+            state.d_prev_positions_x.get(),
+            state.d_prev_positions_y.get(),
+            state.d_prev_positions_z.get(),
+        ], axis=1)
+        saved_pbc = state.d_pbc_matrix.get().reshape(3, 3).copy()
+
+        delta = 1e-3
+        scale1 = 1.0 + delta
+        scale2 = 1.0 - delta
+
+        self._scale_molecular_positions(scale1)
+        self.resize_box(saved_pbc * scale1)
+        E1 = self.compute_total_energy()
+
+        self._scale_molecular_positions(scale2 / scale1)
+        self.resize_box(saved_pbc * scale2)
+        E2 = self.compute_total_energy()
+
+        state.d_positions_x[:] = cp.asarray(saved_pos[:, 0])
+        state.d_positions_y[:] = cp.asarray(saved_pos[:, 1])
+        state.d_positions_z[:] = cp.asarray(saved_pos[:, 2])
+        state.d_prev_positions_x[:] = cp.asarray(saved_prev[:, 0])
+        state.d_prev_positions_y[:] = cp.asarray(saved_prev[:, 1])
+        state.d_prev_positions_z[:] = cp.asarray(saved_prev[:, 2])
+        self.resize_box(saved_pbc)
+
+        K_trans = self._compute_translational_ke()
+        deltaV = V * (scale1 ** 3 - scale2 ** 3)
+        P_internal = (2.0 / 3.0) * K_trans / V - (E1 - E2) / deltaV
+        return P_internal / BAR_TO_INTERNAL_PRESSURE
 
     def compute_total_energy(self):
         """Compute total potential energy on GPU, return as Python float.
