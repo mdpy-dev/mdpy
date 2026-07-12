@@ -1,8 +1,9 @@
 import numpy as np
 from mdpy.core.state import State
 from mdpy.core.topology import Topology
-from mdpy.system import System
-from mdpy.unit import NA
+from mdpy.system import System, BAR_TO_INTERNAL_PRESSURE
+from mdpy.unit import KB, default_energy_unit, kelvin
+from mdpy.utils import generate_velocity_from_temperature
 
 
 def _make_water_system(N_mol=4, box=30.0):
@@ -78,20 +79,17 @@ def test_compute_current_pressure_ideal_gas():
     Set up N_mol molecules with velocities from temperature T in volume V,
     no force terms. The finite-difference pressure should match N_mol*kT/V.
     """
-    from mdpy.unit import KB, default_energy_unit, kelvin
     BOLTZMANN = float(KB.convert_to(default_energy_unit / kelvin).value)
-    BAR = float(NA.value) * 1e-32
 
     N_mol = 200
     system = _make_water_system(N_mol=N_mol, box=80.0)
     N = N_mol * 3
-    from mdpy.utils import generate_velocity_from_temperature
     velocities = generate_velocity_from_temperature(300.0, np.ones(N, dtype=np.float32), seed=42)
     system.state.set_velocities(velocities)
 
     P_bar = system.compute_current_pressure()
     V = 80.0 ** 3
-    P_expected = (N_mol * BOLTZMANN * 300.0 / V) / BAR
+    P_expected = (N_mol * BOLTZMANN * 300.0 / V) / BAR_TO_INTERNAL_PRESSURE
 
     assert abs(P_bar - P_expected) < 0.15 * abs(P_expected), (
         f"Pressure {P_bar:.2f} bar vs expected {P_expected:.2f} bar (ideal gas N_mol*kT/V)"
