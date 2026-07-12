@@ -146,7 +146,7 @@ void compute_bonded(
     for (int off = 16; off > 0; off >>= 1)
         e += __shfl_down_sync(0xffffffff, e, off);
     if ((threadIdx.x & 31) == 0)
-        atomicAdd(energy_buf, e);
+        atomicAdd(&energy_buf[blockIdx.x], e);
 }}
 '''
 
@@ -173,6 +173,9 @@ class BondedForce(ForceTerm):
         self._kernel_source = None
         self._num_sm = None
         self._dirty = True
+
+        self._d_energy_buffer = None
+        self._energy_buffer_size = 0
 
     @property
     def num_terms(self):
@@ -248,6 +251,14 @@ class BondedForce(ForceTerm):
         if self._num_sm is None:
             self._num_sm = cp.cuda.runtime.getDeviceProperties(0)['multiProcessorCount']
 
+    def _ensure_energy_buffer(self, grid_size):
+        if self._d_energy_buffer is None or self._energy_buffer_size < grid_size:
+            self._d_energy_buffer = cp.zeros(grid_size, dtype=precision.FLOAT)
+            self._energy_buffer_size = grid_size
+
+    def _reduce_energy_buffer(self, state, grid_size):
+        state.d_energy[0] = cp.sum(self._d_energy_buffer[:grid_size])
+
     def compute(self, state, block_list=None, compute_energy=True, compute_virial=False):
         num_terms_local = len(self._indices)
         if num_terms_local == 0:
@@ -261,6 +272,9 @@ class BondedForce(ForceTerm):
         max_blocks = 6 * self._num_sm
         grid_size = max(min((num_terms_local + block_size - 1) // block_size, max_blocks), 1)
 
+        self._ensure_energy_buffer(grid_size)
+        self._d_energy_buffer[:grid_size] = 0
+
         args = [
             state.d_positions_x,
             state.d_positions_y,
@@ -268,7 +282,7 @@ class BondedForce(ForceTerm):
             state.d_forces_x,
             state.d_forces_y,
             state.d_forces_z,
-            state.d_energy,
+            self._d_energy_buffer,
         ]
         if compute_virial:
             args.append(state.d_virial)
@@ -285,3 +299,5 @@ class BondedForce(ForceTerm):
             elif prop_name in self._per_particle_gpu:
                 args.append(self._per_particle_gpu[prop_name])
         kernel((grid_size,), (block_size,), tuple(args))
+
+        self._reduce_energy_buffer(state, grid_size)

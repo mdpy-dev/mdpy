@@ -165,7 +165,7 @@ def _assemble_exclusion_kernel(
     for (int offset = 16; offset > 0; offset >>= 1) {{
         total_energy += __shfl_down_sync(0xffffffff, total_energy, offset);
     }}
-    if (tgx == 0) atomicAdd(energy_buffer, total_energy);
+    if (tgx == 0) atomicAdd(&energy_buffer[blockIdx.x], total_energy);
 """
     else:
         energy_buffer_arg = ""
@@ -353,6 +353,9 @@ class NonbondedForce(ForceTerm):
         self._energy_cuda = None
         self._total_energy_expr = None
 
+        self._d_energy_buffer = None
+        self._energy_buffer_size = 0
+
     def set_pair_parameter(self, name, matrix):
         self._pair_param_data[name] = np.asarray(matrix, dtype=np.float32)
 
@@ -436,6 +439,14 @@ class NonbondedForce(ForceTerm):
         )
 
         self._compiled = True
+
+    def _ensure_energy_buffer(self, grid_size):
+        if self._d_energy_buffer is None or self._energy_buffer_size < grid_size:
+            self._d_energy_buffer = cp.zeros(grid_size, dtype=precision.FLOAT)
+            self._energy_buffer_size = grid_size
+
+    def _reduce_energy_buffer(self, state, grid_size):
+        state.d_energy[0] = cp.sum(self._d_energy_buffer[:grid_size])
 
     def _ensure_sorted_force_buffer(self, block_list):
         """Ensure slot-indexed force buffers are allocated for current block count.
@@ -577,7 +588,9 @@ class NonbondedForce(ForceTerm):
             self._d_sorted_fz,
         ]
         if compute_energy:
-            args.append(state.d_energy)
+            self._ensure_energy_buffer(grid_size)
+            self._d_energy_buffer[:grid_size] = 0
+            args.append(self._d_energy_buffer)
         if compute_virial:
             args.append(state.d_virial)
             args.append(self._d_fshift_bp_x)
@@ -602,6 +615,9 @@ class NonbondedForce(ForceTerm):
             args.append(np.float32(self._scalar_data.get(name, 0.0)))
 
         pair_kernel((grid_size,), (256,), tuple(args))
+
+        if compute_energy:
+            self._reduce_energy_buffer(state, grid_size)
 
         # Add slot-indexed forces into PDB-order force array
         self._add_sorted_forces(state, block_list)
