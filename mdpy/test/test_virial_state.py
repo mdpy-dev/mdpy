@@ -34,3 +34,24 @@ def test_set_virial_slot_copies_d_virial():
         state.d_virial_accumulator.get()[1],
         np.arange(9, dtype=np.float32),
     )
+
+
+def test_force_term_compute_accepts_compute_virial_kwarg():
+    from mdpy.force.force_term import ForceTerm
+    class StubTerm(ForceTerm):
+        name = "stub"
+        def compute(self, state, block_list=None, compute_energy=True, compute_virial=False):
+            assert compute_virial is True
+    term = StubTerm()
+    term.compute(state=None, compute_virial=True)
+
+
+def test_system_dump_virial_returns_empty_dict_when_no_terms():
+    import numpy as np
+    from mdpy.core.topology import Topology
+    from mdpy.system import System
+    topo = Topology()
+    topo.num_particles = 2
+    system = System(topo)
+    result = system.dump_virial()
+    assert result == {}

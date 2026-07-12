@@ -84,6 +84,7 @@ class System:
         else:
             self._primary_force_terms.append(term)
         self.state.allocate_energy_accumulator(len(self.force_terms))
+        self.state.allocate_virial_accumulator(len(self.force_terms))
         term_cutoff = getattr(term, '_cutoff', None)
         if term_cutoff is not None:
             if self._cutoff is None:
@@ -127,7 +128,7 @@ class System:
 
         if not self._pme_force_terms:
             for term in self._primary_force_terms:
-                term.compute(self.state, self._block_list, compute_energy=False)
+                term.compute(self.state, self._block_list, compute_energy=False, compute_virial=False)
             return
 
         # PME runs on a non-blocking stream concurrent with primary terms.
@@ -139,14 +140,14 @@ class System:
         self._pme_stream.wait_event(self._ev_zero_forces)
         with self._pme_stream:
             for term in self._pme_force_terms:
-                term.compute(self.state, self._block_list, compute_energy=False)
+                term.compute(self.state, self._block_list, compute_energy=False, compute_virial=False)
             # Record INSIDE the with-block so the event is recorded on the
             # pme stream, not the null stream (record() uses the current stream).
             self._ev_pme_done.record()
 
         # Primary terms run on the null stream, overlapping with PME.
         for term in self._primary_force_terms:
-            term.compute(self.state, self._block_list, compute_energy=False)
+            term.compute(self.state, self._block_list, compute_energy=False, compute_virial=False)
 
         # Make the null stream wait for PME to finish writing forces before
         # compute_forces returns, so the next null-stream op (integrator) sees
@@ -212,6 +213,54 @@ class System:
             if value != 0.0:
                 result[term.name] = value
         return result
+
+    def dump_virial(self):
+        if self.state.d_virial_accumulator is None:
+            return {}
+        self.state.zero_forces()
+        if self._block_list is not None:
+            self._block_list.refresh_sorted_posq(self.state)
+        for term_index, term in enumerate(self.force_terms):
+            self.state.zero_energy()
+            self.state.zero_virial()
+            term.compute(
+                self.state, self._block_list,
+                compute_energy=False, compute_virial=True,
+            )
+            self.state.set_virial_slot(term_index)
+        raw = cp.asnumpy(self.state.d_virial_accumulator)
+        result = {}
+        for term_index, term in enumerate(self.force_terms):
+            if np.any(raw[term_index] != 0.0):
+                result[term.name] = raw[term_index].reshape(3, 3)
+        return result
+
+    def dump_energy_and_virial(self):
+        """Compute both energy and virial in one pass (F+E+V variant)."""
+        energies = {}
+        virials = {}
+        if self.state.d_energy_accumulator is None:
+            return energies, virials
+        self.state.zero_forces()
+        if self._block_list is not None:
+            self._block_list.refresh_sorted_posq(self.state)
+        for term_index, term in enumerate(self.force_terms):
+            self.state.zero_energy()
+            self.state.zero_virial()
+            term.compute(
+                self.state, self._block_list,
+                compute_energy=True, compute_virial=True,
+            )
+            self.state.set_energy_slot(term_index)
+            self.state.set_virial_slot(term_index)
+        raw_e = cp.asnumpy(self.state.d_energy_accumulator)
+        raw_v = cp.asnumpy(self.state.d_virial_accumulator)
+        for i, term in enumerate(self.force_terms):
+            if float(raw_e[i]) != 0.0:
+                energies[term.name] = float(raw_e[i])
+            if np.any(raw_v[i] != 0.0):
+                virials[term.name] = raw_v[i].reshape(3, 3)
+        return energies, virials
 
     def compute_total_energy(self):
         """Compute total potential energy on GPU, return as Python float.
