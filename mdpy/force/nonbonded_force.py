@@ -59,6 +59,64 @@ void add_sorted_forces_kernel(
 """
 
 
+_X_CROSS_F_KERNEL_SRC = r"""
+extern "C" __global__
+void x_cross_f_kernel(
+    const float* __restrict__ px,
+    const float* __restrict__ py,
+    const float* __restrict__ pz,
+    const float* __restrict__ fx,
+    const float* __restrict__ fy,
+    const float* __restrict__ fz,
+    int num_particles,
+    float* __restrict__ virial
+) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= num_particles) return;
+    float x = px[i], y = py[i], z = pz[i];
+    float fxa = fx[i], fya = fy[i], fza = fz[i];
+    atomicAdd(&virial[0], 0.5f * fxa * x);
+    atomicAdd(&virial[1], 0.5f * fxa * y);
+    atomicAdd(&virial[2], 0.5f * fxa * z);
+    atomicAdd(&virial[3], 0.5f * fya * x);
+    atomicAdd(&virial[4], 0.5f * fya * y);
+    atomicAdd(&virial[5], 0.5f * fya * z);
+    atomicAdd(&virial[6], 0.5f * fza * x);
+    atomicAdd(&virial[7], 0.5f * fza * y);
+    atomicAdd(&virial[8], 0.5f * fza * z);
+}
+"""
+
+
+_SHIFT_CROSS_FSHIFT_KERNEL_SRC = r"""
+extern "C" __global__
+void shift_cross_fshift_kernel(
+    const float* __restrict__ shift_x,
+    const float* __restrict__ shift_y,
+    const float* __restrict__ shift_z,
+    const float* __restrict__ fsx,
+    const float* __restrict__ fsy,
+    const float* __restrict__ fsz,
+    int num_pairs,
+    float* __restrict__ virial
+) {
+    int p = blockIdx.x * blockDim.x + threadIdx.x;
+    if (p >= num_pairs) return;
+    float sx = shift_x[p], sy = shift_y[p], sz = shift_z[p];
+    float fx = fsx[p], fy = fsy[p], fz = fsz[p];
+    atomicAdd(&virial[0], 0.5f * fx * sx);
+    atomicAdd(&virial[1], 0.5f * fx * sy);
+    atomicAdd(&virial[2], 0.5f * fx * sz);
+    atomicAdd(&virial[3], 0.5f * fy * sx);
+    atomicAdd(&virial[4], 0.5f * fy * sy);
+    atomicAdd(&virial[5], 0.5f * fy * sz);
+    atomicAdd(&virial[6], 0.5f * fz * sx);
+    atomicAdd(&virial[7], 0.5f * fz * sy);
+    atomicAdd(&virial[8], 0.5f * fz * sz);
+}
+"""
+
+
 def _assemble_exclusion_kernel(
     expr_info, energy_cuda, grad_cuda, radial_force_cuda, total_energy_expr,
     compute_energy=True, compute_virial=False,
@@ -271,6 +329,9 @@ class NonbondedForce(ForceTerm):
         self._pair_kernel_v = None
         self._pair_kernel_ev = None
 
+        self._x_cross_f_kernel = None
+        self._shift_cross_fshift_kernel = None
+
         self._n_types = 0
 
         self._cutoff = cutoff
@@ -369,6 +430,10 @@ class NonbondedForce(ForceTerm):
         self._add_forces_kernel = cp.RawKernel(
             _ADD_SORTED_FORCES_KERNEL_SRC, "add_sorted_forces_kernel"
         )
+        self._x_cross_f_kernel = cp.RawKernel(_X_CROSS_F_KERNEL_SRC, "x_cross_f_kernel")
+        self._shift_cross_fshift_kernel = cp.RawKernel(
+            _SHIFT_CROSS_FSHIFT_KERNEL_SRC, "shift_cross_fshift_kernel"
+        )
 
         self._compiled = True
 
@@ -439,6 +504,38 @@ class NonbondedForce(ForceTerm):
             ),
         )
 
+    def _accumulate_virial(self, state, block_list):
+        """Compute virial = 0.5*(x⊗F + shift⊗fshift). Both pieces atomicAdd
+        into state.d_virial. Must run after pair kernel finishes."""
+        num_pairs = int(block_list.d_num_block_pairs[0])
+        threads = 256
+
+        grid_n = ((state.num_particles + threads - 1) // threads,)
+        self._x_cross_f_kernel(
+            grid_n, (threads,),
+            (
+                state.d_positions_x, state.d_positions_y, state.d_positions_z,
+                state.d_forces_x, state.d_forces_y, state.d_forces_z,
+                np.int32(state.num_particles),
+                state.d_virial,
+            ),
+        )
+        if num_pairs > 0:
+            grid_p = ((num_pairs + threads - 1) // threads,)
+            self._shift_cross_fshift_kernel(
+                grid_p, (threads,),
+                (
+                    block_list.d_block_pair_shift_x,
+                    block_list.d_block_pair_shift_y,
+                    block_list.d_block_pair_shift_z,
+                    self._d_fshift_bp_x,
+                    self._d_fshift_bp_y,
+                    self._d_fshift_bp_z,
+                    np.int32(num_pairs),
+                    state.d_virial,
+                ),
+            )
+
     def compute(self, state, block_list=None, compute_energy=True, compute_virial=False):
         if not self._compiled:
             self._lazy_compile(state)
@@ -453,12 +550,19 @@ class NonbondedForce(ForceTerm):
         # Ensure slot-indexed force buffers exist and are zeroed
         self._ensure_sorted_force_buffer(block_list)
         self._zero_sorted_forces(total_slots)
+        if compute_virial:
+            self._ensure_fshift_buffer(block_list)
+            self._zero_fshift(int(block_list.d_num_block_pairs[0]))
 
         num_sm = self._num_sm
         grid_size = 16 * num_sm
 
-        if compute_energy:
-            pair_kernel = self._pair_kernel
+        if compute_energy and compute_virial:
+            pair_kernel = self._pair_kernel_ev
+        elif compute_energy:
+            pair_kernel = self._pair_kernel_e
+        elif compute_virial:
+            pair_kernel = self._pair_kernel_v
         else:
             pair_kernel = self._pair_kernel_fo
 
@@ -474,6 +578,11 @@ class NonbondedForce(ForceTerm):
         ]
         if compute_energy:
             args.append(state.d_energy)
+        if compute_virial:
+            args.append(state.d_virial)
+            args.append(self._d_fshift_bp_x)
+            args.append(self._d_fshift_bp_y)
+            args.append(self._d_fshift_bp_z)
         args.extend(
             [
                 block_list.d_block_atoms,
@@ -496,3 +605,6 @@ class NonbondedForce(ForceTerm):
 
         # Add slot-indexed forces into PDB-order force array
         self._add_sorted_forces(state, block_list)
+
+        if compute_virial:
+            self._accumulate_virial(state, block_list)
