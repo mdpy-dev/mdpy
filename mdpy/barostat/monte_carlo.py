@@ -38,7 +38,7 @@ def build_molecule_csr(particle_molecule_ids):
     return sort_order, np.array(boundaries, dtype=np.int32)
 
 
-_SCALE_POSITIONS_KERNEL = r"""
+SCALE_POSITIONS_KERNEL = r"""
 extern "C" __global__
 void scale_molecule_positions_kernel(
     float scale,
@@ -167,7 +167,7 @@ class MonteCarloBarostat(BarostatBase):
 
     def _ensure_scale_kernel(self):
         if self._scale_kernel is None:
-            self._scale_kernel = cp.RawKernel(_SCALE_POSITIONS_KERNEL, 'scale_molecule_positions_kernel')
+            self._scale_kernel = cp.RawKernel(SCALE_POSITIONS_KERNEL, 'scale_molecule_positions_kernel')
 
     def _scale_positions(self, state, scale):
         """Scale positions about each molecule's centroid by `scale`.

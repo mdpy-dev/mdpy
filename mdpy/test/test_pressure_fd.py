@@ -1,6 +1,4 @@
 import numpy as np
-import pytest
-import cupy as cp
 from mdpy.core.state import State
 from mdpy.core.topology import Topology
 from mdpy.system import System
@@ -35,5 +33,5 @@ def test_molecule_csr_built():
     system = _make_water_system(N_mol=4)
     system._ensure_molecule_csr()
     assert system._num_molecules == 4
-    assert len(system._mol_atoms) == 12
-    assert len(system._mol_start_index) == 5
+    assert len(system._d_molecule_atoms) == 12
+    assert len(system._d_molecule_start_index) == 5
