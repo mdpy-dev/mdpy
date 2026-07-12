@@ -130,7 +130,7 @@ void compute_bonded(
     float* __restrict__ f_x,
     float* __restrict__ f_y,
     float* __restrict__ f_z,
-    float* __restrict__ energy_buf,
+    float* __restrict__ energy_buf,{virial_buf_decl}
     const float* __restrict__ pbc_inv,
     const float* __restrict__ pbc_matrix,
     const int* __restrict__ d_indices,
@@ -169,6 +169,7 @@ class BondedForce(ForceTerm):
         self._d_indices = None
         self._d_parameters = None
         self._kernel = None
+        self._kernel_virial = None
         self._kernel_source = None
         self._num_sm = None
         self._dirty = True
@@ -198,7 +199,7 @@ class BondedForce(ForceTerm):
         self._d_parameters = cp.asarray(np.array(self._parameters, dtype=np.float32))
         self._dirty = False
 
-    def _assemble_kernel(self):
+    def _assemble_kernel(self, compute_virial=False):
         param_loads_lines = []
         for i, parameter_name in enumerate(self._parameter_names):
             param_loads_lines.append(
@@ -213,10 +214,12 @@ class BondedForce(ForceTerm):
                 f'float {arg_name} = d_{base_name}[{atom_idx}];'
             )
         param_loads = '\n        '.join(param_loads_lines)
+        fragment = (self._expression.cuda_fragment_virial if compute_virial
+                    else self._expression.cuda_fragment)
         body_template = _BODY_TEMPLATES[self._body]
         body = body_template.format(
             param_loads=param_loads,
-            expression_fragment=self._expression.cuda_fragment,
+            expression_fragment=fragment,
         )
         extra_param_lines = []
         for prop_name in self._per_particle_properties:
@@ -226,14 +229,22 @@ class BondedForce(ForceTerm):
         extra_params = ''
         if extra_param_lines:
             extra_params = ',\n    ' + ',\n    '.join(extra_param_lines)
+        virial_buf_decl = '\n    float* __restrict__ virial,' if compute_virial else ''
         self._kernel_source = _PREAMBLE + _MAIN_TEMPLATE.format(
-            body=body, extra_params=extra_params,
+            body=body, extra_params=extra_params, virial_buf_decl=virial_buf_decl,
         )
 
-    def _ensure_compiled(self):
-        if self._kernel is not None:
+    def _ensure_compiled(self, compute_virial=False):
+        if compute_virial and self._kernel_virial is not None:
             return
-        self._kernel = cp.RawKernel(self._kernel_source, 'compute_bonded')
+        if not compute_virial and self._kernel is not None:
+            return
+        self._assemble_kernel(compute_virial=compute_virial)
+        kernel = cp.RawKernel(self._kernel_source, 'compute_bonded')
+        if compute_virial:
+            self._kernel_virial = kernel
+        else:
+            self._kernel = kernel
         if self._num_sm is None:
             self._num_sm = cp.cuda.runtime.getDeviceProperties(0)['multiProcessorCount']
 
@@ -243,9 +254,8 @@ class BondedForce(ForceTerm):
             return
         if self._dirty:
             self._sync()
-        if self._kernel_source is None:
-            self._assemble_kernel()
-        self._ensure_compiled()
+        self._ensure_compiled(compute_virial)
+        kernel = self._kernel_virial if compute_virial else self._kernel
 
         block_size = 128
         max_blocks = 6 * self._num_sm
@@ -259,15 +269,19 @@ class BondedForce(ForceTerm):
             state.d_forces_y,
             state.d_forces_z,
             state.d_energy,
+        ]
+        if compute_virial:
+            args.append(state.d_virial)
+        args.extend([
             state.d_pbc_inv,
             state.d_pbc_matrix,
             self._d_indices.ravel(),
             self._d_parameters.ravel(),
             np.int32(num_terms_local),
-        ]
+        ])
         for prop_name in self._per_particle_properties:
             if prop_name == 'charge' and state.d_particle_charges is not None:
                 args.append(state.d_particle_charges)
             elif prop_name in self._per_particle_gpu:
                 args.append(self._per_particle_gpu[prop_name])
-        self._kernel((grid_size,), (block_size,), tuple(args))
+        kernel((grid_size,), (block_size,), tuple(args))
