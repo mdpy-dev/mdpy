@@ -120,10 +120,11 @@ system.add_barostat(barostat)
 
 # ---- NPT production ----
 print(f"\nNPT simulation ({NPT_STEPS} steps):")
-print(f"  {'Step':>6s}  {'Volume(A^3)':>12s}  {'Box_len':>8s}  {'Density':>8s}  {'Accept%':>8s}  {'E_pot(kcal/mol)':>18s}  {'ms/step':>8s}  {'ns/day':>8s}")
-print(f"  {'------':>6s}  {'------------':>12s}  {'--------':>8s}  {'--------':>8s}  {'--------':>8s}  {'------------------':>18s}  {'--------':>8s}  {'--------':>8s}")
+print(f"  {'Step':>6s}  {'Volume(A^3)':>12s}  {'Box_len':>8s}  {'Density':>8s}  {'Accept%':>8s}  {'P(bar)':>8s}  {'E_pot(kcal/mol)':>18s}  {'ms/step':>8s}  {'ns/day':>8s}")
+print(f"  {'------':>6s}  {'------------':>12s}  {'--------':>8s}  {'--------':>8s}  {'--------':>8s}  {'--------':>8s}  {'------------------':>18s}  {'--------':>8s}  {'--------':>8s}")
 
 block_times = []
+pressure_history = []
 for i in range(NPT_STEPS):
     cp.cuda.Stream.null.synchronize()
     t_step = time.perf_counter()
@@ -143,11 +144,14 @@ for i in range(NPT_STEPS):
         box_len = s.box_x
         density = total_mass * 1.66054 / vol
         accept_pct = barostat.acceptance_rate * 100
-        energy_dict = system.dump_energy()
+        energy_dict, virial_dict = system.dump_energy_and_virial()
         e_total = sum(energy_dict.values()) * KCAL_PER_INTERNAL
+        pressure_bar = system.dump_pressure(virials=virial_dict)
+        pressure_history.append(pressure_bar)
         recent_ms = np.mean(block_times[-REPORT_INTERVAL:]) * 1000
         recent_nsday = 86400.0 / (recent_ms * 1e-3) * TIME_STEP_FS * 1e-6
-        print(f"  {i+1:6d}  {vol:12.0f}  {box_len:8.2f}  {density:8.4f}  {accept_pct:8.1f}  {e_total:18.1f}  {recent_ms:8.1f}  {recent_nsday:8.1f}")
+        recent_p = np.mean(pressure_history[-REPORT_INTERVAL:]) if pressure_history else 0.0
+        print(f"  {i+1:6d}  {vol:12.0f}  {box_len:8.2f}  {density:8.4f}  {accept_pct:8.1f}  {recent_p:8.1f}  {e_total:18.1f}  {recent_ms:8.1f}  {recent_nsday:8.1f}")
 
 avg_ms = np.mean(block_times) * 1000
 avg_nsday = 86400.0 / (avg_ms * 1e-3) * TIME_STEP_FS * 1e-6
@@ -160,5 +164,7 @@ print(f"\nSummary:")
 print(f"  Initial density:  {initial_density:.4f} g/cm^3")
 print(f"  Final density:    {final_density:.4f} g/cm^3")
 print(f"  Volume change:    {vol_change:+.1f}%")
+avg_pressure = np.mean(pressure_history) if pressure_history else 0.0
+print(f"  Avg pressure:    {avg_pressure:.1f} bar (target: {PRESSURE_BAR} bar)")
 print(f"  NVT:  {nvt_ms:.1f} ms/step = {nvt_nsday:.1f} ns/day")
 print(f"  NPT:  {avg_ms:.1f} ms/step = {avg_nsday:.1f} ns/day")
