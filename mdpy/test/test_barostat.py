@@ -286,8 +286,6 @@ class TestMoleculeCSR:
 class TestScaleMoleculePositions:
     def test_single_molecule_scales_about_centroid(self):
         """2-atom molecule: centroid stays at centroid * scale."""
-        from mdpy.barostat.monte_carlo import MonteCarloBarostat
-
         n = 2
         state = State(n)
         state.set_pbc(np.eye(3, dtype=precision.FLOAT) * 100.0)
@@ -299,12 +297,12 @@ class TestScaleMoleculePositions:
         state.set_prev_positions(np.array([[9.0, 0.0, 0.0], [19.0, 0.0, 0.0]], dtype=precision.FLOAT))
         state.set_particle_molecule_ids(np.array([0, 0], dtype=np.int32))
 
-        barostat = MonteCarloBarostat(
-            pressure_bar=1.0, temperature=300.0)
-
-        barostat._build_molecule_csr(state)
+        topology = Topology()
+        topology.num_particles = n
+        system = System(topology, state=state)
+        system._ensure_molecule_csr()
         scale = np.float32(2.0)
-        barostat._scale_positions(state, scale)
+        system._scale_molecular_positions(scale)
 
         pos_x = state.d_positions_x.get()
         # centroid was (10+20)/2 = 15; new centroid = 30
@@ -315,8 +313,6 @@ class TestScaleMoleculePositions:
 
     def test_velocity_preserved(self):
         """Scaling both pos and prev_pos by same delta preserves velocity."""
-        from mdpy.barostat.monte_carlo import MonteCarloBarostat
-
         n = 2
         state = State(n)
         state.set_pbc(np.eye(3, dtype=precision.FLOAT) * 100.0)
@@ -333,18 +329,17 @@ class TestScaleMoleculePositions:
         # Original velocity (assuming dt=1): v = pos - prev = [2, 0, 0] for both
         original_vel_x = state.d_positions_x.get() - state.d_prev_positions_x.get()
 
-        barostat = MonteCarloBarostat(
-            pressure_bar=1.0, temperature=300.0)
-        barostat._build_molecule_csr(state)
-        barostat._scale_positions(state, np.float32(1.5))
+        topology = Topology()
+        topology.num_particles = n
+        system = System(topology, state=state)
+        system._ensure_molecule_csr()
+        system._scale_molecular_positions(np.float32(1.5))
 
         new_vel_x = state.d_positions_x.get() - state.d_prev_positions_x.get()
         np.testing.assert_allclose(new_vel_x, original_vel_x, atol=1e-4)
 
     def test_two_molecules_scale_independently(self):
         """Two single-atom molecules at different positions scale independently."""
-        from mdpy.barostat.monte_carlo import MonteCarloBarostat
-
         n = 2
         state = State(n)
         state.set_pbc(np.eye(3, dtype=precision.FLOAT) * 100.0)
@@ -356,11 +351,11 @@ class TestScaleMoleculePositions:
         state.set_prev_positions(np.array([[9.0, 0.0, 0.0], [29.0, 0.0, 0.0]], dtype=precision.FLOAT))
         state.set_particle_molecule_ids(np.array([0, 1], dtype=np.int32))
 
-        barostat = MonteCarloBarostat(
-            pressure_bar=1.0, temperature=300.0)
-
-        barostat._build_molecule_csr(state)
-        barostat._scale_positions(state, np.float32(2.0))
+        topology = Topology()
+        topology.num_particles = n
+        system = System(topology, state=state)
+        system._ensure_molecule_csr()
+        system._scale_molecular_positions(np.float32(2.0))
 
         pos_x = state.d_positions_x.get()
         # Single-atom molecule: centroid = atom position itself
@@ -377,8 +372,6 @@ class TestScaleMoleculePositions:
         Reference-atom unwrapped centroid = 100.07 (correct).
         Scale=1.003: delta should be 100.07*0.003 = 0.3002 A, not 33.4*0.003 = 0.1002 A.
         """
-        from mdpy.barostat.monte_carlo import MonteCarloBarostat
-
         n = 3
         box = 100.0
         state = State(n)
@@ -399,10 +392,12 @@ class TestScaleMoleculePositions:
         state.set_particle_type_indices(np.zeros(n, dtype=precision.INT))
         state.set_particle_molecule_ids(np.array([0, 0, 0], dtype=np.int32))
 
-        barostat = MonteCarloBarostat(pressure_bar=1.0, temperature=300.0)
-        barostat._build_molecule_csr(state)
+        topology = Topology()
+        topology.num_particles = n
+        system = System(topology, state=state)
+        system._ensure_molecule_csr()
         scale = np.float32(1.003)
-        barostat._scale_positions(state, scale)
+        system._scale_molecular_positions(scale)
 
         pos_x = state.d_positions_x.get()
         # After make_whole: O=99.9, H1=100.1, H2=100.2 (all in same image)
@@ -423,8 +418,6 @@ class TestScaleMoleculePositions:
         size changes: if raw displacements are small (< box/2), the minimum
         image is just the raw displacement, which doesn't depend on box size.
         """
-        from mdpy.barostat.monte_carlo import MonteCarloBarostat
-
         n = 3
         box = 100.0
         state = State(n)
@@ -445,9 +438,11 @@ class TestScaleMoleculePositions:
         state.set_particle_type_indices(np.zeros(n, dtype=precision.INT))
         state.set_particle_molecule_ids(np.array([0, 0, 0], dtype=np.int32))
 
-        barostat = MonteCarloBarostat(pressure_bar=1.0, temperature=300.0)
-        barostat._build_molecule_csr(state)
-        barostat._scale_positions(state, np.float32(1.003))
+        topology = Topology()
+        topology.num_particles = n
+        system = System(topology, state=state)
+        system._ensure_molecule_csr()
+        system._scale_molecular_positions(np.float32(1.003))
 
         pos_x = state.d_positions_x.get()
         # After make_whole, all atoms should be in the same periodic image.
