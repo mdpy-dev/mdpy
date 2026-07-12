@@ -441,8 +441,10 @@ void self_energy_kernel(
 _RECIP_VIRIAL_KERNEL_SOURCE = r"""
 extern "C" __global__
 void reciprocal_virial_kernel(
-    const float2* __restrict__ cmplx_buf,
+    const float2* __restrict__ fq_buf,
+    const float* __restrict__ bk_factors,
     float alpha,
+    float coulomb_scale,
     float recip_box_x, float recip_box_y, float recip_box_z,
     int gx, int gy, int gz,
     int nz_half,
@@ -464,25 +466,25 @@ void reciprocal_virial_kernel(
     float mhz = mz_i * recip_box_z;
     float m2 = mhx*mhx + mhy*mhy + mhz*mhz;
 
-    float2 Q = cmplx_buf[idx];
-    float q2 = Q.x*Q.x + Q.y*Q.y;
+    float2 Q = fq_buf[idx];
+    float B = bk_factors[idx];
+    float q2B = (Q.x*Q.x + Q.y*Q.y) * B;
 
     float corner = ((kz == 0) || (kz == gz / 2)) ? 0.5f : 1.0f;
-    float ets2 = corner * q2;
-    float factor = 3.14159265358979323846f;
-    float vfactor = (factor * factor / (alpha * alpha) * m2 + 1.0f) * 2.0f / m2;
+    float ets2 = corner * q2B;
+    float PI = 3.14159265358979323846f;
+    float vfactor = (PI * PI / (alpha * alpha) * m2 + 1.0f) * 2.0f / m2;
 
-    float scale = 0.25f;
     float vd = ets2 * vfactor;
-    atomicAdd(&virial[0], scale * (vd * mhx * mhx - ets2));
-    atomicAdd(&virial[4], scale * (vd * mhy * mhy - ets2));
-    atomicAdd(&virial[8], scale * (vd * mhz * mhz - ets2));
-    atomicAdd(&virial[1], scale * (vd * mhx * mhy));
-    atomicAdd(&virial[3], scale * (vd * mhx * mhy));
-    atomicAdd(&virial[2], scale * (vd * mhx * mhz));
-    atomicAdd(&virial[6], scale * (vd * mhx * mhz));
-    atomicAdd(&virial[5], scale * (vd * mhy * mhz));
-    atomicAdd(&virial[7], scale * (vd * mhy * mhz));
+    atomicAdd(&virial[0], coulomb_scale * (vd * mhx * mhx - ets2));
+    atomicAdd(&virial[4], coulomb_scale * (vd * mhy * mhy - ets2));
+    atomicAdd(&virial[8], coulomb_scale * (vd * mhz * mhz - ets2));
+    atomicAdd(&virial[1], coulomb_scale * (vd * mhx * mhy));
+    atomicAdd(&virial[3], coulomb_scale * (vd * mhx * mhy));
+    atomicAdd(&virial[2], coulomb_scale * (vd * mhx * mhz));
+    atomicAdd(&virial[6], coulomb_scale * (vd * mhx * mhz));
+    atomicAdd(&virial[5], coulomb_scale * (vd * mhy * mhz));
+    atomicAdd(&virial[7], coulomb_scale * (vd * mhy * mhz));
 }
 """
 
@@ -699,18 +701,21 @@ class PMEReciprocalForce(ForceTerm):
         _rfft_func = _default_fft_func(grid_3d, None, None, value_type='R2C')
         _rfft_func(grid_3d, None, None, None, cufft.CUFFT_FORWARD, 'R2C',
                    out=self._d_complex_buffer)
-        cp.multiply(self._d_complex_buffer, self._d_bk_factors, out=self._d_complex_buffer)
         if compute_virial:
             nz_half = self.grid_z // 2 + 1
             total_k = self.grid_x * self.grid_y * nz_half
+            grid_total = self.grid_x * self.grid_y * self.grid_z
             threads = 256
             grid_k = ((total_k + threads - 1) // threads,)
+            coulomb_scale = np.float32(-0.5 * COULOMB_CONST / grid_total)
             recip_k = get_reciprocal_virial_kernel()
             recip_k(
                 grid_k, (threads,),
                 (
                     self._d_complex_buffer,
+                    self._d_bk_factors,
                     np.float32(self.alpha),
+                    coulomb_scale,
                     np.float32(state.inv_box_x),
                     np.float32(state.inv_box_y),
                     np.float32(state.inv_box_z),
@@ -719,6 +724,7 @@ class PMEReciprocalForce(ForceTerm):
                     state.d_virial,
                 ),
             )
+        cp.multiply(self._d_complex_buffer, self._d_bk_factors, out=self._d_complex_buffer)
         _irfft_func = _default_fft_func(self._d_complex_buffer, None, None, value_type='C2R')
         _irfft_func(self._d_complex_buffer, (gx, gy, gz), None, None,
                     cufft.CUFFT_INVERSE, 'C2R', out=grid_3d)
