@@ -95,3 +95,67 @@ def test_nonbonded_virial_matches_x_cross_f_reference():
         mdpy_virial, ref_virial, atol=1e-3,
         err_msg="Nonbonded virial mismatch vs brute-force 0.5*Σx⊗F"
     )
+
+
+def test_nonbonded_virial_image_pair_pbc():
+    """Virial for a pair interacting ACROSS a PBC boundary (shift != 0).
+
+    Two atoms at opposite box edges interact via minimum-image. The virial
+    must use the minimum-image displacement, not the wrapped-coordinate
+    difference. This tests the shift correction sign in the two-piece form.
+    """
+    from mdpy.core.state import State
+    from mdpy.core.block_list import BlockList
+    from mdpy.core.topology import Topology
+    from mdpy.force.markers import param
+
+    @nonbonded_expression
+    def spring_pair(pos1, pos2, k=param, r0=param):
+        r = distance(pos1, pos2)
+        return 0.5 * k * (r - r0) ** 2
+
+    L = 10.0
+    N = 2
+    topo = Topology(); topo.num_particles = N
+    state = State(N)
+    state.set_pbc(np.diag([L, L, L]).astype(np.float32))
+    state.set_positions(np.array([
+        [0.5, 5.0, 5.0],
+        [9.5, 5.0, 5.0],
+    ], dtype=np.float32))
+    state.set_particle_charges(np.zeros(N, dtype=np.float32))
+    state.set_particle_masses(np.ones(N, dtype=np.float32))
+    state.set_particle_type_indices(np.zeros(N, dtype=np.int32))
+
+    bl = BlockList(cutoff=5.0, skin=1.0)
+    bl.rebuild(topo, state, force=True)
+    state.wrap_positions_with_prev_correction()
+    bl.capture_snapshot(state)
+    bl.build_block_pairs(topo, state)
+    bl.refresh_sorted_posq(state)
+    bl.refresh_sorted_type_indices(state)
+
+    force = NonbondedForce(spring_pair, cutoff=5.0)
+    force.set_pair_parameter('k', np.array([100.0], dtype=np.float32))
+    force.set_pair_parameter('r0', np.array([2.0], dtype=np.float32))
+
+    state.zero_forces()
+    state.zero_virial()
+    force.compute(state, bl, compute_energy=False, compute_virial=True)
+    mdpy_virial = state.d_virial.get().reshape(3, 3)
+
+    forces = np.stack([
+        state.d_forces_x.get(), state.d_forces_y.get(), state.d_forces_z.get()
+    ], axis=1)
+
+    r_0 = np.array([0.5, 5.0, 5.0])
+    r_1 = np.array([9.5, 5.0, 5.0])
+    r_01 = r_0 - r_1
+    r_01 = r_01 - L * np.round(r_01 / L)
+
+    ref_virial = 0.5 * np.outer(r_01, forces[0])
+
+    np.testing.assert_allclose(
+        mdpy_virial, ref_virial, atol=1e-2,
+        err_msg="Image-pair virial mismatch — shift correction may have wrong sign"
+    )

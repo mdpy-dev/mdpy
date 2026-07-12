@@ -104,15 +104,15 @@ void shift_cross_fshift_kernel(
     if (p >= num_pairs) return;
     float sx = shift_x[p], sy = shift_y[p], sz = shift_z[p];
     float fx = fsx[p], fy = fsy[p], fz = fsz[p];
-    atomicAdd(&virial[0], 0.5f * sx * fx);
-    atomicAdd(&virial[1], 0.5f * sx * fy);
-    atomicAdd(&virial[2], 0.5f * sx * fz);
-    atomicAdd(&virial[3], 0.5f * sy * fx);
-    atomicAdd(&virial[4], 0.5f * sy * fy);
-    atomicAdd(&virial[5], 0.5f * sy * fz);
-    atomicAdd(&virial[6], 0.5f * sz * fx);
-    atomicAdd(&virial[7], 0.5f * sz * fy);
-    atomicAdd(&virial[8], 0.5f * sz * fz);
+    atomicAdd(&virial[0], -0.5f * sx * fx);
+    atomicAdd(&virial[1], -0.5f * sx * fy);
+    atomicAdd(&virial[2], -0.5f * sx * fz);
+    atomicAdd(&virial[3], -0.5f * sy * fx);
+    atomicAdd(&virial[4], -0.5f * sy * fy);
+    atomicAdd(&virial[5], -0.5f * sy * fz);
+    atomicAdd(&virial[6], -0.5f * sz * fx);
+    atomicAdd(&virial[7], -0.5f * sz * fy);
+    atomicAdd(&virial[8], -0.5f * sz * fz);
 }
 """
 
