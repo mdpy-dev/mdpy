@@ -103,6 +103,22 @@ class System:
         current_pbc = self.state.d_pbc_matrix.get().reshape(3, 3)
         self.resize_box(current_pbc * float(scale_factor))
 
+    def _update_box_only(self, new_pbc_matrix):
+        """Update PBC matrix and PME parameters without rebuilding block list.
+
+        For small box changes (e.g. ±0.1% in finite-difference pressure),
+        the cell grid, block pairs, and sorted atom order are unchanged.
+        Only the PBC matrix and PME B-spline factors need updating.
+        """
+        self.state.set_pbc(new_pbc_matrix)
+        pbc_2d = np.asarray(new_pbc_matrix).reshape(3, 3)
+        box_x = abs(float(pbc_2d[0, 0]))
+        box_y = abs(float(pbc_2d[1, 1]))
+        box_z = abs(float(pbc_2d[2, 2]))
+        for term in self.force_terms:
+            if hasattr(term, 'update_box'):
+                term.update_box(box_x, box_y, box_z, self._block_list)
+
     def _compute_translational_ke(self):
         """Compute molecular COM translational kinetic energy on CPU.
 
@@ -418,10 +434,12 @@ class System:
         scale1 = 1.0 + delta
         scale2 = 1.0 - delta
 
-        self.scale_molecular_box(scale1)
+        self._scale_molecular_positions(scale1)
+        self._update_box_only(saved_pbc_matrix * scale1)
         energy_plus = self.compute_total_energy()
 
-        self.scale_molecular_box(scale2 / scale1)
+        self._scale_molecular_positions(scale2 / scale1)
+        self._update_box_only(saved_pbc_matrix * scale2)
         energy_minus = self.compute_total_energy()
 
         state.d_positions_x[:] = cp.asarray(saved_positions[:, 0])
@@ -430,7 +448,7 @@ class System:
         state.d_prev_positions_x[:] = cp.asarray(saved_prev_positions[:, 0])
         state.d_prev_positions_y[:] = cp.asarray(saved_prev_positions[:, 1])
         state.d_prev_positions_z[:] = cp.asarray(saved_prev_positions[:, 2])
-        self.resize_box(saved_pbc_matrix)
+        self._update_box_only(saved_pbc_matrix)
 
         translational_ke = self._compute_translational_ke()
         delta_volume = volume * (scale1 ** 3 - scale2 ** 3)
