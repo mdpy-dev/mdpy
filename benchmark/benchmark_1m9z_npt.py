@@ -144,9 +144,9 @@ for i in range(NPT_STEPS):
         box_len = s.box_x
         density = total_mass * 1.66054 / vol
         accept_pct = barostat.acceptance_rate * 100
-        energy_dict, virial_dict = system.dump_energy_and_virial()
+        energy_dict = system.dump_energy()
         e_total = sum(energy_dict.values()) * KCAL_PER_INTERNAL
-        pressure_bar = system.dump_pressure(virials=virial_dict)
+        pressure_bar = system.compute_current_pressure()
         pressure_history.append(pressure_bar)
         recent_ms = np.mean(block_times[-REPORT_INTERVAL:]) * 1000
         recent_nsday = 86400.0 / (recent_ms * 1e-3) * TIME_STEP_FS * 1e-6
