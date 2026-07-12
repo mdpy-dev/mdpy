@@ -538,6 +538,60 @@ class TestMonteCarloApply:
         if barostat._num_attempted > 0 and barostat._num_accepted == 0:
             assert abs(energy_after - energy_before) < 1e-2
 
+    def test_counters_accumulate_when_acceptance_in_range(self):
+        """When 0.25 <= acceptance_rate <= 0.75, counters must NOT reset.
+
+        OpenMM only resets counters when adaptation triggers (rate outside
+        [0.25, 0.75]). This lets the window grow, damping short-window noise
+        that would otherwise inflate volumeScale. See MonteCarloBarostatImpl.cpp:100-111.
+        """
+        system = _make_minimal_system()
+        barostat = MonteCarloBarostat(
+            pressure_bar=1.0, temperature=300.0, frequency=1)
+
+        # Simulate 10 prior attempts with 5 accepts (rate=0.5, healthy range)
+        barostat._num_attempted = 10
+        barostat._num_accepted = 5
+
+        barostat.apply(system)
+
+        # One more attempt happened: 10 -> 11. Rate is 5/11 or 6/11, both in
+        # [0.25, 0.75], so adaptation must NOT fire and counters must NOT reset.
+        assert barostat._num_attempted == 11, (
+            f"Expected counters to accumulate to 11, got {barostat._num_attempted}. "
+            f"Counters must only reset when adaptation triggers (rate outside [0.25, 0.75])."
+        )
+
+    def test_counters_reset_when_acceptance_high(self):
+        """When acceptance_rate > 0.75, adaptation triggers and counters reset.
+
+        Mirrors OpenMM MonteCarloBarostatImpl.cpp:106-110: the volumeScale
+        grows by 1.1x and counters return to zero so a fresh window starts.
+        """
+        system = _make_minimal_system()
+        barostat = MonteCarloBarostat(
+            pressure_bar=1.0, temperature=300.0, frequency=1)
+
+        # Simulate 10 prior attempts with 9 accepts (rate=0.9 > 0.75)
+        barostat._num_attempted = 10
+        barostat._num_accepted = 9
+        initial_volume_scale = 0.01 * (
+            system.state.box_x * system.state.box_y * system.state.box_z)
+        barostat._volume_scale = initial_volume_scale
+
+        barostat.apply(system)
+
+        # Rate after this move: 9/11=0.82 or 10/11=0.91, both > 0.75.
+        # Adaptation must fire: volumeScale grows, counters reset.
+        assert barostat._num_attempted == 0, (
+            f"Expected counters to reset after high-acceptance adaptation, "
+            f"got _num_attempted={barostat._num_attempted}."
+        )
+        assert barostat._volume_scale > initial_volume_scale, (
+            f"Expected volumeScale to grow (> {initial_volume_scale}), "
+            f"got {barostat._volume_scale}."
+        )
+
 
 class TestNPTConvergence:
     def test_ideal_gas_volume_converges(self):

@@ -209,10 +209,12 @@ class MonteCarloBarostat(BarostatBase):
             rate = self._num_accepted / self._num_attempted
             if rate < 0.25:
                 self._volume_scale /= 1.1
+                self._num_attempted = 0
+                self._num_accepted = 0
             elif rate > 0.75:
                 self._volume_scale = min(self._volume_scale * 1.1, 0.3 * volume)
-            self._num_attempted = 0
-            self._num_accepted = 0
+                self._num_attempted = 0
+                self._num_accepted = 0
 
     @property
     def acceptance_rate(self):
