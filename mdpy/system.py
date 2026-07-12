@@ -88,6 +88,35 @@ class System:
             ),
         )
 
+    def _compute_translational_ke(self, state):
+        """Compute molecular COM translational kinetic energy on CPU.
+
+        K_trans = Σ_molecules 0.5 * M_mol * |v_com|^2
+        where v_com = Σ(m_i * v_i) / M_mol.
+        """
+        vx = state.d_velocities_x.get()
+        vy = state.d_velocities_y.get()
+        vz = state.d_velocities_z.get()
+        masses = state.d_particle_masses.get()
+        mol_atoms = cp.asnumpy(self._d_molecule_atoms)
+        mol_start = cp.asnumpy(self._d_molecule_start_index)
+        K_trans = 0.0
+        for m in range(self._num_molecules):
+            s = mol_start[m]
+            e = mol_start[m + 1]
+            px = py = pz = 0.0
+            M = 0.0
+            for i in range(s, e):
+                atom = mol_atoms[i]
+                mi = masses[atom]
+                px += mi * vx[atom]
+                py += mi * vy[atom]
+                pz += mi * vz[atom]
+                M += mi
+            if M > 0:
+                K_trans += 0.5 * (px * px + py * py + pz * pz) / M
+        return K_trans
+
     def set_pbc(self, pbc_matrix):
         self.state.set_pbc(pbc_matrix)
 
