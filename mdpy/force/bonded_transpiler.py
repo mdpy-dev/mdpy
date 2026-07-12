@@ -96,6 +96,27 @@ HELPER_REGISTRY = {
     },
 }
 
+_HELPER_VIRIAL_DISPLACEMENTS = {
+    'distance': {
+        'atom_a': None,
+        'atom_b': '_delta_{rn}',
+    },
+    'angle': {
+        'arm1': '_r1_{rn}',
+        'vertex': None,
+        'arm2': '_r2_{rn}',
+    },
+    'dihedral': {
+        'a': 'scale_f3(_rab_{rn}, -1.0f)',
+        'b': None,
+        'c': '_rbc_{rn}',
+        'd': 'add_f3(_rbc_{rn}, _rcd_{rn})',
+    },
+    'distance_to_point': {
+        'atom_a': '_dpt_{rn}',
+    },
+}
+
 
 def _classify_for_bonded(func, body):
     sig = inspect.signature(func)
@@ -122,19 +143,34 @@ def _classify_for_bonded(func, body):
     return ExprInfo(positions, per_particle, params, scalars, body)
 
 
-def _build_projection(result_name, position_args, arg_indices, grad_expr):
+def _build_projection(result_name, helper_type, position_args, arg_indices,
+                      grad_expr, compute_virial=False):
     """Emit the generic force-projection CUDA for one helper call.
 
     For each atom the geometry reads (slot i maps to atom a{arg_indices[i]+1}),
-    apply F_i = -(dE/dq) * partial_i.
+    apply F_i = -(dE/dq) * partial_i. When compute_virial=True, also accumulate
+    the per-atom virial 0.5 * F_i ⊗ (r_i - r_ref) using the helper's min-image
+    displacement intermediates.
     """
     lines = ['        {', f'            float _neg_grad_{result_name} = -({grad_expr});']
+    disp_map = _HELPER_VIRIAL_DISPLACEMENTS.get(helper_type, {})
     for i in range(len(position_args)):
+        arg_name = position_args[i]
         atom = f'a{arg_indices[i] + 1}'
         lines.append(
-            f'            add_force(f_x,f_y,f_z, {atom}, '
-            f'scale_f3(_partial_{result_name}_{i}, _neg_grad_{result_name}));'
+            f'            float3 _f_{result_name}_{atom} = '
+            f'scale_f3(_partial_{result_name}_{i}, _neg_grad_{result_name});'
         )
+        lines.append(
+            f'            add_force(f_x,f_y,f_z, {atom}, _f_{result_name}_{atom});'
+        )
+        if compute_virial:
+            disp_tpl = disp_map.get(arg_name)
+            if disp_tpl is not None:
+                disp_expr = disp_tpl.format(rn=result_name)
+                lines.append(
+                    f'            virial_acc({disp_expr}, _f_{result_name}_{atom}, virial);'
+                )
     lines.append('        }')
     return '\n'.join(lines)
 
@@ -239,11 +275,50 @@ class _BondedExpression:
         self.body = body
         self.parameter_names = self._expr_info.params
         self.cuda_fragment = ''
+        self.cuda_fragment_virial = ''
         self._compile()
 
     @property
     def per_particle(self):
         return self._expr_info.per_particle
+
+    def _assemble_fragment(self, walker, energy_var, compute_virial):
+        fwd_ad = ForwardADEngine()
+        parts = []
+        for helper_type, result_name, arg_indices in walker._helper_calls:
+            entry = HELPER_REGISTRY[helper_type]
+            template = entry['forward']
+            position_args = entry['position_args']
+            fmt = {'rn': result_name}
+            for ph, idx in zip(position_args, arg_indices):
+                fmt[ph] = f'a{idx + 1}'
+            parts.append(template.format(**fmt))
+        for line in walker.forward_lines:
+            parts.append(f'        {line}')
+        parts.append(f'        float _result_energy = {energy_var};')
+        num_helpers = len(walker._helper_calls)
+        if num_helpers <= 1:
+            shared_grad_lines, shared_derivs = fwd_ad.differentiate(walker.tape)
+            for line in shared_grad_lines:
+                parts.append(f'        {line}')
+        for idx, (helper_type, result_name, arg_indices) in enumerate(walker._helper_calls):
+            entry = HELPER_REGISTRY[helper_type]
+            position_args = entry['position_args']
+            if num_helpers > 1:
+                prefix = f'_g{idx}_'
+                grad_lines, derivs = fwd_ad.differentiate(
+                    walker.tape, seed_vars={result_name: '1.0f'}, prefix=prefix,
+                )
+                for line in grad_lines:
+                    parts.append(f'        {line}')
+            else:
+                derivs = shared_derivs
+            grad_expr = derivs.get(energy_var, '0.0f')
+            parts.append(_build_projection(
+                result_name, helper_type, position_args, arg_indices,
+                grad_expr, compute_virial=compute_virial,
+            ))
+        return '\n'.join(parts)
 
     def _compile(self):
         source = textwrap.dedent(inspect.getsource(self._func))
@@ -274,47 +349,8 @@ class _BondedExpression:
         if energy_var is None:
             return
 
-        fwd_ad = ForwardADEngine()
-
-        parts = []
-
-        for helper_type, result_name, arg_indices in walker._helper_calls:
-            entry = HELPER_REGISTRY[helper_type]
-            template = entry['forward']
-            position_args = entry['position_args']
-            fmt = {'rn': result_name}
-            for ph, idx in zip(position_args, arg_indices):
-                fmt[ph] = f'a{idx + 1}'
-            parts.append(template.format(**fmt))
-
-        for line in walker.forward_lines:
-            parts.append(f'        {line}')
-
-        parts.append(f'        float _result_energy = {energy_var};')
-
-        num_helpers = len(walker._helper_calls)
-        if num_helpers <= 1:
-            shared_grad_lines, shared_derivs = fwd_ad.differentiate(walker.tape)
-            for line in shared_grad_lines:
-                parts.append(f'        {line}')
-
-        for idx, (helper_type, result_name, arg_indices) in enumerate(walker._helper_calls):
-            entry = HELPER_REGISTRY[helper_type]
-            position_args = entry['position_args']
-            if num_helpers > 1:
-                prefix = f'_g{idx}_'
-                grad_lines, derivs = fwd_ad.differentiate(
-                    walker.tape, seed_vars={result_name: '1.0f'}, prefix=prefix,
-                )
-                for line in grad_lines:
-                    parts.append(f'        {line}')
-            else:
-                derivs = shared_derivs
-
-            grad_expr = derivs.get(energy_var, '0.0f')
-            parts.append(_build_projection(result_name, position_args, arg_indices, grad_expr))
-
-        self.cuda_fragment = '\n'.join(parts)
+        self.cuda_fragment = self._assemble_fragment(walker, energy_var, compute_virial=False)
+        self.cuda_fragment_virial = self._assemble_fragment(walker, energy_var, compute_virial=True)
 
 
 def bonded_expression(body):

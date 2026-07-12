@@ -64,6 +64,19 @@ __device__ __forceinline__ void add_force(
     atomicAdd(&fy[i], v.y);
     atomicAdd(&fz[i], v.z);
 }
+__device__ __forceinline__ void virial_acc(
+    float3 r, float3 f, float* __restrict__ virial
+) {
+    atomicAdd(&virial[0], 0.5f * r.x * f.x);
+    atomicAdd(&virial[1], 0.5f * r.x * f.y);
+    atomicAdd(&virial[2], 0.5f * r.x * f.z);
+    atomicAdd(&virial[3], 0.5f * r.y * f.x);
+    atomicAdd(&virial[4], 0.5f * r.y * f.y);
+    atomicAdd(&virial[5], 0.5f * r.y * f.z);
+    atomicAdd(&virial[6], 0.5f * r.z * f.x);
+    atomicAdd(&virial[7], 0.5f * r.z * f.y);
+    atomicAdd(&virial[8], 0.5f * r.z * f.z);
+}
 '''
 
 
