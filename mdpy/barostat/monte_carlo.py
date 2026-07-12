@@ -212,9 +212,6 @@ class MonteCarloBarostat(BarostatBase):
 
         state = system.state
 
-        if not self._molecule_csr_built:
-            self._build_molecule_csr(state)
-
         volume = state.box_x * state.box_y * state.box_z
 
         if self._volume_scale is None:
@@ -236,10 +233,7 @@ class MonteCarloBarostat(BarostatBase):
         saved_prev_z = state.d_prev_positions_z.copy()
         saved_pbc = state.d_pbc_matrix.get().reshape(3, 3).copy()
 
-        self._scale_positions(state, scale_factor)
-
-        new_pbc = saved_pbc * float(scale_factor)
-        system.resize_box(new_pbc)
+        system.scale_molecular_box(scale_factor)
 
         energy_final = system.compute_total_energy()
 
@@ -248,7 +242,7 @@ class MonteCarloBarostat(BarostatBase):
         log_v_ratio = np.log(new_volume / volume)
         weight = (delta_energy
                   + self.pressure * delta_volume
-                  - self._num_molecules * kT * log_v_ratio)
+                  - system._num_molecules * kT * log_v_ratio)
 
         accept = weight <= 0.0 or np.random.random() < np.exp(-weight / kT)
 
