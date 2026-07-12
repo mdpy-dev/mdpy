@@ -113,6 +113,9 @@ class State:
         self.d_energy = cp.zeros(1, dtype=np.float32)
         self.d_energy_accumulator = None
 
+        self.d_virial = cp.zeros(9, dtype=np.float32)
+        self.d_virial_accumulator = None
+
         # PBC: lazy-allocated on first set_pbc. None until then.
         self.d_pbc_matrix = None
         self.d_pbc_inv = None
@@ -314,6 +317,15 @@ class State:
 
     def set_energy_slot(self, term_index):
         self.d_energy_accumulator[term_index] = self.d_energy[0]
+
+    def zero_virial(self):
+        self.d_virial[:] = 0
+
+    def allocate_virial_accumulator(self, num_terms):
+        self.d_virial_accumulator = cp.zeros((num_terms, 9), dtype=np.float32)
+
+    def set_virial_slot(self, term_index):
+        self.d_virial_accumulator[term_index] = self.d_virial[:]
 
     def set_box_dims(self, box_x, box_y, box_z):
         self._box_x = float(box_x)
