@@ -82,6 +82,30 @@ void zero_forces_kernel(
 """
 
 
+_KINETIC_ENERGY_KERNEL = r"""
+extern "C" __global__
+void kinetic_energy_kernel(
+    const float* __restrict__ vx,
+    const float* __restrict__ vy,
+    const float* __restrict__ vz,
+    const float* __restrict__ masses,
+    int num_particles,
+    float* __restrict__ output
+) {
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    int stride = blockDim.x * gridDim.x;
+    float ke = 0.0f;
+    for (int i = tid; i < num_particles; i += stride) {
+        ke += 0.5f * masses[i] * (vx[i]*vx[i] + vy[i]*vy[i] + vz[i]*vz[i]);
+    }
+    for (int off = 16; off > 0; off >>= 1)
+        ke += __shfl_down_sync(0xffffffff, ke, off);
+    if ((threadIdx.x & 31) == 0)
+        atomicAdd(output, ke);
+}
+"""
+
+
 class State:
 
     def __init__(self, num_particles):
@@ -115,6 +139,7 @@ class State:
 
         self.d_virial = cp.zeros(9, dtype=np.float32)
         self.d_virial_accumulator = None
+        self.d_kinetic_energy = cp.zeros(1, dtype=np.float32)
 
         # PBC: lazy-allocated on first set_pbc. None until then.
         self.d_pbc_matrix = None
@@ -139,6 +164,7 @@ class State:
         self._zero_forces_kernel = None
         self._wrap_kernel = None
         self._wrap_correct_kernel = None
+        self._kinetic_energy_kernel = None
 
     def _ensure_wrap_kernel(self):
         if self._wrap_kernel is not None:
@@ -198,6 +224,13 @@ class State:
             return
         self._zero_forces_kernel = cp.RawKernel(
             _ZERO_FORCES_KERNEL, "zero_forces_kernel"
+        )
+
+    def _ensure_kinetic_energy_kernel(self):
+        if self._kinetic_energy_kernel is not None:
+            return
+        self._kinetic_energy_kernel = cp.RawKernel(
+            _KINETIC_ENERGY_KERNEL, "kinetic_energy_kernel"
         )
 
     def set_pbc(self, pbc_matrix):
@@ -311,6 +344,26 @@ class State:
 
     def zero_energy(self):
         self.d_energy[:] = 0
+
+    def compute_kinetic_energy(self):
+        self._ensure_kinetic_energy_kernel()
+        self.d_kinetic_energy[:] = 0
+        N = self.num_particles
+        threads_per_block = 256
+        grid_size = max((N + threads_per_block - 1) // threads_per_block, 1)
+        self._kinetic_energy_kernel(
+            (grid_size,), (threads_per_block,),
+            (
+                self.d_velocities_x,
+                self.d_velocities_y,
+                self.d_velocities_z,
+                self.d_particle_masses,
+                np.int32(N),
+                self.d_kinetic_energy,
+            ),
+        )
+        cp.cuda.Stream.null.synchronize()
+        return float(self.d_kinetic_energy[0])
 
     def allocate_energy_accumulator(self, num_terms):
         self.d_energy_accumulator = cp.zeros(num_terms, dtype=np.float32)

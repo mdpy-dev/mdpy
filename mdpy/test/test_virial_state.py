@@ -55,3 +55,22 @@ def test_system_dump_virial_returns_empty_dict_when_no_terms():
     system = System(topo)
     result = system.dump_virial()
     assert result == {}
+
+
+def test_compute_kinetic_energy_ideal_gas():
+    """K = 0.5 * sum(m * v^2) for a simple system."""
+    import cupy as cp
+    import numpy as np
+    from mdpy.core.state import State
+
+    state = State(num_particles=3)
+    state.set_particle_masses(np.array([1.0, 2.0, 3.0], dtype=np.float32))
+    state.set_velocities(np.array([
+        [1.0, 0.0, 0.0],
+        [0.0, 2.0, 0.0],
+        [0.0, 0.0, 3.0],
+    ], dtype=np.float32))
+
+    ke = state.compute_kinetic_energy()
+    # K = 0.5*1*1 + 0.5*2*4 + 0.5*3*9 = 0.5 + 4.0 + 13.5 = 18.0
+    assert abs(ke - 18.0) < 1e-3, f"Expected K=18.0, got {ke}"
