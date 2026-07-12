@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import numpy as np
-import cupy as cp
 
 from mdpy.unit import KB, NA, default_energy_unit, kelvin
 from mdpy.barostat._base import BarostatBase
@@ -149,59 +148,6 @@ class MonteCarloBarostat(BarostatBase):
         self._volume_scale = None
         self._num_attempted = 0
         self._num_accepted = 0
-
-        self._d_molecule_atoms = None
-        self._d_molecule_start_index = None
-        self._num_molecules = 0
-        self._molecule_csr_built = False
-
-        self._scale_kernel = None
-
-    def _build_molecule_csr(self, state):
-        mol_ids = cp.asnumpy(state.d_particle_molecule_ids)
-        molecule_atoms, molecule_start_index = build_molecule_csr(mol_ids)
-        self._d_molecule_atoms = cp.asarray(molecule_atoms)
-        self._d_molecule_start_index = cp.asarray(molecule_start_index)
-        self._num_molecules = len(molecule_start_index) - 1
-        self._molecule_csr_built = True
-
-    def _ensure_scale_kernel(self):
-        if self._scale_kernel is None:
-            self._scale_kernel = cp.RawKernel(SCALE_POSITIONS_KERNEL, 'scale_molecule_positions_kernel')
-
-    def _scale_positions(self, state, scale):
-        """Scale positions about each molecule's centroid by `scale`.
-
-        First makes each molecule whole (shifts atoms to the same periodic
-        image as the first atom), then scales about the centroid. Making
-        molecules whole ensures that minimum-image bond lengths are preserved
-        when the box size changes during barostat moves.
-
-        Translates both d_positions and d_prev_positions by the same delta
-        so velocity = (pos - prev_pos) / dt is preserved.
-        """
-        if not self._molecule_csr_built:
-            raise RuntimeError("Molecule CSR not built. Call apply(system) first.")
-        self._ensure_scale_kernel()
-        threads_per_block = 256
-        grid = ((self._num_molecules + threads_per_block - 1) // threads_per_block,)
-        self._scale_kernel(
-            grid, (threads_per_block,),
-            (
-                np.float32(scale),
-                np.int32(self._num_molecules),
-                self._d_molecule_atoms,
-                self._d_molecule_start_index,
-                state.d_positions_x, state.d_positions_y, state.d_positions_z,
-                state.d_prev_positions_x, state.d_prev_positions_y, state.d_prev_positions_z,
-                np.float32(state.box_x),
-                np.float32(state.box_y),
-                np.float32(state.box_z),
-                np.float32(state.inv_box_x),
-                np.float32(state.inv_box_y),
-                np.float32(state.inv_box_z),
-            ),
-        )
 
     def apply(self, system):
         """Attempt a Monte Carlo volume move (called every step; acts every `frequency`)."""
