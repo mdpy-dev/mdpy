@@ -74,3 +74,42 @@ def test_compute_kinetic_energy_ideal_gas():
     ke = state.compute_kinetic_energy()
     # K = 0.5*1*1 + 0.5*2*4 + 0.5*3*9 = 0.5 + 4.0 + 13.5 = 18.0
     assert abs(ke - 18.0) < 1e-3, f"Expected K=18.0, got {ke}"
+
+
+def test_dump_pressure_ideal_gas():
+    """For an ideal gas (no forces): P = NkT/V."""
+    import numpy as np
+    from mdpy.core.state import State
+    from mdpy.core.topology import Topology
+    from mdpy.system import System
+    from mdpy.utils import generate_velocity_from_temperature
+    from mdpy.unit import KB, NA, default_energy_unit, kelvin
+
+    BOLTZMANN = float(KB.convert_to(default_energy_unit / kelvin).value)
+    BAR_TO_INTERNAL = float(NA.value) * 1e-32
+
+    N = 100
+    T = 300.0
+    box_len = 50.0
+    volume = box_len ** 3
+
+    topo = Topology(); topo.num_particles = N
+    state = State(N)
+    state.set_pbc(np.diag([box_len]*3).astype(np.float32))
+    masses = np.ones(N, dtype=np.float32)
+    state.set_particle_masses(masses)
+    state.set_velocities(
+        generate_velocity_from_temperature(T, masses, seed=42)
+    )
+    state.set_particle_charges(np.zeros(N, dtype=np.float32))
+    state.set_particle_type_indices(np.zeros(N, dtype=np.int32))
+
+    system = System(topo, state=state)
+
+    P_bar = system.dump_pressure()
+    P_expected_bar = (N * BOLTZMANN * T / volume) / BAR_TO_INTERNAL
+
+    assert abs(P_bar - P_expected_bar) < 0.1 * abs(P_expected_bar), (
+        f"Pressure {P_bar:.2f} bar vs expected {P_expected_bar:.2f} bar "
+        f"(ideal gas NkT/V)"
+    )

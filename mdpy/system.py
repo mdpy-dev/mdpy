@@ -4,6 +4,9 @@ import cupy as cp
 import numpy as np
 from mdpy.core.block_list import BlockList
 from mdpy.core.state import State
+from mdpy.unit import NA
+
+BAR_TO_INTERNAL_PRESSURE = float(NA.value) * 1e-32
 
 
 class System:
@@ -261,6 +264,28 @@ class System:
             if np.any(raw_v[i] != 0.0):
                 virials[term.name] = raw_v[i].reshape(3, 3)
         return energies, virials
+
+    def dump_pressure(self, virials=None):
+        """Compute instantaneous pressure in bar.
+
+        P = (2K + 2*Tr(d_virial)) / (3V), where K is kinetic energy and
+        d_virial is the half-virial (0.5 * sum(r⊗F)).
+
+        Args:
+            virials: optional dict of per-term 3x3 virial arrays from a
+                prior dump_virial() or dump_energy_and_virial() call.
+                If None, recomputes forces with virial (expensive).
+
+        Returns:
+            Pressure in bar (float).
+        """
+        if virials is None:
+            virials = self.dump_virial()
+        kinetic_energy = self.state.compute_kinetic_energy()
+        volume = self.state.box_x * self.state.box_y * self.state.box_z
+        virial_trace = sum(float(np.trace(W)) for W in virials.values())
+        pressure_internal = (2.0 * kinetic_energy + 2.0 * virial_trace) / (3.0 * volume)
+        return pressure_internal / BAR_TO_INTERNAL_PRESSURE
 
     def compute_total_energy(self):
         """Compute total potential energy on GPU, return as Python float.
