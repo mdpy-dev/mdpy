@@ -57,7 +57,7 @@ PRESSURE_BAR = 1.0
 TEMPERATURE = 300.0
 MC_FREQUENCY = 25
 NVT_STEPS = 100
-NPT_STEPS = 2000
+NPT_STEPS = 5000
 REPORT_INTERVAL = 50
 
 psf = app.CharmmPsfFile(os.path.join(DATA_DIR, "1M9Z.psf"))
@@ -101,6 +101,11 @@ bond_list = [(b[0].index, b[1].index) for b in psf.topology.bonds()]
 pos = pdb.positions.value_in_unit(unit.angstrom)
 pos = make_molecules_whole(pos, bond_list, _box_a)
 
+barostat = mm.MonteCarloBarostat(
+    PRESSURE_BAR * unit.bar, TEMPERATURE * unit.kelvin, MC_FREQUENCY
+)
+barostat.setRandomNumberSeed(42)
+
 # ---- NVT equilibration (no barostat) ----
 integrator_nvt = mm.LangevinIntegrator(
     TEMPERATURE * unit.kelvin, 1 / unit.picosecond, TIME_STEP_FS * unit.femtoseconds
@@ -135,10 +140,6 @@ positions_nvt = state_nvt.getPositions()
 velocities_nvt = state_nvt.getVelocities()
 
 # ---- Add barostat for NPT ----
-barostat = mm.MonteCarloBarostat(
-    PRESSURE_BAR * unit.bar, TEMPERATURE * unit.kelvin, MC_FREQUENCY
-)
-barostat.setRandomNumberSeed(42)
 system.addForce(barostat)
 
 integrator_npt = mm.LangevinIntegrator(
@@ -151,16 +152,23 @@ simulation_npt.context.setVelocities(velocities_nvt)
 
 # ---- NPT production ----
 print(f"\nNPT simulation ({NPT_STEPS} steps):")
-print(f"  {'Step':>6s}  {'Volume(A^3)':>12s}  {'Box_len':>8s}  {'Density':>8s}  {'E_pot(kcal/mol)':>18s}")
-print(f"  {'------':>6s}  {'------------':>12s}  {'--------':>8s}  {'--------':>8s}  {'------------------':>18s}")
+print(f"  {'Step':>6s}  {'Volume(A^3)':>12s}  {'Box_len':>8s}  {'Density':>8s}  {'P(bar)':>8s}  {'E_pot(kcal/mol)':>18s}")
+print(f"  {'------':>6s}  {'------------':>12s}  {'--------':>8s}  {'--------':>8s}  {'--------':>8s}  {'------------------':>18s}")
 
 block_times = []
+pressure_history = []
 for i in range(0, NPT_STEPS, REPORT_INTERVAL):
     t0 = time.perf_counter()
     simulation_npt.step(REPORT_INTERVAL)
     elapsed = time.perf_counter() - t0
 
     state = simulation_npt.context.getState(getEnergy=True)
+    pressure_bar = barostat.computeCurrentPressure(simulation_npt.context)
+    if hasattr(pressure_bar, 'value_in_unit'):
+        pressure_bar = pressure_bar.value_in_unit(unit.bar)
+    else:
+        pressure_bar = float(pressure_bar)
+    pressure_history.append(pressure_bar)
     box_vectors = state.getPeriodicBoxVectors()
     box_a = box_vectors[0][0].value_in_unit(unit.angstrom)
     box_b = box_vectors[1][1].value_in_unit(unit.angstrom)
@@ -169,9 +177,10 @@ for i in range(0, NPT_STEPS, REPORT_INTERVAL):
     density = total_mass * 1.66054 / vol
     e_kj = state.getPotentialEnergy().value_in_unit(unit.kilojoule_per_mole)
     e_kcal = e_kj / 4.184
+    recent_p = np.mean(pressure_history[-10:]) if len(pressure_history) >= 10 else np.mean(pressure_history)
     ms = elapsed / REPORT_INTERVAL * 1000
     block_times.append(ms)
-    print(f"  {i+REPORT_INTERVAL:6d}  {vol:12.0f}  {box_a:8.2f}  {density:8.4f}  {e_kcal:18.1f}")
+    print(f"  {i+REPORT_INTERVAL:6d}  {vol:12.0f}  {box_a:8.2f}  {density:8.4f}  {recent_p:8.1f}  {e_kcal:18.1f}")
 
 avg_ms = np.mean(block_times)
 state_final = simulation_npt.context.getState(getEnergy=True)
@@ -187,4 +196,6 @@ print(f"\nSummary:")
 print(f"  Initial density:  {initial_density:.4f} g/cm^3")
 print(f"  Final density:    {final_density:.4f} g/cm^3")
 print(f"  Volume change:    {vol_change:+.1f}%")
+avg_pressure = np.mean(pressure_history) if pressure_history else 0.0
+print(f"  Avg pressure:     {avg_pressure:.1f} bar (target: {PRESSURE_BAR} bar)")
 print(f"  NPT ms/step:      {avg_ms:.1f} (vs {nvt_elapsed/NVT_STEPS*1000:.1f} NVT)")
