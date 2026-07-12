@@ -60,7 +60,8 @@ void add_sorted_forces_kernel(
 
 
 def _assemble_exclusion_kernel(
-    expr_info, energy_cuda, grad_cuda, radial_force_cuda, total_energy_expr, compute_energy=True
+    expr_info, energy_cuda, grad_cuda, radial_force_cuda, total_energy_expr,
+    compute_energy=True, compute_virial=False,
 ):
     i_props, j_props = _split_per_particle(expr_info.per_particle)
     for base in expr_info.per_particle.values():
@@ -114,6 +115,22 @@ def _assemble_exclusion_kernel(
         energy_accum = ""
         energy_reduce = ""
 
+    if compute_virial:
+        virial_args = (
+            "    float* __restrict__ virial,\n"
+            "    float* __restrict__ fshift_bp_x,\n"
+            "    float* __restrict__ fshift_bp_y,\n"
+            "    float* __restrict__ fshift_bp_z,"
+        )
+        fshift_bp_accum = (
+            "            atomicAdd(&fshift_bp_x[pos], force_x);\n"
+            "            atomicAdd(&fshift_bp_y[pos], force_y);\n"
+            "            atomicAdd(&fshift_bp_z[pos], force_z);"
+        )
+    else:
+        virial_args = ""
+        fshift_bp_accum = ""
+
     kernel = f"""extern "C" __global__
 void exclusion_block_pair_kernel(
     const float4* __restrict__ sorted_data,
@@ -124,6 +141,7 @@ void exclusion_block_pair_kernel(
     float* __restrict__ f_y,
     float* __restrict__ f_z,
 {energy_buffer_arg}
+{virial_args}
     const int* __restrict__ block_atoms,
     const int* __restrict__ block_pairs,
     const int* __restrict__ interacting_atoms,
@@ -219,6 +237,7 @@ void exclusion_block_pair_kernel(
             atomicAdd(&f_x[slot_i], force_x);
             atomicAdd(&f_y[slot_i], force_y);
             atomicAdd(&f_z[slot_i], force_z);
+{fshift_bp_accum}
         }}
         if (j_slot >= 0) {{
             atomicAdd(&f_x[j_slot], shfl_fx);
@@ -248,6 +267,9 @@ class NonbondedForce(ForceTerm):
 
         self._pair_kernel = None
         self._pair_kernel_fo = None
+        self._pair_kernel_e = None
+        self._pair_kernel_v = None
+        self._pair_kernel_ev = None
 
         self._n_types = 0
 
@@ -294,25 +316,55 @@ class NonbondedForce(ForceTerm):
             self._energy_cuda_raw
         )
 
-        excl_src = _assemble_exclusion_kernel(
-            self._expr_info,
-            self._energy_cuda,
-            self._grad_cuda,
-            self._radial_force_cuda,
-            self._total_energy_expr,
-            compute_energy=True,
+        self._pair_kernel_fo = cp.RawKernel(
+            _assemble_exclusion_kernel(
+                self._expr_info,
+                self._energy_cuda,
+                self._grad_cuda,
+                self._radial_force_cuda,
+                self._total_energy_expr,
+                compute_energy=False,
+                compute_virial=False,
+            ),
+            "exclusion_block_pair_kernel",
         )
-        excl_src_fo = _assemble_exclusion_kernel(
-            self._expr_info,
-            self._energy_cuda,
-            self._grad_cuda,
-            self._radial_force_cuda,
-            self._total_energy_expr,
-            compute_energy=False,
+        self._pair_kernel_e = cp.RawKernel(
+            _assemble_exclusion_kernel(
+                self._expr_info,
+                self._energy_cuda,
+                self._grad_cuda,
+                self._radial_force_cuda,
+                self._total_energy_expr,
+                compute_energy=True,
+                compute_virial=False,
+            ),
+            "exclusion_block_pair_kernel",
         )
-
-        self._pair_kernel = cp.RawKernel(excl_src, "exclusion_block_pair_kernel")
-        self._pair_kernel_fo = cp.RawKernel(excl_src_fo, "exclusion_block_pair_kernel")
+        self._pair_kernel_v = cp.RawKernel(
+            _assemble_exclusion_kernel(
+                self._expr_info,
+                self._energy_cuda,
+                self._grad_cuda,
+                self._radial_force_cuda,
+                self._total_energy_expr,
+                compute_energy=False,
+                compute_virial=True,
+            ),
+            "exclusion_block_pair_kernel",
+        )
+        self._pair_kernel_ev = cp.RawKernel(
+            _assemble_exclusion_kernel(
+                self._expr_info,
+                self._energy_cuda,
+                self._grad_cuda,
+                self._radial_force_cuda,
+                self._total_energy_expr,
+                compute_energy=True,
+                compute_virial=True,
+            ),
+            "exclusion_block_pair_kernel",
+        )
+        self._pair_kernel = self._pair_kernel_e
 
         self._add_forces_kernel = cp.RawKernel(
             _ADD_SORTED_FORCES_KERNEL_SRC, "add_sorted_forces_kernel"
